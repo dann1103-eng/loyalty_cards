@@ -1,0 +1,106 @@
+# Diseño: MVP de tarjetas de lealtad en Apple/Google Wallet (FM Communications Solutions)
+
+**Fecha:** 2026-07-09
+**Estado:** Aprobado por el usuario para pasar a plan de implementación
+
+## 1. Contexto
+
+FM Communications Solutions ofrece un servicio de cliente frecuente a sus comercios clientes: el cliente final escanea un QR físico en la tienda, se registra con nombre y teléfono, y recibe una tarjeta de puntos virtual que guarda en Apple Wallet o Google Wallet. En cada compra, el cajero escanea el QR de la tarjeta y el sistema suma puntos. El saldo se actualiza solo vía notificación push. No se imprime nada ni se instala ninguna app del lado del cliente.
+
+FM opera como **plataforma multi-comercio**: firma y emite las tarjetas de todos sus comercios con una sola cuenta de Apple y una de Google (modelo similar a PassKit.com o LoopyLoyalty), en vez de que cada comercio tenga su propia cuenta de desarrollador. El costo fijo es US$99/año de Apple Developer Program (ya inscrito y pagado) más el desarrollo; cada comercio nuevo no agrega costo de licencia.
+
+**Stack:** Next.js + Supabase, `passkit-generator` para los passes de Apple, API REST de Google Wallet.
+
+## 2. Objetivo del MVP
+
+Tener **un comercio piloto (cafetería) funcionando de punta a punta**: un cliente real se registra, guarda su tarjeta en su wallet, el cajero le suma puntos en cada compra, y el cliente puede canjear premios que el propio comercio configuró. La base de datos se diseña multi-comercio desde el día 1 (no cuesta más), pero el alta de comercios nuevos en el MVP es manual (por FM), no self-service.
+
+## 3. Actores y roles
+
+- **Cliente final** — pasivo. No tiene login ni app. Solo ve la tarjeta en su wallet (saldo al frente, posiblemente promos al reverso en una fase futura).
+- **Comercio** — dos roles bajo un mismo login (Supabase Auth), en la misma PWA:
+  - **owner** — configura la regla de puntos y el catálogo de recompensas (crear, editar, eliminar).
+  - **cajero** — escanea el QR del cliente, suma puntos, procesa canjes.
+  - En el piloto, es probable que ambos roles sean la misma persona, pero se modelan por separado desde el inicio.
+- **FM (plataforma)** — dueño de la cuenta Apple Developer y del issuer de Google Wallet. Da de alta comercios nuevos manualmente (script / Supabase Studio directo). **No se construye UI de auto-registro de comercios en este MVP.**
+
+## 4. Modelo de datos (Supabase / Postgres)
+
+| Tabla | Campos clave | Notas |
+|---|---|---|
+| `comercios` | `id`, `nombre`, `slug`, `branding` (colores hex, logo_url, strip/hero art url), `google_class_id` | El **Pass Type ID y certificado de Apple son globales** (una sola identidad de firma para todos los comercios); lo que varía por comercio es el contenido/branding del pass, no la credencial. Google sí requiere una "class" distinta por comercio (ver §6). |
+| `usuarios_comercio` | `id`, `comercio_id`, `email`, `rol` (`owner`\|`cajero`), `auth_user_id` (FK a Supabase Auth) | Login con Supabase Auth; RLS restringe cada usuario a su `comercio_id`. |
+| `clientes` | `id`, `nombre`, `telefono` (único global), `created_at` | Un cliente = una persona; puede tener tarjetas en varios comercios de FM. |
+| `tarjetas` | `id`, `cliente_id`, `comercio_id`, `puntos_actuales`, `qr_token` (único, secreto), `apple_serial_number`, `google_object_id`, `created_at` | Une cliente+comercio. El QR del pass codifica `qr_token`. Único por (`cliente_id`, `comercio_id`). |
+| `reglas_puntos` | `id`, `comercio_id`, `tipo` (`por_visita`\|`por_monto`), `valor`, `activa_desde` | Configurable por el owner. |
+| `recompensas` | `id`, `comercio_id`, `nombre`, `descripcion`, `foto_url`, `costo_puntos`, `tipo` (`codigo_descuento`\|`articulo_gratis`\|`otro`), `valor` (ej. el código), `activa` (bool) | CRUD completo del owner (crear, editar, eliminar/desactivar), con subida de foto a Supabase Storage. |
+| `transacciones_puntos` | `id`, `tarjeta_id`, `cajero_usuario_id`, `puntos_delta`, `monto_compra` (nullable), `created_at` | Historial de sumas de puntos. |
+| `canjes` | `id`, `tarjeta_id`, `recompensa_id`, `cajero_usuario_id`, `puntos_gastados`, `created_at`, `estado` | Historial de redenciones. |
+
+Row Level Security (RLS) de Supabase se usa para que cada comercio solo pueda leer/escribir sus propios registros.
+
+## 5. Componentes
+
+1. **Landing de registro** (`/registro/[comercio_slug]`) — pública. Formulario nombre + teléfono → crea `cliente` + `tarjeta` (o recupera la existente si el teléfono ya está registrado en ese comercio) → genera el pass firmado con el branding del comercio → muestra botones "Add to Apple Wallet" / "Guardar en Google Wallet".
+2. **Servicio de generación de pass** — construye el `.pkpass` firmado (passkit-generator) y/o el objeto de Google Wallet (REST API) con los datos de la tarjeta y el branding del comercio.
+3. **Backend de puntos y canjes** — API routes (Next.js): crear tarjeta, sumar puntos, listar recompensas elegibles para una tarjeta, canjear una recompensa, consultar historial.
+4. **PWA de comercio** — un solo codebase, rutas protegidas por rol:
+   - **Vista cajero:** escanear QR con la cámara del teléfono (ej. librería `html5-qrcode` o equivalente), ver cliente + saldo, sumar puntos (pide monto si la regla es `por_monto`), ver recompensas disponibles y canjear.
+   - **Vista owner:** CRUD de la regla de puntos (tipo + valor) y CRUD del catálogo de recompensas (nombre, descripción, foto, costo en puntos, tipo, activar/desactivar o eliminar).
+5. **Servicio de actualización push** — dispara cada vez que cambian los puntos de una tarjeta (suma o canje):
+   - **Apple:** requiere implementar el protocolo **PassKit Web Service** de Apple (registro/desregistro de dispositivo, endpoint de "passes actualizados", endpoint de "última versión del pass") + envío de push vía APNs. Esto es un requisito del protocolo, no una llamada de API simple.
+   - **Google:** más directo — un `PATCH` al objeto vía la API REST actualiza el pass sin necesidad de un protocolo de registro de dispositivo.
+
+## 6. Notas técnicas: Apple vs. Google
+
+- **Apple:** una cuenta, un Pass Type ID, un certificado — compartido por todos los comercios. Los comercios se diferencian solo por el contenido del pass (nombre, colores, logo, arte). El certificado del Pass Type ID expira anualmente y debe renovarse (alerta administrativa a futuro).
+- **Google:** el modelo de Google Wallet es Issuer → Class → Object. Un solo Issuer (FM), pero **cada comercio necesita su propia "Class"** (es la plantilla/branding), y cada cliente tiene un "Object" (su tarjeta individual) bajo la Class de su comercio.
+
+## 7. Flujos clave
+
+**Registro:**
+QR físico (codifica `comercio_slug`) → landing `/registro/[slug]` → formulario → crea `cliente` + `tarjeta` con `qr_token` nuevo → genera pass firmado con el branding del comercio → el cliente lo agrega a su wallet.
+
+**Sumar puntos:**
+Cajero autenticado abre la PWA → escanea el QR de la tarjeta → el sistema resuelve `tarjeta_id` desde `qr_token` → aplica la `regla_puntos` del comercio (si es `por_monto`, el cajero ingresa el monto de la compra) → inserta en `transacciones_puntos`, actualiza `tarjetas.puntos_actuales` → dispara actualización push → el wallet del cliente se actualiza solo.
+
+**Canje:**
+Cajero escanea el QR → ve las recompensas con `costo_puntos <= puntos_actuales` → el cliente elige una → el cajero confirma el canje → se inserta en `canjes`, se restan los puntos, se entrega el código de descuento o el artículo en persona, se dispara push.
+
+## 8. Manejo de errores
+
+- QR no encontrado / inválido → mensaje claro en la PWA del cajero, no debe romper el flujo.
+- Falla de push (token de dispositivo expirado o inválido) → no bloquea la transacción; el punto ya quedó guardado en base de datos; se reintenta en el siguiente cambio de saldo.
+- Teléfono duplicado en el mismo comercio → se recupera la tarjeta existente en vez de crear una duplicada.
+- Certificado de Apple por expirar → requiere monitoreo administrativo (fuera del alcance de código del MVP, pero se documenta como riesgo operativo).
+
+## 9. Estrategia de pruebas
+
+- Unit tests del cálculo de puntos (`por_visita` vs. `por_monto`) y de la elegibilidad de recompensas (`costo_puntos <= puntos_actuales`).
+- Test de generación de pass: validar estructura y firma del `.pkpass`; mock de la API de Google Wallet.
+- Prueba end-to-end del flujo registro → pass → suma de puntos → push, con un iPhone real para Apple (es la parte más frágil de simular con mocks).
+
+## 10. Secuencia de fases (build order)
+
+0. **Setup** — esquema completo en Supabase (todas las tablas de §4), configuración de credenciales Apple (cuenta ya pagada), solicitud del perfil de emisor de Google Wallet en paralelo (Google Cloud Console).
+1. **Walking skeleton, solo Apple** — landing de registro mínima (comercio piloto fijo) → generación y firma real de `.pkpass` → botón "Add to Apple Wallet" funcionando en un iPhone real → suma de puntos vía llamada directa (sin PWA de cajero todavía) → push real actualizando el saldo. **Este es el hito que valida el mayor riesgo técnico del proyecto.**
+2. **Google Wallet** — mismo flujo completo, agregando la Class del comercio piloto y el objeto por cliente.
+3. **Configurabilidad real** — CRUD de regla de puntos y CRUD de catálogo de recompensas (vista owner).
+4. **PWA de cajero completa** — login con rol, escáner de QR por cámara, sumar puntos y canjear, conectado a las reglas/recompensas reales del comercio piloto.
+5. **Piloto en producción** — alta manual de 1–2 cafeterías reales (kit gráfico del diseñador: íconos, logo, arte principal, colores según especificaciones de Apple/Google), pruebas con clientes reales, ajustes según feedback.
+
+## 11. Explícitamente fuera de alcance del MVP
+
+- Panel self-service para que comercios nuevos se den de alta solos (FM lo hace manualmente para el piloto).
+- Notificaciones de proximidad (avisos por cercanía al local).
+- Promociones en el reverso de la tarjeta.
+- Precios/planes SaaS para comercios (queda como decisión de negocio pendiente, no de este spec técnico).
+
+## 12. Decisiones registradas
+
+- MVP alrededor de **un comercio piloto** (cafetería), con base de datos multi-comercio desde el inicio.
+- El usuario codea esto él mismo con Claude Code como copiloto.
+- Apple Developer Program: inscripción Individual, ya pagada.
+- Google Wallet: perfil de emisor pendiente de solicitar/aprobar.
+- Reglas de puntos y catálogo de recompensas son **configurables por cada comercio** (owner) — es la pieza central del producto, no un extra.
+- Secuencia de construcción: Approach B (vertical slice / walking skeleton), Apple primero por ser la parte más incierta técnicamente y por ya tener la cuenta lista.
