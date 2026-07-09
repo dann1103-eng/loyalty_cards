@@ -19,7 +19,7 @@ Tener **un comercio piloto (cafetería) funcionando de punta a punta**: un clien
 
 - **Cliente final** — pasivo. No tiene login ni app. Solo ve la tarjeta en su wallet (saldo al frente, posiblemente promos al reverso en una fase futura).
 - **Comercio** — dos roles bajo un mismo login (Supabase Auth), en la misma PWA:
-  - **owner** — configura la regla de puntos y el catálogo de recompensas (crear, editar, eliminar).
+  - **owner** — configura la regla de puntos y el catálogo de recompensas (crear, editar, desactivar).
   - **cajero** — escanea el QR del cliente, suma puntos, procesa canjes.
   - En el piloto, es probable que ambos roles sean la misma persona, pero se modelan por separado desde el inicio.
 - **FM (plataforma)** — dueño de la cuenta Apple Developer y del issuer de Google Wallet. Da de alta comercios nuevos manualmente (script / Supabase Studio directo). **No se construye UI de auto-registro de comercios en este MVP.**
@@ -32,21 +32,23 @@ Tener **un comercio piloto (cafetería) funcionando de punta a punta**: un clien
 | `usuarios_comercio` | `id`, `comercio_id`, `email`, `rol` (`owner`\|`cajero`), `auth_user_id` (FK a Supabase Auth) | Login con Supabase Auth; RLS restringe cada usuario a su `comercio_id`. |
 | `clientes` | `id`, `nombre`, `telefono` (único global), `created_at` | Un cliente = una persona; puede tener tarjetas en varios comercios de FM. |
 | `tarjetas` | `id`, `cliente_id`, `comercio_id`, `puntos_actuales`, `qr_token` (único, secreto), `apple_serial_number`, `google_object_id`, `created_at` | Une cliente+comercio. El QR del pass codifica `qr_token`. Único por (`cliente_id`, `comercio_id`). |
-| `reglas_puntos` | `id`, `comercio_id`, `tipo` (`por_visita`\|`por_monto`), `valor`, `activa_desde` | Configurable por el owner. |
-| `recompensas` | `id`, `comercio_id`, `nombre`, `descripcion`, `foto_url`, `costo_puntos`, `tipo` (`codigo_descuento`\|`articulo_gratis`\|`otro`), `valor` (ej. el código), `activa` (bool) | CRUD completo del owner (crear, editar, eliminar/desactivar), con subida de foto a Supabase Storage. |
+| `reglas_puntos` | `id`, `comercio_id`, `tipo` (`por_visita`\|`por_monto`), `valor`, `activa_desde` | Configurable por el owner. La regla vigente es la de `activa_desde` más reciente; editar la regla **inserta una fila nueva** en vez de mutar la anterior, para no alterar cómo se explican las transacciones pasadas. |
+| `recompensas` | `id`, `comercio_id`, `nombre`, `descripcion`, `foto_url`, `costo_puntos`, `tipo` (`codigo_descuento`\|`articulo_gratis`\|`otro`), `valor` (ej. el código), `activa` (bool) | CRUD del owner (crear, editar, desactivar), con subida de foto a Supabase Storage. "Eliminar" en la UI es un **soft-delete** (`activa = false`): la fila nunca se borra físicamente porque `canjes` referencia `recompensa_id` para el historial de redenciones. |
 | `transacciones_puntos` | `id`, `tarjeta_id`, `cajero_usuario_id`, `puntos_delta`, `monto_compra` (nullable), `created_at` | Historial de sumas de puntos. |
-| `canjes` | `id`, `tarjeta_id`, `recompensa_id`, `cajero_usuario_id`, `puntos_gastados`, `created_at`, `estado` | Historial de redenciones. |
+| `canjes` | `id`, `tarjeta_id`, `recompensa_id`, `cajero_usuario_id`, `puntos_gastados`, `created_at`, `estado` (`completado`) | Historial de redenciones. En el MVP el flujo es síncrono y solo produce `completado`; el campo queda listo para estados futuros (ej. `cancelado`). |
+
+**Resolución de identidad:** al registrar, primero se busca `cliente` por `telefono` a nivel global (se crea si no existe), y luego se busca/crea la `tarjeta` para el par (`cliente_id`, `comercio_id`) correspondiente. Esto es lo que permite que la misma persona tenga tarjetas en varios comercios de FM sin duplicar su registro de cliente — relevante porque la Fase 5 (§10) da de alta un segundo comercio piloto dentro del propio MVP.
 
 Row Level Security (RLS) de Supabase se usa para que cada comercio solo pueda leer/escribir sus propios registros.
 
 ## 5. Componentes
 
-1. **Landing de registro** (`/registro/[comercio_slug]`) — pública. Formulario nombre + teléfono → crea `cliente` + `tarjeta` (o recupera la existente si el teléfono ya está registrado en ese comercio) → genera el pass firmado con el branding del comercio → muestra botones "Add to Apple Wallet" / "Guardar en Google Wallet".
+1. **Landing de registro** (`/registro/[comercio_slug]`) — pública. Formulario nombre + teléfono → busca o crea el `cliente` por teléfono (a nivel global) → busca o crea la `tarjeta` para ese `cliente` en este `comercio` → genera el pass firmado con el branding del comercio → muestra botones "Add to Apple Wallet" / "Guardar en Google Wallet".
 2. **Servicio de generación de pass** — construye el `.pkpass` firmado (passkit-generator) y/o el objeto de Google Wallet (REST API) con los datos de la tarjeta y el branding del comercio.
 3. **Backend de puntos y canjes** — API routes (Next.js): crear tarjeta, sumar puntos, listar recompensas elegibles para una tarjeta, canjear una recompensa, consultar historial.
 4. **PWA de comercio** — un solo codebase, rutas protegidas por rol:
    - **Vista cajero:** escanear QR con la cámara del teléfono (ej. librería `html5-qrcode` o equivalente), ver cliente + saldo, sumar puntos (pide monto si la regla es `por_monto`), ver recompensas disponibles y canjear.
-   - **Vista owner:** CRUD de la regla de puntos (tipo + valor) y CRUD del catálogo de recompensas (nombre, descripción, foto, costo en puntos, tipo, activar/desactivar o eliminar).
+   - **Vista owner:** CRUD de la regla de puntos (tipo + valor) y CRUD del catálogo de recompensas (nombre, descripción, foto, costo en puntos, tipo). "Eliminar" una recompensa es un soft-delete (`activa = false`); nunca se borra físicamente porque `canjes` guarda el historial de redenciones.
 5. **Servicio de actualización push** — dispara cada vez que cambian los puntos de una tarjeta (suma o canje):
    - **Apple:** requiere implementar el protocolo **PassKit Web Service** de Apple (registro/desregistro de dispositivo, endpoint de "passes actualizados", endpoint de "última versión del pass") + envío de push vía APNs. Esto es un requisito del protocolo, no una llamada de API simple.
    - **Google:** más directo — un `PATCH` al objeto vía la API REST actualiza el pass sin necesidad de un protocolo de registro de dispositivo.
@@ -59,7 +61,7 @@ Row Level Security (RLS) de Supabase se usa para que cada comercio solo pueda le
 ## 7. Flujos clave
 
 **Registro:**
-QR físico (codifica `comercio_slug`) → landing `/registro/[slug]` → formulario → crea `cliente` + `tarjeta` con `qr_token` nuevo → genera pass firmado con el branding del comercio → el cliente lo agrega a su wallet.
+QR físico (codifica `comercio_slug`) → landing `/registro/[slug]` → formulario → busca o crea `cliente` por teléfono (global) → busca o crea `tarjeta` para (`cliente`, comercio), con `qr_token` nuevo si es la primera vez → genera pass firmado con el branding del comercio → el cliente lo agrega a su wallet.
 
 **Sumar puntos:**
 Cajero autenticado abre la PWA → escanea el QR de la tarjeta → el sistema resuelve `tarjeta_id` desde `qr_token` → aplica la `regla_puntos` del comercio (si es `por_monto`, el cajero ingresa el monto de la compra) → inserta en `transacciones_puntos`, actualiza `tarjetas.puntos_actuales` → dispara actualización push → el wallet del cliente se actualiza solo.
@@ -71,7 +73,7 @@ Cajero escanea el QR → ve las recompensas con `costo_puntos <= puntos_actuales
 
 - QR no encontrado / inválido → mensaje claro en la PWA del cajero, no debe romper el flujo.
 - Falla de push (token de dispositivo expirado o inválido) → no bloquea la transacción; el punto ya quedó guardado en base de datos; se reintenta en el siguiente cambio de saldo.
-- Teléfono duplicado en el mismo comercio → se recupera la tarjeta existente en vez de crear una duplicada.
+- Teléfono ya registrado (en este comercio o en otro comercio de FM) → se reutiliza el `cliente` existente; solo se crea una `tarjeta` nueva si no existía ya una para ese par (`cliente`, comercio).
 - Certificado de Apple por expirar → requiere monitoreo administrativo (fuera del alcance de código del MVP, pero se documenta como riesgo operativo).
 
 ## 9. Estrategia de pruebas
@@ -104,3 +106,5 @@ Cajero escanea el QR → ve las recompensas con `costo_puntos <= puntos_actuales
 - Google Wallet: perfil de emisor pendiente de solicitar/aprobar.
 - Reglas de puntos y catálogo de recompensas son **configurables por cada comercio** (owner) — es la pieza central del producto, no un extra.
 - Secuencia de construcción: Approach B (vertical slice / walking skeleton), Apple primero por ser la parte más incierta técnicamente y por ya tener la cuenta lista.
+- Identidad de cliente: `cliente` es único por teléfono a nivel **global** (una persona, un registro, aunque tenga tarjetas en varios comercios); `tarjeta` es única por (`cliente_id`, `comercio_id`).
+- Borrado de recompensas: "eliminar" desde la UI del owner siempre es un soft-delete (`activa = false`); nunca se borra la fila físicamente, para no romper el historial de `canjes`.
