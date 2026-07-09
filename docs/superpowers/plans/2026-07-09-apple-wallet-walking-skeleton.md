@@ -245,6 +245,9 @@ create table tarjetas (
   puntos_actuales integer not null default 0,
   qr_token text not null unique default encode(gen_random_bytes(16), 'hex'),
   apple_serial_number text unique,
+  -- apple_auth_token: NO está en el spec §4 — es un agregado técnico de este plan.
+  -- Apple exige verificar este token en cada llamada al PassKit Web Service (Tareas 9-10);
+  -- se genera una vez al crear la tarjeta y se incrusta en el pass firmado.
   apple_auth_token text,
   google_object_id text unique,
   created_at timestamptz not null default now(),
@@ -750,7 +753,7 @@ Create `passModels/loyalty.pass/pass.json`:
   "storeCard": {}
 }
 ```
-Reemplaza `teamIdentifier` con tu Team ID real de la Tarea 6.
+Reemplaza `teamIdentifier` con tu Team ID real de la Tarea 6, y mantén `passTypeIdentifier` idéntico al que registraste ahí — si ajustaste el dominio reverso en la Tarea 6 Paso 1, este valor debe coincidir exactamente, o el pass firmado no correspondería con el Pass Type ID que Apple tiene registrado.
 
 Crea 3 imágenes cuadradas placeholder (el kit gráfico real del diseñador llega en la Fase 5 — cualquier PNG cuadrado sirve por ahora para probar el flujo):
 - `passModels/loyalty.pass/icon.png` (29×29 px)
@@ -1457,7 +1460,7 @@ afterEach(async () => {
 
 describe('notificarCambioTarjeta', () => {
   it('no lanza error cuando la tarjeta no tiene dispositivos registrados', async () => {
-    const sufijo = `${Date.now()}`;
+    const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const { data: comercio } = await supabase
       .from('comercios').insert({ nombre: 'Comercio Test', slug: `test-push-${sufijo}` }).select('id').single();
     const { data: cliente } = await supabase
@@ -1540,7 +1543,7 @@ afterEach(async () => {
 
 describe('POST /api/tarjetas/[tarjetaId]/puntos', () => {
   it('suma puntos y actualiza el saldo de la tarjeta', async () => {
-    const sufijo = `${Date.now()}`;
+    const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const { data: comercio } = await supabase
       .from('comercios').insert({ nombre: 'Comercio Test', slug: `test-puntos-${sufijo}` }).select('id').single();
     const { data: cliente } = await supabase
@@ -1623,7 +1626,7 @@ Expected: `1 passed`.
 - [ ] **Step 9: Correr toda la suite completa**
 
 Run: `npm test`
-Expected: todos los tests pasan (deberían ser ~10-11 en total entre todas las tareas).
+Expected: todos los tests pasan, ninguno falla.
 
 - [ ] **Step 10: Commit**
 
@@ -1653,21 +1656,21 @@ Para `NEXT_PUBLIC_BASE_URL`, usa la URL que Vercel te asigna (ej. `https://loyal
 
 Vuelve a desplegar después de guardar las variables (Vercel no las aplica automáticamente a un deploy ya hecho): **Deployments → (...) → Redeploy**.
 
-- [ ] **Step 2: Actualizar el pass.json de la plantilla con el Team ID real**
+- [ ] **Step 3: Actualizar el pass.json de la plantilla con el Team ID real**
 
 Si no lo hiciste ya en la Tarea 7, confirma que `passModels/loyalty.pass/pass.json` tiene tu `teamIdentifier` real (no el placeholder) antes de este deploy.
 
-- [ ] **Step 3: Registrarte desde un iPhone real**
+- [ ] **Step 4: Registrarte desde un iPhone real**
 
 Desde Safari **en el iPhone**, abre `https://<tu-deploy>.vercel.app/registro/cafeteria-piloto`. Llena el formulario con tu nombre y tu número. Envía.
 
-- [ ] **Step 4: Agregar la tarjeta a Wallet**
+- [ ] **Step 5: Agregar la tarjeta a Wallet**
 
 Toca "Agregar a Apple Wallet". Debe abrirse la vista previa nativa de Wallet mostrando el branding del comercio piloto y "0" puntos. Toca "Agregar".
 
 Expected: la tarjeta aparece en la app Wallet del iPhone.
 
-- [ ] **Step 5: Sumar puntos desde afuera y confirmar la actualización automática**
+- [ ] **Step 6: Sumar puntos desde afuera y confirmar la actualización automática**
 
 Obtén el `tarjetaId` (de la respuesta JSON del registro, con las herramientas de desarrollador de Safari, o consultando la tabla `tarjetas` en Supabase Studio filtrando por el teléfono que usaste).
 
@@ -1681,14 +1684,14 @@ Expected: `{"puntosActuales":10}`.
 
 Espera unos segundos a un minuto (el push no es instantáneo) y abre la app Wallet en el iPhone. **La tarjeta debe mostrar "10" puntos sin que hayas hecho nada manualmente** — ese es el hito completo de esta fase.
 
-- [ ] **Step 6: Si no se actualiza sola, diagnosticar**
+- [ ] **Step 7: Si no se actualiza sola, diagnosticar**
 
 Run: `vercel logs <tu-deploy>` (o revisa **Deployments → Functions** en el dashboard) y busca:
 - ¿Llegó el `POST` a `/api/apple/v1/devices/.../registrations/...` cuando agregaste la tarjeta a Wallet? (confirma que el dispositivo se registró)
 - ¿El `POST /api/tarjetas/.../puntos` llamó a `notificarCambioTarjeta` sin error?
 - ¿Apple llamó de vuelta a `/api/apple/v1/devices/.../registrations/...` (GET) y luego a `/api/apple/v1/passes/...` después del push?
 
-- [ ] **Step 7: Confirmar el hito y commitear cualquier ajuste**
+- [ ] **Step 8: Confirmar el hito y commitear cualquier ajuste**
 
 Si algo se ajustó durante la verificación (ej. el `teamIdentifier` de la plantilla, una variable de entorno faltante), commitea esos cambios:
 ```bash
