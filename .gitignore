@@ -34,11 +34,10 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-# Narrower than create-next-app's default `.env*` so that `.env.local.example`
-# (added in Task 2) stays trackable in git.
-.env
-.env.local
-.env*.local
+# Se ignoran TODAS las variantes de .env (incluida .env.production);
+# la única excepción es el archivo de ejemplo, que sí se trackea en git.
+.env*
+!.env.local.example
 
 # vercel
 .vercel
