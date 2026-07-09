@@ -3,6 +3,8 @@ config({ path: '.env.local' });
 
 import { createServiceClient } from '../lib/supabase/server';
 
+// OJO: re-ejecutar este script REVIERTE las columnas de branding (nombre, colores) a estos
+// valores placeholder. Cuando el kit gráfico real llegue en la Fase 5, no volver a correrlo.
 async function main() {
   const supabase = createServiceClient();
   const { data, error } = await supabase
