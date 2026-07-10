@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '../supabase/types';
 
 export interface RegistrarClienteResult {
   clienteId: string;
@@ -12,7 +13,7 @@ export interface RegistrarClienteResult {
 // actualiza — gana el primer registro (el spec define la búsqueda por teléfono; no define
 // semántica de actualización).
 export async function registrarCliente(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   comercioId: string,
   nombre: string,
   telefono: string,

@@ -1,3 +1,4 @@
+// Ejecutar vía: npm run verify-schema
 import { config } from 'dotenv';
 config({ path: '.env.local' });
 

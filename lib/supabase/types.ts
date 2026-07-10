@@ -138,7 +138,18 @@ export type Database = {
           google_object_id?: string | null;
           created_at?: string;
         };
-        Relationships: [];
+        // FK inline en la migración 0001 (`references comercios(id)`) — Postgres la nombra
+        // `tarjetas_comercio_id_fkey`. Necesaria para que el join embebido `comercios(*)`
+        // resuelva su tipo (sin la entrada, .select('*, comercios(*)') da SelectQueryError).
+        Relationships: [
+          {
+            foreignKeyName: 'tarjetas_comercio_id_fkey';
+            columns: ['comercio_id'];
+            isOneToOne: false;
+            referencedRelation: 'comercios';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       reglas_puntos: {
         Row: {
