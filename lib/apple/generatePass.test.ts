@@ -24,5 +24,8 @@ describe('generarPassApple', () => {
     const passJson = JSON.parse(await zip.file('pass.json')!.async('string'));
     expect(passJson.serialNumber).toBe('test-serial-001');
     expect(passJson.storeCard.primaryFields[0].value).toBe(10);
+    expect(passJson.barcodes[0].message).toBe('abc123');
+    expect(passJson.webServiceURL).toBe('https://example.com/api/apple');
+    expect(passJson.authenticationToken).toBe('0123456789abcdef0123456789abcdef');
   });
 });
