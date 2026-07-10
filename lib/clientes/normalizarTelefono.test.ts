@@ -26,4 +26,12 @@ describe('normalizarTelefono', () => {
     expect(() => normalizarTelefono('')).toThrow();
     expect(() => normalizarTelefono('abc')).toThrow();
   });
+
+  it('rechaza un número sin + que no es ni local (8) ni 503 explícito (typo de 9 dígitos)', () => {
+    expect(() => normalizarTelefono('777712345')).toThrow();
+  });
+
+  it('rechaza números que exceden el tope E.164 de 15 dígitos', () => {
+    expect(() => normalizarTelefono('+' + '9'.repeat(20))).toThrow();
+  });
 });

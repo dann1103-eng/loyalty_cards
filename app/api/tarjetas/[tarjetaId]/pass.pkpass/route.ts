@@ -33,6 +33,8 @@ export async function GET(
     headers: {
       'Content-Type': 'application/vnd.apple.pkpass',
       'Content-Disposition': 'attachment; filename="tarjeta.pkpass"',
+      // El cuerpo incrusta qr_token y apple_auth_token — no debe quedar en cachés.
+      'Cache-Control': 'no-store',
     },
   });
 }
