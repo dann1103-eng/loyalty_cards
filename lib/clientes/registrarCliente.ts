@@ -1,5 +1,4 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import crypto from 'node:crypto';
 
 export interface RegistrarClienteResult {
   clienteId: string;
@@ -9,6 +8,9 @@ export interface RegistrarClienteResult {
   esNuevaTarjeta: boolean;
 }
 
+// Semántica de `nombre`: si el cliente ya existe (búsqueda por teléfono), su nombre NO se
+// actualiza — gana el primer registro (el spec define la búsqueda por teléfono; no define
+// semántica de actualización).
 export async function registrarCliente(
   supabase: SupabaseClient,
   comercioId: string,
@@ -33,9 +35,22 @@ export async function registrarCliente(
       .insert({ nombre, telefono })
       .select('id')
       .single();
-    if (crearClienteError) throw crearClienteError;
-    clienteId = nuevoCliente.id;
-    esNuevoCliente = true;
+    if (crearClienteError) {
+      // 23505 = unique_violation: un registro concurrente creó el cliente entre nuestra
+      // búsqueda y nuestro insert. Releemos por teléfono y convergemos en esa identidad.
+      if (crearClienteError.code !== '23505') throw crearClienteError;
+      const { data: clienteGanador, error: relecturaClienteError } = await supabase
+        .from('clientes')
+        .select('id')
+        .eq('telefono', telefono)
+        .maybeSingle();
+      if (relecturaClienteError) throw relecturaClienteError;
+      if (!clienteGanador) throw crearClienteError;
+      clienteId = clienteGanador.id;
+    } else {
+      clienteId = nuevoCliente.id;
+      esNuevoCliente = true;
+    }
   }
 
   const { data: tarjetaExistente, error: buscarTarjetaError } = await supabase
@@ -56,13 +71,33 @@ export async function registrarCliente(
     };
   }
 
-  const qrToken = crypto.randomBytes(16).toString('hex');
+  // qr_token lo genera la base de datos: default encode(gen_random_bytes(16), 'hex')
+  // (migración 0001); aquí solo lo leemos de vuelta.
   const { data: nuevaTarjeta, error: crearTarjetaError } = await supabase
     .from('tarjetas')
-    .insert({ cliente_id: clienteId, comercio_id: comercioId, qr_token: qrToken })
+    .insert({ cliente_id: clienteId, comercio_id: comercioId })
     .select('id, qr_token')
     .single();
-  if (crearTarjetaError) throw crearTarjetaError;
+  if (crearTarjetaError) {
+    // Misma carrera que arriba, ahora sobre el unique (cliente_id, comercio_id):
+    // recuperamos la tarjeta que ganó y conservamos su qr_token ya emitido.
+    if (crearTarjetaError.code !== '23505') throw crearTarjetaError;
+    const { data: tarjetaGanadora, error: relecturaTarjetaError } = await supabase
+      .from('tarjetas')
+      .select('id, qr_token')
+      .eq('cliente_id', clienteId)
+      .eq('comercio_id', comercioId)
+      .maybeSingle();
+    if (relecturaTarjetaError) throw relecturaTarjetaError;
+    if (!tarjetaGanadora) throw crearTarjetaError;
+    return {
+      clienteId,
+      tarjetaId: tarjetaGanadora.id,
+      qrToken: tarjetaGanadora.qr_token,
+      esNuevoCliente,
+      esNuevaTarjeta: false,
+    };
+  }
 
   return {
     clienteId,

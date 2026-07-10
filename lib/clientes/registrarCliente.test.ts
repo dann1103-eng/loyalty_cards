@@ -75,6 +75,25 @@ describe('registrarCliente', () => {
     const segundo = await registrarCliente(supabase, comercioId, 'Cliente Prueba', telefono);
 
     expect(segundo.tarjetaId).toBe(primero.tarjetaId);
+    // El qr_token no debe cambiar entre registros: los passes ya emitidos siguen siendo escaneables.
+    expect(segundo.qrToken).toBe(primero.qrToken);
     expect(segundo.esNuevaTarjeta).toBe(false);
+  });
+
+  it('converge en una sola identidad cuando dos registros del mismo teléfono corren en paralelo', async () => {
+    const comercioId = await crearComercioDePrueba(`test-d-${Date.now()}`);
+    ids = { comercioId };
+    const telefono = `+503-test-${Date.now()}`;
+    telefonosDePrueba.push(telefono);
+
+    // Sin importar quién gane la carrera del insert (vía unique + reintento con relectura),
+    // ambas llamadas deben terminar apuntando al mismo cliente y la misma tarjeta.
+    const [a, b] = await Promise.all([
+      registrarCliente(supabase, comercioId, 'Cliente Prueba', telefono),
+      registrarCliente(supabase, comercioId, 'Cliente Prueba', telefono),
+    ]);
+
+    expect(a.clienteId).toBe(b.clienteId);
+    expect(a.tarjetaId).toBe(b.tarjetaId);
   });
 });

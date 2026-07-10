@@ -3,11 +3,12 @@ config({ path: '.env.local' });
 
 import { createServiceClient } from '../lib/supabase/server';
 
+// `as const`: el cliente tipado de Supabase solo acepta nombres de tabla literales en .from().
 const TABLAS = [
   'comercios', 'usuarios_comercio', 'clientes', 'tarjetas',
   'reglas_puntos', 'recompensas', 'transacciones_puntos', 'canjes',
   'apple_push_registrations',
-];
+] as const;
 
 async function main() {
   const supabase = createServiceClient();
