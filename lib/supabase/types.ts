@@ -293,7 +293,18 @@ export type Database = {
           push_token?: string;
           created_at?: string;
         };
-        Relationships: [];
+        // FK inline en la migración 0001 (`tarjeta_id ... references tarjetas(id)`) — Postgres la
+        // nombra `apple_push_registrations_tarjeta_id_fkey`. Necesaria para que el join embebido
+        // `tarjetas(apple_serial_number)` resuelva su tipo (sin la entrada da SelectQueryError).
+        Relationships: [
+          {
+            foreignKeyName: 'apple_push_registrations_tarjeta_id_fkey';
+            columns: ['tarjeta_id'];
+            isOneToOne: false;
+            referencedRelation: 'tarjetas';
+            referencedColumns: ['id'];
+          },
+        ];
       };
     };
     // Secciones vacías en la forma canónica de `supabase gen types` ({ [_ in never]: never }).

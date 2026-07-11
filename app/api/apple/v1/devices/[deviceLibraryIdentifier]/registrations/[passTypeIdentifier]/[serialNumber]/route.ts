@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'node:crypto';
 import { createServiceClient } from '@/lib/supabase/server';
+import { verificarApplePassToken } from '@/lib/apple/authToken';
 
 export const runtime = 'nodejs';
 
 type Params = { deviceLibraryIdentifier: string; passTypeIdentifier: string; serialNumber: string };
-
-function tokensCoinciden(recibido: string, almacenado: string): boolean {
-  const a = Buffer.from(recibido);
-  const b = Buffer.from(almacenado);
-  // timingSafeEqual exige buffers de igual longitud, si no, lanza. La comparación de
-  // longitud no filtra el contenido del token, solo su tamaño (constante en la práctica).
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
 
 // Autentica el header `Authorization: ApplePass <token>` contra el apple_auth_token de la
 // tarjeta. Si coincide, devuelve el id de la tarjeta (una sola consulta, sin segundo lookup);
@@ -28,10 +19,9 @@ async function autenticarTarjeta(request: NextRequest, serialNumber: string): Pr
 
   if (!tarjeta?.apple_auth_token) return null;
 
-  const authHeader = request.headers.get('authorization') ?? '';
-  const tokenRecibido = authHeader.replace(/^ApplePass\s+/i, '');
-
-  return tokensCoinciden(tokenRecibido, tarjeta.apple_auth_token) ? tarjeta.id : null;
+  return verificarApplePassToken(request.headers.get('authorization'), tarjeta.apple_auth_token)
+    ? tarjeta.id
+    : null;
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<Params> }) {
