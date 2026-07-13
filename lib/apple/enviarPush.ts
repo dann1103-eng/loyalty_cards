@@ -1,4 +1,5 @@
 import apn from '@parse/node-apn';
+import { requireEnv } from '@/lib/env';
 
 let provider: apn.Provider | null = null;
 
@@ -6,9 +7,9 @@ function obtenerProvider(): apn.Provider {
   if (!provider) {
     provider = new apn.Provider({
       token: {
-        key: Buffer.from(process.env.APNS_KEY_B64!, 'base64'),
-        keyId: process.env.APNS_KEY_ID!,
-        teamId: process.env.APPLE_TEAM_ID!,
+        key: Buffer.from(requireEnv('APNS_KEY_B64'), 'base64'),
+        keyId: requireEnv('APNS_KEY_ID'),
+        teamId: requireEnv('APPLE_TEAM_ID'),
       },
       production: true, // los push de actualización de pass SOLO funcionan en producción, nunca en sandbox
     });

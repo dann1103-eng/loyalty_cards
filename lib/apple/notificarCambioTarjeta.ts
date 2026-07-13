@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { enviarPushActualizacion } from './enviarPush';
+import { requireEnv } from '@/lib/env';
 
 export async function notificarCambioTarjeta(
   supabase: SupabaseClient<Database>,
@@ -13,7 +14,7 @@ export async function notificarCambioTarjeta(
 
   if (!registros || registros.length === 0) return;
 
-  const passTypeIdentifier = process.env.APPLE_PASS_TYPE_IDENTIFIER!;
+  const passTypeIdentifier = requireEnv('APPLE_PASS_TYPE_IDENTIFIER');
 
   for (const registro of registros) {
     try {

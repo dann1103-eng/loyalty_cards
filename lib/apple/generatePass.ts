@@ -1,11 +1,12 @@
 import { PKPass } from 'passkit-generator';
 import path from 'node:path';
+import { requireEnv } from '@/lib/env';
 
 function cargarCertificados() {
   return {
-    wwdr: Buffer.from(process.env.APPLE_WWDR_B64!, 'base64'),
-    signerCert: Buffer.from(process.env.APPLE_SIGNER_CERT_B64!, 'base64').toString('utf-8'),
-    signerKey: Buffer.from(process.env.APPLE_SIGNER_KEY_B64!, 'base64').toString('utf-8'),
+    wwdr: Buffer.from(requireEnv('APPLE_WWDR_B64'), 'base64'),
+    signerCert: Buffer.from(requireEnv('APPLE_SIGNER_CERT_B64'), 'base64').toString('utf-8'),
+    signerKey: Buffer.from(requireEnv('APPLE_SIGNER_KEY_B64'), 'base64').toString('utf-8'),
   };
 }
 

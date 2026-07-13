@@ -10,6 +10,11 @@ export default defineConfig({
     // los afterEach, que también hacen round-trips.
     testTimeout: 20000,
     hookTimeout: 20000,
+    // Ejecuta los archivos de test en serie (no en paralelo). Varios archivos golpeando la
+    // misma BD remota a la vez causaban inserts que devolvían null bajo contención (flake no
+    // determinista). En serie es más lento pero determinista — el trade correcto para una
+    // suite de integración contra una sola BD.
+    fileParallelism: false,
   },
   resolve: {
     alias: {
