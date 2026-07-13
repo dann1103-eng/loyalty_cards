@@ -63,6 +63,25 @@ describe('POST /api/tarjetas/[tarjetaId]/puntos', () => {
     expect(response.status).toBe(400);
   });
 
+  it('rechaza con 400 si puntosDelta es fraccionario (columna integer)', async () => {
+    const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const { data: comercio } = await supabase
+      .from('comercios').insert({ nombre: 'Comercio Test', slug: `test-puntos-${sufijo}` }).select('id').single();
+    const { data: cliente } = await supabase
+      .from('clientes').insert({ nombre: 'Cliente Test', telefono: `+503-puntos-${sufijo}` }).select('id').single();
+    const { data: tarjeta } = await supabase
+      .from('tarjetas').insert({ cliente_id: cliente!.id, comercio_id: comercio!.id }).select('id').single();
+
+    ids = { comercioId: comercio!.id, clienteId: cliente!.id, tarjetaId: tarjeta!.id };
+
+    const request = new NextRequest(`http://localhost/api/tarjetas/${tarjeta!.id}/puntos`, {
+      method: 'POST',
+      body: JSON.stringify({ puntosDelta: 10.5 }),
+    });
+    const response = await POST(request, { params: Promise.resolve({ tarjetaId: tarjeta!.id }) });
+    expect(response.status).toBe(400);
+  });
+
   it('devuelve 404 si la tarjeta no existe', async () => {
     const request = new NextRequest('http://localhost/api/tarjetas/00000000-0000-0000-0000-000000000000/puntos', {
       method: 'POST',
