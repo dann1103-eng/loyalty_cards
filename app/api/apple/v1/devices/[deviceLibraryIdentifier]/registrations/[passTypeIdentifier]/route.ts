@@ -23,11 +23,16 @@ export async function GET(
     .filter((s): s is string => Boolean(s));
 
   if (serialNumbers.length === 0) {
-    return new NextResponse(null, { status: 204 });
+    return new NextResponse(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
   }
 
-  return NextResponse.json({
-    serialNumbers,
-    lastUpdated: String(Math.floor(Date.now() / 1000)),
-  });
+  // no-store: la lista de seriales es por-dispositivo y mutable; un intermediario que la
+  // cachee podría ocultar brevemente una tarjeta recién registrada.
+  return NextResponse.json(
+    {
+      serialNumbers,
+      lastUpdated: String(Math.floor(Date.now() / 1000)),
+    },
+    { headers: { 'Cache-Control': 'no-store' } },
+  );
 }
