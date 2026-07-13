@@ -1,54 +1,37 @@
-'use client';
+import { createServiceClient } from '@/lib/supabase/server';
+import RegistroCliente from './RegistroCliente';
 
-import { useState, type FormEvent } from 'react';
-import { useParams } from 'next/navigation';
+export const dynamic = 'force-dynamic';
 
-export default function PaginaRegistro() {
-  const { comercioSlug } = useParams<{ comercioSlug: string }>();
-  const [nombre, setNombre] = useState('');
-  const [telefono, setTelefono] = useState('');
-  const [tarjetaId, setTarjetaId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [cargando, setCargando] = useState(false);
+export default async function PaginaRegistro({
+  params,
+}: {
+  params: Promise<{ comercioSlug: string }>;
+}) {
+  const { comercioSlug } = await params;
+  const supabase = createServiceClient();
+  const { data: comercio } = await supabase
+    .from('comercios')
+    .select('nombre')
+    .eq('slug', comercioSlug)
+    .maybeSingle();
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setCargando(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/registro', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comercioSlug, nombre, telefono }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Error al registrar');
-      setTarjetaId(data.tarjetaId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido');
-    } finally {
-      setCargando(false);
-    }
-  }
-
-  if (tarjetaId) {
+  if (!comercio) {
     return (
-      <main>
-        <h1>¡Listo!</h1>
-        <a href={`/api/tarjetas/${tarjetaId}/pass.pkpass`}>Agregar a Apple Wallet</a>
+      <main className="shell">
+        <div className="stack">
+          <p className="kicker reveal d1">FM Lealtad</p>
+          <h1 className="title reveal d2">
+            Comercio <em>no encontrado</em>
+          </h1>
+          <p className="lede reveal d2">
+            No hay ningún comercio con la dirección <strong>/{comercioSlug}</strong>.
+            Revisa el enlace o escanea de nuevo el código QR en el mostrador.
+          </p>
+        </div>
       </main>
     );
   }
 
-  return (
-    <main>
-      <h1>Regístrate</h1>
-      <form onSubmit={handleSubmit}>
-        <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre" required />
-        <input value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="Teléfono" required />
-        <button type="submit" disabled={cargando}>{cargando ? 'Enviando...' : 'Registrarme'}</button>
-        {error && <p role="alert">{error}</p>}
-      </form>
-    </main>
-  );
+  return <RegistroCliente comercioSlug={comercioSlug} nombreComercio={comercio.nombre} />;
 }

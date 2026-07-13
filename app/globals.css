@@ -1,17 +1,37 @@
+/* ============================================================
+   FM Lealtad — sistema visual "cafetería de especialidad"
+   Espresso + papel crema + acento caramelo. Cálido, artesanal.
+   ============================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --espresso: #241812;
+  --bean: #3a2a1e;
+  --oat: #ece1d0;
+  --cream: #f6efe3;
+  --foam: #fcf8f1;
+  --caramel: #c07f38;
+  --caramel-deep: #9c5f24;
+  --clay: #a8563c;
+  --ink-soft: #6b5847;
+  --line: #ded0bb;
+
+  --font-display: Georgia, serif;
+  --font-body: system-ui, sans-serif;
+
+  --radius: 18px;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.6) inset,
+    0 22px 50px -28px rgba(36, 24, 18, 0.45);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
 }
 
 html {
   height: 100%;
+  color-scheme: light;
 }
 
 html,
@@ -22,19 +42,29 @@ body {
 
 body {
   min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--espresso);
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* fondo cálido: dos glows suaves de caramelo sobre avena, con viñeta */
+  background-color: var(--oat);
+  background-image:
+    radial-gradient(120% 80% at 12% 0%, rgba(192, 127, 56, 0.16) 0%, transparent 55%),
+    radial-gradient(100% 70% at 92% 100%, rgba(168, 86, 60, 0.12) 0%, transparent 55%),
+    radial-gradient(140% 120% at 50% 50%, transparent 55%, rgba(36, 24, 18, 0.08) 100%);
+  background-attachment: fixed;
 }
 
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
+/* grano de papel, muy sutil, encima de todo el fondo */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
 }
 
 a {
@@ -42,8 +72,318 @@ a {
   text-decoration: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
+/* ---------- layout base ---------- */
+.shell {
+  position: relative;
+  z-index: 1;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 22px 56px;
+}
+
+.stack {
+  width: 100%;
+  max-width: 430px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- tipografía / encabezados ---------- */
+.kicker {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--caramel-deep);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.kicker::before {
+  content: "";
+  width: 26px;
+  height: 1.5px;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 600;
+  font-size: clamp(2.5rem, 9vw, 3.4rem);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  margin: 16px 0 0;
+  color: var(--espresso);
+}
+.title em {
+  font-style: italic;
+  font-weight: 500;
+  color: var(--caramel-deep);
+}
+
+.lede {
+  margin-top: 14px;
+  font-size: 1.02rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  max-width: 34ch;
+}
+
+/* ---------- tarjeta contenedora del formulario ---------- */
+.panel {
+  margin-top: 30px;
+  background: linear-gradient(180deg, var(--foam), var(--cream));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 26px 24px 28px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 16px;
+}
+.field label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--bean);
+}
+.field input {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: var(--espresso);
+  background: #fff;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 13px 14px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.field input::placeholder {
+  color: #b6a68f;
+}
+.field input:focus {
+  outline: none;
+  border-color: var(--caramel);
+  box-shadow: 0 0 0 4px rgba(192, 127, 56, 0.18);
+}
+
+/* ---------- botones ---------- */
+.btn-primary {
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--foam);
+  background: var(--espresso);
+  border: none;
+  border-radius: 13px;
+  padding: 15px 18px;
+  margin-top: 6px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+  box-shadow: 0 12px 24px -14px rgba(36, 24, 18, 0.9);
+}
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  background: var(--bean);
+  box-shadow: 0 18px 30px -16px rgba(36, 24, 18, 0.95);
+}
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.alerta {
+  margin-top: 14px;
+  font-size: 0.9rem;
+  color: var(--clay);
+  background: rgba(168, 86, 60, 0.08);
+  border: 1px solid rgba(168, 86, 60, 0.25);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.nota {
+  margin-top: 18px;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ---------- previsualización de la tarjeta (réplica del pass) ---------- */
+.cardface {
+  position: relative;
+  border-radius: 16px;
+  padding: 20px 20px 18px;
+  color: var(--foam);
+  overflow: hidden;
+  box-shadow: 0 24px 44px -22px rgba(36, 24, 18, 0.75);
+  isolation: isolate;
+}
+.cardface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(120% 90% at 85% -10%, rgba(255, 255, 255, 0.14), transparent 60%),
+    radial-gradient(80% 80% at 0% 120%, rgba(0, 0, 0, 0.28), transparent 60%);
+}
+.cardface-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-body);
+  font-size: 0.66rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.82;
+}
+.cardface-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 0.9rem;
+}
+.cardface-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.45rem;
+  line-height: 1.1;
+  margin-top: 24px;
+}
+.cardface-points {
+  margin-top: 18px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.cardface-points b {
+  font-family: var(--font-display);
+  font-size: 2.1rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.cardface-points span {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+/* ---------- estado de éxito ---------- */
+.check {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--caramel);
+  color: var(--foam);
+  display: grid;
+  place-items: center;
+  font-size: 1.4rem;
+  box-shadow: 0 10px 22px -10px rgba(192, 127, 56, 0.8);
+}
+
+/* botón oficial-ish "Agregar a Apple Wallet" */
+.wallet-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 20px;
+  background: #000;
+  color: #fff;
+  border-radius: 13px;
+  padding: 14px 18px;
+  font-weight: 600;
+  font-size: 1rem;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  box-shadow: 0 12px 26px -14px rgba(0, 0, 0, 0.9);
+}
+.wallet-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 32px -16px rgba(0, 0, 0, 0.95);
+}
+.wallet-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* ---------- home ---------- */
+.home-mark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(3rem, 12vw, 4.6rem);
+  line-height: 0.98;
+  letter-spacing: -0.02em;
+}
+.home-mark em {
+  font-style: italic;
+  font-weight: 500;
+  color: var(--caramel-deep);
+}
+.home-tag {
+  margin-top: 18px;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  max-width: 40ch;
+}
+.home-foot {
+  margin-top: 34px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+.home-foot strong {
+  color: var(--bean);
+  font-weight: 600;
+}
+
+/* ---------- reveal escalonado al cargar ---------- */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.reveal {
+  opacity: 0;
+  animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+.reveal.d1 { animation-delay: 0.05s; }
+.reveal.d2 { animation-delay: 0.15s; }
+.reveal.d3 { animation-delay: 0.27s; }
+.reveal.d4 { animation-delay: 0.4s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    animation: none;
   }
 }
