@@ -59,6 +59,10 @@ describe('esAdminFm', () => {
   // maybeSingle() SIN filtro devuelve lo mismo que uno con filtro, así que las tres pruebas de
   // arriba siguen pasando aunque se borre el .eq(). Aquí hay una fila de OTRO usuario: sin el
   // filtro, maybeSingle() la devolvería y el intruso pasaría como admin.
+  //
+  // OJO: esto solo muerde si la tabla queda con UNA fila. maybeSingle() con 2+ filas devuelve
+  // error PGRST116, que esAdminFm convierte en false — o sea que con basura acumulada la versión
+  // mutada también daría false y esta prueba pasaría en vano, sin avisar de nada.
   it('devuelve false para un usuario sin fila aunque OTRO usuario sí sea admin', async () => {
     const idAdmin = await crearUsuarioAuth();
     await hacerAdmin(idAdmin);

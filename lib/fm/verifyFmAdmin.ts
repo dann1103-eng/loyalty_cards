@@ -26,10 +26,11 @@ export const verifyFmAdmin = cache(async () => {
   const { data, error } = await supabase.auth.getClaims();
 
   if (error) {
-    // A diferencia de esAdminFm, aquí un error NO siempre es infraestructura: un JWT vencido da
-    // AuthInvalidJwtError y es rutina. Pero AuthRetryableFetchError (Auth caído, red) aterriza
-    // en el mismo sitio, y sin este log una caída total se vería idéntica a "no hay sesión".
-    // warn y no error porque desde aquí no podemos distinguir cuál de los dos fue.
+    // A diferencia de esAdminFm, aquí un error NO siempre es infraestructura: un refresh token
+    // vencido o revocado da AuthApiError y es rutina. Pero AuthRetryableFetchError (Auth caído,
+    // red) aterriza en el mismo sitio, y sin este log una caída total se vería idéntica a "no hay
+    // sesión". No los separamos —warn, no error— porque el gate reacciona igual a ambos; si algún
+    // día importa distinguirlos, auth-js exporta isAuthRetryableFetchError().
     console.warn('[fm] getClaims() falló; se trata como sesión ausente:', error);
   }
 
