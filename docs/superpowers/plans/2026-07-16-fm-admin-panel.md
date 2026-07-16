@@ -394,13 +394,19 @@ import { createServiceClient } from '../supabase/server';
 import { esAdminFm } from './esAdminFm';
 
 const supabase = createServiceClient();
-let authUserId: string | null = null;
+const usuariosCreados: string[] = [];
 
 afterEach(async () => {
-  if (!authUserId) return;
-  await supabase.from('usuarios_fm').delete().eq('auth_user_id', authUserId);
-  await supabase.auth.admin.deleteUser(authUserId);
-  authUserId = null;
+  // Orden importante: la FK usuarios_fm.auth_user_id -> auth.users NO tiene cascade, así que la
+  // fila va antes que el usuario. Los fallos se registran en vez de tragarse: un borrado que
+  // falla deja basura que ninguna prueba volvería a sacar a la luz.
+  for (const id of usuariosCreados) {
+    const { error: errorFila } = await supabase.from('usuarios_fm').delete().eq('auth_user_id', id);
+    if (errorFila) console.error('[test] no se pudo borrar la fila de usuarios_fm:', errorFila);
+    const { error: errorUsuario } = await supabase.auth.admin.deleteUser(id);
+    if (errorUsuario) console.error('[test] no se pudo borrar el usuario de auth:', errorUsuario);
+  }
+  usuariosCreados.length = 0;
 });
 
 async function crearUsuarioAuth(): Promise<string> {
@@ -411,14 +417,21 @@ async function crearUsuarioAuth(): Promise<string> {
     email_confirm: true,
   });
   if (error) throw error;
-  authUserId = data.user.id;
+  usuariosCreados.push(data.user.id);
   return data.user.id;
+}
+
+async function hacerAdmin(id: string) {
+  const { error } = await supabase
+    .from('usuarios_fm')
+    .insert({ auth_user_id: id, email: `fm-${id}@ejemplo.test` });
+  if (error) throw error;
 }
 
 describe('esAdminFm', () => {
   it('devuelve true cuando el usuario tiene fila en usuarios_fm', async () => {
     const id = await crearUsuarioAuth();
-    await supabase.from('usuarios_fm').insert({ auth_user_id: id, email: `fm-${id}@ejemplo.test` });
+    await hacerAdmin(id);
 
     expect(await esAdminFm(supabase, id)).toBe(true);
   });
@@ -431,6 +444,18 @@ describe('esAdminFm', () => {
 
   it('devuelve false para un id que no existe', async () => {
     expect(await esAdminFm(supabase, '00000000-0000-0000-0000-000000000000')).toBe(false);
+  });
+
+  // Esta prueba existe por el .eq('auth_user_id', ...) de esAdminFm. Con la tabla vacía, un
+  // maybeSingle() SIN filtro devuelve lo mismo que uno con filtro, así que las tres pruebas de
+  // arriba siguen pasando aunque se borre el .eq(). Aquí hay una fila de OTRO usuario: sin el
+  // filtro, maybeSingle() la devolvería y el intruso pasaría como admin.
+  it('devuelve false para un usuario sin fila aunque OTRO usuario sí sea admin', async () => {
+    const idAdmin = await crearUsuarioAuth();
+    await hacerAdmin(idAdmin);
+    const idIntruso = await crearUsuarioAuth();
+
+    expect(await esAdminFm(supabase, idIntruso)).toBe(false);
   });
 });
 ```
@@ -474,7 +499,7 @@ export async function esAdminFm(
 ```
 
 Run: `npm test -- esAdminFm`
-Expected: 3 passed. (La rama de error queda sin cobertura a propósito: requiere una BD rota
+Expected: 4 passed. (La rama de error queda sin cobertura a propósito: requiere una BD rota
 para dispararse y no vale la pena simularla aquí.)
 
 - [ ] **Step 3: El gate**
@@ -496,12 +521,27 @@ import { esAdminFm } from './esAdminFm';
 // página. Y los Server Actions son POST a la ruta donde se usan — los docs de Next dicen
 // explícitamente que hay que verificar auth dentro de cada acción, no confiar en el Proxy.
 //
-// cache() lo memoiza por render pass (layout + página + acción comparten una sola consulta).
+// cache() lo memoiza por render pass, así que layout y página comparten una sola consulta. Un
+// Server Action corre fuera de ese render pass y probablemente hará la suya: no pasa nada,
+// cache() sin dispatcher simplemente ejecuta la función.
+//
+// OJO: redirect() funciona LANZANDO una excepción (NEXT_REDIRECT). Si envuelves una llamada a
+// verifyFmAdmin() en try/catch y te tragas el error, DESACTIVAS el gate — la ejecución sigue
+// como si el usuario estuviera autorizado. Llámalo siempre FUERA de cualquier try/catch.
 export const verifyFmAdmin = cache(async () => {
   const supabase = await createClienteServidor();
 
   // getClaims(), NO getSession(): getSession() no garantiza revalidar el token en servidor.
-  const { data } = await supabase.auth.getClaims();
+  const { data, error } = await supabase.auth.getClaims();
+
+  if (error) {
+    // A diferencia de esAdminFm, aquí un error NO siempre es infraestructura: un JWT vencido da
+    // AuthInvalidJwtError y es rutina. Pero AuthRetryableFetchError (Auth caído, red) aterriza
+    // en el mismo sitio, y sin este log una caída total se vería idéntica a "no hay sesión".
+    // warn y no error porque desde aquí no podemos distinguir cuál de los dos fue.
+    console.warn('[fm] getClaims() falló; se trata como sesión ausente:', error);
+  }
+
   const authUserId = data?.claims?.sub;
 
   if (!authUserId) {
@@ -520,7 +560,7 @@ export const verifyFmAdmin = cache(async () => {
 
 - [ ] **Step 4: Gates + commit**
 
-Run: `npm test` (37 passed: 34 + 3), `npm run typecheck`, `npm run lint`.
+Run: `npm test` (38 passed: 34 + 4), `npm run typecheck`, `npm run lint`.
 Confirma 0 filas huérfanas: los tests borran su usuario de auth y su fila.
 ```bash
 git add -A
