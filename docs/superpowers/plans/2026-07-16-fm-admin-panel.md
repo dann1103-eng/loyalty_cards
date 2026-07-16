@@ -268,6 +268,7 @@ Create `lib/supabase/proxy.ts`:
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Database } from './types';
+import { requireEnv } from '@/lib/env';
 
 // Refresca la cookie de sesión de Supabase en cada request a /admin/*. Esto NO puede vivir
 // solo en las páginas: los Server Components no pueden escribir cookies (limitación de Next),
@@ -276,8 +277,8 @@ export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
     {
       cookies: {
         getAll() {
@@ -781,7 +782,7 @@ Expected: 4 passed.
 
 - [ ] **Step 3: Gates + commit**
 
-Run: `npm test` (41 passed), `npm run typecheck`, `npm run lint`.
+Run: `npm test` — expect **45 passed** (34 base + 3 esAdminFm + 4 validarColorRgb + 4 guardarComercio). Run `npm run typecheck`, `npm run lint`.
 Confirma 0 comercios `test-%` huérfanos en la BD.
 ```bash
 git add -A
@@ -794,8 +795,24 @@ git commit -m "Add crearComercio and actualizarComercio with validation"
 
 **Files:**
 - Create: `app/admin/login/actions.ts`
-- Create: `app/admin/login/page.tsx`
+- Create: `app/admin/login/page.tsx` (Server Component)
+- Create: `app/admin/login/FormularioLogin.tsx` (Client Component)
 - Create: `app/admin/actions.ts`
+
+> ⚠️ **NO crees `app/admin/layout.tsx` — ni en esta tarea ni en ninguna.** Un layout ahí envolvería TAMBIÉN a `/admin/login`, y como el layout protegido redirige a `/admin/login`, se produciría un ciclo infinito (`ERR_TOO_MANY_REDIRECTS`). Un route group NO puede sacar una página de un layout que está por encima del grupo. El layout protegido va dentro del grupo, en la Tarea 8. Estructura final:
+>
+> ```
+> app/admin/
+>   actions.ts                  ← cerrarSesion (compartido)
+>   login/
+>     page.tsx                  ← sin chequeo (fuera del grupo protegido)
+>     FormularioLogin.tsx
+>     actions.ts
+>   (protegido)/
+>     layout.tsx                ← AQUÍ va verifyFmAdmin()
+>     comercios/...
+> ```
+> Los route groups no afectan la URL: `/admin/login` y `/admin/comercios` siguen igual.
 
 - [ ] **Step 1: Acción de login**
 
@@ -854,9 +871,9 @@ export async function cerrarSesion() {
 }
 ```
 
-- [ ] **Step 3: Página de login**
+- [ ] **Step 3: Formulario de login (cliente)**
 
-Create `app/admin/login/page.tsx`:
+Create `app/admin/login/FormularioLogin.tsx`:
 
 ```tsx
 'use client';
@@ -864,11 +881,63 @@ Create `app/admin/login/page.tsx`:
 import { useActionState } from 'react';
 import { iniciarSesion, type EstadoLogin } from './actions';
 
-export default function PaginaLogin() {
+export default function FormularioLogin({ mensajeInicial }: { mensajeInicial?: string }) {
   const [estado, accion, pendiente] = useActionState<EstadoLogin, FormData>(
     iniciarSesion,
     undefined,
   );
+
+  // El error de la acción (credenciales malas) tiene prioridad sobre el que venga por URL
+  // (p. ej. ?error=sin-permiso tras un rechazo de verifyFmAdmin).
+  const mensaje = estado?.error ?? mensajeInicial;
+
+  return (
+    <form className="panel reveal d3" action={accion}>
+      <div className="field">
+        <label htmlFor="email">Correo</label>
+        <input id="email" name="email" type="email" autoComplete="email" required />
+      </div>
+      <div className="field">
+        <label htmlFor="password">Contraseña</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+        />
+      </div>
+      <button className="btn-primary" type="submit" disabled={pendiente}>
+        {pendiente ? 'Entrando…' : 'Entrar'}
+      </button>
+      {mensaje && (
+        <p className="alerta" role="alert">
+          {mensaje}
+        </p>
+      )}
+    </form>
+  );
+}
+```
+
+- [ ] **Step 4: Página de login (servidor)**
+
+Create `app/admin/login/page.tsx`. Es Server Component a propósito: así lee `searchParams` como prop y NO necesita `useSearchParams()` — que en un componente cliente exigiría envolverlo en `<Suspense>` o rompería el build al prerenderizar.
+
+```tsx
+import FormularioLogin from './FormularioLogin';
+
+const MENSAJES: Record<string, string> = {
+  'sin-permiso': 'Esa cuenta no tiene acceso al panel de FM.',
+  'sesion-vencida': 'Tu sesión expiró. Vuelve a entrar.',
+};
+
+export default async function PaginaLogin({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
 
   return (
     <main className="shell">
@@ -877,31 +946,7 @@ export default function PaginaLogin() {
         <h1 className="title reveal d2">
           Panel <em>interno</em>
         </h1>
-
-        <form className="panel reveal d3" action={accion}>
-          <div className="field">
-            <label htmlFor="email">Correo</label>
-            <input id="email" name="email" type="email" autoComplete="email" required />
-          </div>
-          <div className="field">
-            <label htmlFor="password">Contraseña</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-            />
-          </div>
-          <button className="btn-primary" type="submit" disabled={pendiente}>
-            {pendiente ? 'Entrando…' : 'Entrar'}
-          </button>
-          {estado?.error && (
-            <p className="alerta" role="alert">
-              {estado.error}
-            </p>
-          )}
-        </form>
+        <FormularioLogin mensajeInicial={error ? MENSAJES[error] : undefined} />
       </div>
     </main>
   );
@@ -910,13 +955,14 @@ export default function PaginaLogin() {
 
 Reutiliza las clases del sistema visual existente (`shell`, `stack`, `kicker`, `title`, `panel`, `field`, `btn-primary`, `alerta`) definidas en `app/globals.css` — no inventes estilos nuevos.
 
-- [ ] **Step 4: Verificar**
+- [ ] **Step 5: Verificar**
 
-Run: `npm run build` → exitoso.
+Run: `npm run build` → exitoso (si falla por prerender de `/admin/login`, revisa que la página NO use `useSearchParams()`).
 Run: `npm run dev`, abre `http://localhost:3000/admin/login` → se ve el formulario con el estilo del sitio.
-Intenta entrar con credenciales falsas → "Correo o contraseña incorrectos." (NO un 500). Detén el dev server.
+Intenta entrar con credenciales falsas → "Correo o contraseña incorrectos." (NO un 500).
+Abre `http://localhost:3000/admin/login?error=sin-permiso` → se ve "Esa cuenta no tiene acceso al panel de FM." Detén el dev server.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -928,18 +974,21 @@ git commit -m "Add FM admin login page with sign-in and sign-out actions"
 ### Task 8: Layout protegido + lista de comercios
 
 **Files:**
-- Create: `app/admin/layout.tsx`
-- Create: `app/admin/comercios/page.tsx`
+- Create: `app/admin/(protegido)/layout.tsx`
+- Create: `app/admin/(protegido)/comercios/page.tsx`
+- Modify: `app/globals.css`
 
-- [ ] **Step 1: Layout**
+- [ ] **Step 1: Layout protegido (DENTRO del grupo)**
 
-Create `app/admin/layout.tsx`:
+> ⚠️ **Va en `app/admin/(protegido)/layout.tsx`, NO en `app/admin/layout.tsx`.** Esto no es cosmético: un layout en `app/admin/` envolvería también a `/admin/login`, y como este layout redirige ahí, daría un ciclo infinito. Los route groups NO pueden sacar una página de un layout que está por encima del grupo — por eso `app/admin/layout.tsx` simplemente no debe existir. Antes de seguir, confirma: `ls app/admin/layout.tsx` → debe decir "No such file".
+
+Create `app/admin/(protegido)/layout.tsx`:
 
 ```tsx
 import { verifyFmAdmin } from '@/lib/fm/verifyFmAdmin';
-import { cerrarSesion } from './actions';
+import { cerrarSesion } from '../actions';
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+export default async function LayoutProtegido({ children }: { children: React.ReactNode }) {
   // Primera barrera. NO es la única: cada página y cada Server Action repiten el chequeo,
   // porque los layouts no se re-renderizan en navegación del lado del cliente.
   await verifyFmAdmin();
@@ -960,21 +1009,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 }
 ```
 
-**Ojo:** el layout de `/admin` también envuelve a `/admin/login`, y `verifyFmAdmin()` redirige a `/admin/login` → ciclo infinito. Para evitarlo, mueve la página de login FUERA de este layout usando un route group: renombra la carpeta a `app/admin/(publico)/login/` y crea `app/admin/(publico)/layout.tsx` que solo renderice `{children}` sin el chequeo. El resto (`comercios/`) vive bajo un grupo `(protegido)` con el layout de arriba. Estructura final:
-
-```
-app/admin/
-  (publico)/
-    layout.tsx        ← sin chequeo
-    login/page.tsx
-    login/actions.ts
-  (protegido)/
-    layout.tsx        ← con verifyFmAdmin()
-    comercios/...
-  actions.ts          ← cerrarSesion (compartido)
-```
-
-Ajusta los imports de la Tarea 7 a las rutas nuevas. Los route groups no afectan la URL: `/admin/login` y `/admin/comercios` siguen igual.
+Nota el import: `../actions` (sube al `app/admin/actions.ts` de la Tarea 7), no `./actions`. Los archivos de la Tarea 7 (`app/admin/login/…`) NO se mueven ni cambian.
 
 - [ ] **Step 2: Estilos del panel**
 
@@ -1448,6 +1483,16 @@ export default async function PaginaEditarComercio({
   // (estado, formData).
   const accion = accionActualizarComercio.bind(null, id);
 
+  // Las columnas de color son nullable en la BD (migración 0001) pero DatosComercio las
+  // declara string, así que Partial<DatosComercio> las vuelve `string | undefined` y NO
+  // acepta null. Pasar `comercio` directo es un error de tipos (TS2322) — hay que mapear.
+  const inicial = {
+    ...comercio,
+    color_fondo: comercio.color_fondo ?? '',
+    color_texto: comercio.color_texto ?? '',
+    color_label: comercio.color_label ?? '',
+  };
+
   return (
     <main className="admin-main">
       <div className="admin-encabezado">
@@ -1458,7 +1503,7 @@ export default async function PaginaEditarComercio({
           ← Volver
         </Link>
       </div>
-      <FormularioComercio accion={accion} inicial={comercio} textoBoton="Guardar cambios" />
+      <FormularioComercio accion={accion} inicial={inicial} textoBoton="Guardar cambios" />
     </main>
   );
 }
@@ -1466,7 +1511,7 @@ export default async function PaginaEditarComercio({
 
 - [ ] **Step 5: Gates + commit**
 
-Run: `npm run build`, `npm run typecheck`, `npm run lint`, `npm test` (41 passed).
+Run: `npm run build`, `npm run typecheck`, `npm run lint`, `npm test` (45 passed).
 ```bash
 git add -A
 git commit -m "Add comercio create/edit form and server actions"
@@ -1578,6 +1623,13 @@ git commit -m "Add FM account seed script"
 Ya se aplicó en la Tarea 1 (la base de Supabase es la misma para local y producción en este proyecto — no hay entornos separados). Confirma con `npm run verify-schema`.
 
 - [ ] **Step 2: Merge y push**
+
+Antes del merge, confirma que `master` no divergió del remoto (al momento de escribir este plan iba varios commits adelante de `origin/master`):
+```bash
+git fetch origin
+git log --oneline origin/master..master
+```
+Si hay commits locales sin subir, están bien — son de este proyecto; solo asegúrate de que `master` no esté DETRÁS de `origin/master` (si lo está, `git pull --ff-only` primero).
 
 ```bash
 git checkout master
