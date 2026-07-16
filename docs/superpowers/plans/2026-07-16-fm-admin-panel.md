@@ -1199,6 +1199,7 @@ git commit -m "Add protected admin layout and comercios list page"
 - Create: `app/admin/(protegido)/comercios/actions.ts`
 - Create: `app/admin/(protegido)/comercios/nuevo/page.tsx`
 - Create: `app/admin/(protegido)/comercios/[id]/editar/page.tsx`
+- Modify: `app/globals.css` (estilos del `<select>`, Step 2)
 
 - [ ] **Step 1: Server Actions**
 
