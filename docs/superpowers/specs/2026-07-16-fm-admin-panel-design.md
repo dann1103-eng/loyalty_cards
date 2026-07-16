@@ -34,6 +34,8 @@ Esta fase construye además la infraestructura de autenticación (Supabase Auth 
 
 Una sola fila hoy (la cuenta compartida de FM), pero modelada como tabla real — visible y editable en Supabase Studio — en vez de un correo quemado en código o en variables de entorno. RLS: activado, deny-all salvo `service_role` (mismo patrón que el resto del esquema).
 
+No hay UI para gestionar `usuarios_fm` en esta fase — la única fila se crea manualmente (Supabase Studio o un script, igual que `scripts/seed-pilot-comercio.ts` siembra el comercio piloto hoy), después de crear la cuenta correspondiente en Supabase Auth.
+
 ### Columnas nuevas en `comercios` (licencia)
 
 | Campo | Tipo | Notas |
@@ -47,20 +49,25 @@ Deliberadamente simple y mutable (no versionado con historial) — es seguimient
 
 ## 5. Componentes
 
-1. **`/admin/login`** — formulario email + contraseña. Primer uso en el proyecto de un cliente de Supabase en el navegador (con la anon key) para `supabase.auth.signInWithPassword`.
-2. **Layout protegido `/admin/*`** — cada request bajo este layout valida la sesión (vía `@supabase/ssr`, lectura de cookies) y confirma que exista una fila en `usuarios_fm` para ese `auth_user_id`; si no, redirige a `/admin/login`.
-3. **`/admin/comercios`** — lista de comercios: nombre, slug, estado de licencia, monto mensual.
-4. **`/admin/comercios/nuevo`** — formulario de alta: nombre, slug, 3 colores (`rgb(r,g,b)`), URLs de logo/franja/imagen principal, campos de licencia.
-5. **`/admin/comercios/[id]/editar`** — mismo formulario, precargado, para editar un comercio existente.
-6. **Server Actions** de creación/edición — validan (slug único, formato de color) y escriben con `createServiceClient()` (mismo cliente de servidor de siempre), después de confirmar que quien llama es un admin de FM autenticado.
+1. **`/admin/login`** — formulario email + contraseña. Usa `createBrowserClient` de `@supabase/ssr` (NO el `createClient` plano de `@supabase/supabase-js` que ya se usa del lado del servidor) para `supabase.auth.signInWithPassword` — usar el cliente equivocado guardaría la sesión en `localStorage` en vez de cookies, y rompería en silencio todos los chequeos del servidor descritos abajo.
+2. **`verifyFmAdmin()`** — un único helper de servidor, no un chequeo "solo en el layout". Next.js 16 (este proyecto) renombró Middleware a Proxy, y su propia guía de autenticación advierte explícitamente que los layouts no se vuelven a renderizar en navegación del lado del cliente dentro de App Router — un chequeo únicamente ahí puede no detectar una sesión vencida al navegar entre páginas. Por eso `verifyFmAdmin()` se llama desde **tres lugares**: el layout de `/admin` (primera barrera), cada página bajo `/admin` (defensa en profundidad, siguiendo la guía del propio framework), y cada Server Action de creación/edición (para que una acción invocada directamente nunca dependa solo del chequeo de la página). Además, se necesita un `proxy.ts` (el archivo que reemplaza a `middleware.ts` en Next.js 16) para refrescar la cookie de sesión de Supabase — los Server Components no pueden escribir cookies, por lo que ese refresco no puede vivir únicamente en las páginas.
+3. **Logout** — una acción simple que cierra la sesión de Supabase Auth y redirige a `/admin/login`.
+4. **`/admin/comercios`** — lista de comercios: nombre, slug, estado de licencia, monto mensual.
+5. **`/admin/comercios/nuevo`** — formulario de alta: nombre, slug, 3 colores (`rgb(r,g,b)`), URLs de logo/franja/imagen principal, campos de licencia.
+6. **`/admin/comercios/[id]/editar`** — mismo formulario, precargado, para editar un comercio existente.
+7. **Server Actions** de creación/edición — validan (slug único, formato de color) y escriben con `createServiceClient()` (mismo cliente de servidor de siempre), después de que `verifyFmAdmin()` confirme la sesión.
 
 ## 6. Flujo de datos
 
-**Login:** FM ingresa email+contraseña → Supabase Auth crea la sesión (cookie httpOnly vía `@supabase/ssr`) → redirige a `/admin/comercios`.
+**Login:** FM ingresa email+contraseña (vía `createBrowserClient`) → Supabase Auth crea la sesión (cookie httpOnly) → redirige a `/admin/comercios`.
 
-**Cada página de `/admin`:** valida la sesión y la fila en `usuarios_fm` en el servidor antes de renderizar o procesar cualquier acción.
+**`proxy.ts`** refresca la cookie de sesión de Supabase en cada request que toque `/admin/*` (los Server Components no pueden escribir cookies, por eso este paso no puede vivir solo en las páginas).
 
-**Crear/editar comercio:** formulario → Server Action → valida slug único y formato de color → `createServiceClient()` inserta/actualiza → redirige a la lista.
+**Cada página y Server Action de `/admin`:** llama a `verifyFmAdmin()` — valida la sesión y confirma la fila en `usuarios_fm` — antes de renderizar o procesar cualquier acción. El layout hace la primera verificación; páginas y Server Actions repiten la misma verificación como defensa en profundidad, no confían solo en el layout.
+
+**Crear/editar comercio:** formulario → Server Action (con `verifyFmAdmin()` ya pasado) → valida slug único y formato de color → `createServiceClient()` inserta/actualiza → redirige a la lista.
+
+**Logout:** cierra la sesión de Supabase Auth → redirige a `/admin/login`.
 
 ## 7. Manejo de errores
 
