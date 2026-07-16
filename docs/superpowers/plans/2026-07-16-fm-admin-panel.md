@@ -453,18 +453,29 @@ export async function esAdminFm(
   supabase: SupabaseClient<Database>,
   authUserId: string,
 ): Promise<boolean> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('usuarios_fm')
     .select('id')
     .eq('auth_user_id', authUserId)
     .maybeSingle();
+
+  if (error) {
+    // maybeSingle() devuelve error: null cuando no hay filas — así que un error aquí SIEMPRE
+    // es infraestructura (llave revocada, migración rota, red), nunca un "no es admin".
+    // Seguimos fallando cerrado (false), pero dejamos rastro: sin esto una caída total se ve
+    // idéntica a una denegación rutinaria, y el admin recibiría "no tienes acceso" —mentira—
+    // sin una sola línea de log que lo explique.
+    console.error('[fm] falló la consulta de usuarios_fm; se deniega por seguridad:', error);
+    return false;
+  }
 
   return Boolean(data);
 }
 ```
 
 Run: `npm test -- esAdminFm`
-Expected: 3 passed.
+Expected: 3 passed. (La rama de error queda sin cobertura a propósito: requiere una BD rota
+para dispararse y no vale la pena simularla aquí.)
 
 - [ ] **Step 3: El gate**
 
