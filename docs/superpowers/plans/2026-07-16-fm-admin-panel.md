@@ -641,7 +641,9 @@ describe('crearComercio', () => {
       .single();
     expect(data!.nombre).toBe('Comercio Test');
     expect(data!.licencia_estado).toBe('activo');
-    expect(Number(data!.licencia_monto_mensual)).toBe(25);
+    // Sin Number(): PostgREST devuelve numeric como número JSON. Aserción más fuerte —
+    // fallaría ruidosamente si eso cambiara, en vez de que Number() lo tapara en silencio.
+    expect(data!.licencia_monto_mensual).toBe(25);
   });
 
   it('rechaza un slug duplicado con un mensaje claro, sin lanzar', async () => {
@@ -659,6 +661,17 @@ describe('crearComercio', () => {
 
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/color/i);
+  });
+
+  it('rechaza un monto mensual negativo', async () => {
+    const slug = `test-monto-${Date.now()}`;
+    const res = await crearComercio(supabase, {
+      ...datosValidos(slug),
+      licencia_monto_mensual: -50,
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/monto/i);
   });
 });
 
@@ -718,6 +731,8 @@ export type ResultadoGuardar =
   | { ok: false; error: string };
 
 // Devuelve el primer problema encontrado, o null si todo está bien.
+// TODA la validación vive aquí, no en los Server Actions: esta es la capa con tests de
+// integración. Una regla que solo exista en la acción no está cubierta por ninguna prueba.
 function validar(datos: DatosComercio): string | null {
   if (!datos.nombre.trim()) return 'El nombre es obligatorio.';
   if (!/^[a-z0-9-]+$/.test(datos.slug)) {
@@ -732,6 +747,10 @@ function validar(datos: DatosComercio): string | null {
     if (!validarColorRgb(valor)) {
       return `El ${nombre} debe tener el formato rgb(r, g, b) con valores de 0 a 255.`;
     }
+  }
+  const monto = datos.licencia_monto_mensual;
+  if (monto !== null && (!Number.isFinite(monto) || monto < 0)) {
+    return 'El monto mensual debe ser un número positivo.';
   }
   return null;
 }
@@ -778,11 +797,11 @@ export async function actualizarComercio(
 ```
 
 Run: `npm test -- guardarComercio`
-Expected: 4 passed.
+Expected: 5 passed.
 
 - [ ] **Step 3: Gates + commit**
 
-Run: `npm test` — expect **45 passed** (34 base + 3 esAdminFm + 4 validarColorRgb + 4 guardarComercio). Run `npm run typecheck`, `npm run lint`.
+Run: `npm test` — expect **46 passed** (34 base + 3 esAdminFm + 4 validarColorRgb + 5 guardarComercio). Run `npm run typecheck`, `npm run lint`.
 Confirma 0 comercios `test-%` huérfanos en la BD.
 ```bash
 git add -A
@@ -1239,6 +1258,8 @@ function leerDatos(formData: FormData): DatosComercio {
   };
 }
 
+// Las acciones NO validan: toda la validación (incluido el monto) vive en validar(), dentro
+// de guardarComercio.ts, que es la capa con tests. Aquí solo: autenticar, parsear, delegar.
 export async function accionCrearComercio(
   _estadoPrevio: EstadoFormulario,
   formData: FormData,
@@ -1247,13 +1268,7 @@ export async function accionCrearComercio(
   // propias, y los docs de Next dicen explícitamente que no hay que confiar solo en el Proxy.
   await verifyFmAdmin();
 
-  const datos = leerDatos(formData);
-  const monto = datos.licencia_monto_mensual;
-  if (monto !== null && (!Number.isFinite(monto) || monto < 0)) {
-    return { error: 'El monto mensual debe ser un número positivo.' };
-  }
-
-  const res = await crearComercio(createServiceClient(), datos);
+  const res = await crearComercio(createServiceClient(), leerDatos(formData));
   if (!res.ok) return { error: res.error };
 
   revalidatePath('/admin/comercios');
@@ -1267,13 +1282,7 @@ export async function accionActualizarComercio(
 ): Promise<EstadoFormulario> {
   await verifyFmAdmin();
 
-  const datos = leerDatos(formData);
-  const monto = datos.licencia_monto_mensual;
-  if (monto !== null && (!Number.isFinite(monto) || monto < 0)) {
-    return { error: 'El monto mensual debe ser un número positivo.' };
-  }
-
-  const res = await actualizarComercio(createServiceClient(), id, datos);
+  const res = await actualizarComercio(createServiceClient(), id, leerDatos(formData));
   if (!res.ok) return { error: res.error };
 
   revalidatePath('/admin/comercios');
@@ -1512,7 +1521,7 @@ export default async function PaginaEditarComercio({
 
 - [ ] **Step 5: Gates + commit**
 
-Run: `npm run build`, `npm run typecheck`, `npm run lint`, `npm test` (45 passed).
+Run: `npm run build`, `npm run typecheck`, `npm run lint`, `npm test` (46 passed).
 ```bash
 git add -A
 git commit -m "Add comercio create/edit form and server actions"
