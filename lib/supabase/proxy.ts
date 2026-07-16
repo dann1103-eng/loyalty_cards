@@ -39,12 +39,27 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const usuario = data?.claims;
 
+  // Anclado a propósito: un startsWith suelto también eximiría a /admin/login-sso o
+  // /admin/loginXYZ, heredando una exención que nadie pidió. Así solo se eximen /admin/login
+  // y sus sub-rutas legítimas (p. ej. un futuro /admin/login/reset).
+  const ruta = request.nextUrl.pathname;
+  const esRutaLogin = ruta === '/admin/login' || ruta.startsWith('/admin/login/');
+
   // Primera barrera (rápida). El gate real es verifyFmAdmin() en layout/página/acción.
   // /admin/login se excluye o se cicla infinitamente contra sí mismo.
-  if (!usuario && !request.nextUrl.pathname.startsWith('/admin/login')) {
+  if (!usuario && !esRutaLogin) {
     const url = request.nextUrl.clone();
     url.pathname = '/admin/login';
-    return NextResponse.redirect(url);
+    // clone() conserva el query string y cambiar .pathname no lo limpia: sin esto,
+    // /admin/comercios?error=sin-permiso mostraría "sin permiso" a alguien que solo no tiene
+    // sesión. Nada necesita preservarlo: el login redirige a un destino fijo.
+    url.search = '';
+    const respuesta = NextResponse.redirect(url);
+    // Si getClaims() detectó un token muerto, setAll ya escribió las cookies de borrado en
+    // supabaseResponse; devolver un redirect nuevo sin copiarlas las tiraría — justo lo que
+    // advierte el comentario del final de esta función.
+    supabaseResponse.cookies.getAll().forEach((c) => respuesta.cookies.set(c));
+    return respuesta;
   }
 
   // Devolver supabaseResponse tal cual: si lo reemplazas por otro NextResponse sin copiar las
