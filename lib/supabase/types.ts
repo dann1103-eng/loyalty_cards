@@ -3,6 +3,7 @@
 // TRANSCRITOS A MANO desde las migraciones (fuente de verdad):
 //   - supabase/migrations/0001_esquema_inicial.sql
 //   - supabase/migrations/0002_rls_clientes_e_indice_dispositivos.sql (RLS + índice; no cambia columnas)
+//   - supabase/migrations/0003_usuarios_fm_y_licencias.sql (tabla usuarios_fm + columnas licencia_* en comercios)
 //
 // Hasta que `supabase gen types` esté cableado (requiere auth del CLI), este archivo se
 // mantiene a mano: si llega una migración nueva, hay que actualizarlo en el mismo commit.
@@ -27,6 +28,10 @@ export type Database = {
           hero_url: string | null;
           google_class_id: string | null;
           created_at: string;
+          licencia_estado: string;
+          licencia_plan: string | null;
+          licencia_monto_mensual: number | null;
+          licencia_activa_desde: string | null;
         };
         Insert: {
           id?: string;
@@ -40,6 +45,10 @@ export type Database = {
           hero_url?: string | null;
           google_class_id?: string | null;
           created_at?: string;
+          licencia_estado?: string;
+          licencia_plan?: string | null;
+          licencia_monto_mensual?: number | null;
+          licencia_activa_desde?: string | null;
         };
         Update: {
           id?: string;
@@ -53,6 +62,10 @@ export type Database = {
           hero_url?: string | null;
           google_class_id?: string | null;
           created_at?: string;
+          licencia_estado?: string;
+          licencia_plan?: string | null;
+          licencia_monto_mensual?: number | null;
+          licencia_activa_desde?: string | null;
         };
         Relationships: [];
       };
@@ -305,6 +318,27 @@ export type Database = {
             referencedColumns: ['id'];
           },
         ];
+      };
+      usuarios_fm: {
+        Row: {
+          id: string;
+          auth_user_id: string;
+          email: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          auth_user_id: string;
+          email: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          auth_user_id?: string;
+          email?: string;
+          created_at?: string;
+        };
+        Relationships: [];
       };
     };
     // Secciones vacías en la forma canónica de `supabase gen types` ({ [_ in never]: never }).
