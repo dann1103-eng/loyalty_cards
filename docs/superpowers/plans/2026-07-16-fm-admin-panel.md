@@ -620,10 +620,15 @@ describe('validarColorRgb', () => {
 
   it('rechaza un rgb() válido envuelto en basura', () => {
     // Fija los anclajes ^ y $. Importa más de lo que parece: la regex de passkit-generator NO
-    // está anclada (es un test de subcadena), así que la librería aceptaría estos dos y el
+    // está anclada (es un test de subcadena), así que la librería aceptaría estos tres y el
     // string malformado llegaría a Wallet dentro de un pass firmado. Esta es la única defensa.
+    //
+    // Hacen falta las dos formas: los primeros dos NO terminan en una tripleta válida, así que
+    // el $ los rechaza solo y el ^ nunca se ejercita. El tercero (basura ANTES, tripleta al
+    // final) es el único que fija el ^.
     expect(validarColorRgb('garbage rgb(0,0,0) garbage')).toBe(false);
     expect(validarColorRgb('rgb(0,0,0); background: url(x)')).toBe(false);
+    expect(validarColorRgb('javascript:alert(1) rgb(0,0,0)')).toBe(false);
   });
 
   it('rechaza canales con relleno de ceros', () => {
@@ -897,7 +902,7 @@ Expected: 5 passed.
 
 - [ ] **Step 3: Gates + commit**
 
-Run: `npm test` — expect **46 passed** (34 base + 3 esAdminFm + 4 validarColorRgb + 5 guardarComercio). Run `npm run typecheck`, `npm run lint`.
+Run: `npm test` — expect **50 passed** (34 base + 4 esAdminFm + 7 validarColorRgb + 5 guardarComercio). Run `npm run typecheck`, `npm run lint`.
 Confirma 0 comercios `test-%` huérfanos en la BD.
 ```bash
 git add -A
