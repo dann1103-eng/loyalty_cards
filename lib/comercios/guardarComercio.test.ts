@@ -80,6 +80,19 @@ describe('crearComercio', () => {
     if (!res.ok) expect(res.error).toMatch(/monto/i);
   });
 
+  it('rechaza un estado de licencia que la BD no acepta', async () => {
+    const slug = `test-estado-${Date.now()}`;
+    const res = await crearComercio(supabase, {
+      ...datosValidos(slug),
+      licencia_estado: 'suspendido',
+    });
+
+    expect(res.ok).toBe(false);
+    // Debe explicar QUÉ está mal. Sin la validación, esto igual daría ok:false — pero por un
+    // 23514 traducido a "No se pudo crear el comercio", que no le dice nada a nadie.
+    if (!res.ok) expect(res.error).toMatch(/estado/i);
+  });
+
   it('normaliza espacios y guarda los opcionales vacíos como null', async () => {
     const slug = `test-normalizar-${Date.now()}`;
     const res = await crearComercio(supabase, {

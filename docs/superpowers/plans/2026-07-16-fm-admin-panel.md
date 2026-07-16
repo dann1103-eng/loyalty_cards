@@ -777,6 +777,19 @@ describe('crearComercio', () => {
     if (!res.ok) expect(res.error).toMatch(/monto/i);
   });
 
+  it('rechaza un estado de licencia que la BD no acepta', async () => {
+    const slug = `test-estado-${Date.now()}`;
+    const res = await crearComercio(supabase, {
+      ...datosValidos(slug),
+      licencia_estado: 'suspendido',
+    });
+
+    expect(res.ok).toBe(false);
+    // Debe explicar QUÉ está mal. Sin la validación, esto igual daría ok:false — pero por un
+    // 23514 traducido a "No se pudo crear el comercio", que no le dice nada a nadie.
+    if (!res.ok) expect(res.error).toMatch(/estado/i);
+  });
+
   it('normaliza espacios y guarda los opcionales vacíos como null', async () => {
     const slug = `test-normalizar-${Date.now()}`;
     const res = await crearComercio(supabase, {
@@ -837,6 +850,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { validarColorRgb } from './validarColorRgb';
 
+// Fuente única de verdad: la BD tiene check (licencia_estado in ('activo','inactivo')) en la
+// migración 0003. El <select> de la Tarea 9 se construye desde esta misma constante para que el
+// formulario y el validador no puedan divergir.
+export const ESTADOS_LICENCIA = ['activo', 'inactivo'] as const;
+export type EstadoLicencia = (typeof ESTADOS_LICENCIA)[number];
+
 export interface DatosComercio {
   nombre: string;
   slug: string;
@@ -890,6 +909,12 @@ function validar(datos: DatosComercio): string | null {
   if (!datos.nombre) return 'El nombre es obligatorio.';
   if (!/^[a-z0-9-]+$/.test(datos.slug)) {
     return 'El slug solo puede tener minúsculas, números y guiones.';
+  }
+  if (!(ESTADOS_LICENCIA as readonly string[]).includes(datos.licencia_estado)) {
+    // Sin esto, un estado inválido no falla aquí: falla en la BD con un 23514 (violación de
+    // CHECK), que el manejo de errores —que solo distingue 23505— convierte en un genérico
+    // "No se pudo crear el comercio". El admin se queda sin saber qué escribió mal.
+    return 'El estado de la licencia debe ser "activo" o "inactivo".';
   }
   const colores: [string, string][] = [
     ['color de fondo', datos.color_fondo],
@@ -954,11 +979,11 @@ export async function actualizarComercio(
 ```
 
 Run: `npm test -- guardarComercio`
-Expected: 6 passed.
+Expected: 7 passed.
 
 - [ ] **Step 3: Gates + commit**
 
-Run: `npm test` — expect **51 passed** (34 base + 4 esAdminFm + 7 validarColorRgb + 6 guardarComercio). Run `npm run typecheck`, `npm run lint`.
+Run: `npm test` — expect **52 passed** (34 base + 4 esAdminFm + 7 validarColorRgb + 7 guardarComercio). Run `npm run typecheck`, `npm run lint`.
 Confirma 0 comercios `test-%` huérfanos en la BD.
 ```bash
 git add -A

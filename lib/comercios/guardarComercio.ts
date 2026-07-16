@@ -2,6 +2,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { validarColorRgb } from './validarColorRgb';
 
+// Fuente única de verdad: la BD tiene check (licencia_estado in ('activo','inactivo')) en la
+// migración 0003. El <select> de la Tarea 9 se construye desde esta misma constante para que el
+// formulario y el validador no puedan divergir.
+export const ESTADOS_LICENCIA = ['activo', 'inactivo'] as const;
+export type EstadoLicencia = (typeof ESTADOS_LICENCIA)[number];
+
 export interface DatosComercio {
   nombre: string;
   slug: string;
@@ -55,6 +61,12 @@ function validar(datos: DatosComercio): string | null {
   if (!datos.nombre) return 'El nombre es obligatorio.';
   if (!/^[a-z0-9-]+$/.test(datos.slug)) {
     return 'El slug solo puede tener minúsculas, números y guiones.';
+  }
+  if (!(ESTADOS_LICENCIA as readonly string[]).includes(datos.licencia_estado)) {
+    // Sin esto, un estado inválido no falla aquí: falla en la BD con un 23514 (violación de
+    // CHECK), que el manejo de errores —que solo distingue 23505— convierte en un genérico
+    // "No se pudo crear el comercio". El admin se queda sin saber qué escribió mal.
+    return 'El estado de la licencia debe ser "activo" o "inactivo".';
   }
   const colores: [string, string][] = [
     ['color de fondo', datos.color_fondo],
