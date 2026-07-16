@@ -684,8 +684,6 @@ git commit -m "Add rgb color validation for comercio branding"
 
 ### Task 6: `crearComercio()` y `actualizarComercio()` (TDD)
 
-**Nota (de la revisión de la Tarea 5):** `validarColorRgb` valida `valor.trim()` pero `guardarComercio` inserta el valor tal cual, así que `'  rgb(0,0,0)  '` pasa la validación y se guarda con espacios. Normaliza los colores con `.trim()` en `validar()` (o antes del insert) para que se valide exactamente lo que se almacena.
-
 Funciones puras de datos, igual que `registrarCliente` — los Server Actions las envuelven en la Tarea 9.
 
 **Files:**
@@ -705,10 +703,10 @@ const supabase = createServiceClient();
 const slugsDePrueba: string[] = [];
 
 afterEach(async () => {
-  if (slugsDePrueba.length) {
-    await supabase.from('comercios').delete().in('slug', slugsDePrueba);
-    slugsDePrueba.length = 0;
-  }
+  if (!slugsDePrueba.length) return;
+  const { error } = await supabase.from('comercios').delete().in('slug', slugsDePrueba);
+  if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
+  slugsDePrueba.length = 0;
 });
 
 function datosValidos(slug: string): DatosComercio {
@@ -725,7 +723,7 @@ function datosValidos(slug: string): DatosComercio {
     licencia_estado: 'activo',
     licencia_plan: 'Básico',
     licencia_monto_mensual: 25,
-    licencia_activa_desde: '2026-07-16T00:00:00.000Z',
+    licencia_activa_desde: '2026-07-16',
   };
 }
 
@@ -737,7 +735,7 @@ describe('crearComercio', () => {
     expect(res.ok).toBe(true);
     const { data } = await supabase
       .from('comercios')
-      .select('nombre, licencia_estado, licencia_monto_mensual')
+      .select('nombre, licencia_estado, licencia_monto_mensual, licencia_activa_desde')
       .eq('slug', slug)
       .single();
     expect(data!.nombre).toBe('Comercio Test');
@@ -745,6 +743,10 @@ describe('crearComercio', () => {
     // Sin Number(): PostgREST devuelve numeric como número JSON. Aserción más fuerte —
     // fallaría ruidosamente si eso cambiara, en vez de que Number() lo tapara en silencio.
     expect(data!.licencia_monto_mensual).toBe(25);
+    // Fija la migración 0004: la columna es `date`, no timestamptz, y PostgREST la devuelve
+    // como "2026-07-16" tal cual. Si alguien la revierte a timestamptz, esto falla — que es el
+    // punto: con timestamptz, El Salvador (UTC-6) renderizaría el 15 de julio en cada fila.
+    expect(data!.licencia_activa_desde).toBe('2026-07-16');
   });
 
   it('rechaza un slug duplicado con un mensaje claro, sin lanzar', async () => {
@@ -773,6 +775,29 @@ describe('crearComercio', () => {
 
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/monto/i);
+  });
+
+  it('normaliza espacios y guarda los opcionales vacíos como null', async () => {
+    const slug = `test-normalizar-${Date.now()}`;
+    const res = await crearComercio(supabase, {
+      ...datosValidos(slug),
+      nombre: '  Café con Espacios  ',
+      color_fondo: '  rgb(35, 24, 18)  ',
+      logo_url: '',
+    });
+
+    expect(res.ok).toBe(true);
+    const { data } = await supabase
+      .from('comercios')
+      .select('nombre, color_fondo, logo_url')
+      .eq('slug', slug)
+      .single();
+    expect(data!.nombre).toBe('Café con Espacios');
+    // validarColorRgb hace su propio .trim() interno, así que sin normalizar ANTES del insert
+    // este valor pasaría la validación y se guardaría con los espacios intactos.
+    expect(data!.color_fondo).toBe('rgb(35, 24, 18)');
+    // El formulario HTML de la Tarea 9 manda '' (nunca null) para un campo opcional vacío.
+    expect(data!.logo_url).toBeNull();
   });
 });
 
@@ -831,11 +856,38 @@ export type ResultadoGuardar =
   | { ok: true; id: string }
   | { ok: false; error: string };
 
+// Un opcional vacío es null, no ''. El formulario HTML de la Tarea 9 manda siempre string:
+// un campo que el usuario dejó en blanco llega como '', y guardarlo tal cual metería cadenas
+// vacías donde la columna espera NULL.
+function limpiarOpcional(valor: string | null): string | null {
+  const limpio = valor?.trim();
+  return limpio ? limpio : null;
+}
+
+// Normaliza ANTES de validar para que se valide EXACTAMENTE lo que se almacena. Sin esto,
+// validarColorRgb —que hace su propio .trim() interno— aprobaría '  rgb(0,0,0)  ' y el valor
+// se guardaría con los espacios puestos.
+function normalizar(datos: DatosComercio): DatosComercio {
+  return {
+    ...datos,
+    nombre: datos.nombre.trim(),
+    slug: datos.slug.trim(),
+    color_fondo: datos.color_fondo.trim(),
+    color_texto: datos.color_texto.trim(),
+    color_label: datos.color_label.trim(),
+    logo_url: limpiarOpcional(datos.logo_url),
+    strip_url: limpiarOpcional(datos.strip_url),
+    hero_url: limpiarOpcional(datos.hero_url),
+    licencia_plan: limpiarOpcional(datos.licencia_plan),
+    licencia_activa_desde: limpiarOpcional(datos.licencia_activa_desde),
+  };
+}
+
 // Devuelve el primer problema encontrado, o null si todo está bien.
 // TODA la validación vive aquí, no en los Server Actions: esta es la capa con tests de
 // integración. Una regla que solo exista en la acción no está cubierta por ninguna prueba.
 function validar(datos: DatosComercio): string | null {
-  if (!datos.nombre.trim()) return 'El nombre es obligatorio.';
+  if (!datos.nombre) return 'El nombre es obligatorio.';
   if (!/^[a-z0-9-]+$/.test(datos.slug)) {
     return 'El slug solo puede tener minúsculas, números y guiones.';
   }
@@ -860,16 +912,18 @@ export async function crearComercio(
   supabase: SupabaseClient<Database>,
   datos: DatosComercio,
 ): Promise<ResultadoGuardar> {
-  const problema = validar(datos);
+  const limpios = normalizar(datos);
+  const problema = validar(limpios);
   if (problema) return { ok: false, error: problema };
 
-  const { data, error } = await supabase.from('comercios').insert(datos).select('id').single();
+  const { data, error } = await supabase.from('comercios').insert(limpios).select('id').single();
 
   if (error) {
     // 23505 = unique violation. El único unique aquí es el slug.
     if (error.code === '23505') {
-      return { ok: false, error: `Ya existe un comercio con el slug "${datos.slug}".` };
+      return { ok: false, error: `Ya existe un comercio con el slug "${limpios.slug}".` };
     }
+    console.error('[fm] falló el insert de comercio:', error);
     return { ok: false, error: 'No se pudo crear el comercio.' };
   }
 
@@ -881,15 +935,17 @@ export async function actualizarComercio(
   id: string,
   datos: DatosComercio,
 ): Promise<ResultadoGuardar> {
-  const problema = validar(datos);
+  const limpios = normalizar(datos);
+  const problema = validar(limpios);
   if (problema) return { ok: false, error: problema };
 
-  const { error } = await supabase.from('comercios').update(datos).eq('id', id);
+  const { error } = await supabase.from('comercios').update(limpios).eq('id', id);
 
   if (error) {
     if (error.code === '23505') {
-      return { ok: false, error: `Ya existe otro comercio con el slug "${datos.slug}".` };
+      return { ok: false, error: `Ya existe otro comercio con el slug "${limpios.slug}".` };
     }
+    console.error('[fm] falló el update de comercio:', error);
     return { ok: false, error: 'No se pudo actualizar el comercio.' };
   }
 
@@ -898,11 +954,11 @@ export async function actualizarComercio(
 ```
 
 Run: `npm test -- guardarComercio`
-Expected: 5 passed.
+Expected: 6 passed.
 
 - [ ] **Step 3: Gates + commit**
 
-Run: `npm test` — expect **50 passed** (34 base + 4 esAdminFm + 7 validarColorRgb + 5 guardarComercio). Run `npm run typecheck`, `npm run lint`.
+Run: `npm test` — expect **51 passed** (34 base + 4 esAdminFm + 7 validarColorRgb + 6 guardarComercio). Run `npm run typecheck`, `npm run lint`.
 Confirma 0 comercios `test-%` huérfanos en la BD.
 ```bash
 git add -A

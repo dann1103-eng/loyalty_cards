@@ -1,0 +1,128 @@
+import { describe, it, expect, afterEach } from 'vitest';
+import { createServiceClient } from '../supabase/server';
+import { crearComercio, actualizarComercio, type DatosComercio } from './guardarComercio';
+
+const supabase = createServiceClient();
+const slugsDePrueba: string[] = [];
+
+afterEach(async () => {
+  if (!slugsDePrueba.length) return;
+  const { error } = await supabase.from('comercios').delete().in('slug', slugsDePrueba);
+  if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
+  slugsDePrueba.length = 0;
+});
+
+function datosValidos(slug: string): DatosComercio {
+  slugsDePrueba.push(slug);
+  return {
+    nombre: 'Comercio Test',
+    slug,
+    color_fondo: 'rgb(35, 24, 18)',
+    color_texto: 'rgb(255, 255, 255)',
+    color_label: 'rgb(255, 255, 255)',
+    logo_url: null,
+    strip_url: null,
+    hero_url: null,
+    licencia_estado: 'activo',
+    licencia_plan: 'Básico',
+    licencia_monto_mensual: 25,
+    licencia_activa_desde: '2026-07-16',
+  };
+}
+
+describe('crearComercio', () => {
+  it('crea un comercio con licencia y branding', async () => {
+    const slug = `test-crear-${Date.now()}`;
+    const res = await crearComercio(supabase, datosValidos(slug));
+
+    expect(res.ok).toBe(true);
+    const { data } = await supabase
+      .from('comercios')
+      .select('nombre, licencia_estado, licencia_monto_mensual, licencia_activa_desde')
+      .eq('slug', slug)
+      .single();
+    expect(data!.nombre).toBe('Comercio Test');
+    expect(data!.licencia_estado).toBe('activo');
+    // Sin Number(): PostgREST devuelve numeric como número JSON. Aserción más fuerte —
+    // fallaría ruidosamente si eso cambiara, en vez de que Number() lo tapara en silencio.
+    expect(data!.licencia_monto_mensual).toBe(25);
+    // Fija la migración 0004: la columna es `date`, no timestamptz, y PostgREST la devuelve
+    // como "2026-07-16" tal cual. Si alguien la revierte a timestamptz, esto falla — que es el
+    // punto: con timestamptz, El Salvador (UTC-6) renderizaría el 15 de julio en cada fila.
+    expect(data!.licencia_activa_desde).toBe('2026-07-16');
+  });
+
+  it('rechaza un slug duplicado con un mensaje claro, sin lanzar', async () => {
+    const slug = `test-dup-${Date.now()}`;
+    await crearComercio(supabase, datosValidos(slug));
+
+    const res = await crearComercio(supabase, { ...datosValidos(slug), nombre: 'Otro' });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/slug/i);
+  });
+
+  it('rechaza un color con formato inválido', async () => {
+    const slug = `test-color-${Date.now()}`;
+    const res = await crearComercio(supabase, { ...datosValidos(slug), color_fondo: '#231812' });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/color/i);
+  });
+
+  it('rechaza un monto mensual negativo', async () => {
+    const slug = `test-monto-${Date.now()}`;
+    const res = await crearComercio(supabase, {
+      ...datosValidos(slug),
+      licencia_monto_mensual: -50,
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/monto/i);
+  });
+
+  it('normaliza espacios y guarda los opcionales vacíos como null', async () => {
+    const slug = `test-normalizar-${Date.now()}`;
+    const res = await crearComercio(supabase, {
+      ...datosValidos(slug),
+      nombre: '  Café con Espacios  ',
+      color_fondo: '  rgb(35, 24, 18)  ',
+      logo_url: '',
+    });
+
+    expect(res.ok).toBe(true);
+    const { data } = await supabase
+      .from('comercios')
+      .select('nombre, color_fondo, logo_url')
+      .eq('slug', slug)
+      .single();
+    expect(data!.nombre).toBe('Café con Espacios');
+    // validarColorRgb hace su propio .trim() interno, así que sin normalizar ANTES del insert
+    // este valor pasaría la validación y se guardaría con los espacios intactos.
+    expect(data!.color_fondo).toBe('rgb(35, 24, 18)');
+    // El formulario HTML de la Tarea 9 manda '' (nunca null) para un campo opcional vacío.
+    expect(data!.logo_url).toBeNull();
+  });
+});
+
+describe('actualizarComercio', () => {
+  it('actualiza licencia y branding de un comercio existente', async () => {
+    const slug = `test-editar-${Date.now()}`;
+    const creado = await crearComercio(supabase, datosValidos(slug));
+    if (!creado.ok) throw new Error('el setup falló');
+
+    const res = await actualizarComercio(supabase, creado.id, {
+      ...datosValidos(slug),
+      nombre: 'Nombre Editado',
+      licencia_estado: 'inactivo',
+    });
+
+    expect(res.ok).toBe(true);
+    const { data } = await supabase
+      .from('comercios')
+      .select('nombre, licencia_estado')
+      .eq('id', creado.id)
+      .single();
+    expect(data!.nombre).toBe('Nombre Editado');
+    expect(data!.licencia_estado).toBe('inactivo');
+  });
+});
