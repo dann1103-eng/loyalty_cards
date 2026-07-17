@@ -1191,7 +1191,8 @@ export async function iniciarSesion(
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
-    // Supabase no distingue "no existe la cuenta" de "contraseña incorrecta", a propósito.
+    // Supabase no distingue "no existe la cuenta" de "contraseña incorrecta", a propósito:
+    // hacerlo permitiría enumerar qué correos tienen cuenta. No lo distingas tú tampoco.
     return { error: 'Correo o contraseña incorrectos.' };
   }
 
@@ -1278,7 +1279,6 @@ import FormularioLogin from './FormularioLogin';
 
 const MENSAJES: Record<string, string> = {
   'sin-permiso': 'Esa cuenta no tiene acceso al panel de FM.',
-  'sesion-vencida': 'Tu sesión expiró. Vuelve a entrar.',
 };
 
 export default async function PaginaLogin({
@@ -1287,6 +1287,11 @@ export default async function PaginaLogin({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
+  // Object.hasOwn y no MENSAJES[error] a secas: ?error=constructor devolvería
+  // Object.prototype.constructor —una FUNCIÓN— y React revienta al intentar renderizarla.
+  // Cualquiera puede escribir eso en la barra de direcciones. Un valor desconocido no muestra
+  // nada, que es el comportamiento correcto.
+  const mensaje = error && Object.hasOwn(MENSAJES, error) ? MENSAJES[error] : undefined;
 
   return (
     <main className="shell">
@@ -1295,21 +1300,27 @@ export default async function PaginaLogin({
         <h1 className="title reveal d2">
           Panel <em>interno</em>
         </h1>
-        <FormularioLogin mensajeInicial={error ? MENSAJES[error] : undefined} />
+        <FormularioLogin mensajeInicial={mensaje} />
       </div>
     </main>
   );
 }
 ```
 
+**Dos correcciones sobre una versión anterior de este plan:**
+
+1. **Guarda con `Object.hasOwn`.** Una versión anterior tenía `MENSAJES[error]` a secas. `/admin/login?error=constructor` devuelve `Object.prototype.constructor` (una función) → React lanza "Functions are not valid as a React child". Trivialmente disparable escribiendo en la barra de direcciones.
+2. **`'sesion-vencida'` se ELIMINA de `MENSAJES`.** Nada lo produce (grep de todo el código confirma cero coincidencias fuera de este plan). `proxy.ts` limpia `url.search = ''` antes de redirigir a `/admin/login` —a propósito, para que `?error=sin-permiso` no le llegue a alguien que simplemente no tiene sesión— y `verifyFmAdmin()` solo emite `?error=sin-permiso`. Un mensaje que ningún usuario puede ver es código muerto que insinúa una función inexistente: quien lo lea después asumirá que el panel anuncia sesiones vencidas, y no es así. Si se quiere esa función, `proxy.ts` tendría que distinguir "tenía una cookie de sesión muerta" de "nunca inició sesión" —una decisión de diseño real, no un string.
+
 Reutiliza las clases del sistema visual existente (`shell`, `stack`, `kicker`, `title`, `panel`, `field`, `btn-primary`, `alerta`) definidas en `app/globals.css` — no inventes estilos nuevos.
 
 - [ ] **Step 5: Verificar**
 
 Run: `npm run build` → exitoso (si falla por prerender de `/admin/login`, revisa que la página NO use `useSearchParams()`).
-Run: `npm run dev`, abre `http://localhost:3000/admin/login` → se ve el formulario con el estilo del sitio.
-Intenta entrar con credenciales falsas → "Correo o contraseña incorrectos." (NO un 500).
-Abre `http://localhost:3000/admin/login?error=sin-permiso` → se ve "Esa cuenta no tiene acceso al panel de FM." Detén el dev server.
+Run: `npm test` → 59 passed (esta tarea no agrega tests — es cableado de UI; la lógica que invoca ya está cubierta).
+Run: `npm run typecheck`, `npm run lint` → limpios.
+
+No levantes un dev server para esto: la verificación visual se hace aparte, con herramientas de navegador administradas.
 
 - [ ] **Step 6: Commit**
 
