@@ -790,6 +790,63 @@ describe('crearComercio', () => {
     if (!res.ok) expect(res.error).toMatch(/estado/i);
   });
 
+  it('rechaza un nombre vacío', async () => {
+    const slug = `test-nombre-${Date.now()}`;
+    const res = await crearComercio(supabase, { ...datosValidos(slug), nombre: '   ' });
+
+    expect(res.ok).toBe(false);
+    // La BD acepta nombre:'' sin chistar (no hay CHECK) — validar() es la única defensa.
+    if (!res.ok) expect(res.error).toMatch(/nombre/i);
+  });
+
+  it('rechaza slugs con formato inválido', async () => {
+    // El slug es la URL del QR impreso, así que su forma no es cosmética.
+    for (const malo of ['Test-Mayusculas', 'con espacios', 'acentué', '']) {
+      const res = await crearComercio(supabase, { ...datosValidos(`test-slug-${Date.now()}`), slug: malo });
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toMatch(/slug/i);
+    }
+  });
+
+  it('valida los tres colores, no solo el de fondo', async () => {
+    // Sin esto, una sola prueba sobre color_fondo da la impresión de que los colores están
+    // cubiertos, y dos tercios de ellos no lo están. Cada uno revienta al firmar el pass.
+    for (const campo of ['color_texto', 'color_label'] as const) {
+      // El slug NO puede llevar el guion bajo de `campo`: la regex de slug lo rechaza y validar()
+      // corta ahí, antes de llegar a los colores — la prueba fallaría por el slug, sin ejercitar
+      // nunca lo que dice probar.
+      const res = await crearComercio(supabase, {
+        ...datosValidos(`test-${campo.replace('_', '-')}-${Date.now()}`),
+        [campo]: '#231812',
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toMatch(/color/i);
+    }
+  });
+
+  it('rechaza un monto que no es un número', async () => {
+    const slug = `test-nan-${Date.now()}`;
+    // La Tarea 9 hace Number(monto): un "25a" en el formulario llega como NaN. Sin el
+    // Number.isFinite, JSON.stringify(NaN) es "null" y el monto se guardaría VACÍO en silencio.
+    const res = await crearComercio(supabase, { ...datosValidos(slug), licencia_monto_mensual: NaN });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/monto/i);
+  });
+
+  it('rechaza fechas inválidas o con el formato equivocado', async () => {
+    // '16/07/2026' es lo que teclea alguien en El Salvador; '2026-02-31' tiene forma correcta
+    // pero no existe. Las dos deben explicar qué pasa, no dar un error genérico.
+    for (const mala of ['16/07/2026', 'ayer', '2026-02-31', '2026-7-6']) {
+      const res = await crearComercio(supabase, {
+        ...datosValidos(`test-fecha-${Date.now()}`),
+        licencia_activa_desde: mala,
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toMatch(/fecha/i);
+    }
+  });
+
   it('normaliza espacios y guarda los opcionales vacíos como null', async () => {
     const slug = `test-normalizar-${Date.now()}`;
     const res = await crearComercio(supabase, {
@@ -834,6 +891,35 @@ describe('actualizarComercio', () => {
       .single();
     expect(data!.nombre).toBe('Nombre Editado');
     expect(data!.licencia_estado).toBe('inactivo');
+  });
+
+  it('valida igual que crearComercio', async () => {
+    // Esta es LA prueba que faltaba: borrar validar() de actualizarComercio dejaba las 7 pruebas
+    // en verde, y guardaba color_fondo:'no-es-un-color' con ok:true — datos que revientan al
+    // firmar el pass, en producción, sin que nada los atrape (la BD no respalda esta regla).
+    const slug = `test-editar-invalido-${Date.now()}`;
+    const creado = await crearComercio(supabase, datosValidos(slug));
+    if (!creado.ok) throw new Error('el setup falló');
+
+    const res = await actualizarComercio(supabase, creado.id, {
+      ...datosValidos(slug),
+      color_fondo: 'no-es-un-color',
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/color/i);
+  });
+
+  it('falla si el comercio ya no existe, en vez de reportar éxito', async () => {
+    // Sin el .select('id').single(), esto devolvía ok:true habiendo escrito cero filas.
+    const res = await actualizarComercio(
+      supabase,
+      '00000000-0000-0000-0000-000000000000',
+      datosValidos(`test-fantasma-${Date.now()}`),
+    );
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/no existe/i);
   });
 });
 ```
@@ -897,9 +983,22 @@ function normalizar(datos: DatosComercio): DatosComercio {
     logo_url: limpiarOpcional(datos.logo_url),
     strip_url: limpiarOpcional(datos.strip_url),
     hero_url: limpiarOpcional(datos.hero_url),
+    licencia_estado: datos.licencia_estado.trim(),
     licencia_plan: limpiarOpcional(datos.licencia_plan),
     licencia_activa_desde: limpiarOpcional(datos.licencia_activa_desde),
   };
+}
+
+// ¿Es una fecha real en formato AAAA-MM-DD? El <input type="date"> del navegador ya lo
+// garantiza, pero un Server Action es un POST: no se le cree al formulario. Sin esto, teclear
+// "16/07/2026" —el formato natural en El Salvador— revienta en la BD y sale como un genérico
+// "No se pudo crear el comercio", sin decir qué está mal.
+function esFechaValida(valor: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  // El round-trip atrapa fechas con forma correcta pero imposibles ("2026-02-31"): según el
+  // motor, Date las rueda a marzo o da Invalid Date. Comparar contra la entrada cubre ambos.
+  const fecha = new Date(`${valor}T00:00:00Z`);
+  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === valor;
 }
 
 // Devuelve el primer problema encontrado, o null si todo está bien.
@@ -928,7 +1027,11 @@ function validar(datos: DatosComercio): string | null {
   }
   const monto = datos.licencia_monto_mensual;
   if (monto !== null && (!Number.isFinite(monto) || monto < 0)) {
-    return 'El monto mensual debe ser un número positivo.';
+    return 'El monto mensual no puede ser negativo.';
+  }
+  const fecha = datos.licencia_activa_desde;
+  if (fecha !== null && !esFechaValida(fecha)) {
+    return 'La fecha de inicio de la licencia debe ser una fecha real en formato AAAA-MM-DD.';
   }
   return null;
 }
@@ -955,6 +1058,14 @@ export async function crearComercio(
   return { ok: true, id: data.id };
 }
 
+// El slug es editable a propósito, aunque sea la URL del QR físico pegado en la tienda
+// (/registro/[slug]). Un typo al crear ("cafeteria-pilotoo") tiene que poder arreglarse, y
+// volverlo inmutable obligaría a borrar y recrear, arrastrando las tarjetas existentes.
+// Lo que SÍ se rompe al cambiarlo: los registros nuevos desde el QR ya impreso, que caen en un
+// "Comercio no encontrado" silencioso — sin error, sin log, sin alerta. Lo que NO se rompe: los
+// passes ya emitidos, cuyo código de barras es tarjetas.qr_token, no el slug. Por eso el
+// formulario de la Tarea 9 debe pedir confirmación explícita al cambiar el slug de un comercio
+// que ya existe.
 export async function actualizarComercio(
   supabase: SupabaseClient<Database>,
   id: string,
@@ -964,11 +1075,25 @@ export async function actualizarComercio(
   const problema = validar(limpios);
   if (problema) return { ok: false, error: problema };
 
-  const { error } = await supabase.from('comercios').update(limpios).eq('id', id);
+  const { error } = await supabase
+    .from('comercios')
+    .update(limpios)
+    .eq('id', id)
+    .select('id')
+    .single();
 
   if (error) {
     if (error.code === '23505') {
       return { ok: false, error: `Ya existe otro comercio con el slug "${limpios.slug}".` };
+    }
+    // PGRST116 = la consulta no devolvió exactamente una fila. El .select('id').single() de
+    // arriba NO es decorativo: sin él, un update que no toca NADA devuelve 204 sin error y esto
+    // reportaría ok:true habiendo escrito cero. Y .select('id') solo tampoco basta — devuelve []
+    // sin error; hace falta el .single(). Dos rutas llegan aquí: un id que ya no existe, o un
+    // cliente sin permiso — comercios es deny-all bajo RLS desde la 0001, así que pasar un
+    // createClienteServidor() haría no-op silencioso en TODOS los updates.
+    if (error.code === 'PGRST116') {
+      return { ok: false, error: 'Ese comercio ya no existe.' };
     }
     console.error('[fm] falló el update de comercio:', error);
     return { ok: false, error: 'No se pudo actualizar el comercio.' };
@@ -979,11 +1104,11 @@ export async function actualizarComercio(
 ```
 
 Run: `npm test -- guardarComercio`
-Expected: 7 passed.
+Expected: 14 passed.
 
 - [ ] **Step 3: Gates + commit**
 
-Run: `npm test` — expect **52 passed** (34 base + 4 esAdminFm + 7 validarColorRgb + 7 guardarComercio). Run `npm run typecheck`, `npm run lint`.
+Run: `npm test` — expect **59 passed** (34 base + 4 esAdminFm + 7 validarColorRgb + 14 guardarComercio). Run `npm run typecheck`, `npm run lint`.
 Confirma 0 comercios `test-%` huérfanos en la BD.
 ```bash
 git add -A

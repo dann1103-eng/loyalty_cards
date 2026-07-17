@@ -49,9 +49,22 @@ function normalizar(datos: DatosComercio): DatosComercio {
     logo_url: limpiarOpcional(datos.logo_url),
     strip_url: limpiarOpcional(datos.strip_url),
     hero_url: limpiarOpcional(datos.hero_url),
+    licencia_estado: datos.licencia_estado.trim(),
     licencia_plan: limpiarOpcional(datos.licencia_plan),
     licencia_activa_desde: limpiarOpcional(datos.licencia_activa_desde),
   };
+}
+
+// ¿Es una fecha real en formato AAAA-MM-DD? El <input type="date"> del navegador ya lo
+// garantiza, pero un Server Action es un POST: no se le cree al formulario. Sin esto, teclear
+// "16/07/2026" —el formato natural en El Salvador— revienta en la BD y sale como un genérico
+// "No se pudo crear el comercio", sin decir qué está mal.
+function esFechaValida(valor: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  // El round-trip atrapa fechas con forma correcta pero imposibles ("2026-02-31"): según el
+  // motor, Date las rueda a marzo o da Invalid Date. Comparar contra la entrada cubre ambos.
+  const fecha = new Date(`${valor}T00:00:00Z`);
+  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === valor;
 }
 
 // Devuelve el primer problema encontrado, o null si todo está bien.
@@ -80,7 +93,11 @@ function validar(datos: DatosComercio): string | null {
   }
   const monto = datos.licencia_monto_mensual;
   if (monto !== null && (!Number.isFinite(monto) || monto < 0)) {
-    return 'El monto mensual debe ser un número positivo.';
+    return 'El monto mensual no puede ser negativo.';
+  }
+  const fecha = datos.licencia_activa_desde;
+  if (fecha !== null && !esFechaValida(fecha)) {
+    return 'La fecha de inicio de la licencia debe ser una fecha real en formato AAAA-MM-DD.';
   }
   return null;
 }
@@ -107,6 +124,14 @@ export async function crearComercio(
   return { ok: true, id: data.id };
 }
 
+// El slug es editable a propósito, aunque sea la URL del QR físico pegado en la tienda
+// (/registro/[slug]). Un typo al crear ("cafeteria-pilotoo") tiene que poder arreglarse, y
+// volverlo inmutable obligaría a borrar y recrear, arrastrando las tarjetas existentes.
+// Lo que SÍ se rompe al cambiarlo: los registros nuevos desde el QR ya impreso, que caen en un
+// "Comercio no encontrado" silencioso — sin error, sin log, sin alerta. Lo que NO se rompe: los
+// passes ya emitidos, cuyo código de barras es tarjetas.qr_token, no el slug. Por eso el
+// formulario de la Tarea 9 debe pedir confirmación explícita al cambiar el slug de un comercio
+// que ya existe.
 export async function actualizarComercio(
   supabase: SupabaseClient<Database>,
   id: string,
@@ -116,11 +141,25 @@ export async function actualizarComercio(
   const problema = validar(limpios);
   if (problema) return { ok: false, error: problema };
 
-  const { error } = await supabase.from('comercios').update(limpios).eq('id', id);
+  const { error } = await supabase
+    .from('comercios')
+    .update(limpios)
+    .eq('id', id)
+    .select('id')
+    .single();
 
   if (error) {
     if (error.code === '23505') {
       return { ok: false, error: `Ya existe otro comercio con el slug "${limpios.slug}".` };
+    }
+    // PGRST116 = la consulta no devolvió exactamente una fila. El .select('id').single() de
+    // arriba NO es decorativo: sin él, un update que no toca NADA devuelve 204 sin error y esto
+    // reportaría ok:true habiendo escrito cero. Y .select('id') solo tampoco basta — devuelve []
+    // sin error; hace falta el .single(). Dos rutas llegan aquí: un id que ya no existe, o un
+    // cliente sin permiso — comercios es deny-all bajo RLS desde la 0001, así que pasar un
+    // createClienteServidor() haría no-op silencioso en TODOS los updates.
+    if (error.code === 'PGRST116') {
+      return { ok: false, error: 'Ese comercio ya no existe.' };
     }
     console.error('[fm] falló el update de comercio:', error);
     return { ok: false, error: 'No se pudo actualizar el comercio.' };

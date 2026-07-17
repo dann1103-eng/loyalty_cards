@@ -93,6 +93,63 @@ describe('crearComercio', () => {
     if (!res.ok) expect(res.error).toMatch(/estado/i);
   });
 
+  it('rechaza un nombre vacío', async () => {
+    const slug = `test-nombre-${Date.now()}`;
+    const res = await crearComercio(supabase, { ...datosValidos(slug), nombre: '   ' });
+
+    expect(res.ok).toBe(false);
+    // La BD acepta nombre:'' sin chistar (no hay CHECK) — validar() es la única defensa.
+    if (!res.ok) expect(res.error).toMatch(/nombre/i);
+  });
+
+  it('rechaza slugs con formato inválido', async () => {
+    // El slug es la URL del QR impreso, así que su forma no es cosmética.
+    for (const malo of ['Test-Mayusculas', 'con espacios', 'acentué', '']) {
+      const res = await crearComercio(supabase, { ...datosValidos(`test-slug-${Date.now()}`), slug: malo });
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toMatch(/slug/i);
+    }
+  });
+
+  it('valida los tres colores, no solo el de fondo', async () => {
+    // Sin esto, una sola prueba sobre color_fondo da la impresión de que los colores están
+    // cubiertos, y dos tercios de ellos no lo están. Cada uno revienta al firmar el pass.
+    for (const campo of ['color_texto', 'color_label'] as const) {
+      // El slug NO puede llevar el guion bajo de `campo`: la regex de slug lo rechaza y validar()
+      // corta ahí, antes de llegar a los colores — la prueba fallaría por el slug, sin ejercitar
+      // nunca lo que dice probar.
+      const res = await crearComercio(supabase, {
+        ...datosValidos(`test-${campo.replace('_', '-')}-${Date.now()}`),
+        [campo]: '#231812',
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toMatch(/color/i);
+    }
+  });
+
+  it('rechaza un monto que no es un número', async () => {
+    const slug = `test-nan-${Date.now()}`;
+    // La Tarea 9 hace Number(monto): un "25a" en el formulario llega como NaN. Sin el
+    // Number.isFinite, JSON.stringify(NaN) es "null" y el monto se guardaría VACÍO en silencio.
+    const res = await crearComercio(supabase, { ...datosValidos(slug), licencia_monto_mensual: NaN });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/monto/i);
+  });
+
+  it('rechaza fechas inválidas o con el formato equivocado', async () => {
+    // '16/07/2026' es lo que teclea alguien en El Salvador; '2026-02-31' tiene forma correcta
+    // pero no existe. Las dos deben explicar qué pasa, no dar un error genérico.
+    for (const mala of ['16/07/2026', 'ayer', '2026-02-31', '2026-7-6']) {
+      const res = await crearComercio(supabase, {
+        ...datosValidos(`test-fecha-${Date.now()}`),
+        licencia_activa_desde: mala,
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toMatch(/fecha/i);
+    }
+  });
+
   it('normaliza espacios y guarda los opcionales vacíos como null', async () => {
     const slug = `test-normalizar-${Date.now()}`;
     const res = await crearComercio(supabase, {
@@ -137,5 +194,34 @@ describe('actualizarComercio', () => {
       .single();
     expect(data!.nombre).toBe('Nombre Editado');
     expect(data!.licencia_estado).toBe('inactivo');
+  });
+
+  it('valida igual que crearComercio', async () => {
+    // Esta es LA prueba que faltaba: borrar validar() de actualizarComercio dejaba las 7 pruebas
+    // en verde, y guardaba color_fondo:'no-es-un-color' con ok:true — datos que revientan al
+    // firmar el pass, en producción, sin que nada los atrape (la BD no respalda esta regla).
+    const slug = `test-editar-invalido-${Date.now()}`;
+    const creado = await crearComercio(supabase, datosValidos(slug));
+    if (!creado.ok) throw new Error('el setup falló');
+
+    const res = await actualizarComercio(supabase, creado.id, {
+      ...datosValidos(slug),
+      color_fondo: 'no-es-un-color',
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/color/i);
+  });
+
+  it('falla si el comercio ya no existe, en vez de reportar éxito', async () => {
+    // Sin el .select('id').single(), esto devolvía ok:true habiendo escrito cero filas.
+    const res = await actualizarComercio(
+      supabase,
+      '00000000-0000-0000-0000-000000000000',
+      datosValidos(`test-fantasma-${Date.now()}`),
+    );
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/no existe/i);
   });
 });
