@@ -44,9 +44,15 @@ alter table comercios add column sello_meta integer check (sello_meta is null or
 
 **Por qué el CHECK en la BD, y no solo en el código (a diferencia de la decisión con `validarColorRgb`):** aquí SÍ conviene el CHECK porque el conjunto de valores válidos es una lista fija y pequeña (8 strings), no una regla derivable de un formato (como `rgb(r,g,b)`, que tiene infinitos valores válidos). No hay una "regex" que duplicar — el CHECK y el array de TypeScript son ambos, literalmente, la misma lista de 8 strings; mantenerlos sincronizados es trivial y ya es el patrón usado para `licencia_estado`/`ESTADOS_LICENCIA`. Se exportará una constante `TIPOS_TARJETA` (mismo mecanismo que `ESTADOS_LICENCIA`) para que el `<select>` de FM y el validador no puedan divergir.
 
-### 4.2 Sellos reutiliza `tarjetas.puntos_actuales`
+### 4.2 Sellos — corregido tras revisión: reutiliza `tarjetas.puntos_actuales`, pero como TEXTO, no como imagen compuesta
 
-No se crea una columna nueva para el conteo de sellos. Un sello es, en los datos, idéntico a un punto — un entero que sube. Lo único que cambia es el **render**: si `comercios.tipo_tarjeta = 'sellos'`, el pass muestra una grilla de `sello_meta` íconos (llenos hasta `puntos_actuales`, vacíos el resto) usando `sello_icono_url` como el ícono, en vez del campo de texto con el número. `reglas_puntos` (cómo se ganan) no cambia — sigue siendo `por_visita` o `por_monto`, aplica igual a puntos y a sellos.
+**La primera versión de esta sección decía "solo cambia el render" y estaba mal.** La revisión de spec comprobó que este proyecto **no tiene ninguna capacidad de composición de imágenes** (sin `sharp`/`canvas`/`jimp`/`resvg`/`satori` ni nada similar), que el pass hoy renderiza puntos como un único campo de texto (`lib/apple/generatePass.ts`, `primaryField` con `numberStyle`) sin ninguna imagen involucrada, y que — más revelador — **ni siquiera las imágenes de branding que YA existen** (`logo_url`, `strip_url`, `hero_url`, capturadas por el panel de FM desde hoy) llegan nunca al pass firmado: hoy solo llegan a la base de datos. Prometer una grilla visual de sellos compuesta como imagen es, en la práctica, pedir un subsistema entero de generación de imágenes desde cero, no un "cambio de render."
+
+**Diseño corregido, sin pipeline de imágenes:** un sello sigue siendo, en los datos, idéntico a un punto — el mismo entero en `tarjetas.puntos_actuales`, ganado con las mismas `reglas_puntos` (`por_visita`/`por_monto`, sin cambios). Lo único que cambia es el **texto** del campo primario del pass: en vez de mostrar el número solo, si `comercios.tipo_tarjeta = 'sellos'` se muestra como fracción de texto — `"7 de 10 sellos"` en vez de `"7"` — usando `comercios.sello_meta` como el denominador. Sigue siendo el mismo `primaryField`, con un `value` de tipo string en vez de number; **cero componentes nuevos, cero dependencias nuevas.**
+
+**Completar la tarjeta usa el mecanismo de canje que YA existe, sin ningún código nuevo:** al llegar a `sello_meta`, el cliente es elegible para canjear una `recompensa` cuyo `costo_puntos = sello_meta` — exactamente el mismo canje que ya existe para puntos (`canjes` descuenta `puntos_gastados` de `puntos_actuales`). No hace falta diseñar "qué pasa al completar" como un caso especial: completar y canjear un sello **es** gastar `sello_meta` puntos, y el contador vuelve a 0 por el mismo camino que ya funciona hoy. Esto también resuelve de raíz la pregunta de "qué pasa si `puntos_actuales >= sello_meta`" que la revisión señaló como no definida: no puede pasar en la práctica, porque llegar a la meta dispara el canje (vía el cajero, fuera de alcance de esta fase pero ya construido conceptualmente) antes de seguir sumando.
+
+**`sello_icono_url` se guarda y se usa en la vista previa web (§6) y en el futuro portal del cliente — NO en el pass firmado, todavía.** Wirear imágenes de verdad al pass (branding general, no solo el ícono de sello) es trabajo real, pre-existente y sin construir, que queda fuera de alcance de esta fase (ver §9). El campo se guarda ahora para no tener que migrar el esquema otra vez cuando se construya esa parte.
 
 ### 4.3 `usuarios_comercio` — ya existe, sin cambios de esquema
 
@@ -61,30 +67,59 @@ create table usuarios_comercio (
   created_at timestamptz not null default now()
 );
 ```
-`auth_user_id` es nullable hoy porque nunca se usó — esta fase es la primera en poblarlo. Alta de una cuenta de dueño: mismo patrón que `scripts/seed-usuario-fm.ts`, un script nuevo `scripts/seed-usuario-comercio.ts <email> <password> <slug-del-comercio>` que FM corre a mano al dar de alta un comercio nuevo (no hay envío de invitación por correo — eso requeriría un servicio de email que este proyecto no tiene configurado, y añadir uno es una decisión de gasto/infraestructura que no me corresponde tomar solo).
+`auth_user_id` es nullable hoy porque nunca se usó — esta fase es la primera en poblarlo. Alta de una cuenta de dueño: script nuevo `scripts/seed-usuario-comercio.ts <email> <password> <slug-del-comercio>` que FM corre a mano al dar de alta un comercio nuevo (no hay envío de invitación por correo — eso requeriría un servicio de email que este proyecto no tiene configurado).
+
+**Corrección tras revisión: NO es exactamente "el mismo patrón" que `seed-usuario-fm.ts`.** Ese script hace `upsert({...}, {onConflict: 'auth_user_id'})`, válido porque `usuarios_fm.auth_user_id` es `not null unique`. Aquí, `usuarios_comercio.auth_user_id` es **nullable y NO único** — ese `onConflict` no tiene ninguna restricción a la cual apuntar y fallaría. La clave de idempotencia correcta es `email` (la única columna única de la tabla aparte del `id`): `upsert({..., rol: 'owner'}, {onConflict: 'email'})`, resolviendo `comercio_id` a partir del slug recibido como argumento antes del upsert.
 
 ### 4.4 Imágenes — Supabase Storage, subida mediada por el servidor
 
-Un bucket nuevo, `comercio-imagenes` (público de lectura), con rutas `{comercio_id}/{campo}.{ext}`. **La escritura NO pasa por políticas de RLS de Storage** — el owner sube el archivo a un Server Action, que lo valida (tipo MIME, tamaño máximo) y lo sube usando `createServiceClient()`, exactamente el mismo patrón que ya usa el resto del proyecto (autorización a nivel de aplicación vía el gate, nunca a nivel de RLS). Evita diseñar un segundo modelo de autorización (políticas de Storage) además del ya existente — dos modelos de autorización en paralelo es exactamente la clase de duplicación que este proyecto ha evitado a propósito en otras decisiones (por ejemplo, no se agregó un CHECK de color en SQL para no duplicar `validarColorRgb`).
+Un bucket nuevo, `comercio-imagenes` (público de lectura — correcto para estos archivos: logo/strip/hero/ícono de sello son, por naturaleza, públicos, aparecen en la tarjeta de cualquier cliente). Rutas `{comercio_id}/{campo}.{ext}`. **La escritura NO pasa por políticas de RLS de Storage** — el owner sube el archivo a un Server Action, que lo valida (tipo MIME, tamaño máximo) y lo sube usando `createServiceClient()`, exactamente el mismo patrón que ya usa el resto del proyecto (autorización a nivel de aplicación vía el gate, nunca a nivel de RLS). Evita diseñar un segundo modelo de autorización (políticas de Storage) además del ya existente.
+
+**Dos correcciones tras revisión, ambas necesarias antes de implementar:**
+1. **El `{comercio_id}` de la ruta debe salir del resultado de `verifyComercioOwner()`, nunca de un campo del formulario.** Si se tomara de un input del cliente, un dueño podría sobrescribir las imágenes de OTRO comercio con solo cambiar un valor en el request. El Server Action ignora cualquier `comercio_id` que llegue del formulario y usa siempre el de la sesión verificada.
+2. **Cache-busting:** la ruta es determinística (`{comercio_id}/logo.png`) y Supabase Storage sirve URLs públicas cacheadas por CDN — volver a subir un logo al mismo path serviría la imagen vieja hasta que expire el caché, tanto en la vista previa como en el pass (cuando se construya esa parte). Se agrega un sufijo de versión al nombre de archivo (o un parámetro `?v=timestamp` en la URL guardada) para invalidar el caché en cada subida nueva.
 
 ## 5. Autenticación y gate del dueño
 
 Réplica exacta de la arquitectura de `/admin`, con nombres propios:
 
-- `lib/comercio/esOwnerDeComercio.ts` — busca en `usuarios_comercio` por `auth_user_id`, retorna `{comercioId, nombre} | null`. Mismo manejo de error que `esAdminFm`: un error de infraestructura se registra con `console.warn`/`console.error` y nunca se confunde con "no es dueño".
+- `lib/comercio/esOwnerDeComercio.ts` — busca en `usuarios_comercio` por `auth_user_id`, retorna `{comercioId, nombre} | null`. Mismo manejo de error que `esAdminFm`: un error de infraestructura se registra con `console.warn`/`console.error` y nunca se confunde con "no es dueño". **Nota tras revisión:** este patrón usa `.maybeSingle()`, igual que `esAdminFm` — seguro ahí porque `usuarios_fm.auth_user_id` es único. Aquí `usuarios_comercio.auth_user_id` **no** tiene esa restricción; el diseño asume que, en la práctica, cada cuenta de Auth queda ligada a una sola fila (un dueño = una cuenta = un comercio). Si alguna vez una misma cuenta terminara con dos filas, `.maybeSingle()` lanzaría y el dueño quedaría bloqueado por el manejo de "error de infraestructura" — un caso de baja probabilidad dado que `email` sí es único, pero vale tenerlo presente si el flujo de alta cambia más adelante.
 - `lib/comercio/verifyComercioOwner.ts` — `cache()`-wrapped, `getClaims()`, redirige a `/comercio/login` si no hay sesión o si el usuario no tiene fila en `usuarios_comercio` con `rol='owner'`.
 - `app/comercio/login/` — mismo patrón que `app/admin/login/` (Server Component + Client Component + Server Action), mismos mensajes de error genéricos ("Correo o contraseña incorrectos"), mismo truco de `Object.hasOwn` para los mensajes por query string.
 - `app/comercio/(protegido)/layout.tsx` — el gate. **Misma regla estructural que ya nos mordió una vez:** `app/comercio/layout.tsx` NUNCA debe existir (envolvería `/comercio/login`, ciclo infinito). El route group es obligatorio.
-- `proxy.ts` (raíz) — su `matcher` gana `/comercio/:path*` junto al `/admin/:path*` existente, y la exención de ruta de login se generaliza a "termina en `/login` o `/login/...`" en vez de estar hardcodeada solo a `/admin/login` (verificar esto con cuidado: la lógica actual compara con el string literal `/admin/login`; hay que generalizarla sin abrir un hueco donde `/comercio/loginX` quede exento por accidente — mismo cuidado que ya se documentó para la ruta de FM).
+
+- `proxy.ts` (raíz) y `lib/supabase/proxy.ts` — **corregido tras revisión, con el patrón exacto en vez de "tener cuidado".** La revisión encontró dos errores concretos en la primera versión de esta sección:
+
+  1. **La descripción del código actual era incorrecta.** `lib/supabase/proxy.ts` ya NO compara con un string literal suelto — ya está anclado a propósito: `ruta === '/admin/login' || ruta.startsWith('/admin/login/')`, con un comentario explicando por qué (un `startsWith` sin anclar eximiría también `/admin/login-sso`). La generalización propuesta ("termina en `/login`") era en realidad **más floja** que el código actual, y contradice ese mismo comentario. Se descarta.
+
+  2. **El destino del redirect está hardcodeado a `/admin/login` sin condición.** Al agregar `/comercio/:path*` al `matcher`, una visita sin sesión a `/comercio/panel` caería en el mismo bloque y terminaría redirigida a `/admin/login` — la pantalla de FM, no la del dueño del comercio. Esto no estaba resuelto en la versión anterior.
+
+  **Patrón correcto** (reemplaza el bloque de exención + redirect en `lib/supabase/proxy.ts`):
+  ```typescript
+  const esRutaLogin =
+    ruta === '/admin/login' || ruta.startsWith('/admin/login/') ||
+    ruta === '/comercio/login' || ruta.startsWith('/comercio/login/');
+
+  if (!usuario && !esRutaLogin) {
+    const prefijo = ruta.startsWith('/comercio') ? '/comercio' : '/admin';
+    const url = request.nextUrl.clone();
+    url.pathname = `${prefijo}/login`;
+    url.search = '';
+    // ...resto sin cambios
+  }
+  ```
+  Dos checks anclados en OR (no una regla floja nueva), y el destino del redirect se deriva del prefijo de la ruta en vez de estar fijo. `matcher` en `proxy.ts` (raíz) pasa a `['/admin/:path*', '/comercio/:path*']`.
 
 ## 6. Páginas del panel de autogestión
 
 - `/comercio/(protegido)/panel` — resumen: nombre del comercio, tipo de tarjeta actual (nombre + descripción corta), atajos a branding/reglas/recompensas.
 - `/comercio/(protegido)/branding` — formulario: colores (mismos 3 campos `rgb(r,g,b)` que ya validan con `validarColorRgb`), logo/strip/hero **con subida de archivo real** (no URL de texto), y si `tipo_tarjeta='sellos'`: el ícono del sello (subida de archivo) y la meta de sellos (número). El campo `tipo_tarjeta` en sí **no es editable aquí** — lo asigna FM (ver §4.1), el dueño solo ve cuál tiene.
 - `/comercio/(protegido)/reglas` — CRUD de `reglas_puntos` (tipo, valor). Sin soft-delete: una regla vieja simplemente se reemplaza o se borra (no hay historial de canjes que dependa de una regla, a diferencia de `recompensas`).
-- `/comercio/(protegido)/recompensas` — CRUD de `recompensas`. **El borrado es SIEMPRE soft-delete (`activa=false`)** — esto ya está decidido desde la Fase 0 (memoria del proyecto): `canjes` referencia `recompensa_id`, borrar de verdad rompería el historial. No reinventar esto.
+- `/comercio/(protegido)/recompensas` — CRUD de `recompensas`. **El borrado es SIEMPRE soft-delete (`activa=false`)** — la columna `recompensas.activa` existe desde la Fase 0, pero **corrección tras revisión: ningún código la usa todavía**. No hay CRUD de recompensas construido hasta ahora, y el único patrón de borrado que sí existe en el proyecto (`eliminarComercio`) es un borrado real (`.delete()`). Esta CRUD es, en la práctica, **la primera vez que se escribe código para esta regla** — no hay nada que "reutilizar", hay que implementarla explícitamente: el botón "eliminar" de una recompensa debe ejecutar `update({activa: false})`, nunca `.delete()`. Se deja anotado así de explícito precisamente para que nadie copie el patrón de `eliminarComercio` aquí por analogía y rompa el historial de `canjes.recompensa_id`.
 
-Diseño visual: reutiliza el mismo sistema (`app/globals.css`: `shell`, `panel`, `field`, `btn-primary`, etc.) que ya existe, extendiéndolo donde haga falta (ej. un componente de subida de imagen con vista previa) — no se reconstruye desde cero. "Mejor diseño" en la práctica significa: vista previa en vivo del pass mientras se edita el branding (mostrar cómo se vería la tarjeta con los colores/imagen elegidos, sin necesidad de firmarla de verdad para previsualizar), algo que el panel de FM no tiene y que sí vale la pena aquí porque el dueño es quien más se beneficia de ver el resultado antes de guardar.
+Diseño visual: reutiliza el mismo sistema (`app/globals.css`: `shell`, `panel`, `field`, `btn-primary`, etc.) que ya existe, extendiéndolo donde haga falta (ej. un componente de subida de imagen con vista previa) — no se reconstruye desde cero.
+
+**"Mejor diseño", corregido tras revisión — vista previa simple, NO un renderizador del pass firmado.** La versión anterior prometía una "vista previa en vivo del pass... sin necesidad de firmarla de verdad." Un `.pkpass` es un zip binario firmado (`passkit-generator`, `getAsBuffer()`) — no se puede renderizar en el navegador, y reconstruir su layout visual en HTML/CSS con fidelidad real es trabajo de diseño propio, no algo gratis. Se reduce el alcance a algo que sí es barato y honesto: un `<div>` con los colores elegidos (fondo/texto/etiqueta) en una proporción similar a una tarjeta de Wallet, mostrando el nombre del comercio y —si `tipo_tarjeta='sellos'`— el texto "7 de 10 sellos" de ejemplo. Una maqueta de colores, no una réplica pixel-perfect del pass real. Si el dueño quiere ver el pass real, sigue pudiendo agregarlo a su propio Wallet después de guardar.
 
 ## 7. Selector de tipo en el panel de FM
 
@@ -107,6 +142,9 @@ No exhaustivo — cubre los caminos críticos, no cada combinación. No hay pipe
 - **Verificación por SMS/OTP del portal de cliente** — ver el spec separado del portal (§10). Requeriría contratar un servicio de terceros (Twilio o similar), una decisión de gasto que no me corresponde tomar unilateralmente.
 - **Invitación de dueños por correo** — alta manual vía script (igual que FM), no hay servicio de email configurado.
 - **Facturación real** — sigue siendo seguimiento manual, sin cambios.
+- **Imágenes de branding renderizadas en el pass firmado** (logo/strip/hero/ícono de sello) — corrección tras revisión: esto **ya estaba fuera de alcance de facto** (nunca se construyó, ni siquiera para los campos que el panel de FM ya captura hoy), pero la primera versión de este documento no lo decía explícitamente. Esta fase permite subir y guardar esas imágenes (§4.4) y usarlas en la vista previa web simplificada (§6); wirearlas al pass real de Apple es trabajo aparte, no diseñado aquí.
+- **Vista previa pixel-perfect del pass firmado** — corrección tras revisión: se reemplaza por una maqueta simple de colores (§6). Reconstruir el layout real de Apple Wallet en HTML/CSS con fidelidad completa queda fuera de alcance.
+- **Grilla visual de sellos compuesta como imagen** — corrección tras revisión (ver §4.2): sellos se muestra como texto ("7 de 10") esta fase, no como una imagen con íconos llenos/vacíos. La versión visual es una mejora futura.
 
 ## 10. Nota sobre el portal del cliente
 
@@ -116,8 +154,11 @@ El "portal de clientes ... para descargarla como app" se diseña como **document
 
 1. Catálogo completo (8 tipos) en el esquema desde ya; solo 2 (puntos, sellos) funcionales. Evita fingir que algo funciona cuando no.
 2. `tipo_tarjeta` SÍ lleva CHECK en la BD (a diferencia del color) porque es un conjunto fijo de 8 valores, no un formato con infinitas variantes válidas.
-3. Sellos reutiliza `puntos_actuales` — sin columna nueva de conteo. Solo cambia el render del pass.
+3. Sellos reutiliza `puntos_actuales` — sin columna nueva de conteo. **Corregido tras revisión:** se muestra como texto ("7 de 10 sellos"), no como imagen — este proyecto no tiene pipeline de composición de imágenes, y construir uno no es "solo cambiar el render." Completar la tarjeta reutiliza el canje de recompensas ya existente, sin lógica nueva de redención.
 4. Autorización del panel de dueño: mismo modelo que FM — gate a nivel de aplicación + `createServiceClient()`, nunca RLS de sesión. Un solo modelo de autorización en todo el proyecto.
-5. Subida de imágenes: mediada por el servidor (Server Action + service-role), no políticas de Storage. Mismo argumento de "un solo modelo de autorización."
-6. Alta de cuentas de dueño: script manual, sin invitación por correo (no hay servicio de email).
+5. Subida de imágenes: mediada por el servidor (Server Action + service-role), no políticas de Storage. El `comercio_id` de la ruta sale siempre del gate, nunca de un campo del formulario. Cache-busting por versión en el nombre de archivo.
+6. Alta de cuentas de dueño: script manual con `upsert(..., {onConflict: 'email'})` (no `auth_user_id` — a diferencia de `usuarios_fm`, no es único aquí), sin invitación por correo (no hay servicio de email).
 7. `tipo_tarjeta` lo asigna FM, no lo elige el dueño — es parte de lo que FM "vende", igual que la licencia.
+8. `proxy.ts`: exención de login como OR de dos checks anclados (`/admin/login` y `/comercio/login`, cada uno con su variante `/…/`), nunca una regla floja tipo `endsWith`. Destino del redirect derivado del prefijo de la ruta, no fijo a `/admin/login`.
+9. Recompensas: soft-delete (`activa=false`) es la primera vez que se escribe ese código — no hay nada existente que reutilizar, y no debe copiarse el borrado real de `eliminarComercio`.
+10. Vista previa de branding: maqueta simple de colores, no una reconstrucción fiel del pass firmado (eso no es viable sin renderizar el `.pkpass` real).
