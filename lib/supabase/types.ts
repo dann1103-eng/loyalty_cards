@@ -4,6 +4,8 @@
 //   - supabase/migrations/0001_esquema_inicial.sql
 //   - supabase/migrations/0002_rls_clientes_e_indice_dispositivos.sql (RLS + índice; no cambia columnas)
 //   - supabase/migrations/0003_usuarios_fm_y_licencias.sql (tabla usuarios_fm + columnas licencia_* en comercios)
+//   - supabase/migrations/0004_licencia_fecha_y_comentario.sql (licencia_activa_desde a date; no cambia tipos de TS)
+//   - supabase/migrations/0005_tipo_tarjeta_y_sellos.sql (columnas tipo_tarjeta/sello_icono_url/sello_meta en comercios)
 //
 // Hasta que `supabase gen types` esté cableado (requiere auth del CLI), este archivo se
 // mantiene a mano: si llega una migración nueva, hay que actualizarlo en el mismo commit.
@@ -32,6 +34,9 @@ export type Database = {
           licencia_plan: string | null;
           licencia_monto_mensual: number | null;
           licencia_activa_desde: string | null;
+          tipo_tarjeta: string;
+          sello_icono_url: string | null;
+          sello_meta: number | null;
         };
         Insert: {
           id?: string;
@@ -49,6 +54,9 @@ export type Database = {
           licencia_plan?: string | null;
           licencia_monto_mensual?: number | null;
           licencia_activa_desde?: string | null;
+          tipo_tarjeta?: string;
+          sello_icono_url?: string | null;
+          sello_meta?: number | null;
         };
         Update: {
           id?: string;
@@ -66,6 +74,9 @@ export type Database = {
           licencia_plan?: string | null;
           licencia_monto_mensual?: number | null;
           licencia_activa_desde?: string | null;
+          tipo_tarjeta?: string;
+          sello_icono_url?: string | null;
+          sello_meta?: number | null;
         };
         Relationships: [];
       };
@@ -94,7 +105,19 @@ export type Database = {
           auth_user_id?: string | null;
           created_at?: string;
         };
-        Relationships: [];
+        // FK inline en la migración 0001 (`comercio_id ... references comercios(id)`) — Postgres
+        // la nombra `usuarios_comercio_comercio_id_fkey`. Necesaria para que el join embebido
+        // `comercios(nombre)` de esOwnerDeComercio resuelva su tipo (sin la entrada da
+        // SelectQueryError, igual que documenta la entrada de `tarjetas`).
+        Relationships: [
+          {
+            foreignKeyName: 'usuarios_comercio_comercio_id_fkey';
+            columns: ['comercio_id'];
+            isOneToOne: false;
+            referencedRelation: 'comercios';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       clientes: {
         Row: {
