@@ -387,3 +387,111 @@ a {
     animation: none;
   }
 }
+
+/* ---------- panel interno de FM ---------- */
+.admin-shell {
+  position: relative;
+  z-index: 1;
+  min-height: 100dvh;
+}
+.admin-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(252, 248, 241, 0.7);
+  backdrop-filter: blur(8px);
+}
+.admin-marca {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.15rem;
+}
+.admin-salir {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 7px 13px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.admin-salir:hover {
+  color: var(--espresso);
+  border-color: var(--ink-soft);
+}
+.admin-main {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 34px 22px 60px;
+}
+.admin-encabezado {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.admin-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.admin-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  background: linear-gradient(180deg, var(--foam), var(--cream));
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+.admin-fila:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px -20px rgba(36, 24, 18, 0.7);
+}
+.admin-fila-nombre {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+.admin-fila-slug {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+.pastilla {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.pastilla-activo {
+  color: #2f5d3a;
+  background: rgba(76, 145, 92, 0.16);
+}
+.pastilla-inactivo {
+  color: var(--clay);
+  background: rgba(168, 86, 60, 0.14);
+}
+.admin-vacio {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--ink-soft);
+  border: 1px dashed var(--line);
+  border-radius: 13px;
+}
+.admin-error {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--clay);
+  border: 1px dashed var(--clay);
+  border-radius: 13px;
+}

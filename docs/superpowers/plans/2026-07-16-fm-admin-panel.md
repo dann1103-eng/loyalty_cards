@@ -1476,6 +1476,13 @@ Modify `app/globals.css` — agrega al final:
   border: 1px dashed var(--line);
   border-radius: 13px;
 }
+.admin-error {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--clay);
+  border: 1px dashed var(--clay);
+  border-radius: 13px;
+}
 ```
 
 - [ ] **Step 3: Lista de comercios**
@@ -1495,10 +1502,17 @@ export default async function PaginaComercios() {
   await verifyFmAdmin();
 
   const supabase = createServiceClient();
-  const { data: comercios } = await supabase
+  const { data: comercios, error } = await supabase
     .from('comercios')
     .select('id, nombre, slug, licencia_estado, licencia_monto_mensual')
     .order('nombre');
+
+  if (error) {
+    // Sin esto, un fallo de consulta deja comercios en null y la página muestra "Todavía no hay
+    // comercios" — una MENTIRA, y de las caras: le dice a FM que su cartera está vacía cuando lo
+    // único que pasa es que la BD no responde. "Vacío" y "roto" tienen que verse distinto.
+    console.error('[fm] falló la consulta de comercios:', error);
+  }
 
   return (
     <main className="admin-main">
@@ -1511,7 +1525,11 @@ export default async function PaginaComercios() {
         </Link>
       </div>
 
-      {!comercios || comercios.length === 0 ? (
+      {error ? (
+        <p className="admin-error" role="alert">
+          No se pudo cargar la lista de comercios. Revisa la conexión y recarga la página.
+        </p>
+      ) : !comercios || comercios.length === 0 ? (
         <p className="admin-vacio">Todavía no hay comercios. Crea el primero.</p>
       ) : (
         <div className="admin-lista">
