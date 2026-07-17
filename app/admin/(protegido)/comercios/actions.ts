@@ -35,6 +35,7 @@ function leerDatos(formData: FormData): DatosComercio {
     // "El monto mensual debe ser un número", y esa capa sí tiene pruebas.
     licencia_monto_mensual: monto === null ? null : Number(monto),
     licencia_activa_desde: textoONull(formData.get('licencia_activa_desde')),
+    tipo_tarjeta: String(formData.get('tipo_tarjeta') ?? 'puntos'),
   };
 }
 

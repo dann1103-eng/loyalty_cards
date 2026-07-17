@@ -45,6 +45,7 @@ function datosValidos(slug: string): DatosComercio {
     licencia_plan: 'Básico',
     licencia_monto_mensual: 25,
     licencia_activa_desde: '2026-07-16',
+    tipo_tarjeta: 'puntos',
   };
 }
 
@@ -201,6 +202,25 @@ describe('crearComercio', () => {
     // El formulario HTML de la Tarea 9 manda '' (nunca null) para un campo opcional vacío.
     expect(data!.logo_url).toBeNull();
   });
+
+  it('guarda el tipo_tarjeta seleccionado', async () => {
+    const slug = `test-tipo-${Date.now()}`;
+    const res = await crearComercio(supabase, { ...datosValidos(slug), tipo_tarjeta: 'sellos' });
+
+    expect(res.ok).toBe(true);
+    const { data } = await supabase.from('comercios').select('tipo_tarjeta').eq('slug', slug).single();
+    expect(data!.tipo_tarjeta).toBe('sellos');
+  });
+
+  it('rechaza un tipo_tarjeta que la BD no acepta', async () => {
+    const slug = `test-tipo-malo-${Date.now()}`;
+    const res = await crearComercio(supabase, { ...datosValidos(slug), tipo_tarjeta: 'inexistente' });
+
+    expect(res.ok).toBe(false);
+    // Sin la validación, esto igual daría ok:false — pero por un 23514 traducido a "No se pudo
+    // crear el comercio", que no le dice al admin qué escribió mal.
+    if (!res.ok) expect(res.error).toMatch(/tipo/i);
+  });
 });
 
 describe('actualizarComercio', () => {
@@ -252,6 +272,18 @@ describe('actualizarComercio', () => {
 
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/no existe/i);
+  });
+
+  it('actualiza el tipo_tarjeta de un comercio existente', async () => {
+    const slug = `test-tipo-editar-${Date.now()}`;
+    const creado = await crearComercio(supabase, datosValidos(slug));
+    if (!creado.ok) throw new Error('el setup falló');
+
+    const res = await actualizarComercio(supabase, creado.id, { ...datosValidos(slug), tipo_tarjeta: 'sellos' });
+
+    expect(res.ok).toBe(true);
+    const { data } = await supabase.from('comercios').select('tipo_tarjeta').eq('id', creado.id).single();
+    expect(data!.tipo_tarjeta).toBe('sellos');
   });
 });
 

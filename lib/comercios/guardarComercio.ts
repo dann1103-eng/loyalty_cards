@@ -8,6 +8,23 @@ import { validarColorRgb } from './validarColorRgb';
 export const ESTADOS_LICENCIA = ['activo', 'inactivo'] as const;
 export type EstadoLicencia = (typeof ESTADOS_LICENCIA)[number];
 
+// Fuente única de verdad del catálogo de tipos de tarjeta: la BD tiene
+// check (tipo_tarjeta in (...8 valores...)) en la migración 0005. El <select> de FM (Tarea 3) se
+// construye desde esta MISMA constante. `disponible: false` = el tipo existe en el catálogo pero
+// su lógica de saldo/canje no está construida esta fase (aparece "(Próximamente)" y deshabilitado).
+// Solo 'puntos' y 'sellos' son funcionales hoy (spec §4.1, §7).
+export const TIPOS_TARJETA = [
+  { valor: 'puntos', etiqueta: 'Puntos', descripcion: 'Suma puntos por visita o por monto.', disponible: true },
+  { valor: 'sellos', etiqueta: 'Sellos', descripcion: 'Junta sellos hacia una meta (ej. 9 y la 10 gratis).', disponible: true },
+  { valor: 'cashback', etiqueta: 'Cashback', descripcion: 'Reembolso hacia compras futuras.', disponible: false },
+  { valor: 'membresia', etiqueta: 'Membresías', descripcion: 'Club VIP por niveles.', disponible: false },
+  { valor: 'descuento', etiqueta: 'Descuento', descripcion: 'Ventas al por mayor.', disponible: false },
+  { valor: 'cupon', etiqueta: 'Cupón', descripcion: 'Uso único; se convierte en otro tipo tras canjear.', disponible: false },
+  { valor: 'prepago', etiqueta: 'Prepago', descripcion: 'Tarjetas de sellos prepagadas.', disponible: false },
+  { valor: 'gift_card', etiqueta: 'Gift Card', descripcion: 'Saldo de regalo prepagado.', disponible: false },
+] as const;
+export type TipoTarjeta = (typeof TIPOS_TARJETA)[number]['valor'];
+
 export interface DatosComercio {
   nombre: string;
   slug: string;
@@ -21,6 +38,7 @@ export interface DatosComercio {
   licencia_plan: string | null;
   licencia_monto_mensual: number | null;
   licencia_activa_desde: string | null;
+  tipo_tarjeta: string;
 }
 
 export type ResultadoGuardar =
@@ -52,6 +70,7 @@ function normalizar(datos: DatosComercio): DatosComercio {
     licencia_estado: datos.licencia_estado.trim(),
     licencia_plan: limpiarOpcional(datos.licencia_plan),
     licencia_activa_desde: limpiarOpcional(datos.licencia_activa_desde),
+    tipo_tarjeta: datos.tipo_tarjeta.trim(),
   };
 }
 
@@ -86,6 +105,14 @@ function validar(datos: DatosComercio): string | null {
     // CHECK), que el manejo de errores —que solo distingue 23505— convierte en un genérico
     // "No se pudo crear el comercio". El admin se queda sin saber qué escribió mal.
     return 'El estado de la licencia debe ser "activo" o "inactivo".';
+  }
+  if (!TIPOS_TARJETA.some((t) => t.valor === datos.tipo_tarjeta)) {
+    // Mismo motivo que licencia_estado: sin esto, un valor inválido cae en un 23514 de la BD que
+    // el manejo de errores (solo distingue 23505) convierte en un genérico "No se pudo crear el
+    // comercio". Se valida contra los 8 valores válidos de la BD (no solo los `disponible`): el
+    // <select> ya deshabilita los no disponibles, y el pass renderiza cualquier tipo != 'sellos'
+    // como número de forma segura, así que un tipo no disponible guardado no rompe nada.
+    return 'El tipo de tarjeta no es válido.';
   }
   const colores: [string, string][] = [
     ['color de fondo', datos.color_fondo],
