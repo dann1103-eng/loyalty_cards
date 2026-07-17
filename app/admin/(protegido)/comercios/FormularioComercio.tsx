@@ -1,8 +1,42 @@
 'use client';
 
+import { useState, type ChangeEvent } from 'react';
 import { useActionState } from 'react';
 import type { EstadoFormulario } from './actions';
 import { ESTADOS_LICENCIA, type DatosComercio } from '@/lib/comercios/guardarComercio';
+
+type Valores = {
+  nombre: string;
+  slug: string;
+  color_fondo: string;
+  color_texto: string;
+  color_label: string;
+  logo_url: string;
+  strip_url: string;
+  hero_url: string;
+  licencia_estado: string;
+  licencia_plan: string;
+  licencia_monto_mensual: string;
+  licencia_activa_desde: string;
+};
+
+function valoresIniciales(inicial?: Partial<DatosComercio>): Valores {
+  return {
+    nombre: inicial?.nombre ?? '',
+    slug: inicial?.slug ?? '',
+    color_fondo: inicial?.color_fondo ?? 'rgb(255, 255, 255)',
+    color_texto: inicial?.color_texto ?? 'rgb(255, 255, 255)',
+    color_label: inicial?.color_label ?? 'rgb(255, 255, 255)',
+    logo_url: inicial?.logo_url ?? '',
+    strip_url: inicial?.strip_url ?? '',
+    hero_url: inicial?.hero_url ?? '',
+    licencia_estado: inicial?.licencia_estado ?? 'activo',
+    licencia_plan: inicial?.licencia_plan ?? '',
+    licencia_monto_mensual:
+      inicial?.licencia_monto_mensual != null ? String(inicial.licencia_monto_mensual) : '',
+    licencia_activa_desde: inicial?.licencia_activa_desde ?? '',
+  };
+}
 
 export default function FormularioComercio({
   accion,
@@ -20,18 +54,31 @@ export default function FormularioComercio({
     undefined,
   );
 
+  // Campos CONTROLADOS a propósito. React 19 resetea los campos no controlados cuando una
+  // action del formulario termina —incluso si devolvió un error— así que con defaultValue el
+  // admin llenaba doce campos, se equivocaba en uno, y perdía todo. Verificado en el navegador:
+  // el nombre y el slug volvían a "" al rechazarse un color. Y es fácil de disparar: escribir
+  // "Café Piloto" como slug (mayúscula, espacio, tilde) lo rechaza al primer intento.
+  const [valores, setValores] = useState<Valores>(() => valoresIniciales(inicial));
+
+  const cambiar =
+    (campo: keyof Valores) =>
+    (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setValores((v) => ({ ...v, [campo]: e.target.value }));
+
   return (
     <form className="panel" action={ejecutar}>
       <div className="field">
         <label htmlFor="nombre">Nombre</label>
-        <input id="nombre" name="nombre" defaultValue={inicial?.nombre ?? ''} required />
+        <input id="nombre" name="nombre" value={valores.nombre} onChange={cambiar('nombre')} required />
       </div>
       <div className="field">
         <label htmlFor="slug">Slug (la dirección: /registro/…)</label>
         <input
           id="slug"
           name="slug"
-          defaultValue={inicial?.slug ?? ''}
+          value={valores.slug}
+          onChange={cambiar('slug')}
           placeholder="cafeteria-piloto"
           required
         />
@@ -56,7 +103,8 @@ export default function FormularioComercio({
           <input
             id={campo}
             name={campo}
-            defaultValue={inicial?.[campo] ?? 'rgb(255, 255, 255)'}
+            value={valores[campo]}
+            onChange={cambiar(campo)}
             placeholder="rgb(35, 24, 18)"
             required
           />
@@ -72,7 +120,7 @@ export default function FormularioComercio({
       ).map(([campo, etiqueta]) => (
         <div className="field" key={campo}>
           <label htmlFor={campo}>{etiqueta} (opcional)</label>
-          <input id={campo} name={campo} defaultValue={inicial?.[campo] ?? ''} />
+          <input id={campo} name={campo} value={valores[campo]} onChange={cambiar(campo)} />
         </div>
       ))}
 
@@ -84,7 +132,8 @@ export default function FormularioComercio({
         <select
           id="licencia_estado"
           name="licencia_estado"
-          defaultValue={inicial?.licencia_estado ?? 'activo'}
+          value={valores.licencia_estado}
+          onChange={cambiar('licencia_estado')}
         >
           {ESTADOS_LICENCIA.map((e) => (
             <option key={e} value={e}>
@@ -95,7 +144,12 @@ export default function FormularioComercio({
       </div>
       <div className="field">
         <label htmlFor="licencia_plan">Plan (opcional)</label>
-        <input id="licencia_plan" name="licencia_plan" defaultValue={inicial?.licencia_plan ?? ''} />
+        <input
+          id="licencia_plan"
+          name="licencia_plan"
+          value={valores.licencia_plan}
+          onChange={cambiar('licencia_plan')}
+        />
       </div>
       <div className="field">
         <label htmlFor="licencia_monto_mensual">Monto mensual (opcional)</label>
@@ -105,7 +159,8 @@ export default function FormularioComercio({
           type="number"
           min="0"
           step="0.01"
-          defaultValue={inicial?.licencia_monto_mensual ?? ''}
+          value={valores.licencia_monto_mensual}
+          onChange={cambiar('licencia_monto_mensual')}
         />
       </div>
       <div className="field">
@@ -114,7 +169,8 @@ export default function FormularioComercio({
           id="licencia_activa_desde"
           name="licencia_activa_desde"
           type="date"
-          defaultValue={inicial?.licencia_activa_desde ?? ''}
+          value={valores.licencia_activa_desde}
+          onChange={cambiar('licencia_activa_desde')}
         />
       </div>
 
