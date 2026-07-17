@@ -495,3 +495,24 @@ a {
   border: 1px dashed var(--clay);
   border-radius: 13px;
 }
+
+.field select {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: var(--espresso);
+  background: #fff;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 13px 14px;
+}
+.field select:focus {
+  outline: none;
+  border-color: var(--caramel);
+  box-shadow: 0 0 0 4px rgba(192, 127, 56, 0.18);
+}
+.field-aviso {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--clay);
+}

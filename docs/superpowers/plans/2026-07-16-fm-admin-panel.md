@@ -1612,19 +1612,22 @@ function leerDatos(formData: FormData): DatosComercio {
     hero_url: textoONull(formData.get('hero_url')),
     licencia_estado: String(formData.get('licencia_estado') ?? 'activo'),
     licencia_plan: textoONull(formData.get('licencia_plan')),
+    // Number('25a') es NaN, no una excepción. No lo atajamos aquí: validar() lo rechaza con
+    // "El monto mensual debe ser un número", y esa capa sí tiene pruebas.
     licencia_monto_mensual: monto === null ? null : Number(monto),
     licencia_activa_desde: textoONull(formData.get('licencia_activa_desde')),
   };
 }
 
-// Las acciones NO validan: toda la validación (incluido el monto) vive en validar(), dentro
-// de guardarComercio.ts, que es la capa con tests. Aquí solo: autenticar, parsear, delegar.
+// Las acciones NO validan: toda la validación vive en validar(), dentro de guardarComercio.ts,
+// que es la capa con tests de integración. Aquí solo: autenticar, parsear, delegar.
 export async function accionCrearComercio(
   _estadoPrevio: EstadoFormulario,
   formData: FormData,
 ): Promise<EstadoFormulario> {
   // Cada Server Action verifica por su cuenta: son POST a la ruta donde se usan, no rutas
   // propias, y los docs de Next dicen explícitamente que no hay que confiar solo en el Proxy.
+  // OJO: verifyFmAdmin() usa redirect(), que funciona LANZANDO. Nunca lo envuelvas en try/catch.
   await verifyFmAdmin();
 
   const res = await crearComercio(createServiceClient(), leerDatos(formData));
@@ -1658,16 +1661,18 @@ Create `app/admin/(protegido)/comercios/FormularioComercio.tsx`:
 
 import { useActionState } from 'react';
 import type { EstadoFormulario } from './actions';
-import type { DatosComercio } from '@/lib/comercios/guardarComercio';
+import { ESTADOS_LICENCIA, type DatosComercio } from '@/lib/comercios/guardarComercio';
 
 export default function FormularioComercio({
   accion,
   inicial,
   textoBoton,
+  esEdicion = false,
 }: {
   accion: (estado: EstadoFormulario, formData: FormData) => Promise<EstadoFormulario>;
   inicial?: Partial<DatosComercio>;
   textoBoton: string;
+  esEdicion?: boolean;
 }) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoFormulario, FormData>(
     accion,
@@ -1689,6 +1694,13 @@ export default function FormularioComercio({
           placeholder="cafeteria-piloto"
           required
         />
+        {esEdicion && (
+          <p className="field-aviso">
+            Cambiarlo rompe los QR ya impresos de este comercio: quien los escanee caerá en
+            «Comercio no encontrado» y no podrá registrarse. Los passes ya emitidos siguen
+            funcionando.
+          </p>
+        )}
       </div>
 
       {(
@@ -1725,13 +1737,19 @@ export default function FormularioComercio({
 
       <div className="field">
         <label htmlFor="licencia_estado">Estado de licencia</label>
+        {/* Las opciones salen de ESTADOS_LICENCIA, la MISMA constante contra la que valida
+            guardarComercio.ts y que refleja el check de la BD. Hardcodearlas aquí crearía tres
+            copias de una sola regla: si mañana se agrega un estado, se agrega en un solo lugar. */}
         <select
           id="licencia_estado"
           name="licencia_estado"
           defaultValue={inicial?.licencia_estado ?? 'activo'}
         >
-          <option value="activo">Activo</option>
-          <option value="inactivo">Inactivo</option>
+          {ESTADOS_LICENCIA.map((e) => (
+            <option key={e} value={e}>
+              {e.charAt(0).toUpperCase() + e.slice(1)}
+            </option>
+          ))}
         </select>
       </div>
       <div className="field">
@@ -1755,7 +1773,7 @@ export default function FormularioComercio({
           id="licencia_activa_desde"
           name="licencia_activa_desde"
           type="date"
-          defaultValue={inicial?.licencia_activa_desde?.slice(0, 10) ?? ''}
+          defaultValue={inicial?.licencia_activa_desde ?? ''}
         />
       </div>
 
@@ -1772,7 +1790,7 @@ export default function FormularioComercio({
 }
 ```
 
-Agrega el estilo del `<select>` a `app/globals.css` (junto a `.field input`):
+Agrega el estilo del `<select>` y del aviso de slug a `app/globals.css` (junto a `.field input`):
 ```css
 .field select {
   font-family: var(--font-body);
@@ -1787,6 +1805,12 @@ Agrega el estilo del `<select>` a `app/globals.css` (junto a `.field input`):
   outline: none;
   border-color: var(--caramel);
   box-shadow: 0 0 0 4px rgba(192, 127, 56, 0.18);
+}
+.field-aviso {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--clay);
 }
 ```
 
@@ -1844,7 +1868,33 @@ export default async function PaginaEditarComercio({
   const { id } = await params;
 
   const supabase = createServiceClient();
-  const { data: comercio } = await supabase.from('comercios').select('*').eq('id', id).maybeSingle();
+  const { data: comercio, error } = await supabase
+    .from('comercios')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) {
+    // maybeSingle() devuelve error:null cuando no hay filas, así que un error aquí SIEMPRE es
+    // infraestructura. Sin separarlo, un fallo de consulta caería en notFound() y le diría al
+    // admin que el comercio NO EXISTE —mentira— justo después de que lo vio en la lista.
+    console.error('[fm] falló la consulta del comercio a editar:', error);
+    return (
+      <main className="admin-main">
+        <div className="admin-encabezado">
+          <h1 className="title" style={{ fontSize: '2rem', margin: 0 }}>
+            Comercio
+          </h1>
+          <Link className="admin-fila-slug" href="/admin/comercios">
+            ← Volver
+          </Link>
+        </div>
+        <p className="admin-error" role="alert">
+          No se pudo cargar este comercio. Revisa la conexión y recarga la página.
+        </p>
+      </main>
+    );
+  }
 
   if (!comercio) notFound();
 
@@ -1852,9 +1902,9 @@ export default async function PaginaEditarComercio({
   // (estado, formData).
   const accion = accionActualizarComercio.bind(null, id);
 
-  // Las columnas de color son nullable en la BD (migración 0001) pero DatosComercio las
-  // declara string, así que Partial<DatosComercio> las vuelve `string | undefined` y NO
-  // acepta null. Pasar `comercio` directo es un error de tipos (TS2322) — hay que mapear.
+  // Las columnas de color son nullable en la BD (migración 0001: `color_fondo text`) pero
+  // DatosComercio las declara string, así que Partial<DatosComercio> las vuelve
+  // `string | undefined` y NO acepta null. Pasar `comercio` directo es un TS2322: hay que mapear.
   const inicial = {
     ...comercio,
     color_fondo: comercio.color_fondo ?? '',
@@ -1872,7 +1922,7 @@ export default async function PaginaEditarComercio({
           ← Volver
         </Link>
       </div>
-      <FormularioComercio accion={accion} inicial={inicial} textoBoton="Guardar cambios" />
+      <FormularioComercio accion={accion} inicial={inicial} textoBoton="Guardar cambios" esEdicion />
     </main>
   );
 }
@@ -1880,7 +1930,7 @@ export default async function PaginaEditarComercio({
 
 - [ ] **Step 5: Gates + commit**
 
-Run: `npm run build`, `npm run typecheck`, `npm run lint`, `npm test` (46 passed).
+Run: `npm run build`, `npm run typecheck`, `npm run lint`, `npm test` (59 passed).
 ```bash
 git add -A
 git commit -m "Add comercio create/edit form and server actions"
