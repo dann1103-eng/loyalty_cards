@@ -13,11 +13,14 @@
 - **Fases 0+1 (walking skeleton Apple Wallet):** COMPLETO, en producción, validado en iPhone real.
 - **Panel de FM (`/admin`):** COMPLETO, fusionado a `master`, desplegado, verificado con clic real
   en `https://loyalty-cards-rose.vercel.app/admin/login`.
-- **Fase 3 (panel del dueño `/comercio` + catálogo de tipos de tarjeta + portal del cliente
-  `/mi-tarjeta`):** EN CURSO en la rama `feature/fase3-autogestion-catalogo` (HEAD `1a56279`). Specs y
-  planes escritos y revisados. Migración `0005` aplicada. Tareas 1, 2 y 5 hechas, comiteadas **y ya
-  revisadas** (revisión de calidad independiente 2026-07-17: ambas APROBADAS; el gate del dueño se
-  endureció con mutation-testing en `1a56279`). Siguiente: construir Tareas 3, 4, 6, 8, 9.
+- **Fase 3a (panel del dueño `/comercio` + catálogo de tipos de tarjeta + tarjetas de sellos):**
+  CÓDIGO COMPLETO en la rama `feature/fase3-autogestion-catalogo` (HEAD `a83b382`). Las **16 tareas de
+  código (1–16) están hechas, comiteadas y verificadas**: **92 pruebas de Vitest verdes** + e2e de
+  Playwright (el flujo de registro corre en vivo y pasa; los de FM/dueño están escritos y se saltan sin
+  credenciales `E2E_*`). Migración `0005` aplicada. Falta solo: el **paso del usuario** (crear el bucket
+  y sembrar la cuenta del dueño, luego e2e manual — Tarea 15) y la **Tarea 17 (merge a `master` +
+  deploy)**, que espera aprobación explícita. El portal del cliente es un plan aparte (migración
+  `0006`), aún sin empezar.
 - **Google Wallet:** pausado a pedido del usuario (sin tiempo). No es que esté roto — no se empezó.
 
 ---
@@ -93,34 +96,31 @@ mata siempre, verificada con mutation-testing real (commit `1a56279`). Baseline:
 
 ---
 
-## 5. Lo que falta, en orden de dependencias
+## 5. Estado de las tareas — TODO el código de 3a está hecho (2026-07-17)
 
-**Independientes de la migración** (se pueden hacer en cualquier orden, ya verificado por grep que no
-tocan `tipo_tarjeta`/`sello_meta`): **3, 6, 8, 9.**
+**Tareas 1–16: HECHAS, comiteadas y verificadas** en `feature/fase3-autogestion-catalogo` (HEAD
+`a83b382`; commits en §4). Cada tarea con lógica pasó por TDD + **mutation-testing** (romper la línea,
+ver fallar la prueba correcta, restaurar); las mecánicas por build/typecheck/lint. Resumen:
 
-- **Tarea 3** — `<select>` de `tipo_tarjeta` en `FormularioComercio.tsx` de FM (solo UI; `leerDatos`
-  ya se hizo en la Tarea 2). Verificar en navegador.
-- **Tarea 4** — sellos como fracción de texto en el pass (`lib/apple/generatePass.ts` /
-  `datosPassDeTarjeta.ts`): `primaryField` string `"N de M sellos"` cuando `tipo_tarjeta='sellos'` y
-  `sello_meta` no es null; si es null, cae a número. TDD.
-- **Tarea 6** — login/logout del dueño (`/comercio/login`), clon de `/admin/login`.
-- **Tarea 7** — layout protegido `/comercio/(protegido)/` + página de resumen. **Usa la Tarea 5.**
-  Regla estructural: `app/comercio/layout.tsx` NUNCA debe existir (envolvería el login → ciclo
-  infinito de redirect); el gate va DENTRO del route group `(protegido)`.
-- **Tarea 8** — extender `proxy.ts` (raíz) + `lib/supabase/proxy.ts` a `/comercio`. **ARCHIVO DE MÁS
-  RIESGO.** El plan trae el parche exacto (checks anclados en OR, destino del redirect derivado del
-  prefijo). Releer el archivo actual antes de parchear, no confiar en la cita del plan.
-- **Tarea 9** — bucket de Storage `comercio-imagenes` vía script (`supabase.storage.createBucket`).
-- **Tareas 10–12** — validación de imágenes, `guardarBranding`, página de branding con subida +
-  vista previa (maqueta simple de colores, NO reconstrucción del pass firmado).
-- **Tareas 13–14** — CRUD de reglas y de recompensas. **Recompensas: borrado = `update({activa:false})`,
-  NUNCA `.delete()`** (el historial de `canjes` referencia `recompensa_id`). Es la PRIMERA vez que se
-  escribe ese código; no copiar el borrado real de `eliminarComercio`.
-- **Tarea 15** — **PASO DEL USUARIO:** correr `npm run seed-usuario-comercio -- <email> "<pass>" <slug>`
-  en su terminal (contraseña nunca por chat), luego verificación manual e2e del panel del dueño.
-- **Tarea 16** — Playwright (3 flujos: registro→pass, FM crear/editar/eliminar, dueño edita branding).
-  Los tests e2e limpian con service-role en `afterEach` (corregido en revisión de plan).
-- **Tarea 17** — fusión a `master` + despliegue.
+- **T3** `<select>` de `tipo_tarjeta` en FM · **T4** sellos como texto `"N de M sellos"` en el pass
+  (rama `puntos` **byte-idéntica** → el pass real de Cafetería Piloto queda intacto).
+- **T6** login/logout del dueño · **T7** layout protegido `(protegido)` + panel · **T8** proxy
+  extendido a `/comercio` (revisado archivo completo; redirects en vivo se validan por Playwright).
+- **T9** script del bucket `comercio-imagenes` (el usuario lo corre) · **T10** validadores de imagen ·
+  **T11** `guardarBranding` · **T12** página de branding (subida real a Storage + maqueta de colores).
+- **T13** CRUD de reglas (hard-delete) · **T14** CRUD de recompensas — **SOFT-DELETE
+  (`update({activa:false})`)**, protegido por el test linchpin + mutation-test (`.delete()` lo rompe).
+- **T15 (script)** `scripts/seed-usuario-comercio.ts` + `npm run seed-comercio` · **T16** Playwright:
+  registro→pass corre en vivo y PASA; FM y dueño escritos, se saltan sin `E2E_*`. Corregido: Playwright
+  no cargaba `.env.local` — se agregó `dotenv` a `playwright.config.ts`.
+
+**Lo que falta para cerrar 3a — DOS pasos del USUARIO + el merge:**
+- **Bucket de Storage:** correr `npm run seed-bucket` (crea `comercio-imagenes`, público de lectura).
+- **Tarea 15 (PASO DEL USUARIO):** `npm run seed-comercio -- <email> "<pass>" cafeteria-piloto` en tu
+  terminal (contraseña nunca por chat); opcional: poner `E2E_FM_*`/`E2E_OWNER_*` en `.env.local` para
+  correr los 3 e2e; luego verificación manual e2e del panel (plan Task 15 Step 3, 10 pasos).
+- **Tarea 17 (merge + deploy) — espera tu aprobación explícita** (despliega a producción):
+  `git checkout master && git merge --ff-only feature/fase3-autogestion-catalogo && git push origin master`.
 
 Después, **todo el plan del portal** (`2026-07-16-portal-cliente.md`), que depende de que 3a esté en
 la base (migración `0006`).
@@ -133,12 +133,12 @@ la base (migración `0006`).
 cd "C:/Users/Daniel/Desktop/Loyalty Cards"
 git checkout feature/fase3-autogestion-catalogo
 git status                 # árbol limpio esperado
-npm test                   # 70 passed esperado (baseline real, NO el 91 del plan que asume todo hecho)
+npm test                   # 92 passed esperado (todo 3a hecho); npm run e2e para los Playwright
 ```
 
-- **El baseline de pruebas del plan asume ejecución en orden.** Como se hizo fuera de orden, confiá
-  en el número real de `npm test`, no en los absolutos del plan. Ya hechas: 61 base + 3 (Tarea 2) +
-  5 (Tarea 5) + 1 (endurecimiento del gate, `1a56279`) = **70**.
+- **Baseline real de `npm test` = 92** (el plan dice 91 porque no cuenta el test extra de
+  endurecimiento del gate, `1a56279`). Desglose: 61 base + 3 (T2) + 2 (T4) + 5 (T5) + 1 (endurecimiento)
+  + 6 (T10) + 4 (T11) + 5 (T13) + 5 (T14) = **92**. Playwright corre aparte (`npm run e2e`, no cuenta).
 - **Migraciones se aplican A MANO.** El asistente NO puede correr `ALTER TABLE` (solo tiene llaves de
   API, no conexión directa a Postgres; el CLI de Supabase ve otra cuenta). Cuando una tarea tenga
   migración: el asistente escribe el `.sql` y lo pega en el chat, el usuario lo corre en Studio y
