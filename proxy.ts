@@ -7,7 +7,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Solo el panel de FM necesita sesión. El resto del sitio (registro público, endpoints de
-  // Apple Wallet) es público y no debe pagar este costo.
-  matcher: '/admin/:path*',
+  // Los paneles de FM y del dueño necesitan sesión. El resto del sitio (registro público,
+  // endpoints de Apple Wallet) es público y no debe pagar este costo.
+  matcher: ['/admin/:path*', '/comercio/:path*'],
 };

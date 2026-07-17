@@ -43,13 +43,20 @@ export async function updateSession(request: NextRequest) {
   // /admin/loginXYZ, heredando una exención que nadie pidió. Así solo se eximen /admin/login
   // y sus sub-rutas legítimas (p. ej. un futuro /admin/login/reset).
   const ruta = request.nextUrl.pathname;
-  const esRutaLogin = ruta === '/admin/login' || ruta.startsWith('/admin/login/');
+  const esRutaLogin =
+    ruta === '/admin/login' || ruta.startsWith('/admin/login/') ||
+    ruta === '/comercio/login' || ruta.startsWith('/comercio/login/');
 
   // Primera barrera (rápida). El gate real es verifyFmAdmin() en layout/página/acción.
   // /admin/login se excluye o se cicla infinitamente contra sí mismo.
   if (!usuario && !esRutaLogin) {
+    // El destino del redirect se DERIVA del prefijo, no es fijo: una visita sin sesión a
+    // /comercio/panel debe caer en /comercio/login (la pantalla del dueño), no en /admin/login
+    // (la de FM). El matcher solo enruta /admin/* y /comercio/*, así que `ruta` siempre empieza
+    // por uno de los dos; startsWith('/comercio') es seguro aquí.
+    const prefijo = ruta.startsWith('/comercio') ? '/comercio' : '/admin';
     const url = request.nextUrl.clone();
-    url.pathname = '/admin/login';
+    url.pathname = `${prefijo}/login`;
     // clone() conserva el query string y cambiar .pathname no lo limpia: sin esto,
     // /admin/comercios?error=sin-permiso mostraría "sin permiso" a alguien que solo no tiene
     // sesión. Nada necesita preservarlo: el login redirige a un destino fijo.
