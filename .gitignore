@@ -51,3 +51,9 @@ supabase/.temp/
 
 # Config local de Claude Code (permisos de la maquina), no del proyecto.
 .claude/settings.local.json
+
+# Playwright — artefactos de corridas de e2e, no del proyecto.
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
