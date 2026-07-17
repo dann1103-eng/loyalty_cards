@@ -542,3 +542,14 @@ a {
   opacity: 0.6;
   cursor: default;
 }
+
+/* ---------- panel del dueño del comercio ---------- */
+.panel-atajos {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 22px;
+}
+.admin-marca {
+  cursor: pointer;
+}
