@@ -179,3 +179,29 @@ export async function actualizarComercio(
 
   return { ok: true, id };
 }
+
+// Ningún FK hacia comercios tiene ON DELETE CASCADE (migración 0001: usuarios_comercio,
+// tarjetas, reglas_puntos y recompensas apuntan aquí sin cascada) — a propósito, para que
+// borrar un comercio NUNCA arrastre en silencio datos reales de un cliente. Postgres es la
+// única fuente de verdad de esa regla: no la duplicamos contando filas en JS, que podría
+// desincronizarse si el esquema cambia. Solo traducimos el 23503 a un mensaje legible.
+export async function eliminarComercio(
+  supabase: SupabaseClient<Database>,
+  id: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { error } = await supabase.from('comercios').delete().eq('id', id);
+
+  if (error) {
+    if (error.code === '23503') {
+      return {
+        ok: false,
+        error:
+          'No se puede eliminar: tiene datos asociados (tarjetas, reglas de puntos o recompensas). Solo se pueden eliminar comercios sin actividad.',
+      };
+    }
+    console.error('[fm] falló el borrado de comercio:', error);
+    return { ok: false, error: 'No se pudo eliminar el comercio.' };
+  }
+
+  return { ok: true };
+}

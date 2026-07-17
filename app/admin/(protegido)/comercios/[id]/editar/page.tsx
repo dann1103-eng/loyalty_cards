@@ -3,7 +3,8 @@ import { notFound } from 'next/navigation';
 import { verifyFmAdmin } from '@/lib/fm/verifyFmAdmin';
 import { createServiceClient } from '@/lib/supabase/server';
 import FormularioComercio from '../../FormularioComercio';
-import { accionActualizarComercio } from '../../actions';
+import BotonEliminar from '../../BotonEliminar';
+import { accionActualizarComercio, accionEliminarComercio } from '../../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +50,7 @@ export default async function PaginaEditarComercio({
   // bind() fija el id como primer argumento; la firma que ve useActionState sigue siendo
   // (estado, formData).
   const accion = accionActualizarComercio.bind(null, id);
+  const eliminar = accionEliminarComercio.bind(null, id);
 
   // Las columnas de color son nullable en la BD (migración 0001: `color_fondo text`) pero
   // DatosComercio las declara string, así que Partial<DatosComercio> las vuelve
@@ -71,6 +73,7 @@ export default async function PaginaEditarComercio({
         </Link>
       </div>
       <FormularioComercio accion={accion} inicial={inicial} textoBoton="Guardar cambios" esEdicion />
+      <BotonEliminar accion={eliminar} nombre={comercio.nombre} />
     </main>
   );
 }

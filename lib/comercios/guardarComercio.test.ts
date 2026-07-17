@@ -1,15 +1,33 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createServiceClient } from '../supabase/server';
-import { crearComercio, actualizarComercio, type DatosComercio } from './guardarComercio';
+import {
+  crearComercio,
+  actualizarComercio,
+  eliminarComercio,
+  type DatosComercio,
+} from './guardarComercio';
 
 const supabase = createServiceClient();
 const slugsDePrueba: string[] = [];
+const tarjetasDePrueba: string[] = [];
+const clientesDePrueba: string[] = [];
 
 afterEach(async () => {
-  if (!slugsDePrueba.length) return;
-  const { error } = await supabase.from('comercios').delete().in('slug', slugsDePrueba);
-  if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
-  slugsDePrueba.length = 0;
+  if (tarjetasDePrueba.length) {
+    const { error } = await supabase.from('tarjetas').delete().in('id', tarjetasDePrueba);
+    if (error) console.error('[test] no se pudieron borrar las tarjetas de prueba:', error);
+    tarjetasDePrueba.length = 0;
+  }
+  if (clientesDePrueba.length) {
+    const { error } = await supabase.from('clientes').delete().in('id', clientesDePrueba);
+    if (error) console.error('[test] no se pudieron borrar los clientes de prueba:', error);
+    clientesDePrueba.length = 0;
+  }
+  if (slugsDePrueba.length) {
+    const { error } = await supabase.from('comercios').delete().in('slug', slugsDePrueba);
+    if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
+    slugsDePrueba.length = 0;
+  }
 });
 
 function datosValidos(slug: string): DatosComercio {
@@ -234,5 +252,54 @@ describe('actualizarComercio', () => {
 
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/no existe/i);
+  });
+});
+
+describe('eliminarComercio', () => {
+  it('elimina un comercio sin datos asociados', async () => {
+    const slug = `test-eliminar-${Date.now()}`;
+    const creado = await crearComercio(supabase, datosValidos(slug));
+    if (!creado.ok) throw new Error('el setup falló');
+
+    const res = await eliminarComercio(supabase, creado.id);
+    expect(res.ok).toBe(true);
+
+    const { data } = await supabase.from('comercios').select('id').eq('id', creado.id).maybeSingle();
+    expect(data).toBeNull();
+  });
+
+  it('rechaza eliminar un comercio con tarjetas y NO lo borra', async () => {
+    const slug = `test-con-tarjeta-${Date.now()}`;
+    const creado = await crearComercio(supabase, datosValidos(slug));
+    if (!creado.ok) throw new Error('el setup falló');
+
+    const telefono = `+000-test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const { data: cliente, error: eCliente } = await supabase
+      .from('clientes')
+      .insert({ nombre: 'Cliente de prueba', telefono })
+      .select('id')
+      .single();
+    if (eCliente) throw eCliente;
+    clientesDePrueba.push(cliente.id);
+
+    const { data: tarjeta, error: eTarjeta } = await supabase
+      .from('tarjetas')
+      .insert({ cliente_id: cliente.id, comercio_id: creado.id })
+      .select('id')
+      .single();
+    if (eTarjeta) throw eTarjeta;
+    tarjetasDePrueba.push(tarjeta.id);
+
+    const res = await eliminarComercio(supabase, creado.id);
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/asociad|eliminar/i);
+
+    // La comprobación que de verdad importa: el comercio SIGUE existiendo. Esta es la misma
+    // situación del comercio piloto real en producción, con una tarjeta real ligada a un pass
+    // de Apple en el iPhone del usuario — si este assert alguna vez fallara, significaría que
+    // el borrado arrastró datos de un cliente real.
+    const { data } = await supabase.from('comercios').select('id').eq('id', creado.id).maybeSingle();
+    expect(data).not.toBeNull();
   });
 });

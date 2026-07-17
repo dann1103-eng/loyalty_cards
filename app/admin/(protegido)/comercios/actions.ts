@@ -4,7 +4,12 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { verifyFmAdmin } from '@/lib/fm/verifyFmAdmin';
 import { createServiceClient } from '@/lib/supabase/server';
-import { crearComercio, actualizarComercio, type DatosComercio } from '@/lib/comercios/guardarComercio';
+import {
+  crearComercio,
+  actualizarComercio,
+  eliminarComercio,
+  type DatosComercio,
+} from '@/lib/comercios/guardarComercio';
 
 export type EstadoFormulario = { error: string } | undefined;
 
@@ -59,6 +64,20 @@ export async function accionActualizarComercio(
   await verifyFmAdmin();
 
   const res = await actualizarComercio(createServiceClient(), id, leerDatos(formData));
+  if (!res.ok) return { error: res.error };
+
+  revalidatePath('/admin/comercios');
+  redirect('/admin/comercios');
+}
+
+export async function accionEliminarComercio(
+  id: string,
+  _estadoPrevio: EstadoFormulario,
+  _formData: FormData,
+): Promise<EstadoFormulario> {
+  await verifyFmAdmin();
+
+  const res = await eliminarComercio(createServiceClient(), id);
   if (!res.ok) return { error: res.error };
 
   revalidatePath('/admin/comercios');

@@ -1994,6 +1994,326 @@ git commit -m "Add comercio create/edit form and server actions"
 
 ---
 
+### Task 9b: Eliminar comercio (agregado durante la Tarea 10)
+
+**Fuera del alcance original.** El objetivo aprobado de esta fase (spec §2) era "ver, crear y
+editar" — sin borrar. Durante la verificación manual end-to-end de la Tarea 10, el usuario creó
+un comercio de prueba y notó que el panel no tenía forma de quitarlo; pidió agregar borrado antes
+de fusionar a `master`. La regla de "solo sin datos asociados" no es una validación nueva de
+aplicación: ya la impone el esquema — ninguna FK hacia `comercios` (migración 0001:
+`usuarios_comercio`, `tarjetas`, `reglas_puntos`, `recompensas`) tiene `on delete cascade`, así
+que Postgres rechaza el borrado con un 23503 si existe cualquier dependiente. El panel solo
+traduce ese código a un mensaje legible; a propósito NO se duplica la regla contando filas en JS
+antes de borrar (podría desincronizarse del esquema).
+
+**Verificación previa a confiar en el diseño** (comercio piloto real de por medio, con 1
+`tarjeta` real ligada a un pass de Apple firmado en el iPhone del usuario):
+1. Se releyeron las cuatro migraciones (`0001`–`0004`) y se grepeó `cascade` (sin distinguir
+   mayúsculas) en todo `supabase/`: cero resultados. Ningún FK, en ninguna migración, tiene
+   `on delete cascade`.
+2. `event.preventDefault()` en el `onSubmit` de un `<form action={función}>` de React 19 SÍ
+   cancela la Server Action, no es decorativo. Verificado leyendo el código fuente instalado
+   (`node_modules/react-dom/cjs/react-dom-client.development.js`): el submit nativo se procesa en
+   un solo batch síncrono que primero acumula y corre los listeners normales de `onSubmit` (vía
+   `accumulateTwoPhaseListeners` sobre "onSubmit") y SOLO DESPUÉS ejecuta la extracción propia de
+   la action (función `extractEvents$1`), cuyo listener revisa `nativeEvent.defaultPrevented` y
+   pasa `action: null` a `startHostTransition` si ya está en `true` — es decir, nunca llama a la
+   action. Como ambos leen/escriben el mismo evento nativo dentro del mismo pase síncrono, y el
+   `onSubmit` del desarrollador corre primero, el `preventDefault()` condicionado al
+   `window.confirm()` de `BotonEliminar` sí bloquea el borrado si el usuario cancela. Coincide con
+   `node_modules/next/dist/docs/01-app/03-api-reference/02-components/form.md`: "calling
+   event.preventDefault() will override \<Form\> behavior".
+3. `accionEliminarComercio.bind(null, id)` sí tipa contra la firma `(estado, formData) =>
+   Promise<EstadoFormulario>` que espera `BotonEliminar` — confirmado con `npm run typecheck`
+   limpio, igual que ya ocurre con `accionActualizarComercio.bind(null, id)`.
+4. Un DELETE sobre un id que ya no existe debe devolver `ok:true` (a diferencia del `ok:true`
+   sobre un UPDATE de 0 filas, que sí sería mentira: implicaría un cambio que nunca pasó). Para
+   un DELETE, el estado que el caller quiere — "esta fila no debe existir" — se cumple lo haya
+   hecho esta llamada o ya estuviera así. Ojo: esto depende de que el único caller use el service
+   client (ignora RLS); con un cliente de sesión, "0 filas por RLS" y "0 filas porque ya no
+   existe" volverían a ser indistinguibles, el mismo problema que motivó el `.select().single()`
+   en `actualizarComercio`. Hoy `accionEliminarComercio` siempre pasa `createServiceClient()`, así
+   que no aplica — pero es un acoplamiento implícito, no verificado por ningún test.
+
+**Files:**
+- Modify: `lib/comercios/guardarComercio.ts` (agrega `eliminarComercio`)
+- Modify: `lib/comercios/guardarComercio.test.ts` (agrega el describe `eliminarComercio`)
+- Modify: `app/admin/(protegido)/comercios/actions.ts` (agrega `accionEliminarComercio`)
+- Create: `app/admin/(protegido)/comercios/BotonEliminar.tsx`
+- Modify: `app/admin/(protegido)/comercios/[id]/editar/page.tsx` (monta `BotonEliminar`)
+- Modify: `app/globals.css` (`.admin-zona-peligro` / `.admin-eliminar`)
+- Modify: `eslint.config.mjs` (`argsIgnorePattern`, Step 7)
+
+- [ ] **Step 1: Escribir el test que falla**
+
+Extiende `lib/comercios/guardarComercio.test.ts`: importa `eliminarComercio` y agrega
+`tarjetasDePrueba`/`clientesDePrueba`, reordenando `afterEach` para borrar tarjetas → clientes →
+comercios, en ese orden (el hijo antes que sus dos padres — al revés, el propio borrado que esta
+prueba ejercita rechazaría la limpieza con el mismo 23503 que el feature existe para producir).
+
+```typescript
+const slugsDePrueba: string[] = [];
+const tarjetasDePrueba: string[] = [];
+const clientesDePrueba: string[] = [];
+
+afterEach(async () => {
+  if (tarjetasDePrueba.length) {
+    const { error } = await supabase.from('tarjetas').delete().in('id', tarjetasDePrueba);
+    if (error) console.error('[test] no se pudieron borrar las tarjetas de prueba:', error);
+    tarjetasDePrueba.length = 0;
+  }
+  if (clientesDePrueba.length) {
+    const { error } = await supabase.from('clientes').delete().in('id', clientesDePrueba);
+    if (error) console.error('[test] no se pudieron borrar los clientes de prueba:', error);
+    clientesDePrueba.length = 0;
+  }
+  if (slugsDePrueba.length) {
+    const { error } = await supabase.from('comercios').delete().in('slug', slugsDePrueba);
+    if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
+    slugsDePrueba.length = 0;
+  }
+});
+```
+
+```typescript
+describe('eliminarComercio', () => {
+  it('elimina un comercio sin datos asociados', async () => {
+    const slug = `test-eliminar-${Date.now()}`;
+    const creado = await crearComercio(supabase, datosValidos(slug));
+    if (!creado.ok) throw new Error('el setup falló');
+
+    const res = await eliminarComercio(supabase, creado.id);
+    expect(res.ok).toBe(true);
+
+    const { data } = await supabase.from('comercios').select('id').eq('id', creado.id).maybeSingle();
+    expect(data).toBeNull();
+  });
+
+  it('rechaza eliminar un comercio con tarjetas y NO lo borra', async () => {
+    const slug = `test-con-tarjeta-${Date.now()}`;
+    const creado = await crearComercio(supabase, datosValidos(slug));
+    if (!creado.ok) throw new Error('el setup falló');
+
+    const telefono = `+000-test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const { data: cliente, error: eCliente } = await supabase
+      .from('clientes')
+      .insert({ nombre: 'Cliente de prueba', telefono })
+      .select('id')
+      .single();
+    if (eCliente) throw eCliente;
+    clientesDePrueba.push(cliente.id);
+
+    const { data: tarjeta, error: eTarjeta } = await supabase
+      .from('tarjetas')
+      .insert({ cliente_id: cliente.id, comercio_id: creado.id })
+      .select('id')
+      .single();
+    if (eTarjeta) throw eTarjeta;
+    tarjetasDePrueba.push(tarjeta.id);
+
+    const res = await eliminarComercio(supabase, creado.id);
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/asociad|eliminar/i);
+
+    // La comprobación que de verdad importa: el comercio SIGUE existiendo. Esta es la misma
+    // situación del comercio piloto real en producción, con una tarjeta real ligada a un pass
+    // de Apple en el iPhone del usuario — si este assert alguna vez fallara, significaría que
+    // el borrado arrastró datos de un cliente real.
+    const { data } = await supabase.from('comercios').select('id').eq('id', creado.id).maybeSingle();
+    expect(data).not.toBeNull();
+  });
+});
+```
+
+Run: `npm test -- guardarComercio` → RED esperado: `TypeError: eliminarComercio is not a
+function` en las 2 pruebas nuevas, 14 pruebas existentes en verde.
+
+- [ ] **Step 2: `eliminarComercio()`**
+
+Agrega a `lib/comercios/guardarComercio.ts`, después de `actualizarComercio`:
+
+```typescript
+// Ningún FK hacia comercios tiene ON DELETE CASCADE (migración 0001: usuarios_comercio,
+// tarjetas, reglas_puntos y recompensas apuntan aquí sin cascada) — a propósito, para que
+// borrar un comercio NUNCA arrastre en silencio datos reales de un cliente. Postgres es la
+// única fuente de verdad de esa regla: no la duplicamos contando filas en JS, que podría
+// desincronizarse si el esquema cambia. Solo traducimos el 23503 a un mensaje legible.
+export async function eliminarComercio(
+  supabase: SupabaseClient<Database>,
+  id: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { error } = await supabase.from('comercios').delete().eq('id', id);
+
+  if (error) {
+    if (error.code === '23503') {
+      return {
+        ok: false,
+        error:
+          'No se puede eliminar: tiene datos asociados (tarjetas, reglas de puntos o recompensas). Solo se pueden eliminar comercios sin actividad.',
+      };
+    }
+    console.error('[fm] falló el borrado de comercio:', error);
+    return { ok: false, error: 'No se pudo eliminar el comercio.' };
+  }
+
+  return { ok: true };
+}
+```
+
+El tipo de retorno es deliberadamente `{ ok: true } | { ok: false; error: string }`, NO
+`ResultadoGuardar`: ese tipo carga un `id` en el caso de éxito que un DELETE no tiene sentido
+devolver (el caller ya lo tiene). Sin `.select().single()` a propósito — ver punto 4 de la
+verificación arriba.
+
+Run: `npm test -- guardarComercio` → GREEN, 16 passed (14 + 2).
+
+- [ ] **Step 3: Server Action**
+
+Agrega a `app/admin/(protegido)/comercios/actions.ts`:
+
+```typescript
+export async function accionEliminarComercio(
+  id: string,
+  _estadoPrevio: EstadoFormulario,
+  _formData: FormData,
+): Promise<EstadoFormulario> {
+  await verifyFmAdmin();
+
+  const res = await eliminarComercio(createServiceClient(), id);
+  if (!res.ok) return { error: res.error };
+
+  revalidatePath('/admin/comercios');
+  redirect('/admin/comercios');
+}
+```
+
+Misma forma que `accionActualizarComercio`: `(id, estadoPrevio, formData)` vía `.bind(null, id)`,
+reutilizando `EstadoFormulario` — sin tipo nuevo.
+
+- [ ] **Step 4: `BotonEliminar` (client component)**
+
+Create `app/admin/(protegido)/comercios/BotonEliminar.tsx`:
+
+```tsx
+'use client';
+
+import { useActionState } from 'react';
+import type { EstadoFormulario } from './actions';
+
+export default function BotonEliminar({
+  accion,
+  nombre,
+}: {
+  accion: (estado: EstadoFormulario, formData: FormData) => Promise<EstadoFormulario>;
+  nombre: string;
+}) {
+  const [estado, ejecutar, pendiente] = useActionState<EstadoFormulario, FormData>(
+    accion,
+    undefined,
+  );
+
+  return (
+    <div className="admin-zona-peligro">
+      <form
+        action={ejecutar}
+        onSubmit={(e) => {
+          // La confirmación es UX contra un clic accidental, NO el control de seguridad — ese
+          // es verifyFmAdmin() dentro de la Server Action, más el FK de Postgres que rechaza
+          // borrar cualquier comercio con datos reales asociados.
+          if (!window.confirm(`¿Eliminar "${nombre}"? Esta acción no se puede deshacer.`)) {
+            e.preventDefault();
+          }
+        }}
+      >
+        <button className="admin-eliminar" type="submit" disabled={pendiente}>
+          {pendiente ? 'Eliminando…' : 'Eliminar comercio'}
+        </button>
+      </form>
+      {estado?.error && (
+        <p className="alerta" role="alert">
+          {estado.error}
+        </p>
+      )}
+    </div>
+  );
+}
+```
+
+Ver punto 2 de la verificación arriba: el `preventDefault()` condicionado al `confirm()` sí
+cancela la action, no es decorativo.
+
+- [ ] **Step 5: Montarlo en la página de edición**
+
+Modifica `app/admin/(protegido)/comercios/[id]/editar/page.tsx`: importa `BotonEliminar` desde
+`'../../BotonEliminar'` y agrega `accionEliminarComercio` al import existente desde `'../../actions'`.
+Después de `const accion = accionActualizarComercio.bind(null, id);` agrega:
+
+```tsx
+const eliminar = accionEliminarComercio.bind(null, id);
+```
+
+Y renderiza `<BotonEliminar accion={eliminar} nombre={comercio.nombre} />` justo después de
+`<FormularioComercio ... />`, dentro del mismo `<main className="admin-main">`. `nuevo/page.tsx`
+NO se toca: no se puede borrar algo que todavía no existe.
+
+- [ ] **Step 6: CSS**
+
+Agrega a `app/globals.css`:
+
+```css
+.admin-zona-peligro {
+  margin-top: 34px;
+  padding-top: 22px;
+  border-top: 1px dashed var(--line);
+}
+.admin-eliminar {
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--clay);
+  background: none;
+  border: 1.5px solid var(--clay);
+  border-radius: 12px;
+  padding: 11px 18px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.admin-eliminar:hover {
+  background: var(--clay);
+  color: #fff;
+}
+.admin-eliminar:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+```
+
+- [ ] **Step 7: Gate imprevisto — ESLint**
+
+`accionEliminarComercio` deja `_estadoPrevio` y `_formData` sin usar. A diferencia de
+`accionCrearComercio`/`accionActualizarComercio` (donde el último parámetro, `formData`, SÍ se
+usa), aquí el último parámetro realmente usado es `id` — el primero. El modo por defecto de
+`@typescript-eslint/no-unused-vars` (`args: 'after-used'`) marca los parámetros no usados que
+quedan DESPUÉS del último usado, sin mirar el prefijo `_`; por eso `_estadoPrevio` nunca había
+disparado el warning en las otras dos acciones (ahí es el del medio, no el que sigue al último
+usado), pero aquí sí marcaba los dos. Se agrega `argsIgnorePattern: '^_'` a
+`@typescript-eslint/no-unused-vars` en `eslint.config.mjs`, lo que hace cumplir una convención
+que el archivo ya usaba de facto.
+
+- [ ] **Step 8: Gates + commit**
+
+Run: `npm test` (61 passed), `npm run typecheck`, `npm run lint`, `npm run build` — clean.
+```bash
+git add lib/comercios/guardarComercio.ts lib/comercios/guardarComercio.test.ts \
+  "app/admin/(protegido)/comercios/actions.ts" "app/admin/(protegido)/comercios/BotonEliminar.tsx" \
+  "app/admin/(protegido)/comercios/[id]/editar/page.tsx" app/globals.css eslint.config.mjs \
+  docs/superpowers/plans/2026-07-16-fm-admin-panel.md
+git commit -m "Add comercio deletion, guarded by the FK constraint"
+```
+
+---
+
 ### Task 10: Cuenta de FM + verificación manual end-to-end
 
 **Files:**
