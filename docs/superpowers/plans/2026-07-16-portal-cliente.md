@@ -47,7 +47,7 @@ Investigados y confirmados contra el código y los docs empaquetados del propio 
 
 ### Nota sobre el conteo de pruebas (baseline)
 
-La suite del proyecto tiene hoy **61 pruebas** (medido sobre los `*.test.ts` de la rama `feature/fm-admin-panel`). Este plan agrega **exactamente 15** (final: **76**). Los números absolutos de cada tarea (65, 72, 76) asumen ese baseline de 61. **Como la Fase 3 es prerrequisito y trae sus propias pruebas, si se fusionó antes que este plan, suma su cantidad a cada total absoluto de abajo** — lo que este plan garantiza son los deltas (+4, +7, +4). Verifica siempre el número real con `npm test` en tu rama.
+La suite del proyecto tiene hoy **61 pruebas** (medido sobre los `*.test.ts` de la rama `feature/fm-admin-panel`). Este plan agrega **exactamente 17** (final: **78**) — corregido tras revisión de plan: se sumaron 2 pruebas al lookup por teléfono (una que fija que normaliza antes de buscar, y una que separa "no encontrado" de "formato irreconocible", que antes compartían una sola prueba ambigua). Los números absolutos de cada tarea (65, 74, 78) asumen ese baseline de 61. **Como la Fase 3 es prerrequisito y trae sus propias pruebas, si se fusionó antes que este plan, suma su cantidad a cada total absoluto de abajo** — lo que este plan garantiza son los deltas (+4, +9, +4). Verifica siempre el número real con `npm test` en tu rama.
 
 ---
 
@@ -444,6 +444,18 @@ afterEach(async () => {
   }
 });
 
+// Corregido tras revisión de plan: el fixture original de teléfono ("+000-portal-<timestamp>-
+// <random36>") no sobrevive normalizarTelefono() — al despojar lo no-numérico, "000" + los 13
+// dígitos de Date.now() YA suman 16, por encima del máximo E.164 de 15 que la función rechaza.
+// Con buscarTarjetasPorTelefono() normalizando de verdad (el fix de esta misma revisión), esos
+// fixtures habrían hecho que TODAS las pruebas "felices" fallaran al no encontrar lo que acaban
+// de insertar. Este helper genera un teléfono único que SÍ pasa normalizarTelefono tal cual.
+function telefonoUnico(): string {
+  const ultimos8DeReloj = String(Date.now()).slice(-8);
+  const azar4Digitos = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  return `+503${ultimos8DeReloj}${azar4Digitos}`; // +503 + 12 dígitos = 15, dentro del límite.
+}
+
 async function crearComercio(extra: Record<string, unknown> = {}): Promise<string> {
   const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const { data, error } = await supabase
@@ -457,8 +469,7 @@ async function crearComercio(extra: Record<string, unknown> = {}): Promise<strin
 }
 
 async function crearClienteConTarjeta(comercioId: string, puntos: number): Promise<string> {
-  const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const telefono = `+000-portal-${sufijo}`;
+  const telefono = telefonoUnico();
   const { data: cliente, error: eC } = await supabase
     .from('clientes')
     .insert({ nombre: 'Cliente Portal', telefono })
@@ -489,8 +500,19 @@ describe('formatearSaldo', () => {
 });
 
 describe('buscarTarjetasPorTelefono', () => {
-  it('devuelve encontrado:false para un teléfono desconocido', async () => {
-    const res = await buscarTarjetasPorTelefono(supabase, `+000-no-existe-${Date.now()}`);
+  it('devuelve encontrado:false para un teléfono bien formado pero no registrado', async () => {
+    // Bien formado (normalizarTelefono lo acepta) mas nadie lo tiene: ejercita el camino real
+    // de "no encontrado", no el de "formato inválido" (esa es la siguiente prueba).
+    const res = await buscarTarjetasPorTelefono(supabase, telefonoUnico());
+    expect(res.encontrado).toBe(false);
+    expect(res.tarjetas).toHaveLength(0);
+  });
+
+  it('devuelve encontrado:false (no lanza) para un teléfono con formato irreconocible', async () => {
+    // normalizarTelefono() lanza con esto (ni +503 válido de 8-15 dígitos ni local de 8). Fija
+    // que el catch de buscarTarjetasPorTelefono lo convierte en "no encontrado", no en una
+    // excepción sin capturar que tumbaría la ruta con un 500.
+    const res = await buscarTarjetasPorTelefono(supabase, 'no-es-un-telefono');
     expect(res.encontrado).toBe(false);
     expect(res.tarjetas).toHaveLength(0);
   });
@@ -507,6 +529,33 @@ describe('buscarTarjetasPorTelefono', () => {
     expect(res.tarjetas[0].comercioNombre).toBe('Comercio Portal Test');
     expect(res.tarjetas[0].puntosActuales).toBe(7);
     expect(res.tarjetas[0].saldoTexto).toBe('7 puntos');
+  });
+
+  it('encuentra al cliente aunque el teléfono se escriba distinto al guardado (normaliza)', async () => {
+    // ESTA es la prueba que faltaba (hallazgo de la revisión de plan): registrarCliente() SIEMPRE
+    // guarda en forma canónica +503XXXXXXXX (normalizarTelefono.ts). Sin normalizar también en la
+    // búsqueda, un cliente real tecleando su número tal cual ("7777-1234") nunca habría
+    // encontrado su propia tarjeta — y las demás pruebas de este archivo no lo detectan porque
+    // insertan y consultan con el MISMO string crudo en ambos lados.
+    const local8 = String(Date.now()).slice(-8); // el mismo truco de 8 dígitos que telefonoUnico()
+    const canonico = `+503${local8}`;
+    const { data: cliente, error: eC } = await supabase
+      .from('clientes').insert({ nombre: 'Cliente Formato Natural', telefono: canonico }).select('id').single();
+    if (eC) throw eC;
+    clientesDePrueba.push(cliente.id);
+    const comercioId = await crearComercio();
+    const { data: t, error: eT } = await supabase
+      .from('tarjetas').insert({ cliente_id: cliente.id, comercio_id: comercioId, puntos_actuales: 3 }).select('id').single();
+    if (eT) throw eT;
+    tarjetasDePrueba.push(t.id);
+
+    // Se consulta con la forma NATURAL que alguien tecléa a mano — con guion, sin +503 — no con
+    // el string canónico que se guardó.
+    const formatoNatural = `${local8.slice(0, 4)}-${local8.slice(4)}`;
+    const res = await buscarTarjetasPorTelefono(supabase, formatoNatural);
+
+    expect(res.encontrado).toBe(true);
+    expect(res.nombreCliente).toBe('Cliente Formato Natural');
   });
 
   it('formatea una tarjeta de sellos como "N de M sellos"', async () => {
@@ -540,8 +589,7 @@ describe('buscarTarjetasPorTelefono', () => {
     const comercioA = await crearComercio();
     const comercioB = await crearComercio();
     // Mismo cliente en ambos comercios: se registra una vez y suma tarjetas (clientes es global).
-    const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const telefono = `+000-portal-multi-${sufijo}`;
+    const telefono = telefonoUnico();
     const { data: cliente, error: eC } = await supabase
       .from('clientes').insert({ nombre: 'Cliente Multi', telefono }).select('id').single();
     if (eC) throw eC;
@@ -582,6 +630,7 @@ Create `lib/portal/buscarTarjetas.ts`:
 ```typescript
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
+import { normalizarTelefono } from '../clientes/normalizarTelefono';
 
 export interface RecompensaPortal {
   nombre: string;
@@ -625,8 +674,20 @@ export async function buscarTarjetasPorTelefono(
   supabase: SupabaseClient<Database>,
   telefono: string,
 ): Promise<ResultadoConsulta> {
-  const limpio = telefono.trim();
-  if (!limpio) return { encontrado: false, nombreCliente: null, tarjetas: [] };
+  // Corregido tras revisión de plan: `clientes.telefono` SIEMPRE se guarda normalizado
+  // (normalizarTelefono.ts: "7777-1234"/"77771234" -> "+50377771234", ver app/api/registro/
+  // route.ts). Un .trim() a secas comparaba el valor CRUDO contra la columna CANÓNICA — un
+  // cliente real tecleando su número tal como lo escribió jamás habría encontrado su tarjeta.
+  // Sin este fix, la función entera no serviría para nada con datos reales aunque todas las
+  // pruebas dieran verde (si insertan y consultan con el mismo string crudo, nunca lo detectan).
+  let limpio: string;
+  try {
+    limpio = normalizarTelefono(telefono);
+  } catch {
+    // Formato irreconocible (ni +503 válido ni 8 dígitos locales): no es un error de
+    // infraestructura, es que no hay tarjeta que buscar con eso.
+    return { encontrado: false, nombreCliente: null, tarjetas: [] };
+  }
 
   const { data: cliente, error: errorCliente } = await supabase
     .from('clientes')
@@ -698,13 +759,13 @@ export async function buscarTarjetasPorTelefono(
 ```
 
 Run: `npm test -- buscarTarjetas`
-Expected: 7 passed.
+Expected: 9 passed.
 
 Si el typecheck se queja de que `tipo_tarjeta`/`sello_meta` no existen en `comercios`, falta el prerrequisito de la Fase 3 (ver Prerrequisitos) — no lo parchees agregando las columnas solo aquí.
 
 - [ ] **Step 3: Gates + commit**
 
-Run: `npm test` → **72 passed** (65 + 7). Run `npm run typecheck`, `npm run lint`.
+Run: `npm test` → **74 passed** (65 + 9). Run `npm run typecheck`, `npm run lint`.
 Confirma 0 comercios `test-portal-%` huérfanos en la BD.
 ```bash
 git add -A
@@ -747,6 +808,15 @@ afterEach(async () => {
   }
 });
 
+// Mismo motivo que en buscarTarjetas.test.ts: un teléfono sintético que no sobrevive
+// normalizarTelefono() (por ejemplo "+000-route-<timestamp>") haría que esta prueba "encuentre"
+// por comparación de string crudo, no porque la ruta normalice de verdad — un falso positivo.
+function telefonoUnico(): string {
+  const ultimos8DeReloj = String(Date.now()).slice(-8);
+  const azar4Digitos = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  return `+503${ultimos8DeReloj}${azar4Digitos}`;
+}
+
 // x-forwarded-for de UN solo valor: así tanto el helper del paquete como el fallback (último
 // valor) devuelven la misma IP, y el test no depende de cuál de los dos use obtenerIp().
 function pedir(telefono: unknown, ip: string): NextRequest {
@@ -761,15 +831,16 @@ function pedir(telefono: unknown, ip: string): NextRequest {
 describe('POST /api/portal/consulta', () => {
   it('devuelve las tarjetas para un teléfono registrado', async () => {
     const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const telefono = telefonoUnico();
     const { data: comercio } = await supabase
       .from('comercios').insert({ nombre: 'Portal Route Test', slug: `test-route-portal-${sufijo}` }).select('id').single();
     const { data: cliente } = await supabase
-      .from('clientes').insert({ nombre: 'Cliente Route', telefono: `+000-route-${sufijo}` }).select('id').single();
+      .from('clientes').insert({ nombre: 'Cliente Route', telefono }).select('id').single();
     const { data: tarjeta } = await supabase
       .from('tarjetas').insert({ cliente_id: cliente!.id, comercio_id: comercio!.id, puntos_actuales: 3 }).select('id').single();
     limpiar = { comercioId: comercio!.id, clienteId: cliente!.id, tarjetaId: tarjeta!.id };
 
-    const res = await POST(pedir(`+000-route-${sufijo}`, `ip-ok-${sufijo}`));
+    const res = await POST(pedir(telefono, `ip-ok-${sufijo}`));
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -779,7 +850,7 @@ describe('POST /api/portal/consulta', () => {
   });
 
   it('devuelve encontrado:false para un teléfono no registrado', async () => {
-    const res = await POST(pedir(`+000-nadie-${Date.now()}`, `ip-none-${Date.now()}`));
+    const res = await POST(pedir(telefonoUnico(), `ip-none-${Date.now()}`));
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.encontrado).toBe(false);
@@ -860,7 +931,7 @@ Expected: 4 passed.
 
 - [ ] **Step 3: Gates + commit**
 
-Run: `npm test` → **76 passed** (72 + 4). Run `npm run typecheck`, `npm run lint`.
+Run: `npm test` → **78 passed** (74 + 4). Run `npm run typecheck`, `npm run lint`.
 Confirma 0 filas `ip-%` huérfanas en `intentos_consulta_portal` ni comercios `test-route-portal-%`.
 ```bash
 git add -A
@@ -1221,7 +1292,7 @@ Modify `app/globals.css` — agrega al final (reutiliza las variables ya existen
 - [ ] **Step 4: Verificar + commit**
 
 Run: `npm run build`, `npm run typecheck`, `npm run lint` → todo limpio.
-Run: `npm test` → 76 passed (esta tarea no agrega pruebas — es cableado de UI; la lógica que invoca ya está cubierta).
+Run: `npm test` → 78 passed (esta tarea no agrega pruebas — es cableado de UI; la lógica que invoca ya está cubierta).
 No levantes un dev server: la verificación visual va en la Tarea 8, con herramientas de navegador administradas.
 ```bash
 git add -A

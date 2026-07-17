@@ -157,6 +157,7 @@ Extiende la capa de datos de FM para que acepte y valide `tipo_tarjeta`. **`guar
 **Files:**
 - Modify: `lib/comercios/guardarComercio.ts`
 - Modify: `lib/comercios/guardarComercio.test.ts`
+- Modify: `app/admin/(protegido)/comercios/actions.ts`
 
 - [ ] **Step 1: Escribir los tests que fallan**
 
@@ -250,7 +251,16 @@ En `validar()`, agrega (después del bloque de `licencia_estado`):
 Run: `npm test -- guardarComercio`
 Expected: 19 passed.
 
-- [ ] **Step 3: Gates + commit**
+- [ ] **Step 3: Actualizar `leerDatos()` — OBLIGATORIO en esta tarea, no en la 3**
+
+`tipo_tarjeta` acaba de volverse un campo **requerido** de `DatosComercio`. `leerDatos()` en `app/admin/(protegido)/comercios/actions.ts` es el único constructor de producción de `DatosComercio` que NO usa `Partial` — si esta tarea termina sin tocarlo, `npm run typecheck` falla con TS2741 ("Property 'tipo_tarjeta' is missing") al cerrar el Step 4, porque `npm test` (Vitest/esbuild) no chequea tipos y no lo habría avisado. Corrige esto YA, no lo dejes para la Tarea 3.
+
+En `app/admin/(protegido)/comercios/actions.ts`, dentro de `leerDatos()`, agrega (después de `licencia_activa_desde`):
+```typescript
+    tipo_tarjeta: String(formData.get('tipo_tarjeta') ?? 'puntos'),
+```
+
+- [ ] **Step 4: Gates + commit**
 
 Run: `npm test` → **64 passed** (61 + 3). Run `npm run typecheck`, `npm run lint`.
 Confirma 0 comercios `test-%` huérfanos en la BD.
@@ -267,16 +277,10 @@ Extiende el formulario existente de FM. Sin tests nuevos (es cableado de UI; la 
 
 **Files:**
 - Modify: `app/admin/(protegido)/comercios/FormularioComercio.tsx`
-- Modify: `app/admin/(protegido)/comercios/actions.ts`
 
-- [ ] **Step 1: Leer `tipo_tarjeta` en la acción**
+`leerDatos()` (en `actions.ts`) ya lee `tipo_tarjeta` — eso se movió a la Tarea 2 Step 3, porque `DatosComercio` lo vuelve requerido ahí y esperar a esta tarea rompía el `typecheck` de la 2. Nada que hacer aquí sobre `actions.ts`.
 
-En `app/admin/(protegido)/comercios/actions.ts`, dentro de `leerDatos()`, agrega (después de `licencia_activa_desde`):
-```typescript
-    tipo_tarjeta: String(formData.get('tipo_tarjeta') ?? 'puntos'),
-```
-
-- [ ] **Step 2: Agregar el `<select>` al formulario**
+- [ ] **Step 1: Agregar el `<select>` al formulario**
 
 En `app/admin/(protegido)/comercios/FormularioComercio.tsx`:
 
@@ -318,7 +322,7 @@ Agrega el campo en el JSX, justo ANTES del `<div className="field">` de `licenci
       </div>
 ```
 
-- [ ] **Step 3: Gates + commit**
+- [ ] **Step 2: Gates + commit**
 
 Run: `npm run build`, `npm run typecheck`, `npm run lint`, `npm test` (**64 passed**).
 ```bash
@@ -2797,6 +2801,34 @@ Create `e2e/registro.spec.ts`:
 
 ```typescript
 import { test, expect } from '@playwright/test';
+import { createClient } from '@supabase/supabase-js';
+
+// Corregido tras revisión: la versión anterior de este archivo no tenía forma de borrar lo que
+// crea (solo tenía `page`/`request`) — cada corrida de `npm run e2e` habría dejado un cliente y
+// una tarjeta huérfanos en la BD compartida de producción, para siempre. Se agrega un cliente
+// de servicio y un afterEach que limpia por teléfono, sin importar si el test pasó o falló.
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+);
+
+let telefonoDePrueba: string | null = null;
+
+test.afterEach(async () => {
+  if (!telefonoDePrueba) return;
+  // Orden FK-safe: tarjeta (hijo) antes que cliente (padre) — mismo orden que usan los tests
+  // de integración de Vitest en este proyecto.
+  const { data: cliente } = await supabase
+    .from('clientes')
+    .select('id')
+    .eq('telefono', telefonoDePrueba)
+    .maybeSingle();
+  if (cliente) {
+    await supabase.from('tarjetas').delete().eq('cliente_id', cliente.id);
+    await supabase.from('clientes').delete().eq('id', cliente.id);
+  }
+  telefonoDePrueba = null;
+});
 
 // Registro de cliente real en la Cafetería Piloto → el botón de Apple Wallet apunta a un .pkpass
 // descargable con Content-Type correcto. Teléfono único por corrida para no chocar con el unique.
@@ -2804,6 +2836,9 @@ test('registro público entrega un pass descargable', async ({ page, request }) 
   await page.goto('/registro/cafeteria-piloto');
 
   const telefono = `7${Date.now().toString().slice(-7)}`;
+  // Se registra para limpieza ANTES del submit — si algo falla después, el afterEach igual
+  // encuentra y borra el cliente si el registro alcanzó a crearlo.
+  telefonoDePrueba = telefono;
   await page.getByLabel('Nombre').fill('Cliente E2E');
   await page.getByLabel('Teléfono').fill(telefono);
   await page.getByRole('button', { name: /crear mi tarjeta/i }).click();
