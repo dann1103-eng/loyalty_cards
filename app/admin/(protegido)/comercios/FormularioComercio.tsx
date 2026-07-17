@@ -3,7 +3,7 @@
 import { useState, type ChangeEvent } from 'react';
 import { useActionState } from 'react';
 import type { EstadoFormulario } from './actions';
-import { ESTADOS_LICENCIA, type DatosComercio } from '@/lib/comercios/guardarComercio';
+import { ESTADOS_LICENCIA, TIPOS_TARJETA, type DatosComercio } from '@/lib/comercios/guardarComercio';
 
 type Valores = {
   nombre: string;
@@ -18,6 +18,7 @@ type Valores = {
   licencia_plan: string;
   licencia_monto_mensual: string;
   licencia_activa_desde: string;
+  tipo_tarjeta: string;
 };
 
 function valoresIniciales(inicial?: Partial<DatosComercio>): Valores {
@@ -35,6 +36,7 @@ function valoresIniciales(inicial?: Partial<DatosComercio>): Valores {
     licencia_monto_mensual:
       inicial?.licencia_monto_mensual != null ? String(inicial.licencia_monto_mensual) : '',
     licencia_activa_desde: inicial?.licencia_activa_desde ?? '',
+    tipo_tarjeta: inicial?.tipo_tarjeta ?? 'puntos',
   };
 }
 
@@ -124,6 +126,25 @@ export default function FormularioComercio({
         </div>
       ))}
 
+      <div className="field">
+        <label htmlFor="tipo_tarjeta">Tipo de tarjeta</label>
+        {/* Opciones desde TIPOS_TARJETA (misma constante que valida guardarComercio). Los tipos
+            no disponibles se muestran deshabilitados con "(Próximamente)" — honestos sobre cuáles
+            funcionan hoy, a diferencia de Cardly que muestra los 8 como si todos funcionaran. */}
+        <select
+          id="tipo_tarjeta"
+          name="tipo_tarjeta"
+          value={valores.tipo_tarjeta}
+          onChange={cambiar('tipo_tarjeta')}
+        >
+          {TIPOS_TARJETA.map((t) => (
+            <option key={t.valor} value={t.valor} disabled={!t.disponible}>
+              {t.etiqueta}
+              {t.disponible ? '' : ' (Próximamente)'}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="field">
         <label htmlFor="licencia_estado">Estado de licencia</label>
         {/* Las opciones salen de ESTADOS_LICENCIA, la MISMA constante contra la que valida
