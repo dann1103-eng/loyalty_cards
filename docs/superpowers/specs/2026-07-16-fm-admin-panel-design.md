@@ -11,7 +11,9 @@ Hoy, dar de alta un comercio nuevo (crear su registro, branding) se hace a mano 
 
 ## 2. Objetivo de esta fase
 
-Un panel interno, usado solo por FM, donde se pueda: ver la lista de comercios clientes, dar de alta uno nuevo, y editar tanto su licencia (activo/inactivo, plan, monto mensual) como su branding existente (nombre, colores, URLs de imágenes) — todo protegido por login real.
+Un panel interno, usado solo por FM, donde se pueda: ver la lista de comercios clientes, dar de alta uno nuevo, editar tanto su licencia (activo/inactivo, plan, monto mensual) como su branding existente (nombre, colores, URLs de imágenes), y eliminar uno **solo si no tiene datos asociados** (tarjetas, reglas de puntos o recompensas) — todo protegido por login real.
+
+**Adición post-aprobación (2026-07-16, durante la verificación manual de la Tarea 10):** el alcance original no incluía eliminar. Se agregó a pedido del usuario tras notar que el panel no tenía forma de quitar un comercio de prueba. La regla de "solo sin datos asociados" no es una validación nueva de aplicación: ya la impone el esquema — ninguna FK hacia `comercios` (migración 0001: `usuarios_comercio`, `tarjetas`, `reglas_puntos`, `recompensas`) tiene `on delete cascade`, así que Postgres rechaza el borrado con un 23503 si existe cualquier dependiente. El panel solo traduce ese código a un mensaje legible.
 
 Esta fase construye además la infraestructura de autenticación (Supabase Auth + `@supabase/ssr`) que la próxima fase (login de dueño/cajero de comercio) reutilizará directamente.
 
