@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "e2e": "playwright test",
     "typecheck": "tsc --noEmit",
     "seed": "tsx --conditions=react-server scripts/seed-pilot-comercio.ts",
     "seed-fm": "tsx --conditions=react-server scripts/seed-usuario-fm.ts",
@@ -27,6 +28,7 @@
     "server-only": "^0.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

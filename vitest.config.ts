@@ -19,7 +19,7 @@ export default defineConfig({
     // repo tiene un git worktree hospedado en `.claude/worktrees/…` (checkout de otra rama en disco),
     // Vitest descubriría y correría TAMBIÉN esos archivos de prueba, inflando el conteo y ocultando
     // regresiones. Ninguna prueba real del proyecto vive bajo `.claude/`.
-    exclude: [...configDefaults.exclude, '**/.claude/**'],
+    exclude: [...configDefaults.exclude, '**/.claude/**', 'e2e/**'],
   },
   resolve: {
     alias: {
