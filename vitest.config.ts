@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 import path from 'node:path';
 
 export default defineConfig({
@@ -15,6 +15,11 @@ export default defineConfig({
     // determinista). En serie es más lento pero determinista — el trade correcto para una
     // suite de integración contra una sola BD.
     fileParallelism: false,
+    // Además de los defaults de Vitest (node_modules, dist, etc.), excluye `.claude/`: cuando el
+    // repo tiene un git worktree hospedado en `.claude/worktrees/…` (checkout de otra rama en disco),
+    // Vitest descubriría y correría TAMBIÉN esos archivos de prueba, inflando el conteo y ocultando
+    // regresiones. Ninguna prueba real del proyecto vive bajo `.claude/`.
+    exclude: [...configDefaults.exclude, '**/.claude/**'],
   },
   resolve: {
     alias: {
