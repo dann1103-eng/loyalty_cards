@@ -20,6 +20,8 @@ export interface DatosPass {
   colorLabel: string;
   webServiceURL: string;
   authenticationToken: string;
+  tipoTarjeta: string;
+  selloMeta: number | null;
 }
 
 export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
@@ -49,12 +51,27 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
   );
 
   pass.type = 'storeCard';
-  pass.primaryFields.push({
-    key: 'puntos',
-    label: 'PUNTOS',
-    value: datos.puntos,
-    numberStyle: 'PKNumberStyleDecimal',
-  });
+
+  // Sellos: el campo primario es TEXTO ("7 de 10 sellos"), no un número. Reutiliza el mismo
+  // puntos_actuales como contador; solo cambia cómo se muestra. Sin numberStyle (es string) y
+  // sin componentes/dependencias nuevas (spec §4.2, corregido tras revisión: este proyecto no
+  // tiene pipeline de composición de imágenes). Fallback al número si no hay meta configurada.
+  const esSellos = datos.tipoTarjeta === 'sellos' && datos.selloMeta != null && datos.selloMeta > 0;
+  if (esSellos) {
+    pass.primaryFields.push({
+      key: 'puntos',
+      label: 'SELLOS',
+      value: `${datos.puntos} de ${datos.selloMeta} sellos`,
+    });
+  } else {
+    pass.primaryFields.push({
+      key: 'puntos',
+      label: 'PUNTOS',
+      value: datos.puntos,
+      numberStyle: 'PKNumberStyleDecimal',
+    });
+  }
+
   pass.setBarcodes(datos.qrToken);
 
   return pass.getAsBuffer();
