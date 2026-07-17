@@ -1026,7 +1026,13 @@ function validar(datos: DatosComercio): string | null {
     }
   }
   const monto = datos.licencia_monto_mensual;
-  if (monto !== null && (!Number.isFinite(monto) || monto < 0)) {
+  if (monto !== null && !Number.isFinite(monto)) {
+    // Ruta real: la Tarea 9 hace Number(monto), así que un "25a" llega como NaN. Va aparte del
+    // chequeo de negativo porque decirle "no puede ser negativo" a un NaN es, literalmente,
+    // afirmar algo falso sobre el valor.
+    return 'El monto mensual debe ser un número.';
+  }
+  if (monto !== null && monto < 0) {
     return 'El monto mensual no puede ser negativo.';
   }
   const fecha = datos.licencia_activa_desde;
