@@ -2114,7 +2114,10 @@ describe('eliminarComercio', () => {
     const res = await eliminarComercio(supabase, creado.id);
 
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toMatch(/asociad|eliminar/i);
+    // /asociad|eliminar/i era demasiado floja: el mensaje genérico de respaldo ("No se pudo
+    // eliminar el comercio.") también la hace matchear, así que esta prueba habría pasado igual
+    // aunque se borrara la rama del 23503. Se ancla al mensaje específico para que sí lo cace.
+    if (!res.ok) expect(res.error).toMatch(/datos asociados/i);
 
     // La comprobación que de verdad importa: el comercio SIGUE existiendo. Esta es la misma
     // situación del comercio piloto real en producción, con una tarjeta real ligada a un pass
@@ -2139,6 +2142,13 @@ Agrega a `lib/comercios/guardarComercio.ts`, después de `actualizarComercio`:
 // borrar un comercio NUNCA arrastre en silencio datos reales de un cliente. Postgres es la
 // única fuente de verdad de esa regla: no la duplicamos contando filas en JS, que podría
 // desincronizarse si el esquema cambia. Solo traducimos el 23503 a un mensaje legible.
+//
+// PRECONDICIÓN: `supabase` DEBE ser createServiceClient(). Un id ya borrado da ok:true a
+// propósito (idempotente) — pero eso solo es seguro si `supabase` ignora RLS. Con un cliente
+// de sesión, comercios es deny-all desde la 0001: un update bloqueado por RLS y un id que ya
+// no existe devolverían el mismo ok:true, indistinguibles. No se agrega .select().single()
+// para detectarlo (a diferencia de actualizarComercio) porque eso rompería la idempotencia
+// legítima del caso "ya borrado" — la única defensa real es no llamar esto con otro cliente.
 export async function eliminarComercio(
   supabase: SupabaseClient<Database>,
   id: string,

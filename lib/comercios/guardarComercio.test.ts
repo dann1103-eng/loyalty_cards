@@ -293,7 +293,10 @@ describe('eliminarComercio', () => {
     const res = await eliminarComercio(supabase, creado.id);
 
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toMatch(/asociad|eliminar/i);
+    // /asociad|eliminar/i era demasiado floja: el mensaje genérico de respaldo ("No se pudo
+    // eliminar el comercio.") también la hace matchear, así que esta prueba habría pasado igual
+    // aunque se borrara la rama del 23503. Se ancla al mensaje específico para que sí lo cace.
+    if (!res.ok) expect(res.error).toMatch(/datos asociados/i);
 
     // La comprobación que de verdad importa: el comercio SIGUE existiendo. Esta es la misma
     // situación del comercio piloto real en producción, con una tarjeta real ligada a un pass
