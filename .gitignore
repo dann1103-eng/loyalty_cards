@@ -48,3 +48,6 @@ next-env.d.ts
 
 # Caché local del CLI de Supabase (no es del proyecto)
 supabase/.temp/
+
+# Config local de Claude Code (permisos de la maquina), no del proyecto.
+.claude/settings.local.json
