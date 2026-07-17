@@ -95,4 +95,21 @@ describe('esOwnerDeComercio', () => {
 
     expect(await esOwnerDeComercio(supabase, idIntruso)).toBeNull();
   });
+
+  it('discrimina entre dos owners distintos: cada uno ve SOLO su comercio', async () => {
+    // Mata de forma ROBUSTA la mutación de .eq('auth_user_id', ...), sin depender del estado de la
+    // BD. Con DOS owners creados por el test, quitar ese filtro deja la consulta en .eq('rol','owner')
+    // sola → matchea ≥2 filas → maybeSingle() lanza PGRST116 → null → estas aserciones fallan.
+    // (La prueba del intruso de arriba solo mata esa mutación cuando hay EXACTAMENTE 1 owner en la
+    // BD; deja de cumplirse en cuanto se siembra el dueño real. Esta no depende de ese supuesto.)
+    const idA = await crearUsuarioAuth();
+    const comercioA = await crearComercio('Comercio A');
+    await ligar(idA, comercioA, 'owner');
+    const idB = await crearUsuarioAuth();
+    const comercioB = await crearComercio('Comercio B');
+    await ligar(idB, comercioB, 'owner');
+
+    expect((await esOwnerDeComercio(supabase, idA))?.comercioId).toBe(comercioA);
+    expect((await esOwnerDeComercio(supabase, idB))?.comercioId).toBe(comercioB);
+  });
 });
