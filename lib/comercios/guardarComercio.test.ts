@@ -105,6 +105,11 @@ describe('crearComercio', () => {
   it('rechaza slugs con formato inválido', async () => {
     // El slug es la URL del QR impreso, así que su forma no es cosmética.
     for (const malo of ['Test-Mayusculas', 'con espacios', 'acentué', '']) {
+      // Registrar el slug que REALMENTE se inserta: el spread de abajo pisa el de datosValidos(),
+      // así que sin esta línea afterEach borraría un slug que nunca existió. No muerde con el
+      // código correcto (validar() rechaza los cuatro antes de insertar), pero sí cada vez que
+      // se muta la regla del slug — y 'Test-Mayusculas' ni siquiera calza un barrido test-%.
+      slugsDePrueba.push(malo);
       const res = await crearComercio(supabase, { ...datosValidos(`test-slug-${Date.now()}`), slug: malo });
       expect(res.ok).toBe(false);
       if (!res.ok) expect(res.error).toMatch(/slug/i);
@@ -140,7 +145,9 @@ describe('crearComercio', () => {
   it('rechaza fechas inválidas o con el formato equivocado', async () => {
     // '16/07/2026' es lo que teclea alguien en El Salvador; '2026-02-31' tiene forma correcta
     // pero no existe. Las dos deben explicar qué pasa, no dar un error genérico.
-    for (const mala of ['16/07/2026', 'ayer', '2026-02-31', '2026-7-6']) {
+    // '0000-01-01' pasa el round-trip de Date (JS representa el año 0 y lo devuelve igual) pero
+    // Postgres lo rechaza con un 22008: no existe el año cero. Sin el (?!0000) sale el genérico.
+    for (const mala of ['16/07/2026', 'ayer', '2026-02-31', '2026-7-6', '0000-01-01']) {
       const res = await crearComercio(supabase, {
         ...datosValidos(`test-fecha-${Date.now()}`),
         licencia_activa_desde: mala,
@@ -156,16 +163,20 @@ describe('crearComercio', () => {
       ...datosValidos(slug),
       nombre: '  Café con Espacios  ',
       color_fondo: '  rgb(35, 24, 18)  ',
+      licencia_estado: '  activo  ',
       logo_url: '',
     });
 
     expect(res.ok).toBe(true);
     const { data } = await supabase
       .from('comercios')
-      .select('nombre, color_fondo, logo_url')
+      .select('nombre, color_fondo, licencia_estado, logo_url')
       .eq('slug', slug)
       .single();
     expect(data!.nombre).toBe('Café con Espacios');
+    // licencia_estado es el único string que normalizar() podría olvidar trimear, y sin trim
+    // '  activo  ' se rechaza con un mensaje que se ve idéntico a lo que el admin escribió.
+    expect(data!.licencia_estado).toBe('activo');
     // validarColorRgb hace su propio .trim() interno, así que sin normalizar ANTES del insert
     // este valor pasaría la validación y se guardaría con los espacios intactos.
     expect(data!.color_fondo).toBe('rgb(35, 24, 18)');
