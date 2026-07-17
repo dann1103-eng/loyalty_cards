@@ -553,3 +553,29 @@ a {
 .admin-marca {
   cursor: pointer;
 }
+
+.subida-imagen {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.subida-imagen .field {
+  flex: 1;
+  margin-bottom: 0;
+}
+.subida-preview {
+  max-width: 100%;
+  max-height: 90px;
+  width: auto;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  margin-bottom: 8px;
+  object-fit: contain;
+  background: #fff;
+}
+.field input[type='file'] {
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
