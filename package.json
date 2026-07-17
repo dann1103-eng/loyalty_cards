@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "seed": "tsx --conditions=react-server scripts/seed-pilot-comercio.ts",
     "seed-fm": "tsx --conditions=react-server scripts/seed-usuario-fm.ts",
+    "seed-bucket": "tsx --conditions=react-server scripts/seed-storage-bucket.ts",
     "verify-schema": "tsx --conditions=react-server scripts/verify-schema.ts"
   },
   "dependencies": {
