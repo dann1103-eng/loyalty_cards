@@ -14,9 +14,10 @@
 - **Panel de FM (`/admin`):** COMPLETO, fusionado a `master`, desplegado, verificado con clic real
   en `https://loyalty-cards-rose.vercel.app/admin/login`.
 - **Fase 3 (panel del dueño `/comercio` + catálogo de tipos de tarjeta + portal del cliente
-  `/mi-tarjeta`):** EN CURSO en la rama `feature/fase3-autogestion-catalogo`. Specs y planes escritos
-  y revisados. Migración `0005` aplicada. Tareas 1, 2 y 5 hechas y comiteadas (sin revisión
-  independiente todavía).
+  `/mi-tarjeta`):** EN CURSO en la rama `feature/fase3-autogestion-catalogo` (HEAD `1a56279`). Specs y
+  planes escritos y revisados. Migración `0005` aplicada. Tareas 1, 2 y 5 hechas, comiteadas **y ya
+  revisadas** (revisión de calidad independiente 2026-07-17: ambas APROBADAS; el gate del dueño se
+  endureció con mutation-testing en `1a56279`). Siguiente: construir Tareas 3, 4, 6, 8, 9.
 - **Google Wallet:** pausado a pedido del usuario (sin tiempo). No es que esté roto — no se empezó.
 
 ---
@@ -80,14 +81,15 @@ Rama sacada de `master`. Estado: **69 pruebas verdes, typecheck/lint/build limpi
 **La migración `0005` YA está aplicada en la base viva** (el usuario la pegó en Studio; verificado:
 Cafetería Piloto intacta con `tipo_tarjeta='puntos'`, los dos CHECK rechazan valores inválidos).
 
-### ⚠️ Deuda de proceso importante
-Estas 3 tareas las escribió **el asistente a mano, SIN la doble revisión** (spec-compliance +
-code-quality) que tuvo cada tarea del panel de FM — porque una caída del clasificador de auto-mode
-+ un límite de sesión bloquearon el despacho de subagentes. Están verdes y el código es casi textual
-de planes ya revisados, PERO: durante el panel de FM, la revisión cazó **8 bugs reales que la sola
-compilación no vio** (pruebas vacías, errores tragados, etc.). **Recomendación fuerte: antes de
-construir más encima, pasar las Tareas 2 y 5 por revisión de calidad** (5 es el núcleo de seguridad
-del panel del dueño; cada gate de auth revisado este día tenía algo).
+### ✅ Deuda de proceso — SALDADA (2026-07-17)
+Estas 3 tareas se habían escrito a mano SIN la doble revisión (una caída del clasificador de auto-mode
++ límite de sesión bloquearon el despacho de subagentes). **Ya se saldó:** las Tareas 2 y 5 pasaron
+por revisión de calidad independiente (subagentes `superpowers:code-reviewer`) — **ambas aprobadas,
+sin issues Critical ni Important.** La compliance de spec se verificó a nivel controlador (los diffs
+coinciden textualmente con planes ya revisados). Único cambio derivado: la prueba del gate del dueño
+(`esOwnerDeComercio.test.ts`) no mataba de forma robusta la mutación del filtro `.eq('auth_user_id')`
+(dependía de que la BD tuviera exactamente 1 owner); se agregó una prueba de discriminación que la
+mata siempre, verificada con mutation-testing real (commit `1a56279`). Baseline: 69 → **70 pruebas**.
 
 ---
 
@@ -131,12 +133,12 @@ la base (migración `0006`).
 cd "C:/Users/Daniel/Desktop/Loyalty Cards"
 git checkout feature/fase3-autogestion-catalogo
 git status                 # árbol limpio esperado
-npm test                   # 69 passed esperado (baseline real, NO el 91 del plan que asume todo hecho)
+npm test                   # 70 passed esperado (baseline real, NO el 91 del plan que asume todo hecho)
 ```
 
 - **El baseline de pruebas del plan asume ejecución en orden.** Como se hizo fuera de orden, confiá
   en el número real de `npm test`, no en los absolutos del plan. Ya hechas: 61 base + 3 (Tarea 2) +
-  5 (Tarea 5) = **69**.
+  5 (Tarea 5) + 1 (endurecimiento del gate, `1a56279`) = **70**.
 - **Migraciones se aplican A MANO.** El asistente NO puede correr `ALTER TABLE` (solo tiene llaves de
   API, no conexión directa a Postgres; el CLI de Supabase ve otra cuenta). Cuando una tarea tenga
   migración: el asistente escribe el `.sql` y lo pega en el chat, el usuario lo corre en Studio y
@@ -177,9 +179,10 @@ npm test                   # 69 passed esperado (baseline real, NO el 91 del pla
 
 ---
 
-## 8. Decisión pendiente para el usuario (al retomar)
+## 8. Decisión de retomada — RESUELTA (2026-07-17)
 
-Las Tareas 1/2/5 están hechas y verdes pero SIN revisión independiente. Opciones:
-1. **(recomendado)** Revisar las Tareas 2 y 5 antes de seguir — son el núcleo de datos y de seguridad.
-2. Seguir construyendo las tareas independientes (3, 6, 8, 9) y revisar todo en bloque después.
-3. Retomar más adelante desde este punto de control comiteado.
+Se tomó la **opción 1 (recomendada):** revisar las Tareas 2 y 5 antes de construir más. Hecho —
+ambas aprobadas, gate del dueño endurecido (ver §4). El punto de control quedó comiteado en
+`1a56279`. **Lo que sigue ahora es construir**, en el orden de dependencias de §5: empezar por las
+tareas independientes de la migración (3, 4, 6, 8, 9), cada una vía subagent-driven-development
+(implementador + revisión de spec + revisión de calidad), con mutation-testing en las ramas críticas.
