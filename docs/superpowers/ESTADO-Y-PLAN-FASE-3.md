@@ -4,7 +4,17 @@
 > está hecho, qué falta, en qué orden, y las trampas que ya nos mordieron. Es la fuente de verdad
 > del estado; los planes (`plans/2026-07-16-*.md`) son la fuente de verdad del *cómo* de cada tarea.
 >
-> Última actualización: **2026-07-17**.
+> Última actualización: **2026-07-17** (tarde).
+
+> **AL DÍA (2026-07-17, tarde):** Fase 3a (Tareas 1–16) **DESPLEGADA a producción** — `master` en
+> `804bc1e`, smoke test en prod OK (`/comercio/login` 200, `/comercio/panel` 307, `/admin/login` 200,
+> `/registro/cafeteria-piloto` 200). Cafetería Piloto quedó en **sellos, meta 10** (decisión del
+> usuario) → el pass real muestra "N de 10 sellos". Pase 1 de **rediseño** (sistema visual migrado a
+> OKLCH + escalas de elevación/espaciado, + `PRODUCT.md`/`DESIGN.md`) hecho en la rama
+> `redesign/impeccable-pass-1`, **NO desplegado** — espera tu revisión; el font display (Fraunces) y
+> el rediseño por página quedaron propuestos para tu OK. **Pendiente tuyo:** borrar el usuario de Auth
+> `soporte@fomcomsolutions.com` (typo, contraseña que se filtró al chat) en Studio, y aplicar la
+> migración `0006` cuando arranquemos el **portal del cliente** (plan aparte, sin empezar).
 
 ---
 
