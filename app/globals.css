@@ -4,23 +4,45 @@
    ============================================================ */
 
 :root {
-  --espresso: #241812;
-  --bean: #3a2a1e;
-  --oat: #ece1d0;
-  --cream: #f6efe3;
-  --foam: #fcf8f1;
-  --caramel: #c07f38;
-  --caramel-deep: #9c5f24;
-  --clay: #a8563c;
-  --ink-soft: #6b5847;
-  --line: #ded0bb;
+  /* ---------- paleta café en OKLCH (nunca #000/#fff; cada neutro tinta al café) ---------- */
+  --espresso: oklch(22.2% 0.023 48);
+  --bean: oklch(30% 0.031 58);
+  --oat: oklch(91.4% 0.026 79);
+  --cream: oklch(95.4% 0.018 81);
+  --foam: oklch(98% 0.01 82);
+  --paper: oklch(99.2% 0.006 82); /* "blanco" tintado para inputs, nunca #fff puro */
+  --caramel: oklch(66% 0.126 64);
+  --caramel-deep: oklch(54% 0.114 60);
+  --clay: oklch(54.7% 0.115 39);
+  --leaf: oklch(52% 0.09 150); /* éxito (pastilla activo) */
+  --ink-soft: oklch(47.5% 0.036 64);
+  --line: oklch(86.3% 0.03 78);
+  --line-soft: oklch(90% 0.02 80);
+  --placeholder: oklch(73.3% 0.037 77);
 
-  --font-display: Georgia, serif;
-  --font-body: system-ui, sans-serif;
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
 
+  /* ---------- forma ---------- */
   --radius: 18px;
-  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.6) inset,
-    0 22px 50px -28px rgba(36, 24, 18, 0.45);
+  --radius-field: 12px;
+  --radius-btn: 13px;
+
+  /* ---------- espaciado (ritmo; evita el padding uniforme) ---------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 22px;
+  --sp-6: 30px;
+  --sp-7: 40px;
+
+  /* ---------- elevación: sombras cálidas tintadas al espresso (no negro) ---------- */
+  --shadow-1: 0 1px 2px oklch(22% 0.02 48 / 0.06), 0 10px 20px -14px oklch(22% 0.02 48 / 0.38);
+  --shadow-2: 0 1px 0 oklch(100% 0 0 / 0.55) inset, 0 22px 50px -28px oklch(22% 0.02 48 / 0.42);
+  --shadow-3: 0 24px 46px -22px oklch(22% 0.02 48 / 0.72);
+  --shadow-card: var(--shadow-2); /* alias de compatibilidad */
+  --ring: 0 0 0 4px oklch(66% 0.126 64 / 0.2);
 }
 
 * {
@@ -161,19 +183,19 @@ a {
   font-family: var(--font-body);
   font-size: 1rem;
   color: var(--espresso);
-  background: #fff;
+  background: var(--paper);
   border: 1.5px solid var(--line);
   border-radius: 12px;
   padding: 13px 14px;
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 .field input::placeholder {
-  color: #b6a68f;
+  color: var(--placeholder);
 }
 .field input:focus {
   outline: none;
   border-color: var(--caramel);
-  box-shadow: 0 0 0 4px rgba(192, 127, 56, 0.18);
+  box-shadow: var(--ring);
 }
 
 /* ---------- botones ---------- */
@@ -230,7 +252,7 @@ a {
   padding: 20px 20px 18px;
   color: var(--foam);
   overflow: hidden;
-  box-shadow: 0 24px 44px -22px rgba(36, 24, 18, 0.75);
+  box-shadow: var(--shadow-3);
   isolation: isolate;
 }
 .cardface::after {
@@ -500,7 +522,7 @@ a {
   font-family: var(--font-body);
   font-size: 1rem;
   color: var(--espresso);
-  background: #fff;
+  background: var(--paper);
   border: 1.5px solid var(--line);
   border-radius: 12px;
   padding: 13px 14px;
@@ -508,7 +530,7 @@ a {
 .field select:focus {
   outline: none;
   border-color: var(--caramel);
-  box-shadow: 0 0 0 4px rgba(192, 127, 56, 0.18);
+  box-shadow: var(--ring);
 }
 .field-aviso {
   margin-top: 6px;
@@ -572,7 +594,7 @@ a {
   border: 1px solid var(--line);
   margin-bottom: 8px;
   object-fit: contain;
-  background: #fff;
+  background: var(--paper);
 }
 .field input[type='file'] {
   font-family: var(--font-body);
