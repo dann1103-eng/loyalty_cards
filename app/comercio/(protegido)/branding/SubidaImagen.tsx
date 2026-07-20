@@ -36,6 +36,10 @@ export default function SubidaImagen({
       const url = URL.createObjectURL(archivo);
       urlLocalRef.current = url;
       setPreviewLocal(url);
+      // La subida arranca SOLA al elegir el archivo. Antes exigía apretar "Subir" aparte, y la
+      // vista previa instantánea hacía creer que ya estaba aplicado — al refrescar "volvía" la
+      // imagen vieja porque nunca se subió (bug de UX visto en el piloto).
+      e.currentTarget.form?.requestSubmit();
     } else {
       urlLocalRef.current = null;
       setPreviewLocal(null);
@@ -63,8 +67,8 @@ export default function SubidaImagen({
         />
       </div>
       <button className="btn-borde" type="submit" disabled={pendiente}>
-        <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">upload</span>
-        {pendiente ? 'Subiendo…' : 'Subir'}
+        <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">{pendiente ? 'progress_activity' : 'upload'}</span>
+        {pendiente ? 'Subiendo…' : 'Volver a subir'}
       </button>
       {estado && 'error' in estado && (
         <p className="alerta" role="alert">{estado.error}</p>

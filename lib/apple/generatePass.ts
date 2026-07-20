@@ -1,7 +1,7 @@
 import { PKPass } from 'passkit-generator';
 import path from 'node:path';
 import { requireEnv } from '@/lib/env';
-import { componerStrips } from './stripPass';
+import { componerStrips, descargarImagen } from './stripPass';
 
 function cargarCertificados() {
   return {
@@ -25,9 +25,16 @@ export interface DatosPass {
   selloMeta: number | null;
   stripUrl: string | null;
   selloIconoUrl: string | null;
+  heroUrl: string | null;
+  logoUrl: string | null;
 }
 
 export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
+  // Logo del comercio (esquina superior del pass), best-effort. Con logo propio se OMITE el
+  // logoText: Apple los pone lado a lado y el nombre ya aparece grande en el cuerpo del pass
+  // (referencia del usuario: los passes de la competencia muestran solo el logo).
+  const logo = await descargarImagen(datos.logoUrl, 'el logo del comercio');
+
   const pass = await PKPass.from(
     {
       model: path.join(process.cwd(), 'passModels', 'loyalty.pass'),
@@ -44,7 +51,7 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
       serialNumber: datos.serialNumber,
       organizationName: datos.nombreComercio,
       description: `Tarjeta de lealtad de ${datos.nombreComercio}`,
-      logoText: datos.nombreComercio,
+      ...(logo ? {} : { logoText: datos.nombreComercio }),
       backgroundColor: datos.colorFondo,
       foregroundColor: datos.colorTexto,
       labelColor: datos.colorLabel,
@@ -67,11 +74,19 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
     colorLabel: datos.colorLabel,
     stripUrl: datos.stripUrl,
     selloIconoUrl: datos.selloIconoUrl,
+    heroUrl: datos.heroUrl,
   });
   if (strips) {
     pass.addBuffer('strip.png', strips.s1);
     pass.addBuffer('strip@2x.png', strips.s2);
     pass.addBuffer('strip@3x.png', strips.s3);
+  }
+
+  if (logo) {
+    // Mismo buffer en los tres tamaños: Wallet lo escala (el área del logo es chica).
+    pass.addBuffer('logo.png', logo.buf);
+    pass.addBuffer('logo@2x.png', logo.buf);
+    pass.addBuffer('logo@3x.png', logo.buf);
   }
 
   const esSellos = datos.tipoTarjeta === 'sellos' && datos.selloMeta != null && datos.selloMeta > 0;

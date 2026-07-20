@@ -16,6 +16,8 @@ function datosBase() {
     webServiceURL: 'https://example.com/api/apple',
     authenticationToken: '0123456789abcdef0123456789abcdef',
     selloIconoUrl: null,
+    heroUrl: null,
+    logoUrl: null,
   };
 }
 

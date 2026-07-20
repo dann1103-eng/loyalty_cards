@@ -26,12 +26,14 @@ export default async function PaginaBranding() {
 
   const esSellos = c.tipo_tarjeta === 'sellos';
 
+  // Cada etiqueta dice DÓNDE aparece la imagen en el pass — "Imagen principal" a secas no le
+  // decía nada al dueño (confusión real vista en el piloto).
   const imagenes: [string, string, string | null][] = [
-    ['logo', 'Logo', c.logo_url],
-    ['strip', 'Franja (strip)', c.strip_url],
-    ['hero', 'Imagen principal', c.hero_url],
+    ['logo', 'Logo (esquina superior del pass)', c.logo_url],
+    ['hero', 'Foto de fondo de la franja', c.hero_url],
+    ['strip', 'Franja personalizada (reemplaza la grilla de sellos)', c.strip_url],
   ];
-  if (esSellos) imagenes.push(['sello_icono', 'Ícono del sello', c.sello_icono_url]);
+  if (esSellos) imagenes.push(['sello_icono', 'Ícono de los sellos', c.sello_icono_url]);
 
   return (
     <main className="admin-main">
