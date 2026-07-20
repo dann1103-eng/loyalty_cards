@@ -10,6 +10,7 @@ import {
   eliminarComercio,
   type DatosComercio,
 } from '@/lib/comercios/guardarComercio';
+import { notificarCambioComercio } from '@/lib/apple/notificarCambioComercio';
 
 export type EstadoFormulario = { error: string } | undefined;
 
@@ -64,8 +65,13 @@ export async function accionActualizarComercio(
 ): Promise<EstadoFormulario> {
   await verifyFmAdmin();
 
-  const res = await actualizarComercio(createServiceClient(), id, leerDatos(formData));
+  const supabase = createServiceClient();
+  const res = await actualizarComercio(supabase, id, leerDatos(formData));
   if (!res.ok) return { error: res.error };
+
+  // Los passes ya emitidos renderizan tipo_tarjeta y colores: sin este push, un cambio de FM
+  // (ej. puntos → sellos) deja los passes viejos mostrando el diseño anterior para siempre.
+  await notificarCambioComercio(supabase, id);
 
   revalidatePath('/admin/comercios');
   redirect('/admin/comercios');

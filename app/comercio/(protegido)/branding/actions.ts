@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { guardarBranding } from '@/lib/comercio/guardarBranding';
+import { notificarCambioComercio } from '@/lib/apple/notificarCambioComercio';
 import {
   validarImagenSubida,
   extensionDeMime,
@@ -33,6 +34,12 @@ export async function accionGuardarBranding(
   });
 
   if (!res.ok) return { error: res.error };
+
+  // Colores y meta de sellos se renderizan en el pass: se avisa a los passes ya emitidos para
+  // que Wallet los re-descargue (sin esto, muestran el diseño viejo hasta el próximo cambio de
+  // puntos — bug visto en el piloto al pasar a sellos).
+  await notificarCambioComercio(createServiceClient(), comercioId);
+
   revalidatePath('/comercio/branding');
   return { ok: true };
 }
