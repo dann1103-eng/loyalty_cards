@@ -43,10 +43,10 @@
   --error-fondo: rgba(147, 0, 10, 0.22);
   --error-borde: rgba(255, 180, 171, 0.35);
 
-  /* ---------- tipografía (next/font define las variables) ---------- */
-  --font-display: var(--font-display, "Outfit"), system-ui, sans-serif;
-  --font-body: var(--font-body, "Hanken Grotesk"), system-ui, sans-serif;
-  --font-mono: var(--font-mono, "Geist Mono"), ui-monospace, monospace;
+  /* ---------- tipografía ----------
+     OJO: --font-display / --font-body / --font-mono las INYECTA next/font en <html>
+     (app/layout.tsx). NO redeclararlas aquí: `--x: var(--x, …)` es una referencia circular
+     que invalida la variable y tira toda la tipografía al serif del navegador. */
 
   /* ---------- forma ---------- */
   --radius: 20px;
