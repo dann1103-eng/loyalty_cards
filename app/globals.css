@@ -537,6 +537,9 @@ a {
   color: var(--texto-3);
   text-align: center;
   margin-top: 8px;
+  /* el token es una sola "palabra" larga: sin esto fuerza el ancho de toda la columna en móvil */
+  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 /* botón oficial-ish "Agregar a Apple Wallet" (se conserva negro por marca Apple) */
@@ -790,17 +793,19 @@ a {
   cursor: default;
 }
 
-/* ---------- métricas apiladas (C2) ---------- */
+/* ---------- métricas (C2) ----------
+   En móvil NO se apilan encima (el diseño original dependía del hover para destapar la de
+   atrás y en pantallas táctiles no hay hover: la segunda quedaba invisible). Van en flujo,
+   ambas completas, con una rotación leve que conserva el aire juguetón. */
 .metric-pila {
-  position: relative;
-  height: 236px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   margin-bottom: 26px;
 }
 .metric-carta {
-  position: absolute;
-  left: 0;
   width: 100%;
-  height: 188px;
+  min-height: 172px;
   border-radius: var(--radius);
   padding: 22px;
   display: flex;
@@ -812,21 +817,16 @@ a {
 .metric-carta:hover {
   transform: scale(1.02) translateY(-4px) rotate(0deg) !important;
   box-shadow: var(--shadow-3);
-  z-index: 30;
 }
 .metric-carta.naranja {
-  top: 0;
   background: var(--acento);
   color: var(--sobre-acento);
-  transform: rotate(1deg);
-  z-index: 20;
+  transform: rotate(0.8deg);
 }
 .metric-carta.menta {
-  top: 44px;
   background: var(--menta);
   color: var(--sobre-menta);
-  transform: rotate(-2deg);
-  z-index: 10;
+  transform: rotate(-0.8deg);
 }
 .metric-etiqueta {
   font-family: var(--font-mono);
@@ -855,14 +855,9 @@ a {
 }
 @media (min-width: 760px) {
   .metric-pila {
-    height: auto;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 16px;
-  }
-  .metric-carta {
-    position: static;
-    height: 176px;
   }
   .metric-carta.naranja { transform: rotate(0.6deg); }
   .metric-carta.menta { transform: rotate(-0.6deg); }
@@ -887,6 +882,7 @@ a {
 /* ---------- subida de imágenes (C3) ---------- */
 .subida-imagen {
   display: flex;
+  flex-wrap: wrap; /* en pantallas angostas el botón baja de línea en vez de desbordar */
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
@@ -903,7 +899,12 @@ a {
 }
 .subida-imagen .field {
   flex: 1;
+  min-width: 0; /* permite encoger por debajo del min-content del <input type=file> */
   margin-bottom: 0;
+}
+.subida-imagen .field input[type='file'] {
+  max-width: 100%;
+  min-width: 0;
 }
 .subida-preview {
   max-width: 100%;
@@ -973,15 +974,23 @@ a {
   color: var(--texto-3);
 }
 
-/* ---------- editor + preview sticky (C3) ---------- */
+/* ---------- editor + preview sticky (C3) ----------
+   minmax(0, …) en TODAS las pistas: con `1fr` a secas, una pista de grid no puede encogerse
+   por debajo del min-content de su contenido (p. ej. la fila de subida de imagen con miniatura
+   + selector de archivo + botón), y en móvil eso estiraba la columna entera — la tarjeta de la
+   vista previa heredaba ese ancho y se salía de la pantalla. */
 .branding-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 26px;
+}
+.branding-preview .cardface {
+  max-width: 400px;
+  margin-inline: auto;
 }
 @media (min-width: 1000px) {
   .branding-grid {
-    grid-template-columns: 7fr 5fr;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
     align-items: start;
   }
   .branding-preview {
