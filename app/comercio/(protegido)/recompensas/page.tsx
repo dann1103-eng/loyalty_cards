@@ -23,15 +23,17 @@ export default async function PaginaRecompensas() {
   const etiquetaTipo = (tipo: string) => TIPOS_RECOMPENSA.find((t) => t.valor === tipo)?.etiqueta ?? tipo;
 
   return (
-    <main className="admin-main">
-      <div className="admin-encabezado">
-        <h1 className="title" style={{ fontSize: '2rem', margin: 0 }}>Recompensas</h1>
+    <main className="admin-main" style={{ maxWidth: 640 }}>
+      <div className="admin-encabezado reveal d1">
+        <h1 className="title" style={{ margin: 0 }}>Recompensas</h1>
         <Link className="admin-fila-slug" href="/comercio/panel">← Volver</Link>
       </div>
 
-      <FormularioRecompensa />
+      <div className="reveal d2">
+        <FormularioRecompensa />
+      </div>
 
-      <div className="admin-lista" style={{ marginTop: 22 }}>
+      <div className="admin-lista reveal d3" style={{ marginTop: 22 }}>
         {error ? (
           <p className="admin-error" role="alert">No se pudieron cargar las recompensas. Recarga la página.</p>
         ) : !recompensas || recompensas.length === 0 ? (
@@ -39,11 +41,16 @@ export default async function PaginaRecompensas() {
         ) : (
           recompensas.map((r) => (
             <div key={r.id} className="admin-fila">
-              <div>
-                <div className="admin-fila-nombre">{r.nombre}</div>
-                <div className="admin-fila-slug">
-                  {r.costo_puntos} puntos · {etiquetaTipo(r.tipo)}
-                  {r.descripcion ? ` · ${r.descripcion}` : ''}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <span className="icono-circulo acento" aria-hidden="true">
+                  <span className="icono">redeem</span>
+                </span>
+                <div>
+                  <div className="admin-fila-nombre">{r.nombre}</div>
+                  <div className="admin-fila-slug">
+                    <span className="dato-mono">{r.costo_puntos}</span> puntos · {etiquetaTipo(r.tipo)}
+                    {r.descripcion ? ` · ${r.descripcion}` : ''}
+                  </div>
                 </div>
               </div>
               <BotonDesactivarRecompensa id={r.id} nombre={r.nombre} />

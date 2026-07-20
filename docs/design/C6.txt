@@ -1,0 +1,273 @@
+<!DOCTYPE html><html lang="es" class="dark" style=""><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&amp;family=Hanken+Grotesk:wght@400;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=block" rel="stylesheet"><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">try{
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-surface": "#e5e2e1",
+                    "on-primary-fixed": "#2e1500",
+                    "primary-container": "#ff9d42",
+                    "on-primary-fixed-variant": "#6d3900",
+                    "surface-container": "#201f1f",
+                    "outline": "#a28d7d",
+                    "surface-variant": "#353534",
+                    "secondary": "#8bd6b4",
+                    "secondary-fixed-dim": "#8bd6b4",
+                    "on-error-container": "#ffdad6",
+                    "surface-tint": "#ffb77c",
+                    "inverse-primary": "#904d00",
+                    "inverse-on-surface": "#313030",
+                    "primary-fixed": "#ffdcc2",
+                    "primary": "#ffc495",
+                    "inverse-surface": "#e5e2e1",
+                    "background": "#131313",
+                    "on-secondary-fixed-variant": "#00513a",
+                    "surface-container-lowest": "#0e0e0e",
+                    "surface-container-high": "#2a2a2a",
+                    "surface-bright": "#393939",
+                    "outline-variant": "#544337",
+                    "secondary-container": "#005c42",
+                    "on-tertiary-fixed-variant": "#4a3d7c",
+                    "surface-container-low": "#1c1b1b",
+                    "on-primary": "#4d2700",
+                    "on-tertiary-fixed": "#1e0e4e",
+                    "error-container": "#93000a",
+                    "surface-container-highest": "#353534",
+                    "surface-dim": "#131313",
+                    "on-tertiary": "#332664",
+                    "error": "#ffb4ab",
+                    "on-surface-variant": "#dac2b1",
+                    "on-secondary": "#003827",
+                    "secondary-fixed": "#a6f2cf",
+                    "on-error": "#690005",
+                    "tertiary": "#d5c9ff",
+                    "on-background": "#e5e2e1",
+                    "tertiary-fixed-dim": "#ccbeff",
+                    "tertiary-fixed": "#e7deff",
+                    "on-primary-container": "#6c3900",
+                    "on-tertiary-container": "#493c7b",
+                    "on-secondary-fixed": "#002115",
+                    "tertiary-container": "#baabf2",
+                    "surface": "#131313",
+                    "primary-fixed-dim": "#ffb77c",
+                    "on-secondary-container": "#87d2b0"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xs": "8px",
+                    "lg": "48px",
+                    "margin-mobile": "20px",
+                    "md": "24px",
+                    "sm": "16px",
+                    "margin-desktop": "64px",
+                    "gutter": "16px",
+                    "base": "4px"
+            },
+            "fontFamily": {
+                    "label-sm": ["Hanken Grotesk"],
+                    "body-md": ["Hanken Grotesk"],
+                    "display-lg": ["Outfit"],
+                    "headline-lg": ["Outfit"],
+                    "headline-lg-mobile": ["Outfit"],
+                    "mono": ["JetBrains Mono"]
+            },
+            "fontSize": {
+                    "label-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["28px", {"lineHeight": "36px", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    }catch(_e){}</script><meta charset="utf-8"></head><body class="pb-32 pt-20">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-margin-mobile h-16 backdrop-blur-xl bg-surface-container-low/60">
+<div class="flex items-center gap-sm">
+<button class="material-symbols-outlined text-on-surface hover:bg-surface-variant/50 transition-colors p-2 rounded-full active:scale-95 transition-transform">menu</button>
+<h1 class="font-display-lg text-[24px] font-bold text-on-surface">FM Lealtad</h1>
+</div>
+<div class="w-10 h-10 rounded-full overflow-hidden border border-outline-variant active:scale-95 transition-transform cursor-pointer">
+<img class="w-full h-full object-cover" data-alt="A professional portrait of a business merchant, high-end lighting, dark minimalist background, shallow depth of field, sharp focus, aesthetic monochromatic tones consistent with a premium loyalty app design." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD-09OULkFvsCIrQcXayre_4IlbB0JJe_iCLchpdNNoBpR292ZpOQJQrahSGqgxZF9X4yYFBCUOqKrN3iJ-I9orhxbg8Gsjb1A5g5mYLxb897cjRD-YrjmPExa8dePwQXxSBHM-qVLzXyk6dqwO2L4fHNxJtUt9gExGRfoTi1I9IIuoY4G4KxW0lUBTElqSTFAjE3C_-prdsg9Zfx4dBE7WvmbKIXMAG48Q2q0j8Oq4ftQdCq4kPi1d">
+</div>
+</header>
+<main class="px-margin-mobile space-y-md">
+<!-- Headline and Stats -->
+<section class="mt-4">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-bold">Clientes</h2>
+<p class="font-label-sm text-on-surface-variant mt-xs opacity-80 uppercase tracking-widest">
+<span class="font-mono text-primary">1,248</span> clientes totales
+            </p>
+</section>
+<!-- Search Bar -->
+<section class="relative group">
+<div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-primary">search</span>
+</div>
+<input class="w-full bg-surface-container border-none rounded-lg py-4 pl-12 pr-4 text-on-surface placeholder:text-on-surface-variant/50 focus:ring-2 focus:ring-primary/40 transition-all font-body-md" placeholder="Buscar por nombre o teléfono..." type="text">
+</section>
+<!-- Customer List Container -->
+<section class="space-y-sm">
+<!-- Customer Item 1 -->
+<div class="customer-row glow-border rounded-lg border border-surface-variant/30 overflow-hidden transition-all duration-300 border-secondary/50 shadow-[0_0_15px_rgba(139,214,180,0.3)] backdrop-blur-xl bg-surface/10" onclick="this.classList.toggle('expanded')">
+<div class="p-sm flex justify-between items-center cursor-pointer">
+<div class="flex items-center gap-sm">
+<div class="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-primary">person</span>
+</div>
+<div>
+<h3 class="font-body-md font-bold text-on-surface">Carlos Mendoza</h3>
+<p class="font-mono text-xs text-on-surface-variant">+54 11 5555-0123</p>
+</div>
+</div>
+<div class="text-right">
+<div class="font-mono text-secondary font-medium">1,200 PTS</div>
+<p class="text-[10px] text-on-surface-variant/60 uppercase">Alta: 12/05/23</p>
+</div>
+<span class="material-symbols-outlined chevron-icon transition-transform ml-xs text-on-surface-variant">expand_more</span>
+</div>
+<!-- Expanded Content -->
+<div class="expandable-content bg-surface-container-lowest/50">
+<div class="p-md flex flex-col items-center gap-md">
+<div class="qr-gradient p-sm rounded-lg shadow-[0_0_30px_rgba(255,255,255,0.05)] border border-white/10">
+<img class="w-40 h-40" data-alt="A clean, minimalist high-contrast black and white QR code centered on a pristine white ceramic tile background. The tile has soft rounded corners and subtle drop shadows, designed for a premium loyalty program's digital asset display." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBH3CoAbwtkhFEzvabvrLKEDMt6W_0bwoE8fkQj4vpeLBAfE8T9oRMxrIE_hDPORIoWuxCnCOm_bOYe1kfEb0XsyV52Se2x1XOvnSARscl-rISXz1S8s13lF_EFaAMf93hYVfHtYQ2FQeTpWKGMzTthKqFVPZmPasyp74HX89VgkYMPc0G1st8CHtIjEq6lfVVy7SzSpE7sey_Rpn00-hcfDYYWu8q5Fqo4KBqLpIMZf4RghLVBAuwu">
+</div>
+<div class="flex gap-sm w-full">
+<button class="flex-1 bg-surface-container-high border border-outline-variant/30 text-on-surface py-3 rounded-lg flex items-center justify-center gap-xs font-label-sm hover:bg-surface-variant active:scale-95 transition-all">
+<span class="material-symbols-outlined text-sm">print</span>
+                                IMPRIMIR
+                            </button>
+<button class="flex-1 bg-primary text-on-primary-fixed py-3 rounded-lg flex items-center justify-center gap-xs font-label-sm hover:bg-primary-container active:scale-95 transition-all">
+<span class="material-symbols-outlined text-sm">download</span>
+                                DESCARGAR
+                            </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Customer Item 2 -->
+<div class="customer-row glow-border rounded-lg border border-surface-variant/30 overflow-hidden transition-all duration-300 border-tertiary/50 shadow-[0_0_15px_rgba(213,201,255,0.3)] backdrop-blur-xl bg-surface/10" onclick="this.classList.toggle('expanded')">
+<div class="p-sm flex justify-between items-center cursor-pointer">
+<div class="flex items-center gap-sm">
+<div class="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-tertiary">person</span>
+</div>
+<div>
+<h3 class="font-body-md font-bold text-on-surface">Elena Rodriguez</h3>
+<p class="font-mono text-xs text-on-surface-variant">+54 11 4444-9876</p>
+</div>
+</div>
+<div class="text-right">
+<div class="font-mono text-secondary font-medium">4 de 10 sellos</div>
+<p class="text-[10px] text-on-surface-variant/60 uppercase">Alta: 28/11/23</p>
+</div>
+<span class="material-symbols-outlined chevron-icon transition-transform ml-xs text-on-surface-variant text-tertiary">expand_more</span>
+</div>
+<div class="expandable-content bg-surface-container-lowest/50">
+<div class="p-md flex flex-col items-center gap-md">
+<div class="qr-gradient p-sm rounded-lg shadow-[0_0_30px_rgba(255,255,255,0.05)] border border-white/10">
+<img class="w-40 h-40" data-alt="High-resolution QR code design, isolated on a stark white textured card background. The style is ultra-modern and clinical, emphasizing digital precision and security, with sharp edges and clear contrast, fitting for a luxury fintech loyalty interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqyxFNV2FhXU1r4r9Aj4wV42-UkWiuECadrjLjAbJ-FYM53EeER8mPIet4TubHZZ1LmBlpX6-mXEHhpDZK-D1gVSRfvW_uXjrgv0s5an6DP1MhJL8T9N_eajHjS0TyBujzJm27FkvMyv_9FKfSw7JuUMFeNERuWP4oomvddetioGWQ7YW7FvvhyckS1UV12e1hHGx8Xd06-kt1ZakEku0h7Es83hdjzAoi16fDrlF-vcJqX1dKaMak">
+</div>
+<div class="flex gap-sm w-full">
+<button class="flex-1 bg-surface-container-high border border-outline-variant/30 text-on-surface py-3 rounded-lg flex items-center justify-center gap-xs font-label-sm hover:bg-surface-variant active:scale-95 transition-all">
+<span class="material-symbols-outlined text-sm text-tertiary">print</span>
+                                IMPRIMIR
+                            </button>
+<button class="flex-1 bg-primary text-on-primary-fixed py-3 rounded-lg flex items-center justify-center gap-xs font-label-sm hover:bg-primary-container active:scale-95 transition-all">
+<span class="material-symbols-outlined text-sm text-tertiary">download</span>
+                                DESCARGAR
+                            </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Customer Item 3 -->
+<div class="customer-row glow-border rounded-lg border border-surface-variant/30 overflow-hidden transition-all duration-300 border-secondary/50 shadow-[0_0_15px_rgba(139,214,180,0.3)] backdrop-blur-xl bg-surface/10" onclick="this.classList.toggle('expanded')">
+<div class="p-sm flex justify-between items-center cursor-pointer">
+<div class="flex items-center gap-sm">
+<div class="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-primary">person</span>
+</div>
+<div>
+<h3 class="font-body-md font-bold text-on-surface">Martín Gomez</h3>
+<p class="font-mono text-xs text-on-surface-variant">+54 11 3333-5566</p>
+</div>
+</div>
+<div class="text-right">
+<div class="font-mono text-secondary font-medium">850 PTS</div>
+<p class="text-[10px] text-on-surface-variant/60 uppercase">Alta: 05/01/24</p>
+</div>
+<span class="material-symbols-outlined chevron-icon transition-transform ml-xs text-on-surface-variant">expand_more</span>
+</div>
+<div class="expandable-content bg-surface-container-lowest/50">
+<div class="p-md flex flex-col items-center gap-md">
+<div class="qr-gradient p-sm rounded-lg shadow-[0_0_30px_rgba(255,255,255,0.05)] border border-white/10">
+<img class="w-40 h-40" data-alt="A futuristic QR code presented on a white digital display card. The card features a subtle linen texture and is illuminated from above by a soft, cool studio light. The overall aesthetic is clean, professional, and reflects a high-end digital identity system." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB1QcmiEckhFNgNr_dz2OXs0O_FhUnUxTYerpXplINF1yIy1YlV_cSeqUwxldMDqQd9DSq4mQraBxCpyAFBe2NNZQhqho6-v4Pvy7vJPiABiD1F9FJUDRK4_piQVlrzRwFi5-L29XkoRCtThVlt83RHC8XHmm5G7vcTb1QVCrNvuWXE61vaoKCDby3tHt97AnmIfTnCp3ramqLN9a4YT87w_73QfhOgB-J4JrBepf1HyO5nYYnXAzIk">
+</div>
+<div class="flex gap-sm w-full">
+<button class="flex-1 bg-surface-container-high border border-outline-variant/30 text-on-surface py-3 rounded-lg flex items-center justify-center gap-xs font-label-sm hover:bg-surface-variant active:scale-95 transition-all">
+<span class="material-symbols-outlined text-sm">print</span>
+                                IMPRIMIR
+                            </button>
+<button class="flex-1 bg-primary text-on-primary-fixed py-3 rounded-lg flex items-center justify-center gap-xs font-label-sm hover:bg-primary-container active:scale-95 transition-all">
+<span class="material-symbols-outlined text-sm">download</span>
+                                DESCARGAR
+                            </button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Load More / Empty State Spacer -->
+<div class="py-lg text-center">
+<p class="text-on-surface-variant/40 font-label-sm italic">Fin de la lista de clientes</p>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-margin-mobile py-sm backdrop-blur-xl bg-surface-container-low/60">
+<!-- dashboard -->
+<button class="flex items-center justify-center text-on-surface-variant p-xs hover:text-primary-fixed-dim transition-all active:scale-90 transition-transform">
+<span class="material-symbols-outlined">dashboard</span>
+</button>
+<!-- straighten -->
+<button class="flex items-center justify-center text-on-surface-variant p-xs hover:text-primary-fixed-dim transition-all active:scale-90 transition-transform">
+<span class="material-symbols-outlined">straighten</span>
+</button>
+<!-- group (Active: Clientes) -->
+<button class="flex items-center justify-center text-primary bg-primary/10 rounded-full p-xs ring-1 ring-primary ring-offset-2 ring-offset-background shadow-[0_0_15px_rgba(255,183,124,0.4)] active:scale-90 transition-transform">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">group</span>
+</button>
+<!-- redeem -->
+<button class="flex items-center justify-center text-on-surface-variant p-xs hover:text-primary-fixed-dim transition-all active:scale-90 transition-transform">
+<span class="material-symbols-outlined">redeem</span>
+</button>
+<!-- settings -->
+<button class="flex items-center justify-center text-on-surface-variant p-xs hover:text-primary-fixed-dim transition-all active:scale-90 transition-transform">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</nav>
+<script>
+        // Stop row from closing if buttons inside expanded area are clicked
+        document.querySelectorAll('.expandable-content').forEach(content => {
+            content.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+        });
+
+        // Search Input Micro-interaction
+        const searchInput = document.querySelector('input[type="text"]');
+        searchInput.addEventListener('focus', () => {
+            searchInput.parentElement.classList.add('scale-[1.01]');
+        });
+        searchInput.addEventListener('blur', () => {
+            searchInput.parentElement.classList.remove('scale-[1.01]');
+        });
+    </script>
+
+</body></html>

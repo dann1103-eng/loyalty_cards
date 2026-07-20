@@ -22,15 +22,17 @@ export default async function PaginaReglas() {
   const etiquetaTipo = (tipo: string) => TIPOS_REGLA.find((t) => t.valor === tipo)?.etiqueta ?? tipo;
 
   return (
-    <main className="admin-main">
-      <div className="admin-encabezado">
-        <h1 className="title" style={{ fontSize: '2rem', margin: 0 }}>Reglas de puntos</h1>
+    <main className="admin-main" style={{ maxWidth: 640 }}>
+      <div className="admin-encabezado reveal d1">
+        <h1 className="title" style={{ margin: 0 }}>Reglas del programa</h1>
         <Link className="admin-fila-slug" href="/comercio/panel">← Volver</Link>
       </div>
 
-      <FormularioRegla />
+      <div className="reveal d2">
+        <FormularioRegla />
+      </div>
 
-      <div className="admin-lista" style={{ marginTop: 22 }}>
+      <div className="admin-lista reveal d3" style={{ marginTop: 22 }}>
         {error ? (
           <p className="admin-error" role="alert">No se pudieron cargar las reglas. Recarga la página.</p>
         ) : !reglas || reglas.length === 0 ? (
@@ -38,9 +40,16 @@ export default async function PaginaReglas() {
         ) : (
           reglas.map((r) => (
             <div key={r.id} className="admin-fila">
-              <div>
-                <div className="admin-fila-nombre">{etiquetaTipo(r.tipo)}</div>
-                <div className="admin-fila-slug">Valor: {r.valor}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <span className="icono-circulo menta" aria-hidden="true">
+                  <span className="icono">{r.tipo === 'por_monto' ? 'payments' : 'storefront'}</span>
+                </span>
+                <div>
+                  <div className="admin-fila-nombre">{etiquetaTipo(r.tipo)}</div>
+                  <div className="admin-fila-slug">
+                    Valor: <span className="dato-mono">{r.valor}</span>
+                  </div>
+                </div>
               </div>
               <BotonEliminarRegla id={r.id} />
             </div>

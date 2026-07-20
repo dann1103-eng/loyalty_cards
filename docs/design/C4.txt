@@ -1,0 +1,309 @@
+<!DOCTYPE html><<!DOCTYPE html><html class="dark" lang="es" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Reglas del Programa - FM Lealtad</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&amp;family=Hanken+Grotesk:wght@400;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-surface": "#e5e2e1",
+                    "on-background": "#e5e2e1",
+                    "on-primary-container": "#6c3900",
+                    "surface-dim": "#131313",
+                    "inverse-primary": "#904d00",
+                    "on-tertiary-container": "#493c7b",
+                    "on-secondary-container": "#87d2b0",
+                    "primary-fixed-dim": "#ffb77c",
+                    "tertiary-fixed-dim": "#ccbeff",
+                    "error": "#ffb4ab",
+                    "surface-container-highest": "#353534",
+                    "on-primary-fixed-variant": "#6d3900",
+                    "secondary-fixed": "#a6f2cf",
+                    "primary": "#ffc495",
+                    "inverse-on-surface": "#313030",
+                    "surface-bright": "#393939",
+                    "secondary": "#8bd6b4",
+                    "inverse-surface": "#e5e2e1",
+                    "background": "#131313",
+                    "on-primary": "#4d2700",
+                    "on-tertiary-fixed-variant": "#4a3d7c",
+                    "on-error": "#690005",
+                    "surface-variant": "#353534",
+                    "surface-container-high": "#2a2a2a",
+                    "tertiary-container": "#baabf2",
+                    "on-error-container": "#ffdad6",
+                    "tertiary": "#d5c9ff",
+                    "primary-fixed": "#ffdcc2",
+                    "on-tertiary": "#332664",
+                    "on-secondary-fixed-variant": "#00513a",
+                    "primary-container": "#ff9d42",
+                    "on-surface-variant": "#dac2b1",
+                    "on-secondary-fixed": "#002115",
+                    "secondary-container": "#005c42",
+                    "surface-tint": "#ffb77c",
+                    "on-primary-fixed": "#2e1500",
+                    "surface-container-lowest": "#0e0e0e",
+                    "on-tertiary-fixed": "#1e0e4e",
+                    "surface-container": "#201f1f",
+                    "on-secondary": "#003827",
+                    "tertiary-fixed": "#e7deff",
+                    "error-container": "#93000a",
+                    "secondary-fixed-dim": "#8bd6b4",
+                    "outline": "#a28d7d",
+                    "surface-container-low": "#1c1b1b",
+                    "surface": "#131313",
+                    "outline-variant": "#544337"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xs": "8px",
+                    "base": "4px",
+                    "md": "24px",
+                    "gutter": "16px",
+                    "lg": "48px",
+                    "margin-desktop": "64px",
+                    "margin-mobile": "20px",
+                    "sm": "16px"
+            },
+            "fontFamily": {
+                    "headline-lg-mobile": ["Outfit"],
+                    "body-md": ["Hanken Grotesk"],
+                    "display-lg": ["Outfit"],
+                    "label-sm": ["Hanken Grotesk"],
+                    "headline-lg": ["Outfit"]
+            },
+            "fontSize": {
+                    "headline-lg-mobile": ["28px", {"lineHeight": "36px", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #121212;
+            color: #e5e2e1;
+            font-family: 'Hanken Grotesk', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .glass-card {
+            background: rgba(30, 30, 30, 0.6);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .glow-primary {
+            box-shadow: 0 0 20px rgba(255, 157, 66, 0.3);
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .active-tab-glow {
+            box-shadow: 0 0 15px rgba(255, 196, 149, 0.4);
+        }
+
+        /* Smooth page transition mockup */
+        .fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="bg-surface/80 dark:bg-surface/80 backdrop-blur-xl flex justify-between items-center w-full px-margin-mobile h-16 z-50 fixed top-0 left-0">
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-primary hover:bg-surface-container-high transition-colors p-2 rounded-full active:scale-95 duration-150">
+                menu
+            </button>
+<h1 class="text-headline-lg-mobile font-headline-lg-mobile font-bold text-white">Reglas</h1>
+</div>
+<div class="w-10 h-10 rounded-full border-2 border-primary-container overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A close-up high-resolution profile portrait of a sophisticated merchant manager in a modern, dark-themed office. The lighting is dramatic and moody with amber neon highlights reflecting off polished surfaces. The overall aesthetic is professional and high-tech, fitting for a premium digital wallet application executive." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDUVCwPgncTi_Mul-ssN3JuMEQRi0zC9qkdIZVvYHf05pZCxpyd9IIN_RJHhdETJfGXkS9Y4jLvPo3h2QYTVQqD73Yf6h9_xbA-3Gh_caHC2oL02f4r4g2fUNbVWwRFWTSxqMn543YXEpZehyei3937Gx9ZVtMVgXOf7wPjc3M3a8cn6Xn2xw9dDeb2vZPdKBF4do4yuH0SZbkxkzTlsPlrbzz0ABzkokxaohj7p2jtqWGTwC4bXgCB">
+</div>
+</header>
+<main class="mt-20 px-margin-mobile fade-in">
+<!-- Add Rule Form -->
+<section class="glass-card p-md rounded-lg mb-lg border border-outline-variant/20">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile mb-sm text-white">Nueva Regla</h2>
+<div class="space-y-sm">
+<div>
+<label class="font-label-sm text-label-sm mb-base block text-white">Tipo de Regla</label>
+<select class="w-full bg-surface-container border border-outline-variant rounded-md py-3 px-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none appearance-none transition-all text-white">
+<option value="visita">Por visita</option>
+<option value="monto">Por monto de consumo</option>
+</select>
+</div>
+<div>
+<label class="font-label-sm text-label-sm mb-base block text-white">Valor / Umbral</label>
+<div class="relative">
+<input class="w-full bg-surface-container border border-outline-variant rounded-md py-3 px-4 placeholder:text-on-surface-variant/40 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all text-white" placeholder="Ej: $10 o 1 punto" type="text">
+<span class="material-symbols-outlined absolute right-4 top-3 text-white">edit</span>
+</div>
+</div>
+<button class="w-full py-4 font-bold rounded-full glow-primary active:scale-95 transition-all duration-200 mt-md" style="background-color: rgb(245, 245, 240); color: rgb(19, 19, 19);">
+                    Agregar Regla
+                </button>
+</div>
+</section>
+<!-- Rules List Section -->
+<section>
+<div class="flex justify-between items-end mb-sm">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-white">Reglas Activas</h2>
+<span class="font-label-sm text-label-sm text-primary text-white">3 Reglas</span>
+</div>
+<div class="space-y-sm">
+<!-- Rule Item 1 -->
+<div class="glass-card p-sm rounded-lg flex items-center justify-between border-l-4 border-l-primary group transition-all hover:bg-surface-container-high">
+<div class="flex items-center gap-sm">
+<div class="w-12 h-12 rounded-full bg-primary-container/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-white">touch_app</span>
+</div>
+<div>
+<p class="font-body-md font-semibold text-white">Gana 1 sello por cada visita</p>
+<p class="font-label-sm text-label-sm text-white">Acción: Registro de llegada</p>
+</div>
+</div>
+<button class="hover:text-error transition-colors p-2 rounded-full hover:bg-error/10">
+<span class="material-symbols-outlined text-white">delete</span>
+</button>
+</div>
+<!-- Rule Item 2 -->
+<div class="glass-card p-sm rounded-lg flex items-center justify-between border-l-4 border-l-secondary group transition-all hover:bg-surface-container-high">
+<div class="flex items-center gap-sm">
+<div class="w-12 h-12 rounded-full bg-secondary-container/20 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-white">payments</span>
+</div>
+<div>
+<p class="font-body-md font-semibold text-white">Gana 1 sello por cada $15 de consumo</p>
+<p class="font-label-sm text-label-sm text-white">Acción: Transacción mínima</p>
+</div>
+</div>
+<button class="hover:text-error transition-colors p-2 rounded-full hover:bg-error/10">
+<span class="material-symbols-outlined text-white">delete</span>
+</button>
+</div>
+<!-- Rule Item 3 -->
+<div class="glass-card p-sm rounded-lg flex items-center justify-between border-l-4 border-l-tertiary group transition-all hover:bg-surface-container-high">
+<div class="flex items-center gap-sm">
+<div class="w-12 h-12 rounded-full bg-tertiary-container/20 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined text-white">celebration</span>
+</div>
+<div>
+<p class="font-body-md font-semibold text-white">Doble puntuación los fines de semana</p>
+<p class="font-label-sm text-label-sm text-white">Acción: Bonus temporal</p>
+</div>
+</div>
+<button class="hover:text-error transition-colors p-2 rounded-full hover:bg-error/10">
+<span class="material-symbols-outlined text-white">delete</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Empty State (Hidden by default, shown when list is empty) -->
+<section class="hidden flex-col items-center justify-center py-lg text-center fade-in" id="empty-state">
+<div class="w-24 h-24 rounded-full bg-surface-container-high flex items-center justify-center mb-md border border-outline-variant/30">
+<span class="material-symbols-outlined text-display-lg opacity-30 text-white" style="font-size: 48px;">rule</span>
+</div>
+<h3 class="font-headline-lg-mobile text-headline-lg-mobile text-white">Sin reglas activas</h3>
+<p class="font-body-md mt-base px-md text-white">Define cómo tus clientes ganan recompensas agregando tu primera regla arriba.</p>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-xs py-base pb-safe bg-surface-container/90 dark:bg-surface-container/90 backdrop-blur-xl border-t border-outline-variant/20 shadow-lg shadow-black/20 z-50">
+<button class="flex flex-col items-center justify-center opacity-70 hover:text-primary transition-all tap-highlight-transparent active:scale-110 duration-200 py-2">
+<span class="material-symbols-outlined text-white">dashboard</span>
+<span class="font-label-sm text-label-sm text-white">Inicio</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1 active-tab-glow active:scale-110 duration-200">
+<span class="material-symbols-outlined text-white" style="font-variation-settings: &quot;FILL&quot; 1;">rule</span>
+<span class="font-label-sm text-label-sm font-bold text-white">Reglas</span>
+</button>
+<button class="flex flex-col items-center justify-center opacity-70 hover:text-primary transition-all active:scale-110 duration-200 py-2">
+<span class="material-symbols-outlined text-white">group</span>
+<span class="font-label-sm text-label-sm text-white">Clientes</span>
+</button>
+<button class="flex flex-col items-center justify-center opacity-70 hover:text-primary transition-all active:scale-110 duration-200 py-2">
+<span class="material-symbols-outlined text-white">card_giftcard</span>
+<span class="font-label-sm text-label-sm text-white">Premios</span>
+</button>
+<button class="flex flex-col items-center justify-center opacity-70 hover:text-primary transition-all active:scale-110 duration-200 py-2">
+<span class="material-symbols-outlined text-white">settings</span>
+<span class="font-label-sm text-label-sm text-white">Ajustes</span>
+</button>
+</nav>
+<script>
+        // Simple micro-interaction for rule deletion
+        document.querySelectorAll('button:has(.material-symbols-outlined:contains("delete"))').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const row = this.closest('.glass-card');
+                row.style.transform = 'translateX(100px)';
+                row.style.opacity = '0';
+                setTimeout(() => {
+                    row.remove();
+                    // If no rules left, show empty state
+                    if (document.querySelectorAll('.space-y-sm .glass-card').length === 0) {
+                        document.getElementById('empty-state').classList.remove('hidden');
+                        document.getElementById('empty-state').classList.add('flex');
+                    }
+                }, 300);
+            });
+        });
+
+        // Add rule micro-interaction
+        document.querySelector('button:contains("Agregar Regla")').addEventListener('click', function() {
+            // Visual feedback
+            this.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span>';
+            setTimeout(() => {
+                this.innerHTML = 'Regla Agregada';
+                this.classList.replace('bg-primary', 'bg-secondary');
+                setTimeout(() => {
+                    this.innerHTML = 'Agregar Regla';
+                    this.classList.replace('bg-secondary', 'bg-primary');
+                }, 1500);
+            }, 800);
+        });
+
+        // Extend utility for selecting by text (for demo purpose)
+        document.querySelectorAll('button').forEach(btn => {
+            if(btn.innerText.includes('Agregar Regla')) {
+                btn.onclick = function() {
+                     // Add logic if needed
+                }
+            }
+        });
+    </script>
+
+
+
+</body></html>
+            if(btn.innerText.includes('Agregar Regla')) {
+                btn.onclick = function() {
+                     // Add logic if needed
+                }
+            }
+        });
+    </script>
+
+</body></html>

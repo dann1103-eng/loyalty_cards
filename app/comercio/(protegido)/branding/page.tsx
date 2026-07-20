@@ -35,8 +35,13 @@ export default async function PaginaBranding() {
 
   return (
     <main className="admin-main">
-      <div className="admin-encabezado">
-        <h1 className="title" style={{ fontSize: '2rem', margin: 0 }}>Branding</h1>
+      <div className="admin-encabezado reveal d1">
+        <div>
+          <h1 className="title" style={{ margin: 0 }}>Editor de marca</h1>
+          <p className="lede" style={{ marginTop: 6, fontSize: '0.92rem' }}>
+            Personalizá la tarjeta que tus clientes llevan en su billetera.
+          </p>
+        </div>
         <Link className="admin-fila-slug" href="/comercio/panel">← Volver</Link>
       </div>
 
@@ -44,19 +49,16 @@ export default async function PaginaBranding() {
         nombreComercio={c.nombre}
         esSellos={esSellos}
         inicial={{
-          color_fondo: c.color_fondo ?? 'rgb(35, 24, 18)',
-          color_texto: c.color_texto ?? 'rgb(255, 255, 255)',
-          color_label: c.color_label ?? 'rgb(255, 255, 255)',
+          color_fondo: c.color_fondo ?? 'rgb(19, 19, 21)',
+          color_texto: c.color_texto ?? 'rgb(245, 245, 240)',
+          color_label: c.color_label ?? 'rgb(255, 157, 66)',
           sello_meta: c.sello_meta != null ? String(c.sello_meta) : '',
         }}
-      />
-
-      <div className="admin-zona-peligro" style={{ borderTopStyle: 'solid' }}>
-        <h2 className="admin-fila-nombre" style={{ marginBottom: 14 }}>Imágenes</h2>
-        {imagenes.map(([campo, etiqueta, url]) => (
+        urls={{ logo: c.logo_url, hero: c.hero_url }}
+        subidas={imagenes.map(([campo, etiqueta, url]) => (
           <SubidaImagen key={campo} campo={campo} etiqueta={etiqueta} urlActual={url} />
         ))}
-      </div>
+      />
     </main>
   );
 }

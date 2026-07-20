@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es-SV"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=block" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;family=Geist:wght@300;400;600;700;800&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">try{
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary": "#fff3f6",
+                    "secondary": "#d1bcff",
+                    "outline": "#849495",
+                    "inverse-primary": "#006970",
+                    "tertiary-fixed": "#ffd8eb",
+                    "inverse-surface": "#e5e1e4",
+                    "surface-dim": "#131315",
+                    "inverse-on-surface": "#313032",
+                    "surface-container-lowest": "#0e0e10",
+                    "on-surface": "#e5e1e4",
+                    "surface-container-highest": "#353437",
+                    "primary-container": "#00f0ff",
+                    "surface-tint": "#00dbe9",
+                    "error": "#ffb4ab",
+                    "on-tertiary-fixed-variant": "#880069",
+                    "secondary-fixed": "#e9ddff",
+                    "on-secondary-fixed": "#23005b",
+                    "background": "#131315",
+                    "on-primary-container": "#006970",
+                    "on-error": "#690005",
+                    "on-surface-variant": "#b9cacb",
+                    "surface-container-low": "#1c1b1d",
+                    "primary": "#dbfcff",
+                    "on-secondary-fixed-variant": "#5700c9",
+                    "tertiary-fixed-dim": "#ffaedd",
+                    "surface-bright": "#39393b",
+                    "on-error-container": "#ffdad6",
+                    "surface": "#131315",
+                    "on-background": "#e5e1e4",
+                    "outline-variant": "#3b494b",
+                    "on-tertiary-container": "#b2008a",
+                    "primary-fixed-dim": "#00dbe9",
+                    "on-primary-fixed": "#002022",
+                    "error-container": "#93000a",
+                    "surface-container-high": "#2a2a2c",
+                    "secondary-container": "#7000ff",
+                    "on-primary-fixed-variant": "#004f54",
+                    "on-tertiary": "#600049",
+                    "surface-variant": "#353437",
+                    "secondary-fixed-dim": "#d1bcff",
+                    "on-tertiary-fixed": "#3b002c",
+                    "surface-container": "#201f21",
+                    "primary-fixed": "#7df4ff",
+                    "on-secondary-container": "#ddcdff",
+                    "on-secondary": "#3c0090",
+                    "on-primary": "#00363a",
+                    "tertiary-container": "#ffcbe6"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "sm": "8px",
+                    "margin-desktop": "64px",
+                    "gutter": "16px",
+                    "margin-mobile": "20px",
+                    "unit": "4px",
+                    "md": "16px",
+                    "lg": "24px",
+                    "xs": "4px",
+                    "xl": "40px"
+            },
+            "fontFamily": {
+                    "headline-md": ["Geist"],
+                    "display-lg-mobile": ["Geist"],
+                    "label-mono": ["JetBrains Mono"],
+                    "display-lg": ["Geist"],
+                    "body-md": ["Geist"]
+            },
+            "fontSize": {
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "display-lg-mobile": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                    "label-mono": ["14px", {"lineHeight": "20px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    }catch(_e){}</script><meta charset="utf-8"/>
+<style>
+    @keyframes staggerReveal {
+        from { opacity: 0; transform: scale(0.8); }
+        to { opacity: 1; transform: scale(1); }
+    }
+    .stamp-stagger {
+        animation: staggerReveal 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        opacity: 0;
+    }
+    .wallet-card-shadow {
+        box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5), 0 0 15px rgba(0, 219, 233, 0.1);
+    }
+    .glass-card {
+        background: rgba(32, 31, 33, 0.6);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(132, 148, 149, 0.2);
+    }
+    .luminescent-border {
+        border: 1px solid rgba(0, 219, 233, 0.3);
+        box-shadow: inset 0 0 10px rgba(0, 219, 233, 0.05);
+    }
+</style>
+</head><body class="bg-surface dark:bg-surface-container-lowest min-h-screen pb-24 md:pb-0">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-sm h-16 bg-surface dark:bg-surface-container-low">
+<div class="flex items-center gap-md">
+<button class="w-10 h-10 flex items-center justify-center text-primary active:scale-95 transition-transform duration-150">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<h1 class="font-headline-md text-headline-md-mobile font-bold text-primary dark:text-primary-fixed-dim tracking-tight">creFM Lealtad</h1>
+</div>
+<div class="flex items-center gap-md">
+<div class="hidden md:flex gap-md px-lg">
+<span class="text-on-surface-variant font-label-sm cursor-pointer hover:text-primary transition-colors">Soporte</span>
+<span class="text-on-surface-variant font-label-sm cursor-pointer hover:text-primary transition-colors">Ayuda</span>
+</div>
+<div class="w-10 h-10 rounded-full overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a business merchant" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAtejjwk1_69PzB-OJTUIM_mnMK_cxqSr23jBMkYF8lyZuJ7MGk0ZWSHCipByj0LsTufRFntYetW4wY56ASHxgNqZnrGku1nssmBP6b8_6giZfAfzu8Zz0Xf-yQlBUKNQ4QN6eIgq91cDNEcNXfJJ4AY9E3-TqHzd4SFpYBKWmncgODtuG9F0HFoxnk8-30s2DiQCfnYliiA4-yYkE8Akl3HfPPd3YpepGC3Q4HGm5qoVWoutX5lbQp"/>
+</div>
+</div>
+</header>
+<main class="pt-24 px-margin-mobile md:px-margin-desktop max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-lg mb-24">
+<!-- EDITOR SECTION -->
+<div class="lg:col-span-7 order-2 lg:order-1 flex flex-col gap-lg">
+<div class="entrance-reveal stagger-1">
+<h2 class="font-headline-md text-headline-md text-on-surface mb-2">Editor de Marca</h2>
+<p class="text-on-surface-variant font-body-md">Personaliza la identidad visual de tu tarjeta de lealtad para tus clientes.</p>
+</div>
+<!-- Visual Assets -->
+<section class="entrance-reveal stagger-2 glass-card p-lg rounded-xl flex flex-col gap-md">
+<h3 class="font-label-mono text-primary text-xs uppercase tracking-widest">Recursos Visuales</h3>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<!-- Logo Upload -->
+<div class="luminescent-border rounded-lg p-md bg-surface-container flex items-center gap-md group cursor-pointer hover-glow">
+<div class="w-12 h-12 rounded bg-surface-container-highest flex items-center justify-center overflow-hidden border border-outline-variant">
+<span class="material-symbols-outlined text-outline" data-icon="add_photo_alternate">add_photo_alternate</span>
+</div>
+<div class="flex-1">
+<p class="font-body-md font-bold text-on-surface">Logo de Comercio</p>
+<p class="text-xs text-on-surface-variant">PNG/JPG • Max 2MB</p>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors" data-icon="upload">upload</span>
+</div>
+<!-- Hero Image Upload -->
+<div class="luminescent-border rounded-lg p-md bg-surface-container flex items-center gap-md group cursor-pointer hover-glow">
+<div class="w-12 h-12 rounded bg-surface-container-highest flex items-center justify-center overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="Vibrant coffee roasting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCEbmoM_TBvzhvzqeeBT_cIQMSBC32xSomIpcLmsgtaPXkcrn3hDmfyhbg6T1P0KIGCJ-nlkdmsU9b0DpxklpANG3ycNMlYrTDhPcM-pXiUMYcyWTIF0bR6H8aozm5Qmg0yRWPZw1kGGYXDYX1Qa1xZn0T-EhNpXvWXoihwh7gohMwVE1TFeRlAO5rMs3iq77KGKOtlT9ZUROZyQIKXKCX53NfYLS53ikmXpXR2-zviE5717oDs5dZG"/>
+</div>
+<div class="flex-1">
+<p class="font-body-md font-bold text-on-surface">Imagen Principal</p>
+<p class="text-xs text-on-surface-variant">16:9 • Alta resolución</p>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors" data-icon="edit">edit</span>
+</div>
+<!-- Strip Upload-->
+<div class="luminescent-border rounded-lg p-md bg-surface-container flex items-center gap-md group cursor-pointer hover-glow md:col-span-2">
+<div class="w-24 h-12 rounded bg-surface-container-highest flex items-center justify-center overflow-hidden border border-outline-variant">
+<div class="w-full h-full bg-gradient-to-r from-primary-container to-secondary-container opacity-40"></div>
+</div>
+<div class="flex-1">
+<p class="font-body-md font-bold text-on-surface">Cinta Decorativa</p>
+<p class="text-xs text-on-surface-variant">Franja horizontal de marca</p>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors" data-icon="upload">upload</span>
+</div>
+</div>
+</section>
+<!-- Color Palette -->
+<section class="entrance-reveal stagger-3 glass-card p-lg rounded-xl flex flex-col gap-md">
+<h3 class="font-label-mono text-primary text-xs uppercase tracking-widest">Paleta de Colores</h3>
+<div class="space-y-md">
+<!-- Color 1 -->
+<div class="flex items-center justify-between p-sm bg-surface-container-low rounded-lg border-b border-outline-variant">
+<div class="flex items-center gap-md">
+<input id="primaryColor" oninput="updateColorPreview(this.value, 'primary')" type="color" value="#00dbe9"/>
+<div>
+<p class="font-body-md text-on-surface">Color Primario</p>
+<p class="font-label-mono text-xs text-on-surface-variant uppercase" id="primaryHex">#00DBE9</p>
+</div>
+</div>
+<button class="p-xs hover:bg-surface-container-highest rounded-full transition-colors">
+<span class="material-symbols-outlined text-outline" data-icon="refresh">refresh</span>
+</button>
+</div>
+<!-- Color 2 -->
+<div class="flex items-center justify-between p-sm bg-surface-container-low rounded-lg border-b border-outline-variant">
+<div class="flex items-center gap-md">
+<input id="secondaryColor" oninput="updateColorPreview(this.value, 'secondary')" type="color" value="#7000ff"/>
+<div>
+<p class="font-body-md text-on-surface">Color Secundario</p>
+<p class="font-label-mono text-xs text-on-surface-variant uppercase" id="secondaryHex">#7000FF</p>
+</div>
+</div>
+<button class="p-xs hover:bg-surface-container-highest rounded-full transition-colors">
+<span class="material-symbols-outlined text-outline" data-icon="refresh">refresh</span>
+</button>
+</div>
+<!-- Color 3 -->
+<div class="flex items-center justify-between p-sm bg-surface-container-low rounded-lg border-b border-outline-variant">
+<div class="flex items-center gap-md">
+<input id="backgroundColor" oninput="updateColorPreview(this.value, 'bg')" type="color" value="#131315"/>
+<div>
+<p class="font-body-md text-on-surface">Fondo de Tarjeta</p>
+<p class="font-label-mono text-xs text-on-surface-variant uppercase" id="bgHex">#131315</p>
+</div>
+</div>
+<button class="p-xs hover:bg-surface-container-highest rounded-full transition-colors">
+<span class="material-symbols-outlined text-outline" data-icon="refresh">refresh</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Card Logic -->
+<section class="entrance-reveal stagger-3 glass-card p-lg rounded-xl flex flex-col gap-md">
+<h3 class="font-label-mono text-primary text-xs uppercase tracking-widest">Configuración de Recompensa</h3>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-lg">
+<div class="flex flex-col gap-sm">
+<label class="text-sm text-on-surface-variant px-xs">Meta de Sellos</label>
+<div class="luminescent-border rounded-lg bg-surface-container-low flex items-center px-md py-sm">
+<span class="material-symbols-outlined text-outline mr-md" data-icon="military_tech">military_tech</span>
+<input class="bg-transparent border-none focus:ring-0 text-on-surface font-headline-md font-bold w-full" max="20" min="1" onchange="updateStamps(this.value)" type="number" value="10"/>
+</div>
+</div>
+<div class="flex flex-col gap-sm">
+<label class="text-sm text-on-surface-variant px-xs">Tipo de Recompensa</label>
+<select class="luminescent-border rounded-lg bg-surface-container-low border-none focus:ring-0 text-on-surface font-body-md px-md py-sm h-full cursor-pointer">
+<option>Café Gratis</option>
+<option>Descuento 20%</option>
+<option>Postre de Cortesía</option>
+<option>Bebida Grande Upgrade</option>
+</select>
+</div>
+</div>
+</section>
+</div>
+<!-- PREVIEW SECTION (STICKY) -->
+<div class="lg:col-span-5 order-1 lg:order-2">
+<div class="sticky top-24 flex flex-col gap-lg">
+<div class="entrance-reveal">
+<h3 class="font-label-mono text-primary text-xs uppercase tracking-widest mb-4">Vista Previa en Vivo</h3>
+<!-- THE NEW WALLET CARD -->
+<div class="relative w-full aspect-[1/1.4] rounded-2xl overflow-hidden wallet-card-shadow transition-all duration-500 bg-[#131315] border border-white/10 group cursor-default flex flex-col" id="cardPreview">
+<!-- Hero Background -->
+<div class="absolute inset-0 z-0 opacity-20">
+<img class="w-full h-full object-cover" id="heroPreview" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD3yYqA7uPWeJadEJ11ViOHrD3VqC_VOuTQUXDKtMb-s3DMHDEov61_vkbJ3Ku98LyJ9Xzfa3pmJki1DObd359lSlPZcaqDM_Q6J9VPreY-WRoPJPoLkJJZJGYKtg_RfK4zRDRUIAWleYfN9dKRAkzKgmt_c0yW4MW1pKxNkkm3Eg7p8YWmNbm9ut-c6qv7rDi74ExxwK5o2WhE6MQO5DF4O6DS3jxRE7lhzAPxniLFT5cLLFAO-Ss1"/>
+<div class="absolute inset-0 bg-gradient-to-b from-[#131315] via-transparent to-[#131315]"></div>
+</div>
+<!-- Content -->
+<div class="relative z-10 flex flex-col h-full p-lg">
+<!-- Top Section: Logo and Merchant -->
+<div class="flex flex-col items-center gap-xs mb-lg">
+<span class="text-white/60 font-label-mono text-[10px] uppercase tracking-widest">COMERCIO AFILIADO</span>
+<div class="w-16 h-16 rounded-full bg-white flex items-center justify-center p-sm shadow-[0_0_20px_rgba(255,255,255,0.2)] border-2 border-primary-container">
+<span class="material-symbols-outlined text-black text-3xl" data-icon="coffee">coffee</span>
+</div>
+<h4 class="font-headline-md text-white tracking-tight mt-2" id="merchantName">Artisan Roast</h4>
+</div>
+<!-- Grid Section: Stamps (2x5) -->
+<div class="grid grid-cols-5 gap-md mb-xl" id="stampsGrid">
+<!-- Stamps will be injected here by script -->
+</div>
+<!-- Info Section -->
+<div class="flex justify-between items-start mb-lg px-xs">
+<div class="flex flex-col">
+<span class="text-white/40 font-label-mono text-[10px] uppercase">NOMBRE</span>
+<span class="text-white font-headline-md text-lg" id="userName">Carlos</span>
+</div>
+<div class="flex flex-col items-end text-right">
+<span class="text-white/40 font-label-mono text-[10px] uppercase">DISPONIBLE</span>
+<span class="text-primary font-headline-md text-lg" id="availableRewards">0 premios</span>
+</div>
+</div>
+<!-- Bottom Section: QR Area -->
+<div class="mt-auto flex flex-col items-center">
+<div class="bg-white p-4 rounded-xl shadow-2xl mb-4 group-hover:scale-105 transition-transform duration-300">
+<span class="material-symbols-outlined text-black text-7xl" data-icon="qr_code_2" style="font-variation-settings: 'FILL' 1;">qr_code_2</span>
+</div>
+<p class="text-white/40 font-body-md text-xs italic" id="statusMessage">La tarjeta está inactiva</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Action Bar -->
+<div class="entrance-reveal stagger-2 flex flex-col gap-md mt-4">
+<button class="w-full bg-primary-container text-on-primary-container font-bold py-md rounded-xl tactile-scale hover-glow transition-all flex items-center justify-center gap-md">
+<span class="material-symbols-outlined" data-icon="check_circle">check_circle</span>
+                        Publicar Cambios
+                    </button>
+<button class="w-full bg-transparent border border-outline text-on-surface font-bold py-md rounded-xl tactile-scale transition-all flex items-center justify-center gap-md">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+                        Vista de Cliente
+                    </button>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile) -->
+<nav class="md:hidden fixed bottom-0 w-full z-50 flex justify-around items-center px-xs py-base pb-safe bg-surface-container dark:bg-surface-container-lowest shadow-sm rounded-t-xl h-20">
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-secondary-container">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-label-sm text-[10px] mt-1">Dashboard</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-primary-container dark:bg-primary text-on-primary-container dark:text-on-primary rounded-full px-5 py-1">
+<span class="material-symbols-outlined" data-icon="palette" style="font-variation-settings: 'FILL' 1;">palette</span>
+<span class="font-label-sm text-[10px] mt-1">Editor</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-secondary-container">
+<span class="material-symbols-outlined" data-icon="bar_chart">bar_chart</span>
+<span class="font-label-sm text-[10px] mt-1">Reportes</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-secondary-container">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-label-sm text-[10px] mt-1">Ajustes</span>
+</button>
+</nav>
+<script>
+    let currentTotal = 10;
+    let currentFilled = 7;
+
+    function renderStamps() {
+        const grid = document.getElementById('stampsGrid');
+        grid.innerHTML = '';
+        const primaryColor = document.getElementById('primaryColor').value;
+        
+        for (let i = 0; i < currentTotal; i++) {
+            const isFilled = i < currentFilled;
+            const stamp = document.createElement('div');
+            stamp.className = 'aspect-square rounded-full flex items-center justify-center stamp-stagger border transition-all duration-300';
+            stamp.style.animationDelay = (i * 0.05) + 's';
+            
+            if (isFilled) {
+                stamp.classList.add('bg-primary-container', 'border-transparent');
+                stamp.style.backgroundColor = primaryColor;
+                stamp.style.boxShadow = `0 0 12px ${primaryColor}66`;
+                stamp.innerHTML = `<span class="material-symbols-outlined text-on-primary-container text-sm" style="font-variation-settings: 'FILL' 1;">verified</span>`;
+            } else {
+                stamp.classList.add('bg-white/5', 'border-white/10');
+                stamp.innerHTML = `<div class="w-1.5 h-1.5 rounded-full bg-white/20"></div>`;
+            }
+            grid.appendChild(stamp);
+        }
+    }
+
+    function updateColorPreview(val, target) {
+        const card = document.getElementById('cardPreview');
+        
+        if (target === 'primary') {
+            document.getElementById('primaryHex').innerText = val.toUpperCase();
+            renderStamps();
+        } else if (target === 'secondary') {
+            document.getElementById('secondaryHex').innerText = val.toUpperCase();
+        } else if (target === 'bg') {
+            card.style.backgroundColor = val;
+            document.getElementById('bgHex').innerText = val.toUpperCase();
+        }
+    }
+
+    function updateStamps(val) {
+        currentTotal = parseInt(val) || 10;
+        renderStamps();
+    }
+
+    // Initial Render
+    renderStamps();
+
+    // Micro-interaction for file uploaders
+    document.querySelectorAll('.luminescent-border').forEach(el => {
+        el.addEventListener('mousedown', () => {
+            el.classList.add('scale-95');
+        });
+        el.addEventListener('mouseup', () => {
+            el.classList.remove('scale-95');
+        });
+    });
+</script>
+</body></html>

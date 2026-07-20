@@ -1,0 +1,315 @@
+<!DOCTYPE html><html class="dark" lang="es" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport">
+<title>FM Lealtad - Escanear</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&amp;family=Hanken+Grotesk:wght@400;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-container": "#87d2b0",
+                    "surface-variant": "#353534",
+                    "surface-container-highest": "#353534",
+                    "secondary-container": "#005c42",
+                    "surface-tint": "#ffb77c",
+                    "on-primary-fixed-variant": "#6d3900",
+                    "outline-variant": "#544337",
+                    "on-background": "#e5e2e1",
+                    "on-primary-fixed": "#2e1500",
+                    "on-secondary-fixed": "#002115",
+                    "on-secondary-fixed-variant": "#00513a",
+                    "secondary": "#8bd6b4",
+                    "inverse-primary": "#904d00",
+                    "on-error": "#690005",
+                    "on-tertiary-container": "#493c7b",
+                    "on-tertiary-fixed-variant": "#4a3d7c",
+                    "surface-bright": "#393939",
+                    "surface": "#131313",
+                    "on-primary-container": "#6c3900",
+                    "on-error-container": "#ffdad6",
+                    "secondary-fixed": "#a6f2cf",
+                    "on-tertiary-fixed": "#1e0e4e",
+                    "on-surface": "#e5e2e1",
+                    "inverse-surface": "#e5e2e1",
+                    "primary-fixed": "#ffdcc2",
+                    "tertiary-container": "#baabf2",
+                    "surface-container-high": "#2a2a2a",
+                    "on-primary": "#4d2700",
+                    "secondary-fixed-dim": "#8bd6b4",
+                    "outline": "#a28d7d",
+                    "inverse-on-surface": "#313030",
+                    "error": "#ffb4ab",
+                    "on-secondary": "#003827",
+                    "primary-fixed-dim": "#ffb77c",
+                    "tertiary": "#d5c9ff",
+                    "background": "#131313",
+                    "primary-container": "#ff9d42",
+                    "surface-container": "#201f1f",
+                    "tertiary-fixed": "#e7deff",
+                    "error-container": "#93000a",
+                    "surface-container-lowest": "#0e0e0e",
+                    "on-tertiary": "#332664",
+                    "on-surface-variant": "#dac2b1",
+                    "tertiary-fixed-dim": "#ccbeff",
+                    "primary": "#ffc495",
+                    "surface-container-low": "#1c1b1b",
+                    "surface-dim": "#131313"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xs": "8px",
+                    "lg": "48px",
+                    "md": "24px",
+                    "gutter": "16px",
+                    "sm": "16px",
+                    "margin-mobile": "20px",
+                    "base": "4px",
+                    "margin-desktop": "64px"
+            },
+            "fontFamily": {
+                    "headline-lg": ["Outfit"],
+                    "headline-lg-mobile": ["Outfit"],
+                    "display-lg": ["Outfit"],
+                    "body-md": ["Hanken Grotesk"],
+                    "label-sm": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["28px", {"lineHeight": "36px", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #131313;
+            color: #ffffff;
+            font-family: 'Hanken Grotesk', sans-serif;
+            overflow: hidden;
+        }
+
+        .scanning-line {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #8bd6b4, transparent);
+            box-shadow: 0 0 15px #8bd6b4;
+            width: 100%;
+            position: absolute;
+            animation: scan 3s linear infinite;
+        }
+
+        @keyframes scan {
+            0% { top: 0%; }
+            50% { top: 100%; }
+            100% { top: 0%; }
+        }
+
+        .glass-card {
+            background: rgba(30, 30, 30, 0.4);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(139, 214, 180, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+        }
+
+        .liquid-gradient-border {
+            background: linear-gradient(135deg, #8bd6b4 0%, #d5c9ff 100%);
+            padding: 1px;
+            border-radius: 2rem;
+        }
+
+        .camera-overlay {
+            background: rgba(0, 0, 0, 0.7);
+            clip-path: polygon(0% 0%, 0% 100%, 15% 100%, 15% 30%, 85% 30%, 85% 70%, 15% 70%, 15% 100%, 100% 100%, 100% 0%);
+        }
+
+        .bottom-sheet-transition {
+            transition: transform 0.4s cubic-bezier(0.33, 1, 0.68, 1);
+        }
+
+        .pulse-emerald {
+            animation: pulse-emerald 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse-emerald {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+    </style>
+</head>
+<body class="bg-background min-h-screen flex flex-col items-center">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/20 shadow-sm flex justify-between items-center px-margin-mobile h-16">
+<div class="flex items-center gap-xs">
+<span class="material-symbols-outlined text-primary">wallet</span>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-surface tracking-tight">Escanear</h1>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant hover:opacity-80 transition-opacity active:scale-95 transition-transform">account_circle</button>
+</header>
+<!-- Main Viewport (Scanner) -->
+<main class="relative w-full h-screen overflow-hidden">
+<!-- Mock Camera Background -->
+<div class="absolute inset-0 z-0">
+<div class="w-full h-full bg-background"></div>
+</div>
+<!-- Camera Framing Overlay -->
+<div class="absolute inset-0 z-10 bg-black/60">
+<!-- Cutout logic implemented via flex centering and a specific width/height container -->
+<div class="flex flex-col items-center justify-center h-full w-full">
+<div class="relative w-72 h-72 border-2 border-white/20 rounded-xl overflow-hidden"><!-- Scanner Corner Accents -->
+<div class="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-secondary rounded-tl-lg"></div>
+<div class="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-secondary rounded-tr-lg"></div>
+<div class="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-secondary rounded-bl-lg"></div>
+<div class="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-secondary rounded-br-lg"></div>
+<!-- Simulated QR Code Image -->
+<div class="absolute inset-0 flex items-center justify-center p-md">
+    <div class="w-full h-full bg-white/5 rounded-lg flex items-center justify-center border border-white/10 shadow-[0_0_30px_rgba(139,214,180,0.1)]">
+        <span class="material-symbols-outlined text-white text-[120px] opacity-80">qr_code_2</span>
+    </div>
+</div>
+<!-- Animated Scan Line (Laser Effect) -->
+<div class="absolute top-0 left-0 w-full h-1 bg-secondary shadow-[0_0_15px_#8bd6b4] scanning-line z-10"></div>
+<!-- Glow Overlay -->
+<div class="absolute inset-0 bg-gradient-to-b from-secondary/5 to-transparent pointer-events-none"></div></div>
+<p class="mt-md font-label-sm text-label-sm text-white/60 tracking-widest uppercase">Alinea el código QR</p>
+</div>
+</div>
+<!-- Feedback Overlay: Error State (Hidden by default) -->
+<div class="hidden absolute top-24 left-1/2 -translate-x-1/2 z-40 w-[90%] max-w-sm" id="errorOverlay">
+<div class="bg-error-container/20 border border-error/50 backdrop-blur-xl rounded-lg px-md py-sm flex items-center gap-sm">
+<span class="material-symbols-outlined text-error">error</span>
+<p class="font-body-md text-body-md text-white">Código no válido para este comercio</p>
+</div>
+</div>
+<!-- Client Found Bottom Sheet -->
+<div class="fixed bottom-0 left-0 w-full z-50 transform bottom-sheet-transition translate-y-0" id="clientSheet">
+<div class="mx-margin-mobile mb-gutter">
+<div class="liquid-gradient-border shadow-2xl">
+<div class="glass-card rounded-[1.95rem] p-md flex flex-col gap-md">
+<!-- Pull Handle -->
+<div class="w-12 h-1 bg-white/20 rounded-full self-center mb-xs"></div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-sm">
+<div class="w-12 h-12 rounded-full overflow-hidden border border-white/20">
+<img class="w-full h-full object-cover" data-alt="Close-up portrait of a friendly professional man named Daniel Garcia with short dark hair and a neat beard, smiling softly. The lighting is sophisticated and moody, with teal and lavender rim lighting that matches a luxury dark-mode app aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBAWQ3nnB1QgLKeobGWSSq-JDvNyJKArKh7zqNUWgE2NPioRtKqI4d7knJlpIbCoBMwQG9ZunWAJD9LLpbRj_YwEGQE3Dft9GKJfz_PXUNNL7ukGavRSXfA6HATQPX7SxOV49JdlD-GaAe_-XGMwwBiTOXWh2JffS8cA_NPBkTWVnzNJ0iJ13uLznHzs6bs7cT85OQiI8WAp9Fjj37NDTayrXS3SFiNosIi4_pXWEAhyS1M7zSMOlhw">
+</div>
+<div>
+<h3 class="font-headline-lg-mobile text-headline-lg-mobile text-white font-bold">Daniel García</h3>
+<p class="font-label-sm text-label-sm text-secondary tracking-wide uppercase">Cliente Platinum</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-headline-lg text-headline-lg text-white font-bold">4/10</span>
+<p class="font-label-sm text-label-sm text-white/50">Sellos acumulados</p>
+</div>
+</div>
+<!-- Progress Bar Visual -->
+<div class="w-full bg-white/5 h-2 rounded-full overflow-hidden flex gap-0.5">
+<div class="h-full bg-secondary w-[40%]"></div>
+<div class="h-full bg-white/10 flex-1"></div>
+</div>
+<div class="flex flex-col gap-sm mt-xs">
+<button class="w-full bg-[#F5F5F0] text-[#131313] font-bold py-4 rounded-xl active:scale-95 transition-transform flex items-center justify-center gap-xs" onclick="applyStamp()">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">add_circle</span>
+<span class="font-body-md text-body-md">+1 Sello</span>
+</button>
+<div class="opacity-0 transition-opacity flex justify-center py-xs" id="undoAction">
+<button class="text-on-surface-variant font-label-sm text-label-sm underline decoration-on-surface-variant/30 underline-offset-4 hover:text-white transition-colors">
+                                    Deshacer acción
+                                </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="h-20 w-full bg-transparent"></div> <!-- Spacer for Nav Bar -->
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 rounded-t-xl bg-surface/90 backdrop-blur-2xl border-t border-outline-variant/10 shadow-[0_-4px_20px_rgba(0,0,0,0.4)] flex justify-around items-center h-20 px-2 pb-safe">
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-sm text-label-sm">Summary</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined">straighten</span>
+<span class="font-label-sm text-label-sm">Rules</span>
+</button>
+<button class="flex flex-col items-center justify-center text-secondary bg-secondary-container/20 rounded-xl px-3 py-1 active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">qr_code_scanner</span>
+<span class="font-label-sm text-label-sm">Scan</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined">redeem</span>
+<span class="font-label-sm text-label-sm">Rewards</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-sm text-label-sm">Users</span>
+</button>
+</nav>
+<script>
+        // Simulation logic for UX flow
+        document.addEventListener('DOMContentLoaded', () => {
+            const sheet = document.getElementById('clientSheet');
+            const error = document.getElementById('errorOverlay');
+
+            // Simulate a scan success after 2 seconds
+            setTimeout(() => {
+                sheet.classList.remove('translate-y-full');
+                sheet.classList.add('translate-y-0');
+            }, 2000);
+
+            // Simulation function for applying a stamp
+            window.applyStamp = function() {
+                const undo = document.getElementById('undoAction');
+                undo.style.opacity = '1';
+                
+                // Visual feedback on button
+                const btn = event.currentTarget;
+                const originalContent = btn.innerHTML;
+                btn.innerHTML = '<span class="material-symbols-outlined animate-spin">refresh</span><span>Procesando...</span>';
+                btn.disabled = true;
+
+                setTimeout(() => {
+                    btn.innerHTML = '<span class="material-symbols-outlined">check_circle</span><span>¡Completado!</span>';
+                    btn.classList.replace('bg-[#F5F5F0]', 'bg-secondary');
+                    
+                    // Reset after few seconds
+                    setTimeout(() => {
+                        undo.style.opacity = '0';
+                        btn.innerHTML = originalContent;
+                        btn.classList.replace('bg-secondary', 'bg-[#F5F5F0]');
+                        btn.disabled = false;
+                        
+                        // Optionally hide sheet to simulate flow end
+                        // sheet.classList.add('translate-y-full');
+                    }, 3000);
+                }, 1200);
+            };
+
+            // To show error state (manual trigger for demo purposes)
+            window.showError = function() {
+                error.classList.remove('hidden');
+                setTimeout(() => {
+                    error.classList.add('hidden');
+                }, 4000);
+            };
+        });
+    </script>
+
+
+
+</body></html>

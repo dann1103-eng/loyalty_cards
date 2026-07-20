@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es-SV"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>FM Lealtad - Merchant Panel</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&amp;family=Hanken+Grotesk:wght@400;600&amp;family=Geist+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error-container": "#93000a",
+                        "on-secondary": "#003827",
+                        "on-tertiary-fixed": "#1e0e4e",
+                        "on-background": "#e5e2e1",
+                        "secondary-container": "#005c42",
+                        "on-tertiary-fixed-variant": "#4a3d7c",
+                        "on-primary-fixed": "#2e1500",
+                        "on-surface": "#e5e2e1",
+                        "secondary": "#8bd6b4",
+                        "tertiary-fixed": "#e7deff",
+                        "surface-container-low": "#1c1b1b",
+                        "surface-dim": "#131313",
+                        "on-secondary-fixed-variant": "#00513a",
+                        "tertiary": "#d5c9ff",
+                        "outline-variant": "#544337",
+                        "on-primary-container": "#6c3900",
+                        "tertiary-container": "#baabf2",
+                        "inverse-on-surface": "#313030",
+                        "inverse-primary": "#904d00",
+                        "secondary-fixed": "#a6f2cf",
+                        "surface-container-high": "#2a2a2a",
+                        "error": "#ffb4ab",
+                        "surface": "#131313",
+                        "primary": "#ffc495",
+                        "primary-fixed-dim": "#ffb77c",
+                        "background": "#121212",
+                        "on-primary-fixed-variant": "#6d3900",
+                        "on-error": "#690005",
+                        "primary-fixed": "#ffdcc2",
+                        "on-surface-variant": "#dac2b1",
+                        "tertiary-fixed-dim": "#ccbeff",
+                        "primary-container": "#ff9d42",
+                        "surface-container-highest": "#353534",
+                        "inverse-surface": "#e5e2e1",
+                        "surface-bright": "#393939",
+                        "surface-variant": "#353534",
+                        "on-tertiary-container": "#493c7b",
+                        "surface-container": "#201f1f",
+                        "surface-container-lowest": "#0e0e0e",
+                        "on-tertiary": "#332664",
+                        "secondary-fixed-dim": "#8bd6b4",
+                        "on-primary": "#4d2700",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-container": "#87d2b0",
+                        "outline": "#a28d7d",
+                        "surface-tint": "#ffb77c",
+                        "on-secondary-fixed": "#002115"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "1rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "lg": "48px",
+                        "gutter": "16px",
+                        "xs": "8px",
+                        "md": "24px",
+                        "base": "4px",
+                        "margin-mobile": "20px",
+                        "sm": "16px",
+                        "margin-desktop": "64px"
+                    },
+                    "fontFamily": {
+                        "headline-lg-mobile": ["Outfit"],
+                        "label-sm": ["Hanken Grotesk"],
+                        "headline-lg": ["Outfit"],
+                        "body-md": ["Hanken Grotesk"],
+                        "display-lg": ["Outfit"],
+                        "mono": ["Geist Mono", "monospace"]
+                    },
+                    "fontSize": {
+                        "headline-lg-mobile": ["28px", {"lineHeight": "36px", "fontWeight": "600"}],
+                        "label-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #121212;
+            color: #e5e2e1;
+            font-family: 'Hanken Grotesk', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .glass-layer {
+            background: rgba(30, 30, 30, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        
+        /* Smooth Transitions */
+        * {
+            transition: all 200ms ease-in-out;
+        }
+
+        /* Metric Card Interactions */
+        .metric-card {
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease;
+        }
+        .metric-card:hover, .metric-card:active {
+            transform: scale(1.02) translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+            z-index: 40 !important;
+        }
+
+        /* Tactile Scale Down */
+        .btn-tactile:active {
+            transform: scale(0.95);
+        }
+
+        /* QR Pulse Animation */
+        @keyframes subtle-glow {
+            0%, 100% { box-shadow: 0 0 0px rgba(255, 255, 255, 0); }
+            50% { box-shadow: 0 0 25px rgba(255, 255, 255, 0.3); }
+        }
+        .qr-pulse {
+            animation: subtle-glow 3s infinite ease-in-out;
+        }
+
+        /* Entrance Animations */
+        @keyframes slideUpFade {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-entrance {
+            opacity: 0;
+            animation: slideUpFade 0.6s forwards ease-out;
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        body {
+            min-height: max(884px, 100dvh);
+        }
+    </style>
+</head>
+<body class="bg-background min-h-screen pb-32 overflow-x-hidden">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-margin-mobile h-16 bg-background/80 dark:bg-background/80 backdrop-blur-xl animate-entrance" style="animation-delay: 0.1s;">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border border-outline/20">
+<img class="w-full h-full object-cover" data-alt="A professional circular profile photo of a merchant owner" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDgf_ysFbY2h0riHFkhWf1u_ndXTPtT11bl6bVOlp6ZhsGeRaVgE3-92CpNpGU2Ophqa6FuJR418cKS8iNDc8ZvQTDH_kfkHrWT9HNVIf69jLhteDgjdDiW8Ml0igC0j7sWlWx6Fbgjn6YuiAxPO7Hg0NJWKwSd9o2rPwaR8iR9OZXCyPFL05wYMFVpZO6VsfTNv5raRYYj2C6vc7Q8sx6fhaZGXj28FIce2E2Kw1rOHxwXEliTEtxi"/>
+</div>
+<span class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-background">FM Lealtad</span>
+</div>
+<button class="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container-high text-on-surface hover:opacity-80 btn-tactile">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</header>
+<main class="pt-24 px-margin-mobile max-w-lg mx-auto">
+<!-- Header Section -->
+<section class="mb-8 animate-entrance" style="animation-delay: 0.2s;">
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile text-on-background mb-2">Resumen del local</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Bienvenido de nuevo, Carlos. Aquí tienes el estado de tu programa hoy.</p>
+</section>
+<!-- Metric Cards -->
+<section class="relative mb-12 h-64 animate-entrance" style="animation-delay: 0.3s;">
+<!-- Card 2: Mint Green -->
+<div class="metric-card absolute top-10 left-0 w-full h-48 bg-secondary rounded-lg p-6 flex flex-col justify-between shadow-lg rotate-[-2deg] z-10">
+<div class="flex justify-between items-start text-on-secondary">
+<span class="font-label-sm text-label-sm uppercase tracking-widest">Total de Sellos</span>
+<span class="material-symbols-outlined">auto_awesome</span>
+</div>
+<div>
+<h2 class="font-mono text-5xl font-bold text-on-secondary">942</h2>
+<p class="font-label-sm text-label-sm text-on-secondary/80 mt-1 uppercase">Sellos marcados</p>
+</div>
+</div>
+<!-- Card 1: Orange/Gold -->
+<div class="metric-card absolute top-0 left-0 w-full h-48 bg-primary rounded-lg p-6 flex flex-col justify-between shadow-2xl rotate-[1deg] z-20">
+<div class="flex justify-between items-start text-on-primary">
+<span class="font-label-sm text-label-sm uppercase tracking-widest">Lealtad del Cliente</span>
+<span class="material-symbols-outlined">groups</span>
+</div>
+<div>
+<h2 class="font-mono text-5xl font-bold text-on-primary">89</h2>
+<p class="font-label-sm text-label-sm text-on-primary/80 mt-1 uppercase">Clientes registrados</p>
+</div>
+</div>
+</section>
+<!-- Loyalty Program Status -->
+<section class="mb-8 animate-entrance" style="animation-delay: 0.4s;">
+<div class="bg-surface-container rounded-lg p-6 border border-outline-variant/10">
+<div class="flex justify-between items-center mb-4">
+<h3 class="font-headline-lg-mobile text-[20px] font-semibold">Tu Programa</h3>
+<span class="bg-secondary/20 text-secondary px-3 py-1 rounded-full font-label-sm text-[10px] tracking-widest">ACTIVO</span>
+</div>
+<div class="space-y-4">
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase mb-1">Tipo de tarjeta</p>
+<p class="font-body-md text-body-md text-on-surface font-semibold">Tarjeta de Sellos Digital</p>
+</div>
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase mb-1">Descripción</p>
+<p class="font-body-md text-body-md text-on-surface-variant">Acumula 10 sellos y obtén un descuento del 15% en tu próxima compra.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- QR Registration Section -->
+<section class="mb-8 animate-entrance" style="animation-delay: 0.5s;">
+<div class="bg-white rounded-lg p-6 flex flex-col items-center gap-6">
+<div class="text-center">
+<h3 class="font-headline-lg-mobile text-[18px] text-background font-bold mb-1">Mostralo en tu local</h3>
+<p class="text-zinc-500 font-label-sm text-[12px]">Tus clientes pueden escanear esto para registrarse</p>
+</div>
+<div class="w-48 h-48 bg-zinc-100 rounded-xl p-4 flex items-center justify-center qr-pulse">
+<div class="w-full h-full bg-zinc-200 rounded-md relative overflow-hidden">
+<img class="w-full h-full object-cover mix-blend-multiply opacity-80" data-alt="Minimalist QR code" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAkjWkL6DHfSdXdAKyyM_KEfuepusWh-bUvfFjkI8DlNvFqwC55Ifc3igz8Urt23UOqf3dlfPEGEf6tsPzOC61oQzvBGXOStuCemt2Ebtu_zW-g3CeRAvGFibuPy5xtpuhOIQe_YCJH_6Gnxiey0hvNlsSRBdtlchU13kqfnUv6whS3rb7QNX2jRTTxQb6AGKLVkxN4wzAmVxz3_0nBQVISGWlOX8uV6DWJFlTQ0z-lnqSfDDmjpQ9N"/>
+</div>
+</div>
+<div class="flex gap-4 w-full">
+<button class="flex-1 bg-background text-on-background py-3 rounded-full font-label-sm flex items-center justify-center gap-2 btn-tactile">
+<span class="material-symbols-outlined text-[18px]">print</span>
+                    Imprimir
+                </button>
+<button class="flex-1 bg-zinc-100 text-background py-3 rounded-full font-label-sm flex items-center justify-center gap-2 border border-zinc-200 btn-tactile">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                    Descargar
+                </button>
+</div>
+</div>
+</section>
+<!-- Quick Access Rows -->
+<section class="space-y-3">
+<h3 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest px-1 animate-entrance" style="animation-delay: 0.6s;">Gestión Rápida</h3>
+<a class="flex items-center justify-between p-4 bg-surface-container rounded-lg group btn-tactile animate-entrance" href="#" style="animation-delay: 0.65s;">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined">palette</span>
+</div>
+<span class="font-body-md font-semibold">Identidad visual</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-1">chevron_right</span>
+</a>
+<a class="flex items-center justify-between p-4 bg-surface-container rounded-lg group btn-tactile animate-entrance" href="#" style="animation-delay: 0.7s;">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-secondary/10 text-secondary flex items-center justify-center">
+<span class="material-symbols-outlined">rule</span>
+</div>
+<span class="font-body-md font-semibold">Reglas del programa</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-1">chevron_right</span>
+</a>
+<a class="flex items-center justify-between p-4 bg-surface-container rounded-lg group btn-tactile animate-entrance" href="#" style="animation-delay: 0.75s;">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-tertiary/10 text-tertiary flex items-center justify-center">
+<span class="material-symbols-outlined">card_giftcard</span>
+</div>
+<span class="font-body-md font-semibold">Recompensas activas</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-1">chevron_right</span>
+</a>
+<a class="flex items-center justify-between p-4 bg-surface-container rounded-lg group btn-tactile animate-entrance" href="#" style="animation-delay: 0.8s;">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-outline-variant/10 text-outline-variant flex items-center justify-center">
+<span class="material-symbols-outlined">person_search</span>
+</div>
+<span class="font-body-md font-semibold">Directorio de clientes</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-1">chevron_right</span>
+</a>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-gutter py-4 bg-surface-container dark:bg-surface-container/90 backdrop-blur-lg rounded-t-lg shadow-md animate-entrance" style="animation-delay: 0.9s;">
+<button class="flex flex-col items-center justify-center bg-primary text-on-primary rounded-full px-6 py-2 btn-tactile">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-label-sm text-label-sm">Dashboard</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-2 btn-tactile">
+<span class="material-symbols-outlined">credit_card</span>
+<span class="font-label-sm text-label-sm">Cards</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-2 btn-tactile">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-sm text-label-sm">Reports</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-2 btn-tactile">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-sm text-label-sm">Settings</span>
+</button>
+</nav>
+<div class="fixed top-0 left-0 w-full h-full -z-10 pointer-events-none opacity-20"></div>
+<script>
+    // Micro-interactions for metric cards - keeping standard hover behavior while adding priority handling
+    document.querySelectorAll('.metric-card').forEach(card => {
+        card.addEventListener('mouseenter', () => {
+            card.style.zIndex = '50';
+        });
+        card.addEventListener('mouseleave', () => {
+            if(card.classList.contains('bg-primary')) card.style.zIndex = '20';
+            else card.style.zIndex = '10';
+        });
+    });
+</script>
+</body></html>

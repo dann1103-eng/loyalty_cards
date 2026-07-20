@@ -23,6 +23,9 @@ export default function FormularioLoginComercio({ mensajeInicial }: { mensajeIni
       </div>
       <button className="btn-primary" type="submit" disabled={pendiente}>
         {pendiente ? 'Entrando…' : 'Entrar'}
+        {!pendiente && (
+          <span className="icono" style={{ fontSize: 20 }} aria-hidden="true">arrow_forward</span>
+        )}
       </button>
       {mensaje && (
         <p className="alerta" role="alert">

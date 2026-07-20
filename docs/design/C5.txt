@@ -1,0 +1,312 @@
+<!DOCTYPE html><html class="dark" lang="es" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>FM Lealtad - Premios</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&amp;family=Hanken+Grotesk:wght@400;500;600&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-fixed-variant": "#00513a",
+                    "tertiary": "#d5c9ff",
+                    "on-background": "#e5e2e1",
+                    "on-secondary-container": "#87d2b0",
+                    "secondary": "#8bd6b4",
+                    "secondary-container": "#005c42",
+                    "surface-container": "#201f1f",
+                    "surface-container-lowest": "#0e0e0e",
+                    "primary": "#ffc495",
+                    "on-primary-fixed": "#2e1500",
+                    "surface-dim": "#131313",
+                    "tertiary-fixed": "#e7deff",
+                    "surface-container-low": "#1c1b1b",
+                    "background": "#131313",
+                    "error": "#ffb4ab",
+                    "surface-bright": "#393939",
+                    "error-container": "#93000a",
+                    "secondary-fixed-dim": "#8bd6b4",
+                    "on-tertiary-fixed-variant": "#4a3d7c",
+                    "on-primary-container": "#6c3900",
+                    "outline": "#a28d7d",
+                    "surface-container-highest": "#353534",
+                    "primary-fixed": "#ffdcc2",
+                    "on-tertiary-fixed": "#1e0e4e",
+                    "surface-container-high": "#2a2a2a",
+                    "on-primary": "#4d2700",
+                    "surface": "#131313",
+                    "on-surface": "#e5e2e1",
+                    "on-error-container": "#ffdad6",
+                    "inverse-surface": "#e5e2e1",
+                    "on-tertiary-container": "#493c7b",
+                    "tertiary-fixed-dim": "#ccbeff",
+                    "on-surface-variant": "#dac2b1",
+                    "on-secondary": "#003827",
+                    "primary-fixed-dim": "#ffb77c",
+                    "on-primary-fixed-variant": "#6d3900",
+                    "tertiary-container": "#baabf2",
+                    "outline-variant": "#544337",
+                    "on-tertiary": "#332664",
+                    "secondary-fixed": "#a6f2cf",
+                    "inverse-on-surface": "#313030",
+                    "surface-variant": "#353534",
+                    "on-error": "#690005",
+                    "inverse-primary": "#904d00",
+                    "surface-tint": "#ffb77c",
+                    "on-secondary-fixed": "#002115",
+                    "primary-container": "#ff9d42",
+                    "bone-white": "#F5F5F0"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "base": "4px",
+                    "xs": "8px",
+                    "md": "24px",
+                    "gutter": "16px",
+                    "margin-desktop": "64px",
+                    "margin-mobile": "20px",
+                    "lg": "48px",
+                    "sm": "16px"
+            },
+            "fontFamily": {
+                    "headline-lg": ["Outfit"],
+                    "display-lg": ["Outfit"],
+                    "label-sm": ["Hanken Grotesk"],
+                    "headline-lg-mobile": ["Outfit"],
+                    "body-md": ["Hanken Grotesk"],
+                    "mono": ["JetBrains Mono"]
+            },
+            "fontSize": {
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["28px", {"lineHeight": "36px", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #131313;
+            color: #e5e2e1;
+            font-family: 'Hanken Grotesk', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .glass-header {
+            background: rgba(19, 19, 19, 0.8);
+            backdrop-filter: blur(20px);
+        }
+
+        .reward-card {
+            background: #1e1e1e;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .reward-card:hover {
+            transform: translateY(-4px);
+        }
+
+        .glow-orange { box-shadow: 0 0 20px -5px rgba(255, 157, 66, 0.3); border-color: rgba(255, 157, 66, 0.4); }
+        .glow-mint { box-shadow: 0 0 20px -5px rgba(139, 214, 180, 0.3); border-color: rgba(139, 214, 180, 0.4); }
+        .glow-lavender { box-shadow: 0 0 20px -5px rgba(213, 201, 255, 0.3); border-color: rgba(213, 201, 255, 0.4); }
+
+        .form-input {
+            background: #1c1b1b;
+            border: 1px solid #544337;
+            border-radius: 1rem;
+            transition: border-color 0.2s ease;
+        }
+
+        .form-input:focus {
+            border-color: #ffc495;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(255, 196, 149, 0.1);
+        }
+
+        .bone-button {
+            background-color: #F5F5F0;
+            color: #121212;
+            box-shadow: 0 4px 15px rgba(245, 245, 240, 0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .bone-button:active {
+            transform: scale(0.96);
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body class="pb-32">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 glass-header flex justify-between items-center px-margin-mobile h-16">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-2xl">grid_view</span>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-white" style="color: rgb(245, 245, 240);">Premios</h1>
+</div>
+<div class="w-10 h-10 rounded-full bg-surface-container-highest border border-outline-variant overflow-hidden flex items-center justify-center">
+<img class="w-full h-full object-cover" data-alt="A close-up portrait of a professional-looking merchant in their 30s, smiling warmly at the camera. The setting is a modern, minimalist cafe with soft, ambient lighting and high-tech digital displays in the background. The overall aesthetic is clean, premium, and trustworthy, using a deep charcoal and vibrant orange color palette." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCEJs-chKO62HlC79Fj1rvNpRhUBw5rMdWc5n7xdRoKqECEeZyZfkCamEJA8zj-pPblXhMVYyQJP3hpRD2ytvFb3oEWTpS9s2qgETnV78OwEvW_j5Cv6Zb8MLu00psEfOzafGnz1_E44rpZMwY1nn-B_tmaS23OtYqjGwfWpARSqsJEhygfjvgKvivXJhITbi9QeFay3DYsPXwFylziToKjh296s9dgPfMQf79rX41oq9o3bOvjTBZa">
+</div>
+</header>
+<main class="mt-20 px-margin-mobile max-w-2xl mx-auto space-y-md">
+<!-- Create Reward Form Section -->
+<section class="bg-surface-container-low p-md rounded-lg border border-white/5">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-md">Nuevo Premio</h2>
+<form class="space-y-sm" onsubmit="event.preventDefault();">
+<div class="grid grid-cols-1 gap-sm">
+<div>
+<label class="block text-label-sm font-label-sm text-on-surface-variant mb-xs ml-1">NOMBRE DEL PREMIO</label>
+<input class="w-full form-input py-3 px-4 text-white placeholder-outline-variant rounded-xl" placeholder="Ej. Café Gratis" type="text">
+</div>
+<div class="grid grid-cols-2 gap-sm">
+<div>
+<label class="block text-label-sm font-label-sm text-on-surface-variant mb-xs ml-1">COSTO (PUNTOS)</label>
+<input class="w-full form-input py-3 px-4 text-white font-mono placeholder-outline-variant rounded-xl" placeholder="500" type="number">
+</div>
+<div>
+<label class="block text-label-sm font-label-sm text-on-surface-variant mb-xs ml-1">TIPO</label>
+<select class="w-full form-input py-3 px-4 text-white appearance-none rounded-xl">
+<option>Producto</option>
+<option>Descuento %</option>
+<option>Servicio</option>
+<option>Otro</option>
+</select>
+</div>
+</div>
+<div>
+<label class="block text-label-sm font-label-sm text-on-surface-variant mb-xs ml-1">DESCRIPCIÓN</label>
+<textarea class="w-full form-input py-3 px-4 text-white placeholder-outline-variant rounded-xl" placeholder="Describe lo que el cliente recibe..." rows="2"></textarea>
+</div>
+</div>
+<button class="w-full bone-button py-4 rounded-xl font-bold text-md mt-4 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">add_circle</span>
+                    Crear Premio
+                </button>
+</form>
+</section>
+<!-- Active Rewards Catalog -->
+<section class="space-y-sm">
+<div class="flex justify-between items-center mb-xs">
+<h2 class="text-label-sm font-label-sm text-on-surface-variant tracking-widest uppercase">Premios Activos</h2>
+<span class="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full">3 totales</span>
+</div>
+<!-- Reward Item 1 -->
+<div class="reward-card glow-orange p-md rounded-lg flex justify-between items-center group">
+<div class="flex items-center gap-md">
+<div class="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-3xl" style="font-variation-settings: 'FILL' 1;">coffee</span>
+</div>
+<div>
+<h3 class="font-bold text-lg text-white">Café de Especialidad</h3>
+<p class="text-sm text-on-surface-variant">Cualquier bebida caliente de 12oz</p>
+<div class="mt-2 font-mono text-primary text-sm font-bold">500 PTS</div>
+</div>
+</div>
+<button class="px-4 py-2 rounded-full border border-outline-variant text-on-surface-variant text-sm hover:bg-error/10 hover:text-error hover:border-error transition-colors">
+                    Desactivar
+                </button>
+</div>
+<!-- Reward Item 2 -->
+<div class="reward-card glow-mint p-md rounded-lg flex justify-between items-center">
+<div class="flex items-center gap-md">
+<div class="w-14 h-14 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-3xl" style="font-variation-settings: 'FILL' 1;">local_pizza</span>
+</div>
+<div>
+<h3 class="font-bold text-lg text-white">Pizza Familiar</h3>
+<p class="text-sm text-on-surface-variant">Válido para Pepperoni o Queso</p>
+<div class="mt-2 font-mono text-secondary text-sm font-bold">2,450 PTS</div>
+</div>
+</div>
+<button class="px-4 py-2 rounded-full border border-outline-variant text-on-surface-variant text-sm hover:bg-error/10 hover:text-error hover:border-error transition-colors">
+                    Desactivar
+                </button>
+</div>
+<!-- Reward Item 3 -->
+<div class="reward-card glow-lavender p-md rounded-lg flex justify-between items-center">
+<div class="flex items-center gap-md">
+<div class="w-14 h-14 rounded-xl bg-tertiary/10 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined text-3xl" style="font-variation-settings: 'FILL' 1;">percent</span>
+</div>
+<div>
+<h3 class="font-bold text-lg text-white">15% de Descuento</h3>
+<p class="text-sm text-on-surface-variant">En toda la cuenta (máx. $200)</p>
+<div class="mt-2 font-mono text-tertiary text-sm font-bold">1,200 PTS</div>
+</div>
+</div>
+<button class="px-4 py-2 rounded-full border border-outline-variant text-on-surface-variant text-sm hover:bg-error/10 hover:text-error hover:border-error transition-colors">
+                    Desactivar
+                </button>
+</div>
+<!-- Empty State Helper (Hidden by default) -->
+<div class="hidden flex flex-col items-center justify-center py-20 text-center space-y-4" id="empty-state">
+<div class="w-24 h-24 rounded-full bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-5xl text-outline-variant">redeem</span>
+</div>
+<div>
+<h3 class="font-bold text-xl">Sin premios aún</h3>
+<p class="text-on-surface-variant max-w-[240px]">Empieza creando tu primer beneficio para fidelizar a tus clientes.</p>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 bg-surface-container-lowest/90 backdrop-blur-xl flex justify-around items-center px-xs pb-4 pt-2 shadow-lg rounded-t-lg">
+<a class="flex flex-col items-center justify-center text-on-surface-variant active:scale-90 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-sm text-label-sm">Resumen</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant active:scale-90 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">rule</span>
+<span class="font-label-sm text-label-sm">Reglas</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant active:scale-90 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-sm text-label-sm">Clientes</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-xl px-4 py-1.5 active:scale-90 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">redeem</span>
+<span class="font-label-sm text-label-sm">Premios</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant active:scale-90 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-sm text-label-sm">Ajustes</span>
+</a>
+</nav>
+<script>
+        // Simple interaction for deactivate buttons to demonstrate state
+        document.querySelectorAll('button').forEach(btn => {
+            if (btn.innerText === 'Desactivar') {
+                btn.addEventListener('click', function() {
+                    if (confirm('¿Estás seguro de desactivar este premio? Se guardará en el historial.')) {
+                        this.closest('.reward-card').style.opacity = '0.5';
+                        this.closest('.reward-card').style.transform = 'scale(0.98)';
+                        this.innerText = 'Reactivar';
+                        this.classList.remove('hover:bg-error/10', 'hover:text-error', 'hover:border-error');
+                        this.classList.add('hover:bg-primary/10', 'hover:text-primary', 'hover:border-primary');
+                    }
+                });
+            }
+        });
+    </script>
+
+
+
+</body></html>
