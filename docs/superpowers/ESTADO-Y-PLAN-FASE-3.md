@@ -6,15 +6,24 @@
 >
 > Última actualización: **2026-07-17** (tarde).
 
-> **AL DÍA (2026-07-17, tarde):** Fase 3a (Tareas 1–16) **DESPLEGADA a producción** — `master` en
-> `804bc1e`, smoke test en prod OK (`/comercio/login` 200, `/comercio/panel` 307, `/admin/login` 200,
-> `/registro/cafeteria-piloto` 200). Cafetería Piloto quedó en **sellos, meta 10** (decisión del
-> usuario) → el pass real muestra "N de 10 sellos". Pase 1 de **rediseño** (sistema visual migrado a
-> OKLCH + escalas de elevación/espaciado, + `PRODUCT.md`/`DESIGN.md`) hecho en la rama
-> `redesign/impeccable-pass-1`, **NO desplegado** — espera tu revisión; el font display (Fraunces) y
-> el rediseño por página quedaron propuestos para tu OK. **Pendiente tuyo:** borrar el usuario de Auth
-> `soporte@fomcomsolutions.com` (typo, contraseña que se filtró al chat) en Studio, y aplicar la
-> migración `0006` cuando arranquemos el **portal del cliente** (plan aparte, sin empezar).
+> **AL DÍA (2026-07-20): TODO EN PRODUCCIÓN.** La visión original del usuario está 100% operativa
+> en `loyalty-cards-rose.vercel.app` (`master` = `2055fee`, 120 pruebas verdes):
+> - **Rediseño Stitch dark** (paleta Stitch, un solo blanco #F5F5F0, Outfit/Hanken/Geist Mono) en
+>   TODAS las superficies. Specs de diseño: `docs/design/STITCH-DESIGN.md` (+ C1-C7.txt de Stitch).
+> - **Panel comercio** completo: resumen con métricas + QR de registro descargable, editor de marca
+>   con preview total en vivo (colores + imágenes + grilla de sellos), reglas, recompensas,
+>   **Clientes** (buscador + QR por cliente) y **Escanear** (cámara jsqr → +sellos/puntos → CANJE
+>   con guard de saldo; fallback manual y ruta ?token= desde Clientes).
+> - **Panel FM**: lista con conteo de clientes, form con preview en vivo, clientes+QR por comercio.
+> - **Portal del cliente** `/mi-tarjeta` (PWA instalable, rate limit 10/15min por IP, migración 0006).
+> - **Pass de Apple**: grilla de sellos VISUAL en el strip (next/og, zona segura anti-recorte) o
+>   franja del comercio (strip_url) o banda de marca; push automático a los passes al cambiar
+>   tipo/branding (notificarCambioComercio) y al acreditar/canjear.
+> - **Endpoint de puntos PROTEGIDO** (401 sin sesión de dueño; scope por comercio). Ledger en
+>   transacciones_puntos y canjes desde el día 1.
+> - **Pendiente del usuario:** borrar el usuario de Auth `soporte@fomcomsolutions.com` (typo,
+>   contraseña filtrada) en Studio. **Siguiente frente natural:** Google Wallet (pausado), cuentas
+>   de cajero (rol ya existe), y limpieza automática de intentos_consulta_portal.
 
 ---
 
