@@ -6,8 +6,8 @@ import { usePathname } from 'next/navigation';
 // Nav inferior móvil del panel del dueño (diseño C2/C3). En desktop se oculta por CSS.
 const ENLACES = [
   { href: '/comercio/panel', icono: 'dashboard', etiqueta: 'Resumen' },
+  { href: '/comercio/escanear', icono: 'qr_code_scanner', etiqueta: 'Escanear' },
   { href: '/comercio/branding', icono: 'palette', etiqueta: 'Marca' },
-  { href: '/comercio/reglas', icono: 'rule', etiqueta: 'Reglas' },
   { href: '/comercio/recompensas', icono: 'redeem', etiqueta: 'Premios' },
   { href: '/comercio/clientes', icono: 'group', etiqueta: 'Clientes' },
 ] as const;

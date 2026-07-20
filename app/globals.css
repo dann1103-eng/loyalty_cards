@@ -1166,3 +1166,32 @@ a {
   cursor: pointer;
   text-decoration: underline;
 }
+
+/* ---------- escáner del cajero (/comercio/escanear) ---------- */
+.escaner-marco {
+  position: relative;
+  background: var(--superficie-1);
+  border: 1px solid var(--linea);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.escaner-video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  background: var(--superficie-0);
+}
+.escaner-guia {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(62%, 260px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -55%);
+  border: 2px solid rgba(255, 196, 149, 0.85);
+  border-radius: 18px;
+  box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  animation: qr-pulso 3s infinite ease-in-out;
+}

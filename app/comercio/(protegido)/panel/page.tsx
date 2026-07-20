@@ -7,6 +7,7 @@ import { TIPOS_TARJETA } from '@/lib/comercios/guardarComercio';
 export const dynamic = 'force-dynamic';
 
 const ATAJOS = [
+  { href: '/comercio/escanear', icono: 'qr_code_scanner', tono: 'acento', titulo: 'Escanear tarjeta', sub: 'Sumá sellos/puntos o canjeá premios' },
   { href: '/comercio/branding', icono: 'palette', tono: 'acento', titulo: 'Identidad visual', sub: 'Colores, imágenes y sellos' },
   { href: '/comercio/reglas', icono: 'rule', tono: 'menta', titulo: 'Reglas del programa', sub: 'Cómo se ganan los puntos/sellos' },
   { href: '/comercio/recompensas', icono: 'redeem', tono: 'acento', titulo: 'Recompensas activas', sub: 'Catálogo de premios canjeables' },
