@@ -26,10 +26,18 @@ export interface StripsPass {
 function grillaSellos(datos: DatosStrip, escala: number) {
   const meta = datos.selloMeta ?? 10;
   const llenos = Math.min(datos.puntos, meta);
-  const filas = meta > 10 ? 2 : 1;
+  // Con más de 6 sellos se parte en 2 filas: círculos más grandes y legibles que una sola fila
+  // apretada, y menos ancho total expuesto al recorte.
+  const filas = meta > 6 ? 2 : 1;
   const porFila = Math.ceil(meta / filas);
-  // El círculo se achica para que la fila más larga siempre quepa en 375pt de ancho.
-  const diametro = Math.min(filas === 1 ? 52 : 40, Math.floor((375 - 32 - (porFila - 1) * 10) / porFila)) * escala;
+  // ZONA SEGURA: Wallet escala la franja al ancho del dispositivo con recorte (aspect-fill), y
+  // cuánto corta varía por modelo — visto en iPhone real: círculos de las puntas partidos a la
+  // mitad. Los sellos se confinan al centro con márgenes anchos (56pt por lado, ~30% total) para
+  // sobrevivir cualquier recorte razonable.
+  const margenLateral = 56;
+  const gap = 8;
+  const diametro =
+    Math.min(filas === 1 ? 40 : 34, Math.floor((375 - margenLateral * 2 - (porFila - 1) * gap) / porFila)) * escala;
   const sellos = Array.from({ length: meta }, (_, i) => i);
 
   return {
@@ -42,14 +50,14 @@ function grillaSellos(datos: DatosStrip, escala: number) {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 8 * escala,
+        gap: 7 * escala,
         background: datos.colorFondo,
       },
       children: Array.from({ length: filas }, (_, f) => ({
         type: 'div',
         key: `fila-${f}`,
         props: {
-          style: { display: 'flex', gap: 10 * escala },
+          style: { display: 'flex', gap: 8 * escala },
           children: sellos.slice(f * porFila, (f + 1) * porFila).map((i) => ({
             type: 'div',
             key: `sello-${i}`,
