@@ -1,5 +1,10 @@
 # DESIGN.md — FM Lealtad
 
+> **⚠️ SUPERSEDIDO para el rediseño (2026-07-17):** Daniel decidió resetear la paleta y dejar que
+> Google Stitch la proponga. La fuente de verdad del rediseño es
+> [docs/design/STITCH-DESIGN.md](docs/design/STITCH-DESIGN.md). Este archivo documenta el sistema
+> "cafetería" que sigue VIVO en producción hasta que el rediseño se apruebe y fusione.
+
 > Sistema visual, documentado desde el código actual (`app/globals.css`) y **elevado** en el pase 1
 > de rediseño (rama `redesign/impeccable-pass-1`, 2026-07-17). La identidad se conserva; se refina
 > hacia un acabado más premium. Ver `PRODUCT.md` para el porqué.
