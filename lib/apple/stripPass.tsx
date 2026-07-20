@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og';
+import { stopsDifuminado } from './difuminadoFranja';
 
 // Composición de la FRANJA (strip) del pass con next/og — el "pipeline de composición de
 // imágenes" que la Fase 3 no tenía: llegó gratis con los íconos del portal (PWA). Tres casos:
@@ -22,6 +23,9 @@ export interface DatosStrip {
   // Foto de fondo de la franja (hero_url): la grilla/banda se compone ENCIMA con un oscurecido
   // para que sellos y número sigan legibles. Sin foto, el fondo es el color del pass.
   heroUrl: string | null;
+  // Cuánto se funde esa foto hacia el color de la tarjeta en los bordes (comercios.difuminado_franja,
+  // migración 0007). Ver stopsDifuminado(): 'ninguno' = corte seco, sin gradiente.
+  difuminadoFranja: string;
 }
 
 export interface StripsPass {
@@ -36,7 +40,7 @@ export interface StripsPass {
 function capasDeFondo(datos: DatosStrip, escala: number, heroDataUrl: string | null) {
   if (!heroDataUrl) return [];
   const capaLlena = { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' };
-  return [
+  const capas = [
     {
       type: 'img',
       props: {
@@ -50,26 +54,35 @@ function capasDeFondo(datos: DatosStrip, escala: number, heroDataUrl: string | n
       type: 'div',
       props: { style: { ...capaLlena, background: 'rgba(0, 0, 0, 0.45)' } },
     },
-    // Difuminado vertical (arriba/abajo) y horizontal (izquierda/derecha) hacia el fondo del pass.
-    {
-      type: 'div',
-      props: {
-        style: {
-          ...capaLlena,
-          background: `linear-gradient(180deg, ${datos.colorFondo} 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 78%, ${datos.colorFondo} 100%)`,
-        },
-      },
-    },
-    {
-      type: 'div',
-      props: {
-        style: {
-          ...capaLlena,
-          background: `linear-gradient(90deg, ${datos.colorFondo} 0%, rgba(0,0,0,0) 14%, rgba(0,0,0,0) 86%, ${datos.colorFondo} 100%)`,
-        },
-      },
-    },
   ];
+
+  // Difuminado configurable por el dueño (nivel elegido en /comercio/branding). 'ninguno' →
+  // stopsDifuminado devuelve null → la foto queda con corte seco (sin las dos capas de abajo).
+  const stops = stopsDifuminado(datos.difuminadoFranja);
+  if (stops) {
+    capas.push(
+      {
+        type: 'div',
+        props: {
+          style: {
+            ...capaLlena,
+            background: `linear-gradient(180deg, ${datos.colorFondo} 0%, rgba(0,0,0,0) ${stops.v[0]}%, rgba(0,0,0,0) ${stops.v[1]}%, ${datos.colorFondo} 100%)`,
+          },
+        },
+      },
+      {
+        type: 'div',
+        props: {
+          style: {
+            ...capaLlena,
+            background: `linear-gradient(90deg, ${datos.colorFondo} 0%, rgba(0,0,0,0) ${stops.h[0]}%, rgba(0,0,0,0) ${stops.h[1]}%, ${datos.colorFondo} 100%)`,
+          },
+        },
+      },
+    );
+  }
+
+  return capas;
 }
 
 function grillaSellos(datos: DatosStrip, escala: number, iconoDataUrl: string | null, heroDataUrl: string | null) {

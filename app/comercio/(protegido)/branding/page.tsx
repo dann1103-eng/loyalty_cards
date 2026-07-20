@@ -12,7 +12,7 @@ export default async function PaginaBranding() {
   const supabase = createServiceClient();
   const { data: c } = await supabase
     .from('comercios')
-    .select('nombre, tipo_tarjeta, color_fondo, color_texto, color_label, sello_meta, logo_url, strip_url, hero_url, sello_icono_url')
+    .select('nombre, tipo_tarjeta, color_fondo, color_texto, color_label, sello_meta, logo_url, strip_url, hero_url, sello_icono_url, difuminado_franja')
     .eq('id', comercioId)
     .maybeSingle();
 
@@ -55,6 +55,7 @@ export default async function PaginaBranding() {
           color_texto: c.color_texto ?? 'rgb(245, 245, 240)',
           color_label: c.color_label ?? 'rgb(255, 157, 66)',
           sello_meta: c.sello_meta != null ? String(c.sello_meta) : '',
+          difuminado_franja: c.difuminado_franja,
         }}
         urls={{ logo: c.logo_url, hero: c.hero_url, selloIcono: c.sello_icono_url }}
         subidas={imagenes.map(([campo, etiqueta, url]) => (

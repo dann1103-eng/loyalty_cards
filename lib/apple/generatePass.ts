@@ -27,6 +27,7 @@ export interface DatosPass {
   selloIconoUrl: string | null;
   heroUrl: string | null;
   logoUrl: string | null;
+  difuminadoFranja: string;
 }
 
 export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
@@ -75,6 +76,7 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
     stripUrl: datos.stripUrl,
     selloIconoUrl: datos.selloIconoUrl,
     heroUrl: datos.heroUrl,
+    difuminadoFranja: datos.difuminadoFranja,
   });
   if (strips) {
     pass.addBuffer('strip.png', strips.s1);

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { validarColorRgb } from '../comercios/validarColorRgb';
+import { NIVELES_DIFUMINADO } from '../apple/difuminadoFranja';
 
 export interface DatosBranding {
   color_fondo: string;
@@ -8,6 +9,10 @@ export interface DatosBranding {
   color_label: string;
   // null = el comercio no usa sellos, o el dueño aún no configuró la meta. La BD exige > 0 o null.
   sello_meta: number | null;
+  // Cuánto se funde la foto de fondo de la franja hacia el color de la tarjeta. Uno de
+  // NIVELES_DIFUMINADO (migración 0007) — misma constante que valida el pass real, así el
+  // <select> del formulario y este check nunca pueden divergir.
+  difuminado_franja: string;
 }
 
 export type ResultadoBranding = { ok: true } | { ok: false; error: string };
@@ -36,6 +41,12 @@ export async function guardarBranding(
     return { ok: false, error: 'La meta de sellos debe ser un número entero mayor que cero.' };
   }
 
+  if (!(NIVELES_DIFUMINADO as readonly string[]).includes(datos.difuminado_franja)) {
+    // Mismo motivo que sello_meta/tipo_tarjeta en otros formularios: sin esto, un valor inválido
+    // cae en el 23514 de la BD y el dueño solo ve "No se pudo guardar el branding".
+    return { ok: false, error: 'El nivel de difuminado no es válido.' };
+  }
+
   const { error } = await supabase
     .from('comercios')
     .update({
@@ -43,6 +54,7 @@ export async function guardarBranding(
       color_texto: colores[1][1],
       color_label: colores[2][1],
       sello_meta: datos.sello_meta,
+      difuminado_franja: datos.difuminado_franja,
     })
     .eq('id', comercioId)
     .select('id')

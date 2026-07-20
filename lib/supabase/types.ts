@@ -7,6 +7,7 @@
 //   - supabase/migrations/0004_licencia_fecha_y_comentario.sql (licencia_activa_desde a date; no cambia tipos de TS)
 //   - supabase/migrations/0005_tipo_tarjeta_y_sellos.sql (columnas tipo_tarjeta/sello_icono_url/sello_meta en comercios)
 //   - supabase/migrations/0006_intentos_consulta_portal.sql (tabla intentos_consulta_portal, rate limit del portal)
+//   - supabase/migrations/0007_difuminado_franja.sql (columna difuminado_franja en comercios)
 //
 // Hasta que `supabase gen types` esté cableado (requiere auth del CLI), este archivo se
 // mantiene a mano: si llega una migración nueva, hay que actualizarlo en el mismo commit.
@@ -38,6 +39,7 @@ export type Database = {
           tipo_tarjeta: string;
           sello_icono_url: string | null;
           sello_meta: number | null;
+          difuminado_franja: string;
         };
         Insert: {
           id?: string;
@@ -58,6 +60,7 @@ export type Database = {
           tipo_tarjeta?: string;
           sello_icono_url?: string | null;
           sello_meta?: number | null;
+          difuminado_franja?: string;
         };
         Update: {
           id?: string;
@@ -78,6 +81,7 @@ export type Database = {
           tipo_tarjeta?: string;
           sello_icono_url?: string | null;
           sello_meta?: number | null;
+          difuminado_franja?: string;
         };
         Relationships: [];
       };

@@ -18,6 +18,7 @@ function datosBase() {
     selloIconoUrl: null,
     heroUrl: null,
     logoUrl: null,
+    difuminadoFranja: 'medio',
   };
 }
 
@@ -128,5 +129,26 @@ describe('generarPassApple', () => {
     const zip = await JSZip.loadAsync(buffer);
     const guardado = Buffer.from(await zip.file('strip.png')!.async('nodebuffer'));
     expect(guardado.equals(esperado)).toBe(true);
+  });
+
+  it('el nivel de difuminado queda conectado al pass: "ninguno" y "fuerte" con la misma foto producen strips distintos', async () => {
+    // Prueba de integración (no solo unitaria de stopsDifuminado): confirma que
+    // DatosPass.difuminadoFranja realmente llega hasta el PNG rasterizado, no que se ignora en
+    // algún punto del cableado entre generatePass → stripPass.
+    const conFoto = {
+      ...datosBase(),
+      puntos: 3,
+      tipoTarjeta: 'puntos',
+      selloMeta: null,
+      stripUrl: null,
+      heroUrl: `data:image/png;base64,${PNG_1PX_B64}`,
+    };
+
+    const sinDifuminar = await generarPassApple({ ...conFoto, serialNumber: 'test-difum-ninguno', qrToken: 'd1', difuminadoFranja: 'ninguno' });
+    const difuminado = await generarPassApple({ ...conFoto, serialNumber: 'test-difum-fuerte', qrToken: 'd2', difuminadoFranja: 'fuerte' });
+
+    const strip1 = Buffer.from(await (await JSZip.loadAsync(sinDifuminar)).file('strip.png')!.async('nodebuffer'));
+    const strip2 = Buffer.from(await (await JSZip.loadAsync(difuminado)).file('strip.png')!.async('nodebuffer'));
+    expect(strip1.equals(strip2)).toBe(false);
   });
 });

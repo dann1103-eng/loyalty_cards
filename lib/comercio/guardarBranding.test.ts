@@ -32,16 +32,18 @@ describe('guardarBranding', () => {
       color_texto: 'rgb(255, 255, 255)',
       color_label: 'rgb(200, 200, 200)',
       sello_meta: 10,
+      difuminado_franja: 'fuerte',
     });
 
     expect(res.ok).toBe(true);
     const { data } = await supabase
       .from('comercios')
-      .select('color_fondo, sello_meta')
+      .select('color_fondo, sello_meta, difuminado_franja')
       .eq('id', id)
       .single();
     expect(data!.color_fondo).toBe('rgb(10, 20, 30)');
     expect(data!.sello_meta).toBe(10);
+    expect(data!.difuminado_franja).toBe('fuerte');
   });
 
   it('rechaza un color con formato inválido', async () => {
@@ -51,6 +53,7 @@ describe('guardarBranding', () => {
       color_texto: 'rgb(255, 255, 255)',
       color_label: 'rgb(255, 255, 255)',
       sello_meta: null,
+      difuminado_franja: 'medio',
     });
 
     expect(res.ok).toBe(false);
@@ -64,10 +67,25 @@ describe('guardarBranding', () => {
       color_texto: 'rgb(255, 255, 255)',
       color_label: 'rgb(255, 255, 255)',
       sello_meta: 0,
+      difuminado_franja: 'medio',
     });
 
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/meta|sellos/i);
+  });
+
+  it('rechaza un nivel de difuminado que no es uno de los 4 válidos', async () => {
+    const id = await crearComercio();
+    const res = await guardarBranding(supabase, id, {
+      color_fondo: 'rgb(10, 20, 30)',
+      color_texto: 'rgb(255, 255, 255)',
+      color_label: 'rgb(255, 255, 255)',
+      sello_meta: null,
+      difuminado_franja: 'extremo',
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/difuminado/i);
   });
 
   it('falla si el comercio ya no existe, en vez de reportar éxito', async () => {
@@ -77,6 +95,7 @@ describe('guardarBranding', () => {
       color_texto: 'rgb(255, 255, 255)',
       color_label: 'rgb(255, 255, 255)',
       sello_meta: null,
+      difuminado_franja: 'medio',
     });
 
     expect(res.ok).toBe(false);

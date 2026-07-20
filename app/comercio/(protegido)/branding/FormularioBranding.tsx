@@ -3,6 +3,14 @@
 import { useState, type ChangeEvent, type ReactNode } from 'react';
 import { useActionState } from 'react';
 import { accionGuardarBranding, type EstadoBranding } from './actions';
+import { NIVELES_DIFUMINADO, stopsDifuminado, type NivelDifuminado } from '@/lib/apple/difuminadoFranja';
+
+const ETIQUETAS_DIFUMINADO: Record<NivelDifuminado, string> = {
+  ninguno: 'Ninguno (corte seco)',
+  sutil: 'Sutil',
+  medio: 'Medio',
+  fuerte: 'Fuerte',
+};
 
 type Props = {
   nombreComercio: string;
@@ -12,6 +20,7 @@ type Props = {
     color_texto: string;
     color_label: string;
     sello_meta: string;
+    difuminado_franja: string;
   };
   urls: {
     logo: string | null;
@@ -59,12 +68,16 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
     color_texto: inicial.color_texto,
     color_label: inicial.color_label,
     sello_meta: inicial.sello_meta,
+    difuminado_franja: inicial.difuminado_franja,
   });
 
   const cambiarTexto =
     (campo: 'color_fondo' | 'color_texto' | 'color_label' | 'sello_meta') =>
     (e: ChangeEvent<HTMLInputElement>) =>
       setValores((v) => ({ ...v, [campo]: e.target.value }));
+
+  const cambiarDifuminado = (e: ChangeEvent<HTMLSelectElement>) =>
+    setValores((v) => ({ ...v, difuminado_franja: e.target.value }));
 
   const cambiarPicker =
     (campo: 'color_fondo' | 'color_texto' | 'color_label') =>
@@ -81,6 +94,9 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
 
   const meta = Number(valores.sello_meta) > 0 ? Math.min(20, Number(valores.sello_meta)) : 10;
   const llenos = Math.min(7, meta);
+  // Misma función que usa el pass real (lib/apple/stripPass.tsx): el preview y el pass NUNCA
+  // pueden mostrar un difuminado distinto para el mismo nivel elegido.
+  const stops = stopsDifuminado(valores.difuminado_franja);
 
   return (
     <div className="branding-grid">
@@ -117,8 +133,12 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
                 {/* eslint-disable-next-line @next/next/no-img-element -- vista previa simple */}
                 <img src={urls.hero} alt="" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                 <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} />
-                <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(180deg, ${fondo} 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 78%, ${fondo} 100%)` }} />
-                <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(90deg, ${fondo} 0%, rgba(0,0,0,0) 14%, rgba(0,0,0,0) 86%, ${fondo} 100%)` }} />
+                {stops && (
+                  <>
+                    <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(180deg, ${fondo} 0%, rgba(0,0,0,0) ${stops.v[0]}%, rgba(0,0,0,0) ${stops.v[1]}%, ${fondo} 100%)` }} />
+                    <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(90deg, ${fondo} 0%, rgba(0,0,0,0) ${stops.h[0]}%, rgba(0,0,0,0) ${stops.h[1]}%, ${fondo} 100%)` }} />
+                  </>
+                )}
               </>
             )}
             {esSellos ? (
@@ -246,6 +266,23 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
               />
             </div>
           )}
+
+          <div className="field">
+            <label htmlFor="difuminado_franja">Difuminado de la foto de fondo</label>
+            <select
+              id="difuminado_franja"
+              name="difuminado_franja"
+              value={valores.difuminado_franja}
+              onChange={cambiarDifuminado}
+            >
+              {NIVELES_DIFUMINADO.map((nivel) => (
+                <option key={nivel} value={nivel}>{ETIQUETAS_DIFUMINADO[nivel]}</option>
+              ))}
+            </select>
+            <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>
+              Solo se nota si subiste una foto de fondo de la franja. Mirá el cambio arriba, en vivo.
+            </p>
+          </div>
 
           <button className="btn-acento" type="submit" disabled={pendiente} style={{ marginTop: 6 }}>
             <span className="icono" style={{ fontSize: 20 }} aria-hidden="true">check_circle</span>

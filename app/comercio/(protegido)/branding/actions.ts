@@ -31,6 +31,7 @@ export async function accionGuardarBranding(
     color_label: String(formData.get('color_label') ?? ''),
     // '' → null; "12" → 12; "12a" → NaN, que guardarBranding rechaza con mensaje claro.
     sello_meta: montoMeta === '' ? null : Number(montoMeta),
+    difuminado_franja: String(formData.get('difuminado_franja') ?? 'medio'),
   });
 
   if (!res.ok) return { error: res.error };
