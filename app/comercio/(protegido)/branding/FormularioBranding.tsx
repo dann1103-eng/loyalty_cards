@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ChangeEvent, type ReactNode } from 'react';
+import { useState, useRef, useEffect, type ChangeEvent, type ReactNode } from 'react';
 import { useActionState } from 'react';
 import { accionGuardarBranding, type EstadoBranding } from './actions';
 import { NIVELES_DIFUMINADO, stopsDifuminado, type NivelDifuminado } from '@/lib/apple/difuminadoFranja';
@@ -78,6 +78,22 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
 
   const cambiarDifuminado = (e: ChangeEvent<HTMLSelectElement>) =>
     setValores((v) => ({ ...v, difuminado_franja: e.target.value }));
+
+  // BUG conocido de React 19 + Server Actions: al confirmar el submit, el <form> nativo se
+  // resetea (igual que un <form> HTML normal al enviarse) y el <select> queda mostrando el
+  // valor con el que se sirvió la página — el dato SÍ se guardó bien (verificado contra la BD:
+  // esto es solo un problema de DOM, no de persistencia). Los <input> de color no lo sufren
+  // porque React los reescribe en cada commit; el <select> solo se reescribe cuando su prop
+  // `value` CAMBIA entre renders, y acá no cambia (sigue siendo el mismo valor elegido). La
+  // solución: forzar un remount del <select> justo tras cada guardado exitoso, vía `key`.
+  const [claveSelect, setClaveSelect] = useState(0);
+  const pendienteAnteriorRef = useRef(false);
+  useEffect(() => {
+    if (pendienteAnteriorRef.current && !pendiente && estado && 'ok' in estado) {
+      setClaveSelect((n) => n + 1);
+    }
+    pendienteAnteriorRef.current = pendiente;
+  }, [pendiente, estado]);
 
   const cambiarPicker =
     (campo: 'color_fondo' | 'color_texto' | 'color_label') =>
@@ -270,6 +286,7 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
           <div className="field">
             <label htmlFor="difuminado_franja">Difuminado de la foto de fondo</label>
             <select
+              key={claveSelect}
               id="difuminado_franja"
               name="difuminado_franja"
               value={valores.difuminado_franja}
