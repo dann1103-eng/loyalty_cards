@@ -15,6 +15,9 @@ export interface DatosStrip {
   colorFondo: string;
   colorLabel: string;
   stripUrl: string | null;
+  // Ícono del sello subido por el comercio (sello_icono_url): se dibuja DENTRO de cada sello
+  // lleno. Si no hay (o su descarga falla), el sello lleno usa el punto interior de siempre.
+  selloIconoUrl: string | null;
 }
 
 export interface StripsPass {
@@ -23,7 +26,7 @@ export interface StripsPass {
   s3: Buffer; // 1125×369 (@3x)
 }
 
-function grillaSellos(datos: DatosStrip, escala: number) {
+function grillaSellos(datos: DatosStrip, escala: number, iconoDataUrl: string | null) {
   const meta = datos.selloMeta ?? 10;
   const llenos = Math.min(datos.puntos, meta);
   // Con más de 6 sellos se parte en 2 filas: círculos más grandes y legibles que una sola fila
@@ -72,21 +75,32 @@ function grillaSellos(datos: DatosStrip, escala: number) {
                 background: i < llenos ? datos.colorLabel : 'rgba(255, 255, 255, 0.07)',
                 border: `${2 * escala}px solid ${i < llenos ? datos.colorLabel : 'rgba(255, 255, 255, 0.35)'}`,
               },
-              // Punto interior del color del fondo en los llenos: lectura de "sello marcado"
-              // sin depender de íconos (satori no trae fuentes de íconos).
+              // Sello lleno: el ÍCONO del comercio si lo subió (como data URL, satori no
+              // resuelve URLs remotas por su cuenta); si no, el punto interior de siempre.
               children:
                 i < llenos
-                  ? [{
-                      type: 'div',
-                      props: {
-                        style: {
-                          width: Math.round(diametro * 0.3),
-                          height: Math.round(diametro * 0.3),
-                          borderRadius: 9999,
-                          background: datos.colorFondo,
-                        },
-                      },
-                    }]
+                  ? [
+                      iconoDataUrl
+                        ? {
+                            type: 'img',
+                            props: {
+                              src: iconoDataUrl,
+                              width: Math.round(diametro * 0.62),
+                              height: Math.round(diametro * 0.62),
+                            },
+                          }
+                        : {
+                            type: 'div',
+                            props: {
+                              style: {
+                                width: Math.round(diametro * 0.3),
+                                height: Math.round(diametro * 0.3),
+                                borderRadius: 9999,
+                                background: datos.colorFondo,
+                              },
+                            },
+                          },
+                    ]
                   : [],
             },
           })),
@@ -145,11 +159,27 @@ function bandaMarca(datos: DatosStrip, escala: number) {
   };
 }
 
-async function renderizar(datos: DatosStrip, escala: number): Promise<Buffer> {
+async function renderizar(datos: DatosStrip, escala: number, iconoDataUrl: string | null): Promise<Buffer> {
   const esSellos = datos.tipoTarjeta === 'sellos' && datos.selloMeta != null && datos.selloMeta > 0;
-  const jsx = esSellos ? grillaSellos(datos, escala) : bandaMarca(datos, escala);
+  const jsx = esSellos ? grillaSellos(datos, escala, iconoDataUrl) : bandaMarca(datos, escala);
   const img = new ImageResponse(jsx as React.ReactElement, { width: 375 * escala, height: 123 * escala });
   return Buffer.from(await img.arrayBuffer());
+}
+
+// Baja el ícono del sello y lo convierte a data URL para satori. Best-effort: si falla, la grilla
+// sale con el punto interior (nunca se rompe la franja por un ícono caído).
+async function iconoComoDataUrl(url: string | null): Promise<string | null> {
+  if (!url) return null;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`ícono de sello respondió ${res.status}`);
+    const tipo = res.headers.get('content-type') ?? 'image/png';
+    const buf = Buffer.from(await res.arrayBuffer());
+    return `data:${tipo};base64,${buf.toString('base64')}`;
+  } catch (error) {
+    console.warn('[apple] no se pudo bajar el ícono del sello; la grilla usa el punto:', error);
+    return null;
+  }
 }
 
 export async function componerStrips(datos: DatosStrip): Promise<StripsPass | null> {
@@ -161,7 +191,8 @@ export async function componerStrips(datos: DatosStrip): Promise<StripsPass | nu
       const buf = Buffer.from(await res.arrayBuffer());
       return { s1: buf, s2: buf, s3: buf };
     }
-    const [s1, s2, s3] = await Promise.all([1, 2, 3].map((e) => renderizar(datos, e)));
+    const icono = await iconoComoDataUrl(datos.selloIconoUrl);
+    const [s1, s2, s3] = await Promise.all([1, 2, 3].map((e) => renderizar(datos, e, icono)));
     return { s1, s2, s3 };
   } catch (error) {
     console.warn('[apple] no se pudo componer la franja; el pass sale sin strip:', error);

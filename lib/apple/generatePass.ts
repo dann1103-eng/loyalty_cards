@@ -24,6 +24,7 @@ export interface DatosPass {
   tipoTarjeta: string;
   selloMeta: number | null;
   stripUrl: string | null;
+  selloIconoUrl: string | null;
 }
 
 export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
@@ -65,6 +66,7 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
     colorFondo: datos.colorFondo,
     colorLabel: datos.colorLabel,
     stripUrl: datos.stripUrl,
+    selloIconoUrl: datos.selloIconoUrl,
   });
   if (strips) {
     pass.addBuffer('strip.png', strips.s1);

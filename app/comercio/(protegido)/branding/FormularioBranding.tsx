@@ -16,6 +16,7 @@ type Props = {
   urls: {
     logo: string | null;
     hero: string | null;
+    selloIcono: string | null;
   };
   /* Los formularios de subida (Server Actions aparte) se inyectan en la columna del editor. */
   subidas: ReactNode;
@@ -118,7 +119,12 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
                     }}
                   >
                     {i < llenos ? (
-                      <span className="icono icono-lleno" style={{ fontSize: 15, color: fondo }} aria-hidden="true">verified</span>
+                      urls.selloIcono ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- vista previa simple
+                        <img src={urls.selloIcono} alt="" aria-hidden="true" style={{ width: '62%', height: '62%', objectFit: 'contain' }} />
+                      ) : (
+                        <span className="icono icono-lleno" style={{ fontSize: 15, color: fondo }} aria-hidden="true">verified</span>
+                      )
                     ) : (
                       <span className="punto" />
                     )}

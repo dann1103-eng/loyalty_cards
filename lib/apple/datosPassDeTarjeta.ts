@@ -34,6 +34,7 @@ export async function datosPassDeTarjeta(
       tipoTarjeta: tarjeta.comercios.tipo_tarjeta,
       selloMeta: tarjeta.comercios.sello_meta,
       stripUrl: tarjeta.comercios.strip_url,
+      selloIconoUrl: tarjeta.comercios.sello_icono_url,
       webServiceURL: `${baseUrl}/api/apple`,
       authenticationToken: tarjeta.apple_auth_token,
     },

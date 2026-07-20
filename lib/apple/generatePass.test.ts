@@ -15,6 +15,7 @@ function datosBase() {
     colorLabel: 'rgb(255, 255, 255)',
     webServiceURL: 'https://example.com/api/apple',
     authenticationToken: '0123456789abcdef0123456789abcdef',
+    selloIconoUrl: null,
   };
 }
 

@@ -15,6 +15,7 @@
     "seed-fm": "tsx --conditions=react-server scripts/seed-usuario-fm.ts",
     "seed-bucket": "tsx --conditions=react-server scripts/seed-storage-bucket.ts",
     "seed-comercio": "tsx --conditions=react-server scripts/seed-usuario-comercio.ts",
+    "seed-demos": "tsx --conditions=react-server scripts/seed-demo-comercios.ts",
     "verify-schema": "tsx --conditions=react-server scripts/verify-schema.ts"
   },
   "dependencies": {
