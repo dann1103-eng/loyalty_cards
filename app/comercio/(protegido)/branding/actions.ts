@@ -102,3 +102,43 @@ export async function accionSubirImagen(
   revalidatePath('/comercio/branding');
   return { ok: true };
 }
+
+// Quita una imagen subida por error: vacía la columna, borra el archivo del bucket (best-effort)
+// y empuja la actualización a los passes (que ahora renderizan estas imágenes). El campo se valida
+// contra la lista blanca, igual que en la subida.
+export async function accionQuitarImagen(
+  campo: string,
+  _estadoPrevio: EstadoBranding,
+  _formData: FormData,
+): Promise<EstadoBranding> {
+  const { comercioId } = await verifyComercioOwner();
+
+  if (!(CAMPOS_IMAGEN as readonly string[]).includes(campo)) {
+    return { error: 'Campo de imagen no válido.' };
+  }
+
+  const supabase = createServiceClient();
+
+  const actualizacion = { [`${campo}_url`]: null } as Database['public']['Tables']['comercios']['Update'];
+  const { error: errorUpdate } = await supabase
+    .from('comercios')
+    .update(actualizacion)
+    .eq('id', comercioId)
+    .select('id')
+    .single();
+  if (errorUpdate) {
+    console.error('[comercio] no se pudo quitar la imagen:', errorUpdate);
+    return { error: 'No se pudo quitar la imagen.' };
+  }
+
+  // El archivo pudo subirse con cualquiera de las tres extensiones permitidas; borrar de más no
+  // falla (remove ignora rutas inexistentes) y es best-effort: la referencia en la BD ya no existe.
+  const rutas = ['png', 'jpg', 'webp'].map((ext) => rutaImagenComercio(comercioId, campo, ext));
+  const { error: errorStorage } = await supabase.storage.from(BUCKET).remove(rutas);
+  if (errorStorage) console.warn('[comercio] no se pudo borrar el archivo del bucket:', errorStorage);
+
+  await notificarCambioComercio(supabase, comercioId);
+
+  revalidatePath('/comercio/branding');
+  return { ok: true };
+}

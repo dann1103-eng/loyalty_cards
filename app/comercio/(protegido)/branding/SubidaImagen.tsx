@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useActionState } from 'react';
-import { accionSubirImagen, type EstadoBranding } from './actions';
+import { accionSubirImagen, accionQuitarImagen, type EstadoBranding } from './actions';
 
 export default function SubidaImagen({
   campo,
@@ -15,6 +15,10 @@ export default function SubidaImagen({
 }) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoBranding, FormData>(
     accionSubirImagen,
+    undefined,
+  );
+  const [estadoQuitar, ejecutarQuitar, pendienteQuitar] = useActionState<EstadoBranding, FormData>(
+    accionQuitarImagen.bind(null, campo),
     undefined,
   );
 
@@ -49,9 +53,9 @@ export default function SubidaImagen({
   const mostrada = previewLocal ?? urlActual;
 
   return (
-    <form className="subida-imagen" action={ejecutar}>
-      <input type="hidden" name="campo" value={campo} />
-      <div className="field">
+    <div className="subida-imagen">
+      <form action={ejecutar} className="field" style={{ flex: 1, minWidth: 0, marginBottom: 0 }}>
+        <input type="hidden" name="campo" value={campo} />
         <label htmlFor={`archivo-${campo}`}>{etiqueta}</label>
         {mostrada && (
           // eslint-disable-next-line @next/next/no-img-element -- vista previa simple, no vale next/image
@@ -65,14 +69,34 @@ export default function SubidaImagen({
           onChange={alElegir}
           required
         />
-      </div>
-      <button className="btn-borde" type="submit" disabled={pendiente}>
-        <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">{pendiente ? 'progress_activity' : 'upload'}</span>
-        {pendiente ? 'Subiendo…' : 'Volver a subir'}
-      </button>
-      {estado && 'error' in estado && (
-        <p className="alerta" role="alert">{estado.error}</p>
+        {pendiente && <p className="admin-fila-slug">Subiendo…</p>}
+        {estado && 'error' in estado && (
+          <p className="alerta" role="alert">{estado.error}</p>
+        )}
+        {estadoQuitar && 'error' in estadoQuitar && (
+          <p className="alerta" role="alert">{estadoQuitar.error}</p>
+        )}
+      </form>
+      {mostrada && (
+        <form
+          action={ejecutarQuitar}
+          onSubmit={(e) => {
+            if (!window.confirm(`¿Quitar ${etiqueta.toLowerCase()}? La tarjeta quedará sin esta imagen.`)) {
+              e.preventDefault();
+              return;
+            }
+            // Limpia también la vista previa local: si solo se había ELEGIDO un archivo (ya se
+            // sube solo, pero por si el quitar gana la carrera) no debe quedar el espejismo.
+            if (urlLocalRef.current) URL.revokeObjectURL(urlLocalRef.current);
+            urlLocalRef.current = null;
+            setPreviewLocal(null);
+          }}
+        >
+          <button className="admin-eliminar" type="submit" disabled={pendienteQuitar || pendiente}>
+            {pendienteQuitar ? 'Quitando…' : 'Quitar'}
+          </button>
+        </form>
       )}
-    </form>
+    </div>
   );
 }
