@@ -1,6 +1,7 @@
 import { PKPass } from 'passkit-generator';
 import path from 'node:path';
 import { requireEnv } from '@/lib/env';
+import { componerStrips } from './stripPass';
 
 function cargarCertificados() {
   return {
@@ -22,6 +23,7 @@ export interface DatosPass {
   authenticationToken: string;
   tipoTarjeta: string;
   selloMeta: number | null;
+  stripUrl: string | null;
 }
 
 export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
@@ -52,12 +54,36 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
 
   pass.type = 'storeCard';
 
-  // Sellos: el campo primario es TEXTO ("7 de 10 sellos"), no un número. Reutiliza el mismo
-  // puntos_actuales como contador; solo cambia cómo se muestra. Sin numberStyle (es string) y
-  // sin componentes/dependencias nuevas (spec §4.2, corregido tras revisión: este proyecto no
-  // tiene pipeline de composición de imágenes). Fallback al número si no hay meta configurada.
+  // Franja visual (best-effort, nunca rompe la emisión): la imagen del comercio si subió una;
+  // si no, para sellos una GRILLA de círculos llenos/vacíos compuesta con next/og, y para el
+  // resto una banda sutil con los colores de la marca. (Evolución del contrato original de la
+  // Fase 3, que era solo-texto porque entonces no había pipeline de imágenes.)
+  const strips = await componerStrips({
+    tipoTarjeta: datos.tipoTarjeta,
+    puntos: datos.puntos,
+    selloMeta: datos.selloMeta,
+    colorFondo: datos.colorFondo,
+    colorLabel: datos.colorLabel,
+    stripUrl: datos.stripUrl,
+  });
+  if (strips) {
+    pass.addBuffer('strip.png', strips.s1);
+    pass.addBuffer('strip@2x.png', strips.s2);
+    pass.addBuffer('strip@3x.png', strips.s3);
+  }
+
   const esSellos = datos.tipoTarjeta === 'sellos' && datos.selloMeta != null && datos.selloMeta > 0;
-  if (esSellos) {
+  if (esSellos && strips && !datos.stripUrl) {
+    // La grilla se VE en la franja; texto encima taparía los círculos (los primaryFields de un
+    // storeCard se dibujan sobre el strip). El contador baja a secondaryFields, debajo.
+    pass.secondaryFields.push({
+      key: 'puntos',
+      label: 'SELLOS',
+      value: `${datos.puntos} de ${datos.selloMeta}`,
+    });
+  } else if (esSellos) {
+    // Sin grilla (composición falló, o el comercio usa SU franja): el texto vuelve al campo
+    // primario — mismo fallback seguro de siempre.
     pass.primaryFields.push({
       key: 'puntos',
       label: 'SELLOS',
