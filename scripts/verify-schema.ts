@@ -8,7 +8,7 @@ import { createServiceClient } from '../lib/supabase/server';
 const TABLAS = [
   'comercios', 'usuarios_comercio', 'clientes', 'tarjetas',
   'reglas_puntos', 'recompensas', 'transacciones_puntos', 'canjes',
-  'apple_push_registrations', 'usuarios_fm',
+  'apple_push_registrations', 'usuarios_fm', 'intentos_consulta_portal',
 ] as const;
 
 async function main() {

@@ -6,6 +6,7 @@
 //   - supabase/migrations/0003_usuarios_fm_y_licencias.sql (tabla usuarios_fm + columnas licencia_* en comercios)
 //   - supabase/migrations/0004_licencia_fecha_y_comentario.sql (licencia_activa_desde a date; no cambia tipos de TS)
 //   - supabase/migrations/0005_tipo_tarjeta_y_sellos.sql (columnas tipo_tarjeta/sello_icono_url/sello_meta en comercios)
+//   - supabase/migrations/0006_intentos_consulta_portal.sql (tabla intentos_consulta_portal, rate limit del portal)
 //
 // Hasta que `supabase gen types` esté cableado (requiere auth del CLI), este archivo se
 // mantiene a mano: si llega una migración nueva, hay que actualizarlo en el mismo commit.
@@ -367,6 +368,24 @@ export type Database = {
           id?: string;
           auth_user_id?: string;
           email?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      intentos_consulta_portal: {
+        Row: {
+          id: string;
+          ip: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          ip: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          ip?: string;
           created_at?: string;
         };
         Relationships: [];
