@@ -16,6 +16,7 @@
     "seed-bucket": "tsx --conditions=react-server scripts/seed-storage-bucket.ts",
     "seed-comercio": "tsx --conditions=react-server scripts/seed-usuario-comercio.ts",
     "seed-demos": "tsx --conditions=react-server scripts/seed-demo-comercios.ts",
+    "seed-demo-owners": "tsx --conditions=react-server scripts/seed-demo-owners.ts",
     "verify-schema": "tsx --conditions=react-server scripts/verify-schema.ts"
   },
   "dependencies": {
