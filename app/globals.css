@@ -1043,3 +1043,126 @@ a {
   .nav-inferior { display: none; }
   .admin-shell { padding-bottom: 0; }
 }
+
+/* ---------- portal del cliente (/mi-tarjeta) ----------
+   Adaptado del plan del portal (escrito para el sistema café) a los tokens del sistema v2:
+   --line→--linea, --ink-soft→--texto-2, foam/cream→--superficie-2, --caramel→--acento,
+   verde canjeable→--menta. La estructura y las clases son las del plan. */
+.portal-saldo {
+  margin-top: 14px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.6rem;
+}
+.portal-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 8px;
+}
+.portal-subtitulo {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--texto-2);
+  margin: 0 0 8px;
+}
+.portal-cuentas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+.portal-cuenta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--superficie-2);
+  border: 1px solid var(--linea);
+  border-radius: var(--radius-field);
+  cursor: pointer;
+  color: var(--texto);
+  font-family: var(--font-body);
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+.portal-cuenta:active {
+  transform: scale(0.98);
+}
+.portal-cuenta-activa {
+  border-color: var(--acento);
+  box-shadow: var(--ring);
+}
+.portal-cuenta-nombre {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+.portal-cuenta-saldo {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--texto-2);
+}
+.portal-recompensas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.portal-recompensa {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 15px;
+  border: 1px solid var(--linea);
+  border-radius: var(--radius-field);
+  background: var(--superficie-1);
+}
+.portal-recompensa-nombre {
+  font-weight: 600;
+}
+.portal-recompensa-desc {
+  font-size: 0.82rem;
+  color: var(--texto-2);
+  margin-top: 2px;
+}
+.portal-recompensa-estado {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  white-space: nowrap;
+}
+.portal-canjeable {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--menta);
+}
+.portal-falta {
+  font-size: 0.78rem;
+  color: var(--texto-2);
+}
+.portal-costo {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--acento);
+}
+.portal-instalar {
+  margin-top: 20px;
+  padding: 16px 18px;
+  border: 1px dashed var(--linea-fuerte);
+  border-radius: var(--radius-field);
+}
+.portal-link {
+  align-self: flex-start;
+  margin-top: 6px;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--texto-2);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
