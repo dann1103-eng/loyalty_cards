@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { notificarCambioTarjeta } from '@/lib/apple/notificarCambioTarjeta';
+import { ownerDeSesion } from '@/lib/comercio/ownerDeSesion';
+import { acreditarPuntos } from '@/lib/comercio/acreditar';
 
 export const runtime = 'nodejs';
 
+// Fase 4: el endpoint del walking skeleton quedó PROTEGIDO. Antes era público (cualquiera con un
+// tarjetaId podía inflar puntos); ahora exige sesión de dueño y solo opera sobre tarjetas de SU
+// comercio. La lógica (ledger + saldo) vive en lib/comercio/acreditar.ts, compartida con el
+// escáner del panel. El curl manual del piloto ya no aplica: el flujo es /comercio/escanear.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ tarjetaId: string }> },
 ) {
   const { tarjetaId } = await params;
 
+  // Validación ANTES del auth: las reglas de formato son públicas (no filtran nada) y así los
+  // errores de cliente responden 400 sin costear consultas de sesión.
   let puntosDelta: unknown;
   try {
     ({ puntosDelta } = await request.json());
@@ -26,43 +34,21 @@ export async function POST(
     return NextResponse.json({ error: 'puntosDelta debe ser un entero positivo razonable' }, { status: 400 });
   }
 
+  const sesion = await ownerDeSesion();
+  if (!sesion) {
+    return NextResponse.json({ error: 'Requiere sesión de comercio' }, { status: 401 });
+  }
+
   const supabase = createServiceClient();
-
-  const { data: tarjeta, error: tarjetaError } = await supabase
-    .from('tarjetas')
-    .select('puntos_actuales')
-    .eq('id', tarjetaId)
-    .maybeSingle();
-  if (tarjetaError || !tarjeta) {
-    return NextResponse.json({ error: 'Tarjeta no encontrada' }, { status: 404 });
+  const res = await acreditarPuntos(supabase, sesion.comercioId, tarjetaId, puntosDelta);
+  if (!res.ok) {
+    const status = /no existe/i.test(res.error) ? 404 : 500;
+    return NextResponse.json({ error: res.error }, { status });
   }
 
-  // NOTA (diferido a Fase 3/4): este read-modify-write NO es atómico y la inserción del ledger
-  // + el update del saldo no comparten transacción. Con un solo cajero en el piloto el riesgo
-  // es nulo (concurrencia ~0) y la divergencia es recuperable (el ledger es la fuente de
-  // verdad). En Fase 3/4 se reemplaza por un RPC de Postgres `sumar_puntos` que hace insert +
-  // `update ... set puntos_actuales = puntos_actuales + delta returning` en un solo statement
-  // atómico. Ver review de calidad de la Tarea 11.
-  const nuevoSaldo = tarjeta.puntos_actuales + puntosDelta;
-
-  const { error: txError } = await supabase
-    .from('transacciones_puntos')
-    .insert({ tarjeta_id: tarjetaId, puntos_delta: puntosDelta });
-  if (txError) {
-    return NextResponse.json({ error: 'No se pudo registrar la transacción' }, { status: 500 });
-  }
-
-  const { error: updateError } = await supabase
-    .from('tarjetas')
-    .update({ puntos_actuales: nuevoSaldo })
-    .eq('id', tarjetaId);
-  if (updateError) {
-    return NextResponse.json({ error: 'No se pudo actualizar el saldo' }, { status: 500 });
-  }
-
-  // TODO(Fase 4): mover el push a segundo plano (p. ej. after() de next/server) para que la
-  // confirmación del cajero no espere a APNs. Hoy se await-ea, aceptable para el curl de Tarea 12.
+  // TODO(Fase 4+): mover el push a segundo plano (after() de next/server) para que la
+  // confirmación del cajero no espere a APNs.
   await notificarCambioTarjeta(supabase, tarjetaId);
 
-  return NextResponse.json({ puntosActuales: nuevoSaldo });
+  return NextResponse.json({ puntosActuales: res.puntosActuales });
 }
