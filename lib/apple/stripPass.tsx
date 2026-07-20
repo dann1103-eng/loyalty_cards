@@ -30,9 +30,12 @@ export interface StripsPass {
   s3: Buffer; // 1125×369 (@3x)
 }
 
-// Capa de fondo compartida: foto (si hay) + velo oscuro para contraste, o el color liso del pass.
+// Capa de fondo compartida: foto (si hay) + velo oscuro para contraste + DIFUMINADO en los
+// bordes hacia el color del pass — la foto se funde con la tarjeta en vez de cortarse seca
+// (referencia del usuario: así lo hace la competencia). Sin foto no hace falta nada.
 function capasDeFondo(datos: DatosStrip, escala: number, heroDataUrl: string | null) {
   if (!heroDataUrl) return [];
+  const capaLlena = { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' };
   return [
     {
       type: 'img',
@@ -45,8 +48,25 @@ function capasDeFondo(datos: DatosStrip, escala: number, heroDataUrl: string | n
     },
     {
       type: 'div',
+      props: { style: { ...capaLlena, background: 'rgba(0, 0, 0, 0.45)' } },
+    },
+    // Difuminado vertical (arriba/abajo) y horizontal (izquierda/derecha) hacia el fondo del pass.
+    {
+      type: 'div',
       props: {
-        style: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0, 0, 0, 0.45)' },
+        style: {
+          ...capaLlena,
+          background: `linear-gradient(180deg, ${datos.colorFondo} 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 78%, ${datos.colorFondo} 100%)`,
+        },
+      },
+    },
+    {
+      type: 'div',
+      props: {
+        style: {
+          ...capaLlena,
+          background: `linear-gradient(90deg, ${datos.colorFondo} 0%, rgba(0,0,0,0) 14%, rgba(0,0,0,0) 86%, ${datos.colorFondo} 100%)`,
+        },
       },
     },
   ];

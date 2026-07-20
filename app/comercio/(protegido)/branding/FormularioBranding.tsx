@@ -84,67 +84,112 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
 
   return (
     <div className="branding-grid">
-      {/* -------- VISTA PREVIA EN VIVO (sticky en desktop) -------- */}
+      {/* -------- VISTA PREVIA EN VIVO (sticky en desktop) --------
+          Réplica de la ANATOMÍA REAL del pass de Apple (que es fija: logo arriba a la izquierda,
+          franja, campos debajo, QR al pie) — antes el preview inventaba un layout propio y no se
+          parecía a lo que llegaba al Wallet (observación del usuario). */}
       <div className="branding-preview reveal d1">
         <p className="titulo-seccion" style={{ marginBottom: 12 }}>Vista previa en vivo</p>
-        <div className="cardface" style={{ background: fondo, color: texto }}>
-          {urls.hero && (
-            // eslint-disable-next-line @next/next/no-img-element -- vista previa simple
-            <img className="cardface-fondo" src={urls.hero} alt="" aria-hidden="true" />
-          )}
-          <div className="cardface-top" style={{ color: label }}>
-            <span>Comercio afiliado</span>
-            <span>FM Lealtad</span>
-          </div>
-          <div className="cardface-logo">
+        <div
+          style={{
+            background: fondo,
+            color: texto,
+            borderRadius: 14,
+            overflow: 'hidden',
+            boxShadow: 'var(--shadow-3)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          {/* Cabecera: logo (o el nombre como logoText, igual que el pass real sin logo). */}
+          <div style={{ display: 'flex', alignItems: 'center', padding: '12px 14px', minHeight: 52 }}>
             {urls.logo ? (
               // eslint-disable-next-line @next/next/no-img-element -- vista previa simple
-              <img src={urls.logo} alt={`Logo de ${nombreComercio}`} />
+              <img src={urls.logo} alt={`Logo de ${nombreComercio}`} style={{ height: 34, maxWidth: 140, objectFit: 'contain' }} />
             ) : (
-              <span className="icono icono-lleno" style={{ color: '#111' }} aria-hidden="true">storefront</span>
+              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '1.05rem' }}>{nombreComercio}</span>
             )}
           </div>
-          <div className="cardface-name">{nombreComercio}</div>
 
-          {esSellos ? (
-            <>
-              <div className="sello-grid">
-                {Array.from({ length: meta }, (_, i) => (
-                  <div
-                    key={`${meta}-${i}`}
-                    className={`sello${i < llenos ? ' lleno' : ''}`}
-                    style={{
-                      animationDelay: `${i * 0.04}s`,
-                      ...(i < llenos ? { background: label, boxShadow: `0 0 12px ${hexDesdeRgb(label)}66` } : {}),
-                    }}
-                  >
-                    {i < llenos ? (
-                      urls.selloIcono ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- vista previa simple
-                        <img src={urls.selloIcono} alt="" aria-hidden="true" style={{ width: '62%', height: '62%', objectFit: 'contain' }} />
-                      ) : (
-                        <span className="icono icono-lleno" style={{ fontSize: 15, color: fondo }} aria-hidden="true">verified</span>
-                      )
-                    ) : (
-                      <span className="punto" />
-                    )}
-                  </div>
-                ))}
+          {/* Franja (aspecto real 375:123): foto + velo + difuminado a los bordes + grilla. */}
+          <div style={{ position: 'relative', width: '100%', aspectRatio: '375 / 123', overflow: 'hidden' }}>
+            {urls.hero && (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element -- vista previa simple */}
+                <img src={urls.hero} alt="" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} />
+                <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(180deg, ${fondo} 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 78%, ${fondo} 100%)` }} />
+                <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(90deg, ${fondo} 0%, rgba(0,0,0,0) 14%, rgba(0,0,0,0) 86%, ${fondo} 100%)` }} />
+              </>
+            )}
+            {esSellos ? (
+              <div style={{ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                {[0, 1].slice(0, meta > 6 ? 2 : 1).map((f) => {
+                  const porFila = Math.ceil(meta / (meta > 6 ? 2 : 1));
+                  return (
+                    <div key={f} style={{ display: 'flex', gap: 6 }}>
+                      {Array.from({ length: meta }, (_, i) => i)
+                        .slice(f * porFila, (f + 1) * porFila)
+                        .map((i) => (
+                          <div
+                            key={`${meta}-${i}`}
+                            className="sello"
+                            style={{
+                              width: meta > 6 ? 34 : 42,
+                              height: meta > 6 ? 34 : 42,
+                              animationDelay: `${i * 0.04}s`,
+                              ...(i < llenos
+                                ? { background: label, border: 'none', boxShadow: `0 0 10px ${hexDesdeRgb(label)}55` }
+                                : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.16)' }),
+                            }}
+                          >
+                            {urls.selloIcono ? (
+                              // eslint-disable-next-line @next/next/no-img-element -- vista previa simple
+                              <img
+                                src={urls.selloIcono}
+                                alt=""
+                                aria-hidden="true"
+                                style={{ width: '62%', height: '62%', objectFit: 'contain', opacity: i < llenos ? 1 : 0.32 }}
+                              />
+                            ) : i < llenos ? (
+                              <span style={{ width: '30%', height: '30%', borderRadius: 999, background: fondo }} />
+                            ) : (
+                              <span className="punto" />
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  );
+                })}
               </div>
-              <div className="cardface-points">
-                <b>{llenos} de {meta}</b>
-                <span style={{ color: label }}>sellos</span>
-              </div>
-            </>
-          ) : (
-            <div className="cardface-points">
-              <b>0</b>
-              <span style={{ color: label }}>Puntos</span>
+            ) : (
+              !urls.hero && (
+                <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', right: -40, top: -30, width: 180, height: 180, borderRadius: 999, background: label, opacity: 0.14 }} />
+                  <div style={{ position: 'absolute', right: 30, bottom: -60, width: 110, height: 110, borderRadius: 999, background: label, opacity: 0.08 }} />
+                </div>
+              )
+            )}
+          </div>
+
+          {/* Campo bajo la franja: igual que el pass (label + valor, a la izquierda). */}
+          <div style={{ padding: '12px 16px 4px' }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: label }}>
+              {esSellos ? 'Sellos' : 'Puntos'}
             </div>
-          )}
+            <div style={{ fontSize: '1.7rem', lineHeight: 1.2 }}>
+              {esSellos ? `${llenos} de ${meta}` : '0'}
+            </div>
+          </div>
+
+          {/* Zona del QR (siempre presente en el pass real). */}
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 0 20px' }}>
+            <div style={{ background: '#fff', borderRadius: 10, padding: 10, display: 'grid', placeItems: 'center' }}>
+              <span className="icono icono-lleno" style={{ fontSize: 64, color: '#111' }} aria-hidden="true">qr_code_2</span>
+            </div>
+          </div>
         </div>
         <p className="nota" style={{ textAlign: 'center' }}>
-          Maqueta ilustrativa: el pass real lo firma Apple con estos mismos colores.
+          Réplica del pass real: Apple define la estructura; vos definís colores, imágenes y sellos.
         </p>
       </div>
 

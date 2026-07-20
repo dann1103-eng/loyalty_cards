@@ -110,7 +110,9 @@ async function pngDe(img: ImageResponse): Promise<Buffer> {
   return Buffer.from(await img.arrayBuffer());
 }
 
-// Logo monograma: iniciales sobre el color de marca, con anillo del color de etiqueta.
+// Logo monograma con fondo TRANSPARENTE: en el pass real el logo se apoya directo sobre el color
+// de la tarjeta — un fondo sólido se veía como un cuadrote pegado cuando el dueño cambiaba el
+// color (visto en el piloto con Café Aurora en granate).
 function renderLogo(d: Demo): ImageResponse {
   return new ImageResponse(
     {
@@ -118,15 +120,15 @@ function renderLogo(d: Demo): ImageResponse {
       props: {
         style: {
           width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: d.fondo,
+          background: 'transparent',
         },
         children: [{
           type: 'div',
           props: {
             style: {
-              width: 400, height: 400, borderRadius: 9999, display: 'flex', alignItems: 'center',
-              justifyContent: 'center', border: `14px solid ${d.label}`,
-              color: d.texto, fontSize: 170, fontWeight: 700, fontFamily: 'sans-serif', letterSpacing: -6,
+              width: 440, height: 440, borderRadius: 9999, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', border: `16px solid ${d.label}`,
+              color: d.texto, fontSize: 180, fontWeight: 700, fontFamily: 'sans-serif', letterSpacing: -6,
             },
             children: d.iniciales,
           },
