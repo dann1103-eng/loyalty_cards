@@ -7,9 +7,14 @@ export default async function LayoutProtegido({ children }: { children: React.Re
   await verifyFmAdmin();
 
   return (
-    <div className="admin-shell">
+    <div className="admin-shell" style={{ paddingBottom: 0 }}>
       <header className="admin-top">
-        <span className="admin-marca">FM Lealtad</span>
+        <span className="admin-marca">
+          <span className="icono-circulo" aria-hidden="true" style={{ background: 'var(--acento-fuerte)', color: 'var(--sobre-acento)', width: 34, height: 34, minWidth: 34 }}>
+            <span className="icono icono-lleno" style={{ fontSize: 18 }}>shield_person</span>
+          </span>
+          FM Lealtad · Interno
+        </span>
         <form action={cerrarSesion}>
           <button className="admin-salir" type="submit">
             Salir

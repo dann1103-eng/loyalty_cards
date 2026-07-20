@@ -64,14 +64,26 @@ export default async function PaginaEditarComercio({
 
   return (
     <main className="admin-main">
-      <div className="admin-encabezado">
-        <h1 className="title" style={{ fontSize: '2rem', margin: 0 }}>
+      <div className="admin-encabezado reveal d1">
+        <h1 className="title" style={{ margin: 0 }}>
           {comercio.nombre}
         </h1>
         <Link className="admin-fila-slug" href="/admin/comercios">
           ← Volver
         </Link>
       </div>
+      <Link className="admin-fila reveal d2" href={`/admin/comercios/${id}/clientes`} style={{ marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <span className="icono-circulo menta" aria-hidden="true">
+            <span className="icono">group</span>
+          </span>
+          <div>
+            <div className="admin-fila-nombre">Clientes y tarjetas</div>
+            <div className="admin-fila-slug">Saldos y QR por cliente</div>
+          </div>
+        </div>
+        <span className="icono icono-chevron" aria-hidden="true">chevron_right</span>
+      </Link>
       <FormularioComercio accion={accion} inicial={inicial} textoBoton="Guardar cambios" esEdicion />
       <BotonEliminar accion={eliminar} nombre={comercio.nombre} />
     </main>

@@ -68,8 +68,26 @@ export default function FormularioComercio({
     (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setValores((v) => ({ ...v, [campo]: e.target.value }));
 
+  const esSellos = valores.tipo_tarjeta === 'sellos';
+
   return (
-    <form className="panel" action={ejecutar}>
+    <>
+      {/* Vista previa EN VIVO: los campos son controlados, así que la tarjeta reacciona al tipeo.
+          Un valor de color a medio escribir es inválido en CSS y el navegador simplemente lo
+          ignora (conserva el anterior) — no hace falta validar aquí. */}
+      <div className="cardface reveal d2" style={{ background: valores.color_fondo, color: valores.color_texto, maxWidth: 360, margin: '0 auto 22px' }}>
+        <div className="cardface-top" style={{ color: valores.color_label }}>
+          <span>Comercio afiliado</span>
+          <span>FM Lealtad</span>
+        </div>
+        <div className="cardface-name">{valores.nombre || 'Nombre del comercio'}</div>
+        <div className="cardface-points">
+          <b>{esSellos ? '0 de 10' : '0'}</b>
+          <span style={{ color: valores.color_label }}>{esSellos ? 'sellos' : 'Puntos'}</span>
+        </div>
+      </div>
+
+      <form className="panel" action={ejecutar} style={{ marginTop: 0 }}>
       <div className="field">
         <label htmlFor="nombre">Nombre</label>
         <input id="nombre" name="nombre" value={valores.nombre} onChange={cambiar('nombre')} required />
@@ -203,6 +221,7 @@ export default function FormularioComercio({
           {estado.error}
         </p>
       )}
-    </form>
+      </form>
+    </>
   );
 }
