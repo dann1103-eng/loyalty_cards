@@ -6,6 +6,7 @@ import { buscarTarjetaPorToken, acreditarPuntos } from '@/lib/comercio/acreditar
 import { canjearRecompensa } from '@/lib/comercio/canje';
 import { formatearSaldo } from '@/lib/portal/buscarTarjetas';
 import { notificarCambioTarjeta } from '@/lib/apple/notificarCambioTarjeta';
+import { syncObjetoTarjeta } from '@/lib/google/syncObjeto';
 
 export interface RecompensaEscaner {
   id: string;
@@ -84,6 +85,7 @@ export async function accionAcreditar(tarjetaId: string, delta: number): Promise
 
   // El pass del cliente se refresca solo (mismo push que usa el cambio de branding).
   await notificarCambioTarjeta(supabase, tarjetaId);
+  await syncObjetoTarjeta(supabase, tarjetaId);
 
   return {
     ok: true,
@@ -102,6 +104,7 @@ export async function accionCanjear(tarjetaId: string, recompensaId: string): Pr
   if (!res.ok) return { ok: false, error: res.error };
 
   await notificarCambioTarjeta(supabase, tarjetaId);
+  await syncObjetoTarjeta(supabase, tarjetaId);
 
   return {
     ok: true,

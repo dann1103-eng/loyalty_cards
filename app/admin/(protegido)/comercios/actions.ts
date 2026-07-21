@@ -11,6 +11,7 @@ import {
   type DatosComercio,
 } from '@/lib/comercios/guardarComercio';
 import { notificarCambioComercio } from '@/lib/apple/notificarCambioComercio';
+import { syncClaseComercio } from '@/lib/google/syncClase';
 
 export type EstadoFormulario = { error: string } | undefined;
 
@@ -72,6 +73,7 @@ export async function accionActualizarComercio(
   // Los passes ya emitidos renderizan tipo_tarjeta y colores: sin este push, un cambio de FM
   // (ej. puntos → sellos) deja los passes viejos mostrando el diseño anterior para siempre.
   await notificarCambioComercio(supabase, id);
+  await syncClaseComercio(supabase, id);
 
   revalidatePath('/admin/comercios');
   redirect('/admin/comercios');

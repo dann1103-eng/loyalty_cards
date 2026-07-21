@@ -5,6 +5,7 @@ import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { guardarBranding } from '@/lib/comercio/guardarBranding';
 import { notificarCambioComercio } from '@/lib/apple/notificarCambioComercio';
+import { syncClaseComercio } from '@/lib/google/syncClase';
 import {
   validarImagenSubida,
   extensionDeMime,
@@ -40,6 +41,9 @@ export async function accionGuardarBranding(
   // que Wallet los re-descargue (sin esto, muestran el diseño viejo hasta el próximo cambio de
   // puntos — bug visto en el piloto al pasar a sellos).
   await notificarCambioComercio(createServiceClient(), comercioId);
+  // Google Wallet: una sola llamada actualiza la clase para TODOS los clientes de este comercio
+  // (a diferencia de Apple, que necesita un push por tarjeta). Best-effort, igual que arriba.
+  await syncClaseComercio(createServiceClient(), comercioId);
 
   revalidatePath('/comercio/branding');
   return { ok: true };
@@ -100,6 +104,13 @@ export async function accionSubirImagen(
     return { error: 'La imagen se subió pero no se pudo guardar su dirección.' };
   }
 
+  // Solo logo/hero alimentan la LoyaltyClass de Google (strip y sello_icono son exclusivos del
+  // pipeline visual de Apple). El logo es además el gatillo típico que recién HABILITA Google
+  // Wallet para un comercio que antes no lo tenía (programLogo es obligatorio ahí).
+  if (campo === 'logo' || campo === 'hero') {
+    await syncClaseComercio(supabase, comercioId);
+  }
+
   revalidatePath('/comercio/branding');
   return { ok: true };
 }
@@ -139,6 +150,9 @@ export async function accionQuitarImagen(
   if (errorStorage) console.warn('[comercio] no se pudo borrar el archivo del bucket:', errorStorage);
 
   await notificarCambioComercio(supabase, comercioId);
+  if (campo === 'logo' || campo === 'hero') {
+    await syncClaseComercio(supabase, comercioId);
+  }
 
   revalidatePath('/comercio/branding');
   return { ok: true };

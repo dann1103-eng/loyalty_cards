@@ -3,6 +3,8 @@ import crypto from 'node:crypto';
 import { createServiceClient } from '@/lib/supabase/server';
 import { registrarCliente } from '@/lib/clientes/registrarCliente';
 import { normalizarTelefono } from '@/lib/clientes/normalizarTelefono';
+import { syncClaseComercio } from '@/lib/google/syncClase';
+import { syncObjetoTarjeta } from '@/lib/google/syncObjeto';
 
 export const runtime = 'nodejs';
 
@@ -67,5 +69,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Error al preparar la tarjeta' }, { status: 500 });
   }
 
-  return NextResponse.json({ tarjetaId: resultado.tarjetaId });
+  // Google Wallet, best-effort (nunca bloquea el registro): la clase del comercio se crea la
+  // primera vez que hace falta (aquí, en su primer cliente) o ya existe de un guardado de
+  // branding previo — syncClaseComercio es idempotente en ambos casos. Sin logo del comercio,
+  // Google Wallet simplemente no está disponible todavía (googleWalletDisponible: false).
+  let googleWalletDisponible = false;
+  try {
+    const resClase = await syncClaseComercio(supabase, comercio.id);
+    if (resClase.ok) {
+      await syncObjetoTarjeta(supabase, resultado.tarjetaId);
+      googleWalletDisponible = true;
+    }
+  } catch (err) {
+    console.error('[google] error inesperado sincronizando el registro:', err);
+  }
+
+  return NextResponse.json({ tarjetaId: resultado.tarjetaId, googleWalletDisponible });
 }

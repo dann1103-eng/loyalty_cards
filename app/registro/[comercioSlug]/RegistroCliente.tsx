@@ -12,6 +12,17 @@ function IconoWallet() {
   );
 }
 
+function IconoGoogle() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.07 5.07 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.99.66-2.25 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.85A10.99 10.99 0 0 0 12 23z" />
+      <path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.05H2.18a11 11 0 0 0 0 9.9l3.66-2.85z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1a10.99 10.99 0 0 0-9.82 6.05l3.66 2.85C6.71 7.3 9.14 5.38 12 5.38z" />
+    </svg>
+  );
+}
+
 function VistaTarjeta({ nombreComercio }: { nombreComercio: string }) {
   return (
     <div
@@ -44,6 +55,7 @@ export default function RegistroCliente({
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
   const [tarjetaId, setTarjetaId] = useState<string | null>(null);
+  const [googleWalletDisponible, setGoogleWalletDisponible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
 
@@ -60,6 +72,7 @@ export default function RegistroCliente({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error al registrar');
       setTarjetaId(data.tarjetaId);
+      setGoogleWalletDisponible(Boolean(data.googleWalletDisponible));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
@@ -84,6 +97,16 @@ export default function RegistroCliente({
               <IconoWallet />
               Agregar a Apple Wallet
             </a>
+            {googleWalletDisponible && (
+              <a
+                className="wallet-btn"
+                style={{ marginTop: 10 }}
+                href={`/api/tarjetas/${tarjetaId}/google-wallet`}
+              >
+                <IconoGoogle />
+                Agregar a Google Wallet
+              </a>
+            )}
             <p className="nota">
               ¿No se abrió? Mantén presionado el botón y elige “Descargar”, o ábrelo desde Safari.
             </p>
