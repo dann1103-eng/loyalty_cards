@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
+import { verifyComercioAcceso } from '@/lib/comercio/verifyComercioAcceso';
 import Escaner from './Escaner';
 
 export const dynamic = 'force-dynamic';
@@ -7,12 +7,18 @@ export const dynamic = 'force-dynamic';
 // Pantalla C7 (Fase 4): el cajero escanea el QR del pass del cliente (o el impreso del panel) y
 // suma sellos/puntos o canjea recompensas. También acepta ?token= para llegar sin cámara desde
 // el directorio de clientes.
+//
+// Gate COMPARTIDO (Fase 7), no owner-only: el escáner es la pantalla del CAJERO. Con
+// verifyComercioOwner() un cajero era rebotado a /comercio/escanear → loop infinito de redirect.
+// verifyComercioAcceso() admite owner Y cajero. La atribución completa (qué sucursal registra cada
+// operación) y el ajuste de las Server Actions del escáner llegan en Fase 9; acá solo se garantiza
+// que el cajero pueda ENTRAR. La página no usa datos del gate (solo pasa el token del querystring).
 export default async function PaginaEscanear({
   searchParams,
 }: {
   searchParams: Promise<{ token?: string }>;
 }) {
-  await verifyComercioOwner();
+  await verifyComercioAcceso();
   const { token } = await searchParams;
 
   return (
