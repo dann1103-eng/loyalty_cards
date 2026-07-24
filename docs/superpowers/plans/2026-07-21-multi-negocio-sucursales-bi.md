@@ -43,7 +43,7 @@
 
 **Selector:**
 - Crear `app/comercio/elegir/page.tsx`, `app/comercio/elegir/actions.ts`
-- Crear `app/comercio/actions.ts` (`cambiarComercioActivo`)
+- **Modificar** `app/comercio/actions.ts` — YA EXISTE (contiene `cerrarSesionComercio`, del que depende el layout del panel). AGREGAR `cambiarComercioActivo`, CONSERVAR `cerrarSesionComercio`.
 - Crear `app/comercio/(protegido)/SelectorComercio.tsx` (dropdown del header)
 - Modificar `app/comercio/(protegido)/layout.tsx`, `app/comercio/(protegido)/NavInferior.tsx`
 - Modificar `app/comercio/login/actions.ts` (redirect por rol/cantidad)
@@ -298,16 +298,22 @@ git commit -m "Auth core: membresías (lista), gate compartido y comercio activo
 - Create: `app/comercio/elegir/page.tsx`, `app/comercio/elegir/actions.ts`
 
 - [ ] **Step 1:** `elegir/page.tsx` (`dynamic='force-dynamic'`): gate liviano — `getClaims()` → sin sub → `redirect('/comercio/login')`; `membresias`; 0 → `redirect('/comercio/login?error=sin-permiso')`; 1 → setear cookie + `redirect('/comercio/panel')`; 2+ → render de una lista con un `<form action={elegirComercio.bind(null, comercioId)}>` por comercio (botón con el nombre). Reusar clases del design system (`.panel`, `.admin-fila`).
-- [ ] **Step 2:** `elegir/actions.ts` → `elegirComercio(comercioId, _prev, _fd)`: `getClaims()`; `membresias`; **assert `comercioId ∈ membresias`** (si no, `redirect('/comercio/elegir')` — no confiar en el input); `cookies().set('fm_comercio_activo', comercioId, { httpOnly:true, sameSite:'lax', path:'/' })`; `revalidatePath('/comercio','layout')`; `redirect('/comercio/panel')`.
-- [ ] **Step 3: Commit.**
+- [ ] **Step 2:** `elegir/actions.ts` → `elegirComercio(comercioId, _prev, _fd)`: `getClaims()`; `membresias`; **assert `comercioId ∈ membresias`** (si no, `redirect('/comercio/elegir')` — no confiar en el input); `const cookieStore = await cookies()` (async en este Next); `cookieStore.set('fm_comercio_activo', comercioId, { httpOnly:true, sameSite:'lax', path:'/' })`; `revalidatePath('/comercio','layout')`; `redirect('/comercio/panel')`. NOTA: entre el commit de esta Task 4.1 y el resto de la Fase 4, `/comercio/elegir` recién empieza a existir; los gates de Fase 3 que redirigen ahí no tienen a quién enviar antes — inocuo en la práctica porque tras el backfill ninguna cuenta tiene 2+ comercios (todos caen en la rama de resolución directa).
+- [ ] **Step 3: Commit** de la pantalla elegir.
+
+```bash
+git add app/comercio/elegir
+git commit -m "Pantalla /comercio/elegir para cuentas con varios comercios"
+```
 
 ### Task 4.2: Selector en el header + cajero shell + redirect del login
 
 **Files:**
-- Create: `app/comercio/actions.ts`, `app/comercio/(protegido)/SelectorComercio.tsx`
+- Modify: `app/comercio/actions.ts` (YA EXISTE — agregar `cambiarComercioActivo`, conservar `cerrarSesionComercio`)
+- Create: `app/comercio/(protegido)/SelectorComercio.tsx`
 - Modify: `app/comercio/(protegido)/layout.tsx`, `app/comercio/(protegido)/NavInferior.tsx`, `app/comercio/login/actions.ts`
 
-- [ ] **Step 1:** `app/comercio/actions.ts` → `cambiarComercioActivo(comercioId, ...)`: misma lógica de validación+cookie+revalidate+redirect que `elegirComercio` (extraer un helper compartido si conviene, DRY).
+- [ ] **Step 1:** En `app/comercio/actions.ts` (CONSERVANDO `cerrarSesionComercio`), agregar `cambiarComercioActivo(comercioId, ...)`: misma lógica de validación+cookie+revalidate+redirect que `elegirComercio` (extraer un helper compartido si conviene, DRY). Recordar: `cookies()` es ASYNC en este Next → `const cookieStore = await cookies()`.
 - [ ] **Step 2:** `layout.tsx`: cambiar la llamada del gate a `verifyComercioAcceso()`. Si `rol==='owner'` y `comercios.length>=2`, renderizar `<SelectorComercio comercios={comercios} activo={comercioId} />` (client component: un `<select>`/dropdown que hace `startTransition`→`cambiarComercioActivo`). Si `rol==='cajero'`, header mínimo (nombre comercio + sucursal + "Salir").
 - [ ] **Step 3:** `NavInferior.tsx`: aceptar `rol`; cajero ve solo "Escanear" (y "Salir"); owner ve la nav completa (incluye los nuevos ítems de fases siguientes: Sucursales, Cajeros, Reportes — agregar en sus fases).
 - [ ] **Step 4:** `login/actions.ts`: tras `signInWithPassword` OK, resolver `membresias`; owner con 2+ → `redirect('/comercio/elegir')`; 1 owner → cookie + `/comercio/panel`; solo cajero → cookie (su comercio) + `/comercio/escanear`; ninguna → `?error=sin-permiso`.
@@ -315,8 +321,8 @@ git commit -m "Auth core: membresías (lista), gate compartido y comercio activo
 - [ ] **Step 6: Commit.**
 
 ```bash
-git add app/comercio/elegir app/comercio/actions.ts "app/comercio/(protegido)/SelectorComercio.tsx" "app/comercio/(protegido)/layout.tsx" "app/comercio/(protegido)/NavInferior.tsx" app/comercio/login/actions.ts
-git commit -m "Selector de comercio: pantalla elegir, dropdown del header y redirect por rol en login"
+git add app/comercio/actions.ts "app/comercio/(protegido)/SelectorComercio.tsx" "app/comercio/(protegido)/layout.tsx" "app/comercio/(protegido)/NavInferior.tsx" app/comercio/login/actions.ts
+git commit -m "Selector de comercio: dropdown del header, cajero shell y redirect por rol en login"
 ```
 
 ---
@@ -362,8 +368,11 @@ export async function verificarLimiteCuenta(
 ```
 
   Más `crearCuenta`, `actualizarCuenta` (`.select('id').single()` para detectar no-op → "Esa cuenta ya no existe."), `asignarComercioACuenta(supabase, comercioId, cuentaId)` (llama `verificarLimiteCuenta(cuentaId, {excluyendoComercioId: comercioId})` y luego `update comercios set cuenta_id`).
+  Teardown FK de este test: borrar `comercios` (o sus tarjetas si las hubiera) ANTES de `cuentas_comercio`.
 - [ ] **Step 3:** Correr → PASS.
-- [ ] **Step 4: Mutation** — cambiar `>=` por `>` en `verificarLimiteCuenta`. El test "2 comercios (== límite) → bloquea" debe FALLAR. Restaurar.
+- [ ] **Step 4: Mutation A** — cambiar `>=` por `>` en `verificarLimiteCuenta`. El test "2 comercios (== límite) → bloquea" debe FALLAR. Restaurar.
+- [ ] **Step 5: Test del camino de reasignar (la corrección del spec-review).** Caso: cuenta destino con `limite_negocios=2` ya con 2 comercios → `asignarComercioACuenta(supabase, tercerComercioId, cuentaDestinoId)` → `{ok:false}` con el mensaje del límite (y el comercio NO queda reasignado). Correr → PASS.
+- [ ] **Step 6: Mutation B** — quitar la llamada a `verificarLimiteCuenta` dentro de `asignarComercioACuenta` (que asigne directo). El test del Step 5 debe FALLAR. Restaurar. (Sin esto, el guard del camino de reasignar quedaría sin protección — es una de las correcciones del spec-review.)
 
 ### Task 5.2: `guardarComercio.ts` — `cuenta_id` + límite; y refactor de su test
 
@@ -385,13 +394,14 @@ export async function verificarLimiteCuenta(
 - [ ] **Step 1:** Área `cuentas/` (espeja `comercios/`): listar cuentas con conteo de negocios (`comercios` count por `cuenta_id`) y su límite; crear (`accionCrearCuenta` → `crearCuenta`); editar límite y nombre (`accionActualizarCuenta`); vincular/desvincular comercios (`asignarComercioACuenta`); borrar cuenta vacía (traducir 23503 como en `eliminarComercio`). Cada página y acción con `verifyFmAdmin()` fuera de try/catch.
 - [ ] **Step 2:** En `comercios/actions.ts` `leerDatos`: agregar `cuenta_id: String(formData.get('cuenta_id') ?? '')`. En `FormularioComercio.tsx`: `<select name="cuenta_id">` poblado con las cuentas (las páginas nuevo/editar cargan la lista y la pasan). En `comercios/[id]/editar/page.tsx` seleccionar la cuenta actual.
 - [ ] **Step 3:** `admin/layout.tsx`: agregar link de nav a `/admin/cuentas`.
-- [ ] **Step 4: Verificación (navegador, controlador).** Crear una cuenta límite 2 → crear/vincular 2 comercios OK → intentar un 3ro → bloqueado con el mensaje del límite. Reasignar un comercio entre cuentas respeta el límite del destino.
-- [ ] **Step 5:** `npx vitest run` (suite completa) + `npx tsc --noEmit` + `npm run lint` → verde.
-- [ ] **Step 6: Commit.**
+- [ ] **Step 4: Actualizar los seeds REALES de comercios** (requisito del spec §4.1, hoy faltante): `scripts/seed-demo-comercios.ts` y `scripts/seed-pilot-comercio.ts` insertan directo en `comercios` sin `cuenta_id` (no rompe — la columna es nullable — pero quedan fuera del rollup por cuenta en los reportes FM). Agregar en cada uno: crear una `cuentas_comercio` (nombre = el del comercio, `limite_negocios` acorde) y asignar su `cuenta_id` al comercio. Idempotente por slug como el resto del seed.
+- [ ] **Step 5: Verificación (navegador, controlador).** Crear una cuenta límite 2 → crear/vincular 2 comercios OK → intentar un 3ro → bloqueado con el mensaje del límite. Reasignar un comercio entre cuentas respeta el límite del destino.
+- [ ] **Step 6:** `npx vitest run` (suite completa) + `npx tsc --noEmit` + `npm run lint` → verde.
+- [ ] **Step 7: Commit.**
 
 ```bash
-git add lib/comercios/cuentas.ts lib/comercios/cuentas.test.ts lib/comercios/guardarComercio.ts lib/comercios/guardarComercio.test.ts "app/admin/(protegido)/cuentas" "app/admin/(protegido)/comercios" "app/admin/(protegido)/layout.tsx"
-git commit -m "Cuentas: CRUD FM, cuenta_id en comercios y límite aplicado al crear y al reasignar"
+git add lib/comercios/cuentas.ts lib/comercios/cuentas.test.ts lib/comercios/guardarComercio.ts lib/comercios/guardarComercio.test.ts "app/admin/(protegido)/cuentas" "app/admin/(protegido)/comercios" "app/admin/(protegido)/layout.tsx" scripts/seed-demo-comercios.ts scripts/seed-pilot-comercio.ts
+git commit -m "Cuentas: CRUD FM, cuenta_id en comercios, límite al crear y reasignar, seeds con cuenta"
 ```
 
 ---
@@ -405,7 +415,7 @@ git commit -m "Cuentas: CRUD FM, cuenta_id en comercios y límite aplicado al cr
 **Files:**
 - Create: `lib/comercio/sucursales.ts`, `lib/comercio/sucursales.test.ts`
 
-- [ ] **Step 1: Test que falla.** `crearSucursal(supabase, comercioId, {nombre})` (nombre vacío → error; ok → id). `renombrarSucursal(supabase, id, comercioId, {nombre})` scoped (id de OTRO comercio → no toca nada / error). `cambiarEstadoSucursal(supabase, id, comercioId, activa)` (soft; nunca borra). `listarSucursales(supabase, comercioId)`. `sucursalPerteneceAComercio(supabase, sucursalId, comercioId)` → boolean (sucursal ajena → false). Teardown FK. Correr → FAIL.
+- [ ] **Step 1: Test que falla.** `crearSucursal(supabase, comercioId, {nombre})` (nombre vacío → error; ok → id). `renombrarSucursal(supabase, id, comercioId, {nombre})` scoped (id de OTRO comercio → no toca nada / error). `cambiarEstadoSucursal(supabase, id, comercioId, activa)` (soft; nunca borra). `listarSucursales(supabase, comercioId)`. `sucursalPerteneceAComercio(supabase, sucursalId, comercioId)` → boolean (sucursal ajena → false). Teardown FK-ordenado: `sucursales` ANTES de `comercios` (y antes de `cuentas_comercio` si el helper creó una). Correr → FAIL.
 - [ ] **Step 2: Implementar** (scoping por `comercio_id` en todas, como `recompensas.ts`; `renombrar`/`cambiarEstado` con `.eq('id').eq('comercio_id').select('id').single()`).
 - [ ] **Step 3:** Correr → PASS.
 - [ ] **Step 4: Mutation** — en `sucursalPerteneceAComercio` quitar el `.eq('comercio_id', comercioId)`. El test "sucursal ajena → false" debe FALLAR. Restaurar. (Este helper es un control de seguridad del picker del dueño.)
@@ -477,10 +487,18 @@ git commit -m "Cajeros: alta en runtime por el dueño, atados a una sucursal (ro
 -- usan service_role (ignora RLS). Se REVOCA execute de public/anon/authenticated para que la anon
 -- key (pública, va al bundle) NO pueda invocarlas por REST saltándose el gate de la app.
 
+-- IMPORTANTE (plpgsql): en `returns table(...)` cada columna de salida es una variable OUT dentro
+-- del cuerpo. Por eso las columnas OUT se llaman `saldo`/`costo` y NO `puntos_actuales`/`costo_puntos`:
+-- si se llamaran igual que las columnas de las tablas, una referencia sin calificar (en el update,
+-- el where, el returning o el select) sería AMBIGUA y Postgres lanzaría "column reference ... is
+-- ambiguous" en la PRIMERA llamada (default variable_conflict = error). Con nombres OUT distintos,
+-- `puntos_actuales`/`costo_puntos` sin calificar refieren SIEMPRE a la columna de la tabla. No cambiar
+-- estos nombres sin re-verificar esa regla.
+
 create or replace function acreditar_puntos_atomico(
   p_comercio_id uuid, p_tarjeta_id uuid, p_delta integer,
   p_sucursal_id uuid, p_cajero_usuario_id uuid
-) returns table(estado text, puntos_actuales integer)
+) returns table(estado text, saldo integer)
 language plpgsql
 set search_path = public
 as $$
@@ -508,7 +526,7 @@ end $$;
 create or replace function canjear_recompensa_atomico(
   p_comercio_id uuid, p_tarjeta_id uuid, p_recompensa_id uuid,
   p_sucursal_id uuid, p_cajero_usuario_id uuid
-) returns table(estado text, puntos_actuales integer, nombre_recompensa text, costo_puntos integer)
+) returns table(estado text, saldo integer, nombre_recompensa text, costo integer)
 language plpgsql
 set search_path = public
 as $$
@@ -557,9 +575,9 @@ grant execute on function canjear_recompensa_atomico(uuid, uuid, uuid, uuid, uui
 **Files:**
 - Modify: `lib/supabase/types.ts`, `lib/comercio/acreditar.ts`, `lib/comercio/acreditar.test.ts`
 
-- [ ] **Step 1:** Agregar a `Functions` de `types.ts` las entradas de `acreditar_puntos_atomico` y `canjear_recompensa_atomico` (Args + Returns).
-- [ ] **Step 2: Adaptar el test** de `acreditar.test.ts`: mantener TODOS los casos actuales (delta inválido, tarjeta ajena, saldo/ledger). `acreditarPuntos` ahora acepta `opciones?: {sucursalId?, cajeroUsuarioId?}`. NUEVO caso: al acreditar con `sucursalId` + `cajeroUsuarioId`, la fila de `transacciones_puntos` queda con esos valores; `sucursalId` de otro comercio → `{ok:false}` (estado `sucursal_invalida`). Correr → FAIL (la firma/impl aún no cambia).
-- [ ] **Step 3: Reimplementar** `acreditarPuntos(supabase, comercioId, tarjetaId, delta, opciones?)`: conservar la validación de `delta` (mensaje idéntico); reemplazar el read+insert+update por `supabase.rpc('acreditar_puntos_atomico', {p_comercio_id, p_tarjeta_id, p_delta:delta, p_sucursal_id:opciones?.sucursalId ?? null, p_cajero_usuario_id:opciones?.cajeroUsuarioId ?? null})`; leer `data?.[0]`; mapear `estado`: `ok`→`{ok:true, puntosActuales}`; `tarjeta_no_encontrada`→`{ok:false, error:'Esa tarjeta no existe en tu comercio.'}` (byte-idéntico); `sucursal_invalida`→`{ok:false, error:'La sucursal no es válida.'}`; error de transporte → log + `'No se pudo registrar la transacción.'`.
+- [ ] **Step 1:** Agregar a `Functions` de `types.ts` las entradas de `acreditar_puntos_atomico` y `canjear_recompensa_atomico`. OJO: por ser `returns table(...)`, el tipo de `Returns` es un ARRAY (`{estado: string; saldo: number}[]` / `{estado; saldo; nombre_recompensa; costo}[]`) — por eso los wrappers leen `data?.[0]`.
+- [ ] **Step 2: Adaptar el test** de `acreditar.test.ts`: mantener TODOS los casos actuales (delta inválido, tarjeta ajena, saldo/ledger). `acreditarPuntos` ahora acepta `opciones?: {sucursalId?, cajeroUsuarioId?}`. NUEVOS casos: (a) al acreditar con `sucursalId` + `cajeroUsuarioId`, la fila de `transacciones_puntos` queda con esos valores; (b) `sucursalId` de OTRO comercio → `{ok:false}` (estado `sucursal_invalida`); (c) **`sucursalId` del MISMO comercio pero `activa=false` → `{ok:false}` `sucursal_invalida`** (cubre el `and activa` del RPC; sin este caso, quitar `and activa` no se detecta). Fixtures crean sucursales (activa e inactiva). Teardown FK: `transacciones_puntos` → `sucursales` → `tarjetas`/`clientes` → `comercios`. Correr → FAIL (la firma/impl aún no cambia).
+- [ ] **Step 3: Reimplementar** `acreditarPuntos(supabase, comercioId, tarjetaId, delta, opciones?)`: conservar la validación de `delta` (mensaje idéntico); reemplazar el read+insert+update por `supabase.rpc('acreditar_puntos_atomico', {p_comercio_id, p_tarjeta_id, p_delta:delta, p_sucursal_id:opciones?.sucursalId ?? null, p_cajero_usuario_id:opciones?.cajeroUsuarioId ?? null})`; leer `const fila = data?.[0]`; **guard: `if (error || !fila) return {ok:false, error:'No se pudo registrar la transacción.'}`** (log del error); mapear `fila.estado`: `ok`→`{ok:true, puntosActuales: fila.saldo}`; `tarjeta_no_encontrada`→`{ok:false, error:'Esa tarjeta no existe en tu comercio.'}` (byte-idéntico); `sucursal_invalida`→`{ok:false, error:'La sucursal no es válida.'}`.
 - [ ] **Step 4:** Correr → PASS.
 - [ ] **Step 5: Mutation** — quitar `p_sucursal_id`/`p_cajero_usuario_id` del insert dentro del RPC (requiere re-aplicar SQL a mano — o, más práctico, mutar el wrapper para pasar `null` fijo). El test "persiste sucursal/cajero" debe FALLAR. Restaurar.
 
@@ -568,10 +586,10 @@ grant execute on function canjear_recompensa_atomico(uuid, uuid, uuid, uuid, uui
 **Files:**
 - Modify: `lib/comercio/canje.ts`, `lib/comercio/canje.test.ts`
 
-- [ ] **Step 1: Adaptar el test:** mantener todos los casos (recompensa ajena/inactiva, saldo insuficiente con "le faltan N", tarjeta ajena, canje OK deja fila). `canjearRecompensa` acepta `opciones?`. NUEVO: fila `canjes` con `sucursal_id`+`cajero_usuario_id`; `sucursal_id` ajena → rechazo. Correr → FAIL.
-- [ ] **Step 2: Reimplementar** `canjearRecompensa(supabase, comercioId, tarjetaId, recompensaId, opciones?)`: todo el cuerpo pasa a `supabase.rpc('canjear_recompensa_atomico', {...})`; mapear `estado`: `ok`→`{ok:true, puntosActuales, nombreRecompensa}`; `recompensa_no_disponible`→`'Esa recompensa no está disponible.'`; `saldo_insuficiente`→`` `No le alcanzan los puntos: le faltan ${costo_puntos - puntos_actuales}.` ``; `tarjeta_no_encontrada`→`'Esa tarjeta no existe en tu comercio.'`; `sucursal_invalida`→`'La sucursal no es válida.'`. La reversa best-effort se ELIMINA (ya no aplica).
+- [ ] **Step 1: Adaptar el test:** mantener todos los casos (recompensa ajena/inactiva, saldo insuficiente con "le faltan N", tarjeta ajena, canje OK deja fila). `canjearRecompensa` acepta `opciones?`. NUEVOS: (a) fila `canjes` con `sucursal_id`+`cajero_usuario_id`; (b) `sucursal_id` de otro comercio → rechazo (`sucursal_invalida`); (c) `sucursal_id` del MISMO comercio pero `activa=false` → rechazo (cubre el `and activa`). Teardown FK: `canjes` → `sucursales` → `tarjetas`/`clientes`/`recompensas` → `comercios`. Correr → FAIL.
+- [ ] **Step 2: Reimplementar** `canjearRecompensa(supabase, comercioId, tarjetaId, recompensaId, opciones?)`: todo el cuerpo pasa a `supabase.rpc('canjear_recompensa_atomico', {...})`; leer `const fila = data?.[0]`; guard `if (error || !fila) return {ok:false, error:'No se pudo canjear.'}` (log); mapear `fila.estado`: `ok`→`{ok:true, puntosActuales: fila.saldo, nombreRecompensa: fila.nombre_recompensa}`; `recompensa_no_disponible`→`'Esa recompensa no está disponible.'`; `saldo_insuficiente`→`` `No le alcanzan los puntos: le faltan ${fila.costo - fila.saldo}.` `` (el RPC devuelve `saldo`=saldo actual y `costo`=costo de la recompensa); `tarjeta_no_encontrada`→`'Esa tarjeta no existe en tu comercio.'`; `sucursal_invalida`→`'La sucursal no es válida.'`. La reversa best-effort se ELIMINA (ya no aplica).
 - [ ] **Step 3:** Correr → PASS.
-- [ ] **Step 4: Mutation** — en el RPC, quitar `and comercio_id = p_comercio_id` del `update tarjetas` (re-aplicar SQL o mutar equivalente). El test de scope cross-comercio debe FALLAR. Restaurar. (Es el guard de aislamiento entre comercios.)
+- [ ] **Step 4: Scope cross-comercio.** El aislamiento entre comercios vive en el `and comercio_id = p_comercio_id` del `update` del RPC (SQL, no wrapper). El test que YA cubre esto es "tarjeta de otro comercio → `tarjeta_no_encontrada`" contra el RPC real: si pasa, el scope está activo end-to-end. La mutación de ese guard requiere re-aplicar DDL a mano (⚑), así que es una **verificación manual asistida por el usuario, opcional**: si se hace, el usuario aplica una versión sin el `and comercio_id`, se confirma que el test cross-comercio falla, y se restaura. No es un paso automatizable por el asistente; el test verde contra el RPC correcto es la garantía primaria.
 - [ ] **Step 5:** `npx vitest run` completa verde. **Correr `npm run seed-demos` o el seed que usa `acreditarPuntos` para confirmar que la llamada de 4 args sigue funcionando** (el `opciones?` opcional).
 - [ ] **Step 6: Commit.**
 
@@ -586,20 +604,35 @@ git commit -m "Migración 0009: RPC atómicos (INVOKER+revoke) y acreditar/canje
 
 **Objetivo:** que cada acreditación/canje registre su sucursal y cajero. Depende de Fases 3, 6, 8.
 
-### Task 9.1: Threading de sucursal + cajero en las acciones del escáner
+### Task 9.1: Resolver PURO de atribución (control de seguridad, mutation-testeable)
+
+**Files:**
+- Create: `lib/comercio/atribucionEscaner.ts`, `lib/comercio/atribucionEscaner.test.ts`
+
+Para no depender de `cookies()`/`redirect()` en el test (misma técnica que `resolverComercioActivo` de la Fase 3), la lógica anti-spoofing vive en una función pura.
+
+- [ ] **Step 1: Test que falla.** `resolverSucursalDeAccion(rol, sucursalIdSesion, sucursalIdCliente)`:
+  - `rol==='cajero'` → SIEMPRE `sucursalIdSesion`, aunque `sucursalIdCliente` sea otra cosa (un cajero no puede falsear su sucursal). **Caso de seguridad:** `resolverSucursalDeAccion('cajero', 'A', 'B')` === `'A'`.
+  - `rol==='owner'` → `sucursalIdCliente` (el owner elige en el picker; la validación de pertenencia la hace la acción con `sucursalPerteneceAComercio`).
+  Correr → FAIL.
+- [ ] **Step 2: Implementar** la función pura.
+- [ ] **Step 3:** Correr → PASS.
+- [ ] **Step 4: Mutation** — hacer que para `'cajero'` devuelva `sucursalIdCliente ?? sucursalIdSesion` (confiar en el cliente). El caso `('cajero','A','B') === 'A'` debe FALLAR. Restaurar. (Es EL control que impide que un cajero atribuya visitas a otra sucursal — dato que se le vende al cliente.)
+
+### Task 9.2: Threading de sucursal + cajero en las acciones del escáner
 
 **Files:**
 - Modify: `app/comercio/(protegido)/escanear/page.tsx`, `Escaner.tsx`, `actions.ts`
 
 - [ ] **Step 1:** `page.tsx`: gate → `verifyComercioAcceso()`. Cajero → pasar `sucursalFija = {id, nombre}`; owner → `listarSucursales(comercioId)` activas → `sucursales` para el picker. Si el cajero tiene su sucursal DESACTIVADA (no está entre las activas) → estado "tu sucursal está desactivada, contactá al dueño", sin permitir acreditar.
 - [ ] **Step 2:** `Escaner.tsx`: si `sucursalFija` → etiqueta read-only; si `sucursales` (owner) → `<select>` que guarda `sucursalIdSeleccionada`. Pasar ese valor a `accionAcreditar`/`accionCanjear`.
-- [ ] **Step 3:** `actions.ts`: gate → `verifyComercioAcceso()` en las 3 acciones. Calcular server-side: `rol==='cajero'` → `sucursalId = sesion.sucursalId` (IGNORAR el valor del cliente); `rol==='owner'` → validar el `sucursalId` recibido con `sucursalPerteneceAComercio` (rechazar si no); `cajeroUsuarioId = sesion.usuarioComercioId` para ambos. Pasar `{sucursalId, cajeroUsuarioId}` a `acreditarPuntos`/`canjearRecompensa`. Mantener `notificarCambioTarjeta` + `syncObjetoTarjeta`.
-- [ ] **Step 4: Verificación e2e (navegador, controlador).** Como cajero (cuenta atada a sucursal A): escanear una tarjeta, acreditar → en la BD la fila `transacciones_puntos` tiene `sucursal_id`=A y `cajero_usuario_id`=el cajero. Intentar (vía devtools, forzando el arg) atribuir a la sucursal B → se ignora, queda A. Como dueño: elegir sucursal B en el picker, acreditar → fila con B. Limpiar fixtures.
+- [ ] **Step 3:** `actions.ts`: gate → `verifyComercioAcceso()` en las 3 acciones. `sucursalId = resolverSucursalDeAccion(sesion.rol, sesion.sucursalId, sucursalIdCliente)`; si `rol==='owner'` y `sucursalId` no es null, validar con `sucursalPerteneceAComercio` (rechazar si no); `cajeroUsuarioId = sesion.usuarioComercioId` para ambos. Pasar `{sucursalId, cajeroUsuarioId}` a `acreditarPuntos`/`canjearRecompensa`. Mantener `notificarCambioTarjeta` + `syncObjetoTarjeta`.
+- [ ] **Step 4: Verificación e2e (navegador, controlador).** Como cajero (cuenta atada a sucursal A): escanear una tarjeta, acreditar → en la BD la fila `transacciones_puntos` tiene `sucursal_id`=A y `cajero_usuario_id`=el cajero. Como dueño: elegir sucursal B en el picker, acreditar → fila con B. Limpiar fixtures.
 - [ ] **Step 5: Commit.**
 
 ```bash
-git add "app/comercio/(protegido)/escanear"
-git commit -m "Escáner: sucursal fija por cajero, selector por dueño, atribución en el ledger"
+git add lib/comercio/atribucionEscaner.ts lib/comercio/atribucionEscaner.test.ts "app/comercio/(protegido)/escanear"
+git commit -m "Escáner: atribución por sucursal (cajero fijo vs dueño selector) con resolver puro testeado"
 ```
 
 ---
@@ -613,7 +646,7 @@ git commit -m "Escáner: sucursal fija por cajero, selector por dueño, atribuci
 **Files:**
 - Create: `supabase/migrations/0010_reportes.sql`
 
-- [ ] **Step 1: Escribir el `.sql`.** Mismo blindaje que 0009 (`SECURITY INVOKER` + `revoke execute from public, anon, authenticated` + `grant to service_role`) en TODAS las funciones. Agregación en SQL. Funciones: `reporte_sucursales(p_comercio_id)` (por sucursal: acreditaciones, puntos_otorgados, canjes, clientes_unicos — join a `tarjetas` para scopear, bucket NULL para filas sin sucursal); `reporte_top_clientes(p_comercio_id, p_limite)`; `reporte_tendencia(p_comercio_id, p_dias)` (serie por día); `reporte_fm_comercios()` (cross-cliente, **LEFT join** `comercios → cuentas_comercio` para no perder comercios con `cuenta_id` null). Índices: `transacciones_puntos(sucursal_id)`, `canjes(sucursal_id)`, `transacciones_puntos(tarjeta_id)`, `transacciones_puntos(created_at)`.
+- [ ] **Step 1: Escribir el `.sql`.** Mismo blindaje que 0009 (`SECURITY INVOKER` + `revoke execute from public, anon, authenticated` + `grant to service_role`) en TODAS las funciones. Agregación en SQL. **MISMA trampa de nombres OUT que 0009 (crítico):** en cada `returns table(...)`, las columnas OUT NO deben llamarse igual que columnas de las tablas que se referencian sin calificar en el cuerpo (ej. no usar `sucursal_id`, `costo_puntos`, `puntos_actuales` como nombre OUT si en el `group by`/`select`/`join` se referencian esas columnas sin calificar) — calificar con el nombre de la tabla o aliasar los OUT, o Postgres lanza "column reference ambiguous" en la primera llamada. Funciones: `reporte_sucursales(p_comercio_id)` (por sucursal: acreditaciones, puntos_otorgados, canjes, clientes_unicos — join a `tarjetas` para scopear, bucket NULL para filas sin sucursal); `reporte_top_clientes(p_comercio_id, p_limite)`; `reporte_tendencia(p_comercio_id, p_dias)` (serie por día); `reporte_fm_comercios()` (cross-cliente, **LEFT join** `comercios → cuentas_comercio` para no perder comercios con `cuenta_id` null). Índices: `transacciones_puntos(sucursal_id)`, `canjes(sucursal_id)`, `transacciones_puntos(tarjeta_id)`, `transacciones_puntos(created_at)`.
 - [ ] **Step 2: STOP — entregar al usuario.** Esperar confirmación.
 - [ ] **Step 3:** Verificar con la anon key que las funciones de reporte NO devuelven datos (mismo chequeo C1). Borrar el script.
 
@@ -625,7 +658,7 @@ git commit -m "Escáner: sucursal fija por cajero, selector por dueño, atribuci
 - Modify: `app/comercio/(protegido)/panel/page.tsx` (ATAJOS), `.../NavInferior.tsx`, `app/admin/(protegido)/layout.tsx`
 
 - [ ] **Step 1:** Agregar las entradas `Functions` de 0010 a `types.ts`.
-- [ ] **Step 2: Test** de `reportes.ts`: sembrar acreditaciones/canjes en 2 sucursales de un comercio QA; `reporteSucursales(supabase, comercioId)` devuelve los conteos correctos por sucursal (y el bucket NULL si hay filas legacy). `comercioId` siempre explícito (del gate en el uso real). Correr → FAIL → implementar wrappers `supabase.rpc(...)` → PASS.
+- [ ] **Step 2: Test** de `reportes.ts`: sembrar acreditaciones/canjes en 2 sucursales de un comercio QA; `reporteSucursales(supabase, comercioId)` devuelve los conteos correctos por sucursal (y el bucket NULL si hay filas legacy). `comercioId` siempre explícito (del gate en el uso real). Teardown FK-ordenado: `transacciones_puntos`/`canjes` → `sucursales` → `tarjetas`/`clientes`/`recompensas` → `comercios` → `cuentas_comercio`. Correr → FAIL → implementar wrappers `supabase.rpc(...)` → PASS.
 - [ ] **Step 3:** Pantalla dueño (`reportes/page.tsx`, gate `verifyComercioOwner()`): tarjetas por sucursal (clientes, acreditaciones, premios), tendencia, top clientes. Agregar a ATAJOS + NavInferior (owner).
 - [ ] **Step 4:** Pantalla FM (`app/admin/(protegido)/reportes/page.tsx`, gate `verifyFmAdmin()`): tabla agregada por comercio y por cuenta. Link de nav en el layout admin.
 - [ ] **Step 5:** Ajustar el copy del portal: `app/mi-tarjeta/PortalCliente.tsx` "El canje se hace en el local" → texto neutral (multi-sucursal).
