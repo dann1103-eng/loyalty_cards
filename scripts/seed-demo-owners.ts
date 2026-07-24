@@ -55,12 +55,12 @@ async function main() {
       console.log(`  (${email} ya existía en Auth; se reutiliza — la contraseña NO cambió)`);
     }
 
-    // onConflict 'email': la única columna única de usuarios_comercio aparte del id.
+    // onConflict 'comercio_id,email': desde la 0008 el unique es (comercio_id, email), no email global.
     const { error: errorFila } = await supabase
       .from('usuarios_comercio')
       .upsert(
         { comercio_id: comercio.id, email, rol: 'owner', auth_user_id: authUserId! },
-        { onConflict: 'email' },
+        { onConflict: 'comercio_id,email' },
       );
     if (errorFila) throw errorFila;
 

@@ -42,13 +42,13 @@ async function main() {
     console.log('La cuenta ya existía en Auth; se reutiliza.');
   }
 
-  // onConflict: 'email' — la ÚNICA columna única de usuarios_comercio aparte de id. auth_user_id
-  // aquí es nullable y NO único (a diferencia de usuarios_fm), así que 'auth_user_id' fallaría.
+  // onConflict: 'comercio_id,email' — desde la migración 0008 el unique de usuarios_comercio es
+  // (comercio_id, email), no email global (una persona puede ser owner de varios comercios).
   const { error: errorFila } = await supabase
     .from('usuarios_comercio')
     .upsert(
       { comercio_id: comercio.id, email, rol: 'owner', auth_user_id: authUserId! },
-      { onConflict: 'email' },
+      { onConflict: 'comercio_id,email' },
     );
   if (errorFila) throw errorFila;
 
