@@ -27,12 +27,15 @@ export default async function PaginaEscanear({
 
   const supabase = createServiceClient();
   const sucursales = await listarSucursales(supabase, sesion.comercioId);
+  // null = error de BD (distinto de [] = no hay sucursales). Para el cajero se distingue del caso
+  // "desactivada": un fallo transitorio no es lo mismo que una baja real, aunque ambos bloqueen.
+  const errorCargaSucursales = sucursales === null;
   const activas = (sucursales ?? []).filter((s) => s.activa);
 
   // Cajero: su sucursal la fija la membresía; debe seguir ACTIVA para poder operar.
   const suya =
     sesion.rol === 'cajero' ? activas.find((s) => s.id === sesion.sucursalId) : undefined;
-  const cajeroSinSucursalActiva = sesion.rol === 'cajero' && !suya;
+  const cajeroSinSucursalActiva = sesion.rol === 'cajero' && !errorCargaSucursales && !suya;
 
   return (
     <main className="admin-main" style={{ maxWidth: 560 }}>
@@ -41,7 +44,13 @@ export default async function PaginaEscanear({
         <Link className="admin-fila-slug" href="/comercio/panel">← Volver</Link>
       </div>
 
-      {cajeroSinSucursalActiva ? (
+      {errorCargaSucursales && sesion.rol === 'cajero' ? (
+        // Fallo transitorio al leer las sucursales: no confundir con una baja real. Fail-closed igual
+        // (el cajero no puede operar sin su sucursal), pero el mensaje es "reintentá", no "desactivada".
+        <p className="alerta reveal d2" role="alert" style={{ marginTop: 0 }}>
+          No se pudieron cargar las sucursales. Recargá la página e intentá de nuevo.
+        </p>
+      ) : cajeroSinSucursalActiva ? (
         // Su sucursal fue desactivada (o su membresía no apunta a ninguna activa): sin acreditar. El
         // RPC igual la rechazaría (sucursal_invalida), pero acá se lo decimos claro antes de escanear.
         <p className="alerta reveal d2" role="alert" style={{ marginTop: 0 }}>
