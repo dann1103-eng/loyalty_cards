@@ -12,13 +12,13 @@ const ENLACES = [
   { href: '/comercio/sucursales', icono: 'store', etiqueta: 'Sucursales' },
   { href: '/comercio/cajeros', icono: 'badge', etiqueta: 'Cajeros' },
   { href: '/comercio/clientes', icono: 'group', etiqueta: 'Clientes' },
+  { href: '/comercio/reportes', icono: 'insights', etiqueta: 'Reportes' },
 ] as const;
 
 export default function NavInferior({ rol }: { rol: string }) {
   const ruta = usePathname();
 
-  // El cajero solo opera el escáner; el owner ve la nav completa. (El ítem Reportes se agrega en su
-  // fase.)
+  // El cajero solo opera el escáner; el owner ve la nav completa (incluido Reportes).
   const enlaces = rol === 'owner' ? ENLACES : ENLACES.filter((e) => e.href === '/comercio/escanear');
 
   return (

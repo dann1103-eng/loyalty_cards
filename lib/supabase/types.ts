@@ -10,6 +10,7 @@
 //   - supabase/migrations/0007_difuminado_franja.sql (columna difuminado_franja en comercios)
 //   - supabase/migrations/0008_cuentas_sucursales_cajeros.sql (tablas cuentas_comercio/sucursales; comercios.cuenta_id; usuarios_comercio.sucursal_id; sucursal_id en transacciones_puntos/canjes)
 //   - supabase/migrations/0009_rpc_atomico.sql (usuarios_comercio.activo; funciones acreditar_puntos_atomico/canjear_recompensa_atomico en Functions)
+//   - supabase/migrations/0010_reportes.sql (funciones de reportes en Functions; índices; no cambia columnas)
 //
 // Hasta que `supabase gen types` esté cableado (requiere auth del CLI), este archivo se
 // mantiene a mano: si llega una migración nueva, hay que actualizarlo en el mismo commit.
@@ -561,6 +562,61 @@ export type Database = {
           saldo: number;
           nombre_recompensa: string;
           costo: number;
+        }[];
+      };
+      // Migración 0010: funciones de reportes (BI), read-only. Como son `returns table(...)`,
+      // `.rpc()` devuelve `data` como ARRAY de filas → `Returns` es `[]` (los wrappers leen las filas).
+      // Los `bigint` de Postgres los serializa PostgREST como `number`. `dia` (date) llega como string.
+      // Blindadas contra anon: solo service_role las ejecuta y los callers scopean por p_comercio_id del
+      // gate, nunca del cliente. reporte_fm_comercios() no toma argumentos (Args vacío).
+      reporte_sucursales: {
+        Args: {
+          p_comercio_id: string;
+        };
+        Returns: {
+          sucursal_id: string | null;
+          sucursal_nombre: string | null;
+          sucursal_activa: boolean | null;
+          acreditaciones: number;
+          puntos_otorgados: number;
+          canjes: number;
+          clientes_unicos: number;
+        }[];
+      };
+      reporte_top_clientes: {
+        Args: {
+          p_comercio_id: string;
+          p_limite: number;
+        };
+        Returns: {
+          cliente_id: string;
+          cliente_nombre: string;
+          visitas: number;
+          puntos_totales: number;
+        }[];
+      };
+      reporte_tendencia: {
+        Args: {
+          p_comercio_id: string;
+          p_dias: number;
+        };
+        Returns: {
+          dia: string;
+          acreditaciones: number;
+          canjes: number;
+        }[];
+      };
+      reporte_fm_comercios: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          comercio_id: string;
+          comercio_nombre: string;
+          cuenta_id: string | null;
+          cuenta_nombre: string | null;
+          clientes: number;
+          acreditaciones: number;
+          canjes: number;
+          saldo_circulante: number;
         }[];
       };
     };

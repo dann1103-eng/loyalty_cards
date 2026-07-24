@@ -26,6 +26,9 @@ export default async function LayoutProtegido({ children }: { children: React.Re
             <Link className="admin-salir" style={{ textDecoration: 'none' }} href="/admin/cuentas">
               Cuentas
             </Link>
+            <Link className="admin-salir" style={{ textDecoration: 'none' }} href="/admin/reportes">
+              Reportes
+            </Link>
           </nav>
           <form action={cerrarSesion}>
             <button className="admin-salir" type="submit">

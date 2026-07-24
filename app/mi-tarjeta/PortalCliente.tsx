@@ -57,7 +57,7 @@ function DetalleTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
         Descargar mi pass de nuevo
       </a>
       <p className="nota">
-        El canje se hace en el local: muestra tu pass al cajero. Esta vista es solo para consultar.
+        El canje se hace en persona: muestra tu pass al cajero. Esta vista es solo para consultar.
       </p>
     </div>
   );
