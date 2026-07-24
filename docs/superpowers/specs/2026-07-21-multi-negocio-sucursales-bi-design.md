@@ -77,8 +77,20 @@ al usuario**. Pasar a una lista lo elimina de raíz.
   respalda la validación; `validar()` es la ÚNICA defensa"). Un `cuenta_id` null degrada con gracia
   (queda fuera de los reportes agrupados por cuenta y fuera de cualquier límite), no rompe nada. Los
   seeds REALES (`scripts/seed-demo-comercios.ts`, `scripts/seed-pilot-comercio.ts`) SÍ se actualizan
-  para crear+asignar una cuenta (son datos que se muestran); los helpers de test sintéticos se dejan
-  como están (filas descartables que se limpian en teardown y prueban otra cosa).
+  para crear+asignar una cuenta (son datos que se muestran); los helpers de test que insertan comercios
+  DIRECTO (`insert({nombre, slug})`, saltándose `validar()` — `acreditar.test.ts`, `canje.test.ts`,
+  etc.) se dejan como están (filas descartables, con `cuenta_id` null, que prueban otra cosa).
+  **EXCEPCIÓN — `lib/comercios/guardarComercio.test.ts` SÍ debe refactorizarse:** su factory
+  `datosValidos()` (líneas 33-50) NO inserta directo — construye un `DatosComercio` y lo pasa por la
+  CAPA LIB (`crearComercio`/`actualizarComercio`), justo donde §4.3 agrega la regla `validar()` "La
+  cuenta es obligatoria." + `verificarLimiteCuenta`. Sin refactor, esa suite entera se pone roja (el
+  primer test esperaría `ok:true` y recibiría "La cuenta es obligatoria."; los tests que crean 2
+  comercios —p. ej. slug duplicado— fallarían por límite antes de llegar a lo que aseveran, porque una
+  cuenta nace con `limite_negocios` default 1). Refactor: un helper async `cuentaDePrueba()` que inserta
+  una `cuentas_comercio` con `limite_negocios` alto (p. ej. 999, para que el límite no interfiera con lo
+  que esos tests prueban), `datosValidos()` pasa a async (o recibe el `cuentaId`) y arrastra ese
+  `cuenta_id`, y el `afterEach` borra las `cuentas_comercio` de prueba DESPUÉS de los comercios (orden
+  FK, §5). Este refactor es parte del paso 5 de §6.
 - Swap del unique de email (§3).
 - `sucursales (id uuid pk, comercio_id uuid not null references comercios(id), nombre text not null,
   activa boolean not null default true, created_at timestamptz)` + RLS.
@@ -138,7 +150,10 @@ cliente; agregación en SQL (`count`/`group by`, no en JS):
   clientes_unicos (join a `tarjetas` porque las tablas de ledger no tienen `comercio_id`; bucket NULL
   para filas legacy sin sucursal).
 - `reporte_top_clientes(p_comercio_id, p_limite)`, `reporte_tendencia(p_comercio_id, p_dias)`.
-- `reporte_fm_comercios()` (+ opcional `reporte_fm_cuentas()`) cross-cliente para el panel FM.
+- `reporte_fm_comercios()` (+ opcional `reporte_fm_cuentas()`) cross-cliente para el panel FM. **El
+  join `comercios → cuentas_comercio` debe ser LEFT join (o bucket "sin cuenta")** — igual que el bucket
+  NULL de `sucursal_id` — para que un comercio con `cuenta_id` null (§4.1) no desaparezca en silencio
+  del rollup por cuenta.
 - Índices: `transacciones_puntos(sucursal_id)`, `canjes(sucursal_id)`, `transacciones_puntos(tarjeta_id)`,
   `transacciones_puntos(created_at)`.
 
