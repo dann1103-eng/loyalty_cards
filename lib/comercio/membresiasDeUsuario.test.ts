@@ -84,4 +84,22 @@ describe('membresiasDeUsuario', () => {
       sucursalId: null,
     });
   });
+
+  it('SEGURIDAD: un cajero dado de baja (activo=false) NO tiene membresía', async () => {
+    // Soft-delete: la fila usuarios_comercio sigue existiendo pero con activo=false. El filtro
+    // .eq('activo', true) de membresiasDeUsuario es el que le quita el acceso; sin él, el cajero
+    // dado de baja conservaría la membresía (MUTATION-TESTING apunta a este caso).
+    const id = await crearUsuarioAuth();
+    const comercio = await crearComercio('Comercio Baja');
+    const filaId = await ligar(id, comercio, 'cajero');
+
+    // Antes de la baja, la membresía existe: así el test aísla el efecto del soft-delete.
+    expect(await membresiasDeUsuario(supabase, id)).toHaveLength(1);
+
+    // Baja = soft-delete (equivale a desactivarCajero): update activo=false sobre la fila.
+    const { error } = await supabase.from('usuarios_comercio').update({ activo: false }).eq('id', filaId);
+    if (error) throw error;
+
+    expect(await membresiasDeUsuario(supabase, id)).toHaveLength(0);
+  });
 });

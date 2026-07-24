@@ -11,7 +11,20 @@ import {
 
 type Modo = 'camara' | 'sin-camara' | 'buscando' | 'resultado';
 
-export default function Escaner({ tokenInicial }: { tokenInicial?: string }) {
+// Sucursal a la que se atribuye la operación. Un CAJERO recibe una fija (su membresía); un OWNER
+// recibe la lista de activas para elegir en un picker. La atribución real la decide el servidor
+// (resolverSucursalDeAccion): para el cajero el valor que mande este cliente se ignora.
+export type SucursalOpcion = { id: string; nombre: string };
+
+export default function Escaner({
+  tokenInicial,
+  sucursalFija,
+  sucursales,
+}: {
+  tokenInicial?: string;
+  sucursalFija?: SucursalOpcion;
+  sucursales?: SucursalOpcion[];
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -24,7 +37,14 @@ export default function Escaner({ tokenInicial }: { tokenInicial?: string }) {
   const [error, setError] = useState<string | null>(null);
   const [deltaPuntos, setDeltaPuntos] = useState('1');
   const [tokenManual, setTokenManual] = useState('');
+  // Solo aplica al owner (con picker). '' = "Sin especificar" → null (sin atribución). El cajero no
+  // usa este estado: su sucursal es fija y el servidor la impone.
+  const [sucursalIdSeleccionada, setSucursalIdSeleccionada] = useState('');
   const [pendiente, iniciarTransicion] = useTransition();
+
+  // Valor que se manda a las acciones como "sucursal del cliente". Para el cajero es su sucursal fija
+  // (el servidor la revalida igual); para el owner, lo elegido en el picker ('' → null).
+  const sucursalIdCliente = sucursalFija ? sucursalFija.id : sucursalIdSeleccionada || null;
 
   const apagarCamara = useCallback(() => {
     if (intervaloRef.current) {
@@ -117,7 +137,7 @@ export default function Escaner({ tokenInicial }: { tokenInicial?: string }) {
     setMensaje(null);
     setError(null);
     iniciarTransicion(async () => {
-      const res = await accionAcreditar(resultado.tarjetaId!, delta);
+      const res = await accionAcreditar(resultado.tarjetaId!, delta, sucursalIdCliente);
       if (res.ok) {
         setSaldoTexto(res.saldoTexto);
         setResultado((r) => (r ? { ...r, puntosActuales: res.puntosActuales } : r));
@@ -134,7 +154,7 @@ export default function Escaner({ tokenInicial }: { tokenInicial?: string }) {
     setMensaje(null);
     setError(null);
     iniciarTransicion(async () => {
-      const res = await accionCanjear(resultado.tarjetaId!, recompensaId);
+      const res = await accionCanjear(resultado.tarjetaId!, recompensaId, sucursalIdCliente);
       if (res.ok) {
         setSaldoTexto(res.saldoTexto);
         setResultado((r) => (r ? { ...r, puntosActuales: res.puntosActuales } : r));
@@ -226,6 +246,28 @@ export default function Escaner({ tokenInicial }: { tokenInicial?: string }) {
         <p className="metric-valor" style={{ fontSize: '2rem', marginTop: 12, color: 'var(--acento)' }}>
           {saldoTexto}
         </p>
+
+        {/* Atribución de sucursal: fija para el cajero (solo etiqueta), elegible para el owner. */}
+        {sucursalFija && (
+          <p className="nota" style={{ marginTop: 12 }}>
+            Sucursal: <strong style={{ color: 'var(--texto)' }}>{sucursalFija.nombre}</strong>
+          </p>
+        )}
+        {sucursales && (
+          <div className="field" style={{ marginTop: 12, textAlign: 'left' }}>
+            <label htmlFor="sucursal-escaner">Sucursal</label>
+            <select
+              id="sucursal-escaner"
+              value={sucursalIdSeleccionada}
+              onChange={(e) => setSucursalIdSeleccionada(e.target.value)}
+            >
+              <option value="">Sin especificar</option>
+              {sucursales.map((s) => (
+                <option key={s.id} value={s.id}>{s.nombre}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {resultado.esSellos ? (
           <button className="btn-acento" style={{ marginTop: 16 }} onClick={() => acreditar(1)} disabled={pendiente}>

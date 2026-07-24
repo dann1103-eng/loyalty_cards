@@ -167,10 +167,26 @@ describe('listarCajeros', () => {
     expect(lista).not.toBeNull();
     expect(lista!.length).toBe(1); // solo el cajero de ESTE comercio, sin el owner ni el ajeno
   });
+
+  it('no incluye cajeros dados de baja (soft-delete, activo=false)', async () => {
+    const { comercioId, sucursalId } = await armar();
+    const creado = await crearCajero(supabase, comercioId, {
+      email: emailUnico(),
+      password: 'contrasena-de-prueba-1234',
+      sucursalId,
+    });
+    if (!creado.ok) throw new Error('el setup falló');
+
+    await desactivarCajero(supabase, creado.id, comercioId);
+
+    const lista = await listarCajeros(supabase, comercioId);
+    expect(lista).not.toBeNull();
+    expect(lista!.length).toBe(0); // el dado de baja no aparece en la lista
+  });
 });
 
 describe('desactivarCajero', () => {
-  it('borra la fila del cajero (pierde el acceso)', async () => {
+  it('soft-delete: la fila NO se borra y queda activo=false (preserva el ledger)', async () => {
     const { comercioId, sucursalId } = await armar();
     const creado = await crearCajero(supabase, comercioId, {
       email: emailUnico(),
@@ -182,11 +198,16 @@ describe('desactivarCajero', () => {
     const res = await desactivarCajero(supabase, creado.id, comercioId);
     expect(res.ok).toBe(true);
 
-    const { data } = await supabase.from('usuarios_comercio').select('id').eq('id', creado.id).maybeSingle();
-    expect(data).toBeNull(); // la fila se borró
+    const { data } = await supabase
+      .from('usuarios_comercio')
+      .select('id, activo')
+      .eq('id', creado.id)
+      .maybeSingle();
+    expect(data).not.toBeNull(); // la fila SIGUE existiendo (soft-delete, no DELETE)
+    expect(data!.activo).toBe(false); // queda inactiva → sin acceso, pero el ledger la conserva
   });
 
-  it('no borra un cajero de OTRO comercio', async () => {
+  it('no da de baja un cajero de OTRO comercio', async () => {
     const a = await armar();
     const b = await armar();
     const creado = await crearCajero(supabase, a.comercioId, {
@@ -200,7 +221,12 @@ describe('desactivarCajero', () => {
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/ya no existe/i);
 
-    const { data } = await supabase.from('usuarios_comercio').select('id').eq('id', creado.id).maybeSingle();
+    const { data } = await supabase
+      .from('usuarios_comercio')
+      .select('id, activo')
+      .eq('id', creado.id)
+      .maybeSingle();
     expect(data).not.toBeNull(); // intacto: no era de comercioB
+    expect(data!.activo).toBe(true); // y sigue activo: la baja ajena no lo tocó
   });
 });

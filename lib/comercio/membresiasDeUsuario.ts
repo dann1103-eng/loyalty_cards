@@ -12,6 +12,10 @@ export interface Membresia {
 // Todas las membresías (owner o cajero) de una cuenta de Auth. Lista, NO maybeSingle(): una cuenta
 // puede administrar varios comercios (arreglo del lockout que documentaba esOwnerDeComercio.ts).
 // Falla cerrado → [] con log (un error acá es infraestructura, no "sin membresías").
+//
+// Solo membresías ACTIVAS (.eq('activo', true)): un cajero dado de baja (soft-delete, activo=false)
+// NO tiene membresía → pierde el acceso en el gate. Los owners nacen activo=true (default de la BD),
+// así que este filtro no los afecta. Es un CONTROL DE SEGURIDAD (ver MUTATION-TESTING en el .test.ts).
 export async function membresiasDeUsuario(
   supabase: SupabaseClient<Database>,
   authUserId: string,
@@ -19,7 +23,8 @@ export async function membresiasDeUsuario(
   const { data, error } = await supabase
     .from('usuarios_comercio')
     .select('id, comercio_id, rol, sucursal_id, comercios(nombre)')
-    .eq('auth_user_id', authUserId);
+    .eq('auth_user_id', authUserId)
+    .eq('activo', true);
 
   if (error) {
     console.error('[comercio] falló la consulta de membresías; se deniega por seguridad:', error);
