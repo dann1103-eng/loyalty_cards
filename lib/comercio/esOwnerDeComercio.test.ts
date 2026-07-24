@@ -7,8 +7,9 @@ const usuariosCreados: string[] = [];
 const slugsDePrueba: string[] = [];
 
 afterEach(async () => {
-  // Orden: filas de usuarios_comercio (por email) → auth.users → comercios. usuarios_comercio
-  // apunta a comercios y a auth.users sin cascade, así que el hijo va antes que ambos padres.
+  // Orden: filas de usuarios_comercio (por auth_user_id) → auth.users → comercios.
+  // usuarios_comercio apunta a comercios y a auth.users sin cascade, así que el hijo va antes
+  // que ambos padres.
   for (const id of usuariosCreados) {
     const { error: e1 } = await supabase.from('usuarios_comercio').delete().eq('auth_user_id', id);
     if (e1) console.error('[test] no se pudo borrar la fila de usuarios_comercio:', e1);
@@ -55,61 +56,58 @@ async function ligar(authUserId: string, comercioId: string, rol: 'owner' | 'caj
 }
 
 describe('esOwnerDeComercio', () => {
-  it('devuelve el comercio (id y nombre) cuando el usuario es owner', async () => {
+  it('devuelve UN comercio (id y nombre) cuando el usuario es owner de uno', async () => {
     const id = await crearUsuarioAuth();
     const comercioId = await crearComercio('Comercio del Owner');
     await ligar(id, comercioId, 'owner');
 
     const res = await esOwnerDeComercio(supabase, id);
-    expect(res).not.toBeNull();
-    expect(res!.comercioId).toBe(comercioId);
-    expect(res!.nombre).toBe('Comercio del Owner');
+    expect(res).toHaveLength(1);
+    expect(res[0].comercioId).toBe(comercioId);
+    expect(res[0].nombre).toBe('Comercio del Owner');
   });
 
-  it('devuelve null cuando el usuario existe pero NO tiene fila en usuarios_comercio', async () => {
+  it('devuelve AMBOS comercios cuando el usuario es owner de dos', async () => {
     const id = await crearUsuarioAuth();
-    expect(await esOwnerDeComercio(supabase, id)).toBeNull();
+    const comercioA = await crearComercio('Comercio A');
+    const comercioB = await crearComercio('Comercio B');
+    await ligar(id, comercioA, 'owner');
+    await ligar(id, comercioB, 'owner');
+
+    const res = await esOwnerDeComercio(supabase, id);
+    expect(res).toHaveLength(2);
+    expect(res.map((c) => c.comercioId).sort()).toEqual([comercioA, comercioB].sort());
   });
 
-  it('devuelve null para un id que no existe', async () => {
-    expect(await esOwnerDeComercio(supabase, '00000000-0000-0000-0000-000000000000')).toBeNull();
+  it('devuelve lista vacía cuando el usuario existe pero NO tiene fila en usuarios_comercio', async () => {
+    const id = await crearUsuarioAuth();
+    expect(await esOwnerDeComercio(supabase, id)).toEqual([]);
   });
 
-  it('devuelve null para un usuario con rol cajero (no owner)', async () => {
-    // El filtro .eq('rol','owner') NO es decorativo: un cajero tiene fila en usuarios_comercio
-    // pero no debe entrar al panel del dueño. Sin el filtro, este test pasaría un cajero como owner.
+  it('devuelve lista vacía para un id que no existe', async () => {
+    expect(await esOwnerDeComercio(supabase, '00000000-0000-0000-0000-000000000000')).toEqual([]);
+  });
+
+  it('devuelve lista vacía para un usuario con rol cajero (no owner)', async () => {
+    // El filtro rol==='owner' NO es decorativo: un cajero tiene fila en usuarios_comercio pero no
+    // debe entrar al panel del dueño. Sin el filtro, este test devolvería un cajero como owner.
     const id = await crearUsuarioAuth();
     const comercioId = await crearComercio('Comercio con Cajero');
     await ligar(id, comercioId, 'cajero');
 
-    expect(await esOwnerDeComercio(supabase, id)).toBeNull();
+    expect(await esOwnerDeComercio(supabase, id)).toEqual([]);
   });
 
-  it('devuelve null para un usuario sin fila aunque OTRO sí sea owner', async () => {
-    // Fija el .eq('auth_user_id', ...): con una sola fila de otro owner, un maybeSingle() sin
-    // filtro la devolvería y el intruso entraría.
-    const idOwner = await crearUsuarioAuth();
-    const comercioId = await crearComercio('Comercio de Otro');
-    await ligar(idOwner, comercioId, 'owner');
-    const idIntruso = await crearUsuarioAuth();
+  it('devuelve SOLO los comercios donde es owner, ignorando los de cajero', async () => {
+    // Con una cuenta que es owner de uno y cajero de otro, la lista trae únicamente el de owner.
+    const id = await crearUsuarioAuth();
+    const comercioOwner = await crearComercio('Comercio Propio');
+    const comercioCajero = await crearComercio('Comercio Ajeno');
+    await ligar(id, comercioOwner, 'owner');
+    await ligar(id, comercioCajero, 'cajero');
 
-    expect(await esOwnerDeComercio(supabase, idIntruso)).toBeNull();
-  });
-
-  it('discrimina entre dos owners distintos: cada uno ve SOLO su comercio', async () => {
-    // Mata de forma ROBUSTA la mutación de .eq('auth_user_id', ...), sin depender del estado de la
-    // BD. Con DOS owners creados por el test, quitar ese filtro deja la consulta en .eq('rol','owner')
-    // sola → matchea ≥2 filas → maybeSingle() lanza PGRST116 → null → estas aserciones fallan.
-    // (La prueba del intruso de arriba solo mata esa mutación cuando hay EXACTAMENTE 1 owner en la
-    // BD; deja de cumplirse en cuanto se siembra el dueño real. Esta no depende de ese supuesto.)
-    const idA = await crearUsuarioAuth();
-    const comercioA = await crearComercio('Comercio A');
-    await ligar(idA, comercioA, 'owner');
-    const idB = await crearUsuarioAuth();
-    const comercioB = await crearComercio('Comercio B');
-    await ligar(idB, comercioB, 'owner');
-
-    expect((await esOwnerDeComercio(supabase, idA))?.comercioId).toBe(comercioA);
-    expect((await esOwnerDeComercio(supabase, idB))?.comercioId).toBe(comercioB);
+    const res = await esOwnerDeComercio(supabase, id);
+    expect(res).toHaveLength(1);
+    expect(res[0].comercioId).toBe(comercioOwner);
   });
 });
