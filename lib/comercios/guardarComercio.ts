@@ -197,12 +197,18 @@ export async function actualizarComercio(
   // Si el edit MUEVE el comercio a otra cuenta, la cuenta DESTINO tiene que tener cupo. Se lee el
   // cuenta_id actual y solo se verifica cuando cambia: reguardar el mismo comercio en su cuenta no
   // debe bloquearse a sí mismo (por eso el excluyendoComercioId). Si el comercio ya no existe, la
-  // lectura no devuelve fila y se salta el chequeo — el update de abajo lo reporta con PGRST116.
-  const { data: actual } = await supabase
+  // lectura no devuelve fila (data:null, error:null) y se salta el chequeo — el update de abajo lo
+  // reporta con PGRST116. Un ERROR de la lectura (infra), en cambio, falla CERRADO: no se puede
+  // saltar el chequeo de límite por un fallo transitorio (coherente con verificarLimiteCuenta).
+  const { data: actual, error: eActual } = await supabase
     .from('comercios')
     .select('cuenta_id')
     .eq('id', id)
     .maybeSingle();
+  if (eActual) {
+    console.error('[fm] no se pudo leer el comercio para verificar el límite:', eActual);
+    return { ok: false, error: 'No se pudo actualizar el comercio.' };
+  }
   if (actual && actual.cuenta_id !== limpios.cuenta_id) {
     const limite = await verificarLimiteCuenta(supabase, limpios.cuenta_id, { excluyendoComercioId: id });
     if (!limite.ok) return { ok: false, error: limite.error };
