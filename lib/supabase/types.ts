@@ -8,6 +8,8 @@
 //   - supabase/migrations/0005_tipo_tarjeta_y_sellos.sql (columnas tipo_tarjeta/sello_icono_url/sello_meta en comercios)
 //   - supabase/migrations/0006_intentos_consulta_portal.sql (tabla intentos_consulta_portal, rate limit del portal)
 //   - supabase/migrations/0007_difuminado_franja.sql (columna difuminado_franja en comercios)
+//   - supabase/migrations/0008_cuentas_sucursales_cajeros.sql (tablas cuentas_comercio/sucursales; comercios.cuenta_id; usuarios_comercio.sucursal_id; sucursal_id en transacciones_puntos/canjes)
+//   - supabase/migrations/0009_rpc_atomico.sql (usuarios_comercio.activo; funciones acreditar_puntos_atomico/canjear_recompensa_atomico en Functions)
 //
 // Hasta que `supabase gen types` esté cableado (requiere auth del CLI), este archivo se
 // mantiene a mano: si llega una migración nueva, hay que actualizarlo en el mismo commit.

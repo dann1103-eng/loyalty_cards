@@ -146,7 +146,9 @@ describe('canjearRecompensa', () => {
     const res = await canjearRecompensa(supabase, comercioId, tarjetaId, recompensaId);
 
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toMatch(/alcanzan|puntos|sellos/i);
+    // Mensaje EXACTO (no regex floja): saldo 7, costo 10 → faltan 3. Protege la resta `costo - saldo`
+    // del wrapper; invertirla (saldo - costo → -3) rompe esta aserción. (Mutation-testing, CLAUDE.md.)
+    if (!res.ok) expect(res.error).toBe('No le alcanzan los puntos: le faltan 3.');
     const { data: tarjeta } = await supabase.from('tarjetas').select('puntos_actuales').eq('id', tarjetaId).single();
     expect(tarjeta!.puntos_actuales).toBe(7);
     const { data: canjes } = await supabase.from('canjes').select('id').eq('tarjeta_id', tarjetaId);
