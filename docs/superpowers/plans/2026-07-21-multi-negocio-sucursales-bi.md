@@ -460,8 +460,9 @@ git commit -m "Sucursales: capa lib scopeada y CRUD en el panel del dueño"
 - Modify: `app/comercio/(protegido)/panel/page.tsx` (ATAJOS), `.../NavInferior.tsx`
 
 - [ ] **Step 1:** `page.tsx` (gate owner) lista cajeros con su sucursal; `FormularioCajero.tsx` con email + password + `<select sucursal>` (de `listarSucursales` activas); `actions.ts` `accionCrearCajero` corre `createServiceClient()`, re-gate owner, `comercioId` del gate, delega a `crearCajero`. **La acción no loguea la password.** `accionDesactivarCajero`.
+- [ ] **Step 1.5 (PRECONDICIÓN — detectado en review de Fase 4):** antes de crear cualquier cajero, RELAJAR el gate de `app/comercio/(protegido)/escanear/page.tsx` de `verifyComercioOwner()` a `verifyComercioAcceso()`. Hoy un cajero que se loguea es mandado a `/comercio/escanear`, pero esa página usa el gate owner-only que lo rebota a `/comercio/escanear` → **loop infinito de redirect**. El picker/atribución completo llega en Fase 9; acá solo el cambio de gate (y que la página no reviente si `rol==='cajero'`) para que el cajero pueda entrar. Sin esto, la verificación del Step 3 da "demasiadas redirecciones".
 - [ ] **Step 2:** Agregar "Cajeros" a ATAJOS + NavInferior (owner).
-- [ ] **Step 3:** Verificación (navegador, controlador): crear un cajero atado a una sucursal; loguear con esa cuenta en otra sesión/incógnito → cae en `/comercio/escanear`, NO ve el panel de dueño. Limpiar el cajero (fila + Auth user).
+- [ ] **Step 3:** Verificación (navegador, controlador): crear un cajero atado a una sucursal; loguear con esa cuenta en otra sesión/incógnito → cae en `/comercio/escanear` (SIN loop, gracias al Step 1.5), NO ve el panel de dueño. Limpiar el cajero (fila + Auth user).
 - [ ] **Step 4: Commit.**
 
 ```bash
