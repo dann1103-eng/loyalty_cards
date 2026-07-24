@@ -66,6 +66,7 @@
 - Modificar `lib/comercio/canje.ts`, `lib/comercio/canje.test.ts`
 
 **Escáner:**
+- Crear `lib/comercio/atribucionEscaner.ts` (+ test) — resolver puro anti-spoofing del cajero
 - Modificar `app/comercio/(protegido)/escanear/page.tsx`, `Escaner.tsx`, `actions.ts`
 
 **BI:**
