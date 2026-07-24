@@ -70,7 +70,7 @@ export default async function PaginaReportesFm() {
       </section>
 
       {comercios.length === 0 ? (
-        <p className="admin-vacio">Todavía no hay comercios con actividad.</p>
+        <p className="admin-vacio">Todavía no hay comercios registrados.</p>
       ) : (
         grupos.map((g) => (
           <section key={g.cuentaId ?? 'sin-cuenta'} className="reveal d3" style={{ marginBottom: 26 }}>

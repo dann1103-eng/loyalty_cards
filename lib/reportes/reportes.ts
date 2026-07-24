@@ -9,10 +9,11 @@ import type { Database } from '../supabase/types';
 // un campo del cliente — igual que el resto del proyecto, para que un dueño no pueda leer los reportes
 // de otro comercio aunque conozca el id.
 //
-// CRITERIO ANTE ERROR (consistente en los cuatro): se registra con console.error y se devuelve `[]`.
+// CRITERIO ANTE ERROR (consistente en los cuatro): se registra con console.error ACÁ y se devuelve `[]`.
 // Una pantalla de reportes rota NO debe tumbar todo el panel: un arreglo vacío la deja renderizar su
-// estado "sin datos" en vez de lanzar. La distinción "vacío real" vs "error" se maneja en la pantalla
-// (que ya loguea) — acá no inventamos un canal de error extra que nadie consume.
+// estado "sin datos" en vez de lanzar. Decisión deliberada de fail-soft para el piloto: la pantalla NO
+// distingue "vacío real" de "error" (muestra el mismo estado); el rastro del fallo queda en el log de
+// acá. Si algún día importa distinguirlos, se agregaría un canal de error explícito en el retorno.
 
 // Los tipos de fila se DERIVAN de Database (fuente de verdad transcrita de la migración): si el shape
 // de una función cambia en types.ts, estos tipos y las pantallas se enteran en compilación.
