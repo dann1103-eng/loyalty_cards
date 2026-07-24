@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { createClienteServidor, createServiceClient } from '@/lib/supabase/server';
 import { membresiasDeUsuario } from './membresiasDeUsuario';
 import { resolverComercioActivo } from './comercioActivo';
+import { COOKIE_COMERCIO_ACTIVO } from './cookieComercio';
 
 // Gate COMPARTIDO de /comercio: resuelve la sesión + el "comercio activo" y devuelve TODO el
 // contexto (rol incluido). verifyComercioOwner() es un wrapper delgado encima que exige rol owner.
@@ -37,7 +38,7 @@ export const verifyComercioAcceso = cache(async () => {
   const membresias = await membresiasDeUsuario(createServiceClient(), sub);
 
   const cookieStore = await cookies();
-  const r = resolverComercioActivo(membresias, cookieStore.get('fm_comercio_activo')?.value);
+  const r = resolverComercioActivo(membresias, cookieStore.get(COOKIE_COMERCIO_ACTIVO)?.value);
 
   if (r.tipo === 'sin-acceso') {
     redirect('/comercio/login?error=sin-permiso');

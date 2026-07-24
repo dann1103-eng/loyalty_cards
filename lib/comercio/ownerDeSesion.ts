@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { createClienteServidor, createServiceClient } from '@/lib/supabase/server';
 import { membresiasDeUsuario } from './membresiasDeUsuario';
 import { resolverComercioActivo } from './comercioActivo';
+import { COOKIE_COMERCIO_ACTIVO } from './cookieComercio';
 
 // Variante del gate del dueño para ROUTE HANDLERS (APIs): devuelve la sesión o null, y el caller
 // responde 401 en JSON. verifyComercioOwner() es para páginas/acciones (redirige con
@@ -28,7 +29,7 @@ export async function ownerDeSesion(): Promise<{
 
     const membresias = await membresiasDeUsuario(createServiceClient(), authUserId);
     const cookieStore = await cookies();
-    const r = resolverComercioActivo(membresias, cookieStore.get('fm_comercio_activo')?.value);
+    const r = resolverComercioActivo(membresias, cookieStore.get(COOKIE_COMERCIO_ACTIVO)?.value);
 
     if (r.tipo !== 'resuelto' || r.membresia.rol !== 'owner') return null;
     return {
