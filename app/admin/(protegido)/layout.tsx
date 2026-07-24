@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { verifyFmAdmin } from '@/lib/fm/verifyFmAdmin';
 import { cerrarSesion } from '../actions';
 
@@ -15,11 +16,23 @@ export default async function LayoutProtegido({ children }: { children: React.Re
           </span>
           FM Lealtad · Interno
         </span>
-        <form action={cerrarSesion}>
-          <button className="admin-salir" type="submit">
-            Salir
-          </button>
-        </form>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Nav interna del panel FM. Reusa el estilo pastilla de .admin-salir para no depender de
+              CSS nuevo (globals.css queda fuera del alcance de esta fase). */}
+          <nav style={{ display: 'flex', gap: 8 }}>
+            <Link className="admin-salir" style={{ textDecoration: 'none' }} href="/admin/comercios">
+              Comercios
+            </Link>
+            <Link className="admin-salir" style={{ textDecoration: 'none' }} href="/admin/cuentas">
+              Cuentas
+            </Link>
+          </nav>
+          <form action={cerrarSesion}>
+            <button className="admin-salir" type="submit">
+              Salir
+            </button>
+          </form>
+        </div>
       </header>
       {children}
     </div>

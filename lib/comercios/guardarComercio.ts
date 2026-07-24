@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { validarColorRgb } from './validarColorRgb';
+import { verificarLimiteCuenta } from './cuentas';
 
 // Fuente única de verdad: la BD tiene check (licencia_estado in ('activo','inactivo')) en la
 // migración 0003. El <select> de la Tarea 9 se construye desde esta misma constante para que el
@@ -39,6 +40,10 @@ export interface DatosComercio {
   licencia_monto_mensual: number | null;
   licencia_activa_desde: string | null;
   tipo_tarjeta: string;
+  // La cuenta (cliente que paga) a la que pertenece el comercio. Obligatorio en la capa app —
+  // la columna es nullable en la BD a propósito (migración 0008), así que validar() es la única
+  // defensa, igual que con los colores y el monto.
+  cuenta_id: string;
 }
 
 export type ResultadoGuardar =
@@ -71,6 +76,7 @@ function normalizar(datos: DatosComercio): DatosComercio {
     licencia_plan: limpiarOpcional(datos.licencia_plan),
     licencia_activa_desde: limpiarOpcional(datos.licencia_activa_desde),
     tipo_tarjeta: datos.tipo_tarjeta.trim(),
+    cuenta_id: datos.cuenta_id.trim(),
   };
 }
 
@@ -96,6 +102,9 @@ function esFechaValida(valor: string): boolean {
 // TODA la validación vive aquí, no en los Server Actions: esta es la capa con tests de
 // integración. Una regla que solo exista en la acción no está cubierta por ninguna prueba.
 function validar(datos: DatosComercio): string | null {
+  // La cuenta va primero: sin ella no hay contra qué verificar el límite de negocios, y la BD la
+  // acepta null sin chistar (columna nullable de la 0008) — validar() es la única defensa.
+  if (!datos.cuenta_id) return 'La cuenta es obligatoria.';
   if (!datos.nombre) return 'El nombre es obligatorio.';
   if (!/^[a-z0-9-]+$/.test(datos.slug)) {
     return 'El slug solo puede tener minúsculas, números y guiones.';
@@ -149,6 +158,11 @@ export async function crearComercio(
   const problema = validar(limpios);
   if (problema) return { ok: false, error: problema };
 
+  // El límite de negocios de la cuenta se aplica ANTES del insert: crear un comercio consume un
+  // cupo, así que una cuenta llena debe rechazar el alta con un mensaje claro (no un error de BD).
+  const limite = await verificarLimiteCuenta(supabase, limpios.cuenta_id);
+  if (!limite.ok) return { ok: false, error: limite.error };
+
   const { data, error } = await supabase.from('comercios').insert(limpios).select('id').single();
 
   if (error) {
@@ -179,6 +193,20 @@ export async function actualizarComercio(
   const limpios = normalizar(datos);
   const problema = validar(limpios);
   if (problema) return { ok: false, error: problema };
+
+  // Si el edit MUEVE el comercio a otra cuenta, la cuenta DESTINO tiene que tener cupo. Se lee el
+  // cuenta_id actual y solo se verifica cuando cambia: reguardar el mismo comercio en su cuenta no
+  // debe bloquearse a sí mismo (por eso el excluyendoComercioId). Si el comercio ya no existe, la
+  // lectura no devuelve fila y se salta el chequeo — el update de abajo lo reporta con PGRST116.
+  const { data: actual } = await supabase
+    .from('comercios')
+    .select('cuenta_id')
+    .eq('id', id)
+    .maybeSingle();
+  if (actual && actual.cuenta_id !== limpios.cuenta_id) {
+    const limite = await verificarLimiteCuenta(supabase, limpios.cuenta_id, { excluyendoComercioId: id });
+    if (!limite.ok) return { ok: false, error: limite.error };
+  }
 
   const { error } = await supabase
     .from('comercios')

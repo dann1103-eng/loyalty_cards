@@ -173,7 +173,17 @@ async function main() {
       continue;
     }
 
-    // 1. Comercio (colores + tipo + licencia demo).
+    // 0. Cuenta (cliente que paga) del demo: una por comercio, límite 1. Se crea dentro de la rama
+    //    "no existe" (arriba se hace continue si el slug ya está), así que re-correr el seed no
+    //    acumula cuentas huérfanas — misma idempotencia por slug que el resto.
+    const { data: cuenta, error: eCuenta } = await supabase
+      .from('cuentas_comercio')
+      .insert({ nombre: d.nombre, limite_negocios: 1 })
+      .select('id')
+      .single();
+    if (eCuenta) throw eCuenta;
+
+    // 1. Comercio (colores + tipo + licencia demo + cuenta).
     const { data: comercio, error: eC } = await supabase
       .from('comercios')
       .insert({
@@ -181,6 +191,7 @@ async function main() {
         color_fondo: d.fondo, color_texto: d.texto, color_label: d.label,
         tipo_tarjeta: d.tipo, sello_meta: d.meta,
         licencia_estado: 'activo', licencia_plan: 'Demo',
+        cuenta_id: cuenta.id,
       })
       .select('id')
       .single();

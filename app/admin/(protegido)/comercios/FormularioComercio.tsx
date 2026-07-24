@@ -19,9 +19,10 @@ type Valores = {
   licencia_monto_mensual: string;
   licencia_activa_desde: string;
   tipo_tarjeta: string;
+  cuenta_id: string;
 };
 
-function valoresIniciales(inicial?: Partial<DatosComercio>): Valores {
+function valoresIniciales(inicial?: Partial<DatosComercio>, cuentas: { id: string }[] = []): Valores {
   return {
     nombre: inicial?.nombre ?? '',
     slug: inicial?.slug ?? '',
@@ -37,6 +38,10 @@ function valoresIniciales(inicial?: Partial<DatosComercio>): Valores {
       inicial?.licencia_monto_mensual != null ? String(inicial.licencia_monto_mensual) : '',
     licencia_activa_desde: inicial?.licencia_activa_desde ?? '',
     tipo_tarjeta: inicial?.tipo_tarjeta ?? 'puntos',
+    // Al crear (sin inicial) se preselecciona la primera cuenta para que el <select> nunca envíe ''
+    // — validar() exige cuenta_id, y un dropdown vacío sería un rechazo garantizado en el primer
+    // intento. Al editar, se respeta el cuenta_id del comercio.
+    cuenta_id: inicial?.cuenta_id ?? cuentas[0]?.id ?? '',
   };
 }
 
@@ -44,11 +49,13 @@ export default function FormularioComercio({
   accion,
   inicial,
   textoBoton,
+  cuentas,
   esEdicion = false,
 }: {
   accion: (estado: EstadoFormulario, formData: FormData) => Promise<EstadoFormulario>;
   inicial?: Partial<DatosComercio>;
   textoBoton: string;
+  cuentas: { id: string; nombre: string }[];
   esEdicion?: boolean;
 }) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoFormulario, FormData>(
@@ -61,7 +68,7 @@ export default function FormularioComercio({
   // admin llenaba doce campos, se equivocaba en uno, y perdía todo. Verificado en el navegador:
   // el nombre y el slug volvían a "" al rechazarse un color. Y es fácil de disparar: escribir
   // "Café Piloto" como slug (mayúscula, espacio, tilde) lo rechaza al primer intento.
-  const [valores, setValores] = useState<Valores>(() => valoresIniciales(inicial));
+  const [valores, setValores] = useState<Valores>(() => valoresIniciales(inicial, cuentas));
 
   const cambiar =
     (campo: keyof Valores) =>
@@ -107,6 +114,32 @@ export default function FormularioComercio({
             Cambiarlo rompe los QR ya impresos de este comercio: quien los escanee caerá en
             «Comercio no encontrado» y no podrá registrarse. Los passes ya emitidos siguen
             funcionando.
+          </p>
+        )}
+      </div>
+
+      <div className="field">
+        <label htmlFor="cuenta_id">Cuenta (cliente que paga)</label>
+        {/* El límite de negocios por cuenta se aplica en validar()/verificarLimiteCuenta al guardar,
+            no aquí: este <select> solo elige la cuenta. Si no hay cuentas todavía, hay que crear una
+            en «Cuentas» antes de poder dar de alta un comercio. */}
+        <select
+          id="cuenta_id"
+          name="cuenta_id"
+          value={valores.cuenta_id}
+          onChange={cambiar('cuenta_id')}
+          required
+        >
+          {cuentas.length === 0 && <option value="">— No hay cuentas —</option>}
+          {cuentas.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.nombre}
+            </option>
+          ))}
+        </select>
+        {cuentas.length === 0 && (
+          <p className="field-aviso">
+            No hay cuentas todavía. Creá una en «Cuentas» antes de dar de alta un comercio.
           </p>
         )}
       </div>

@@ -11,6 +11,7 @@ const supabase = createServiceClient();
 const slugsDePrueba: string[] = [];
 const tarjetasDePrueba: string[] = [];
 const clientesDePrueba: string[] = [];
+const cuentasDePrueba: string[] = [];
 
 afterEach(async () => {
   if (tarjetasDePrueba.length) {
@@ -28,9 +29,32 @@ afterEach(async () => {
     if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
     slugsDePrueba.length = 0;
   }
+  // DESPUÉS de comercios: cada comercio referencia su cuenta vía cuenta_id, así que borrar las
+  // cuentas antes daría un 23503. Orden FK: comercios → cuentas_comercio.
+  if (cuentasDePrueba.length) {
+    const { error } = await supabase.from('cuentas_comercio').delete().in('id', cuentasDePrueba);
+    if (error) console.error('[test] no se pudieron borrar las cuentas de prueba:', error);
+    cuentasDePrueba.length = 0;
+  }
 });
 
-function datosValidos(slug: string): DatosComercio {
+// Cada comercio de prueba necesita una cuenta real a la que colgarse (cuenta_id es obligatorio en
+// la capa lib). Se le pone limite_negocios: 999 —absurdamente alto— para que el límite NUNCA
+// interfiera con las pruebas de crear/actualizar branding; el límite tiene su propia suite en
+// cuentas.test.ts. Se registra el id para el teardown.
+async function cuentaDePrueba(): Promise<string> {
+  const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const { data, error } = await supabase
+    .from('cuentas_comercio')
+    .insert({ nombre: `Cuenta Test ${sufijo}`, limite_negocios: 999 })
+    .select('id')
+    .single();
+  if (error) throw error;
+  cuentasDePrueba.push(data.id);
+  return data.id;
+}
+
+async function datosValidos(slug: string): Promise<DatosComercio> {
   slugsDePrueba.push(slug);
   return {
     nombre: 'Comercio Test',
@@ -46,13 +70,14 @@ function datosValidos(slug: string): DatosComercio {
     licencia_monto_mensual: 25,
     licencia_activa_desde: '2026-07-16',
     tipo_tarjeta: 'puntos',
+    cuenta_id: await cuentaDePrueba(),
   };
 }
 
 describe('crearComercio', () => {
   it('crea un comercio con licencia y branding', async () => {
     const slug = `test-crear-${Date.now()}`;
-    const res = await crearComercio(supabase, datosValidos(slug));
+    const res = await crearComercio(supabase, await datosValidos(slug));
 
     expect(res.ok).toBe(true);
     const { data } = await supabase
@@ -73,16 +98,16 @@ describe('crearComercio', () => {
 
   it('rechaza un slug duplicado con un mensaje claro, sin lanzar', async () => {
     const slug = `test-dup-${Date.now()}`;
-    await crearComercio(supabase, datosValidos(slug));
+    await crearComercio(supabase, await datosValidos(slug));
 
-    const res = await crearComercio(supabase, { ...datosValidos(slug), nombre: 'Otro' });
+    const res = await crearComercio(supabase, { ...(await datosValidos(slug)), nombre: 'Otro' });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/slug/i);
   });
 
   it('rechaza un color con formato inválido', async () => {
     const slug = `test-color-${Date.now()}`;
-    const res = await crearComercio(supabase, { ...datosValidos(slug), color_fondo: '#231812' });
+    const res = await crearComercio(supabase, { ...(await datosValidos(slug)), color_fondo: '#231812' });
 
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/color/i);
@@ -91,7 +116,7 @@ describe('crearComercio', () => {
   it('rechaza un monto mensual negativo', async () => {
     const slug = `test-monto-${Date.now()}`;
     const res = await crearComercio(supabase, {
-      ...datosValidos(slug),
+      ...(await datosValidos(slug)),
       licencia_monto_mensual: -50,
     });
 
@@ -102,7 +127,7 @@ describe('crearComercio', () => {
   it('rechaza un estado de licencia que la BD no acepta', async () => {
     const slug = `test-estado-${Date.now()}`;
     const res = await crearComercio(supabase, {
-      ...datosValidos(slug),
+      ...(await datosValidos(slug)),
       licencia_estado: 'suspendido',
     });
 
@@ -114,11 +139,25 @@ describe('crearComercio', () => {
 
   it('rechaza un nombre vacío', async () => {
     const slug = `test-nombre-${Date.now()}`;
-    const res = await crearComercio(supabase, { ...datosValidos(slug), nombre: '   ' });
+    const res = await crearComercio(supabase, { ...(await datosValidos(slug)), nombre: '   ' });
 
     expect(res.ok).toBe(false);
     // La BD acepta nombre:'' sin chistar (no hay CHECK) — validar() es la única defensa.
     if (!res.ok) expect(res.error).toMatch(/nombre/i);
+  });
+
+  it('rechaza un comercio sin cuenta (cuenta_id vacío)', async () => {
+    // MUTATION: quitar el guard `if (!datos.cuenta_id) return 'La cuenta es obligatoria.'` de
+    // validar() hace que un cuenta_id vacío NO falle aquí; caería más abajo, en crearComercio,
+    // con "No se pudo verificar el límite de la cuenta." (el id '' no es un uuid válido). Se
+    // ancla al mensaje EXACTO —no una regex floja— para que el mutante se detecte por la razón
+    // correcta. La BD no respalda esta regla (cuenta_id es nullable a propósito): validar() es la
+    // única defensa.
+    const slug = `test-sin-cuenta-${Date.now()}`;
+    const res = await crearComercio(supabase, { ...(await datosValidos(slug)), cuenta_id: '' });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toBe('La cuenta es obligatoria.');
   });
 
   it('rechaza slugs con formato inválido', async () => {
@@ -129,7 +168,7 @@ describe('crearComercio', () => {
       // código correcto (validar() rechaza los cuatro antes de insertar), pero sí cada vez que
       // se muta la regla del slug — y 'Test-Mayusculas' ni siquiera calza un barrido test-%.
       slugsDePrueba.push(malo);
-      const res = await crearComercio(supabase, { ...datosValidos(`test-slug-${Date.now()}`), slug: malo });
+      const res = await crearComercio(supabase, { ...(await datosValidos(`test-slug-${Date.now()}`)), slug: malo });
       expect(res.ok).toBe(false);
       if (!res.ok) expect(res.error).toMatch(/slug/i);
     }
@@ -143,7 +182,7 @@ describe('crearComercio', () => {
       // corta ahí, antes de llegar a los colores — la prueba fallaría por el slug, sin ejercitar
       // nunca lo que dice probar.
       const res = await crearComercio(supabase, {
-        ...datosValidos(`test-${campo.replace('_', '-')}-${Date.now()}`),
+        ...(await datosValidos(`test-${campo.replace('_', '-')}-${Date.now()}`)),
         [campo]: '#231812',
       });
       expect(res.ok).toBe(false);
@@ -155,7 +194,7 @@ describe('crearComercio', () => {
     const slug = `test-nan-${Date.now()}`;
     // La Tarea 9 hace Number(monto): un "25a" en el formulario llega como NaN. Sin el
     // Number.isFinite, JSON.stringify(NaN) es "null" y el monto se guardaría VACÍO en silencio.
-    const res = await crearComercio(supabase, { ...datosValidos(slug), licencia_monto_mensual: NaN });
+    const res = await crearComercio(supabase, { ...(await datosValidos(slug)), licencia_monto_mensual: NaN });
 
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/monto/i);
@@ -168,7 +207,7 @@ describe('crearComercio', () => {
     // Postgres lo rechaza con un 22008: no existe el año cero. Sin el (?!0000) sale el genérico.
     for (const mala of ['16/07/2026', 'ayer', '2026-02-31', '2026-7-6', '0000-01-01']) {
       const res = await crearComercio(supabase, {
-        ...datosValidos(`test-fecha-${Date.now()}`),
+        ...(await datosValidos(`test-fecha-${Date.now()}`)),
         licencia_activa_desde: mala,
       });
       expect(res.ok).toBe(false);
@@ -179,7 +218,7 @@ describe('crearComercio', () => {
   it('normaliza espacios y guarda los opcionales vacíos como null', async () => {
     const slug = `test-normalizar-${Date.now()}`;
     const res = await crearComercio(supabase, {
-      ...datosValidos(slug),
+      ...(await datosValidos(slug)),
       nombre: '  Café con Espacios  ',
       color_fondo: '  rgb(35, 24, 18)  ',
       licencia_estado: '  activo  ',
@@ -205,7 +244,7 @@ describe('crearComercio', () => {
 
   it('guarda el tipo_tarjeta seleccionado', async () => {
     const slug = `test-tipo-${Date.now()}`;
-    const res = await crearComercio(supabase, { ...datosValidos(slug), tipo_tarjeta: 'sellos' });
+    const res = await crearComercio(supabase, { ...(await datosValidos(slug)), tipo_tarjeta: 'sellos' });
 
     expect(res.ok).toBe(true);
     const { data } = await supabase.from('comercios').select('tipo_tarjeta').eq('slug', slug).single();
@@ -214,7 +253,7 @@ describe('crearComercio', () => {
 
   it('rechaza un tipo_tarjeta que la BD no acepta', async () => {
     const slug = `test-tipo-malo-${Date.now()}`;
-    const res = await crearComercio(supabase, { ...datosValidos(slug), tipo_tarjeta: 'inexistente' });
+    const res = await crearComercio(supabase, { ...(await datosValidos(slug)), tipo_tarjeta: 'inexistente' });
 
     expect(res.ok).toBe(false);
     // Sin la validación, esto igual daría ok:false — pero por un 23514 traducido a "No se pudo
@@ -226,11 +265,12 @@ describe('crearComercio', () => {
 describe('actualizarComercio', () => {
   it('actualiza licencia y branding de un comercio existente', async () => {
     const slug = `test-editar-${Date.now()}`;
-    const creado = await crearComercio(supabase, datosValidos(slug));
+    const datos = await datosValidos(slug);
+    const creado = await crearComercio(supabase, datos);
     if (!creado.ok) throw new Error('el setup falló');
 
     const res = await actualizarComercio(supabase, creado.id, {
-      ...datosValidos(slug),
+      ...datos,
       nombre: 'Nombre Editado',
       licencia_estado: 'inactivo',
     });
@@ -250,11 +290,12 @@ describe('actualizarComercio', () => {
     // en verde, y guardaba color_fondo:'no-es-un-color' con ok:true — datos que revientan al
     // firmar el pass, en producción, sin que nada los atrape (la BD no respalda esta regla).
     const slug = `test-editar-invalido-${Date.now()}`;
-    const creado = await crearComercio(supabase, datosValidos(slug));
+    const datos = await datosValidos(slug);
+    const creado = await crearComercio(supabase, datos);
     if (!creado.ok) throw new Error('el setup falló');
 
     const res = await actualizarComercio(supabase, creado.id, {
-      ...datosValidos(slug),
+      ...datos,
       color_fondo: 'no-es-un-color',
     });
 
@@ -267,7 +308,7 @@ describe('actualizarComercio', () => {
     const res = await actualizarComercio(
       supabase,
       '00000000-0000-0000-0000-000000000000',
-      datosValidos(`test-fantasma-${Date.now()}`),
+      await datosValidos(`test-fantasma-${Date.now()}`),
     );
 
     expect(res.ok).toBe(false);
@@ -276,10 +317,11 @@ describe('actualizarComercio', () => {
 
   it('actualiza el tipo_tarjeta de un comercio existente', async () => {
     const slug = `test-tipo-editar-${Date.now()}`;
-    const creado = await crearComercio(supabase, datosValidos(slug));
+    const datos = await datosValidos(slug);
+    const creado = await crearComercio(supabase, datos);
     if (!creado.ok) throw new Error('el setup falló');
 
-    const res = await actualizarComercio(supabase, creado.id, { ...datosValidos(slug), tipo_tarjeta: 'sellos' });
+    const res = await actualizarComercio(supabase, creado.id, { ...datos, tipo_tarjeta: 'sellos' });
 
     expect(res.ok).toBe(true);
     const { data } = await supabase.from('comercios').select('tipo_tarjeta').eq('id', creado.id).single();
@@ -290,7 +332,7 @@ describe('actualizarComercio', () => {
 describe('eliminarComercio', () => {
   it('elimina un comercio sin datos asociados', async () => {
     const slug = `test-eliminar-${Date.now()}`;
-    const creado = await crearComercio(supabase, datosValidos(slug));
+    const creado = await crearComercio(supabase, await datosValidos(slug));
     if (!creado.ok) throw new Error('el setup falló');
 
     const res = await eliminarComercio(supabase, creado.id);
@@ -302,7 +344,7 @@ describe('eliminarComercio', () => {
 
   it('rechaza eliminar un comercio con tarjetas y NO lo borra', async () => {
     const slug = `test-con-tarjeta-${Date.now()}`;
-    const creado = await crearComercio(supabase, datosValidos(slug));
+    const creado = await crearComercio(supabase, await datosValidos(slug));
     if (!creado.ok) throw new Error('el setup falló');
 
     const telefono = `+000-test-${Date.now()}-${Math.random().toString(36).slice(2)}`;

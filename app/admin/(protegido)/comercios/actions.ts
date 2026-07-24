@@ -38,6 +38,7 @@ function leerDatos(formData: FormData): DatosComercio {
     licencia_monto_mensual: monto === null ? null : Number(monto),
     licencia_activa_desde: textoONull(formData.get('licencia_activa_desde')),
     tipo_tarjeta: String(formData.get('tipo_tarjeta') ?? 'puntos'),
+    cuenta_id: String(formData.get('cuenta_id') ?? ''),
   };
 }
 

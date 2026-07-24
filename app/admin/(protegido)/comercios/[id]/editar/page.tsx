@@ -61,6 +61,14 @@ export default async function PaginaEditarComercio({
     .eq('comercio_id', id)
     .order('rol');
 
+  // Cuentas para el <select> del formulario. Cambiar la cuenta acá reasigna el comercio y
+  // actualizarComercio verifica el límite de la cuenta destino antes de guardar.
+  const { data: cuentas, error: errorCuentas } = await supabase
+    .from('cuentas_comercio')
+    .select('id, nombre')
+    .order('nombre');
+  if (errorCuentas) console.error('[fm] falló la consulta de cuentas para el formulario:', errorCuentas);
+
   // bind() fija el id como primer argumento; la firma que ve useActionState sigue siendo
   // (estado, formData).
   const accion = accionActualizarComercio.bind(null, id);
@@ -74,6 +82,9 @@ export default async function PaginaEditarComercio({
     color_fondo: comercio.color_fondo ?? '',
     color_texto: comercio.color_texto ?? '',
     color_label: comercio.color_label ?? '',
+    // cuenta_id es nullable en la BD (columna de la 0008) pero DatosComercio lo declara string;
+    // Partial<DatosComercio> no acepta null, así que se mapea igual que los colores.
+    cuenta_id: comercio.cuenta_id ?? '',
   };
 
   return (
@@ -141,7 +152,7 @@ export default async function PaginaEditarComercio({
           </div>
         </div>
       </section>
-      <FormularioComercio accion={accion} inicial={inicial} textoBoton="Guardar cambios" esEdicion />
+      <FormularioComercio accion={accion} inicial={inicial} textoBoton="Guardar cambios" cuentas={cuentas ?? []} esEdicion />
       <BotonEliminar accion={eliminar} nombre={comercio.nombre} />
     </main>
   );
