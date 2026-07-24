@@ -9,6 +9,9 @@ export interface Membresia {
   sucursalId: string | null;
 }
 
+// Todas las membresías (owner o cajero) de una cuenta de Auth. Lista, NO maybeSingle(): una cuenta
+// puede administrar varios comercios (arreglo del lockout que documentaba esOwnerDeComercio.ts).
+// Falla cerrado → [] con log (un error acá es infraestructura, no "sin membresías").
 export async function membresiasDeUsuario(
   supabase: SupabaseClient<Database>,
   authUserId: string,

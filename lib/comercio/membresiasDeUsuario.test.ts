@@ -48,11 +48,14 @@ async function crearComercio(nombre: string): Promise<string> {
   return data.id;
 }
 
-async function ligar(authUserId: string, comercioId: string, rol: 'owner' | 'cajero') {
-  const { error } = await supabase
+async function ligar(authUserId: string, comercioId: string, rol: 'owner' | 'cajero'): Promise<string> {
+  const { data, error } = await supabase
     .from('usuarios_comercio')
-    .insert({ comercio_id: comercioId, email: `uc-${authUserId}@ejemplo.test`, rol, auth_user_id: authUserId });
+    .insert({ comercio_id: comercioId, email: `uc-${authUserId}-${comercioId}@ejemplo.test`, rol, auth_user_id: authUserId })
+    .select('id')
+    .single();
   if (error) throw error;
+  return data.id;
 }
 
 describe('membresiasDeUsuario', () => {
@@ -62,11 +65,23 @@ describe('membresiasDeUsuario', () => {
     const id = await crearUsuarioAuth();
     const comercioA = await crearComercio('Comercio A');
     const comercioB = await crearComercio('Comercio B');
-    await ligar(id, comercioA, 'owner');
+    const filaA = await ligar(id, comercioA, 'owner');
     await ligar(id, comercioB, 'owner');
 
     const res = await membresiasDeUsuario(supabase, id);
     expect(res).toHaveLength(2);
     expect(res.map((m) => m.comercioId).sort()).toEqual([comercioA, comercioB].sort());
+
+    // Shape completo de una membresía: protege el map() contra swaps de campos (usuarioComercioId
+    // ← id de la fila, NO comercio_id; sucursalId null para un owner). Estos dos alimentarán la
+    // atribución de ledger/sucursal en fases próximas, así que se asertan explícitamente.
+    const membresiaA = res.find((m) => m.comercioId === comercioA)!;
+    expect(membresiaA).toEqual({
+      usuarioComercioId: filaA,
+      comercioId: comercioA,
+      nombre: 'Comercio A',
+      rol: 'owner',
+      sucursalId: null,
+    });
   });
 });
