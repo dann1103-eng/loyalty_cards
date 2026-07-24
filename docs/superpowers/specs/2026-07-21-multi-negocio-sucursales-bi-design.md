@@ -65,10 +65,20 @@ al usuario**. Pasar a una lista lo elimina de raíz.
 **`0008_cuentas_sucursales_cajeros.sql`** — schema + backfill en una sola migración:
 - `cuentas_comercio (id uuid pk, nombre text not null, limite_negocios int not null default 1
   check (limite_negocios > 0), created_at timestamptz)` + RLS deny-all (patrón del resto del esquema).
-- `comercios add column cuenta_id uuid references cuentas_comercio(id)` **nullable** → bloque `do $$`
-  que crea una cuenta 1:1 (`limite_negocios = 1`) por cada comercio existente y la asigna →
-  `alter column cuenta_id set not null`. (Los 6 comercios actuales quedan cada uno en su cuenta con
+- `comercios add column cuenta_id uuid references cuentas_comercio(id)` **nullable, se queda nullable**
+  → bloque `do $$` que, por cada comercio existente, crea una cuenta 1:1 con `nombre = comercio.nombre`
+  y `limite_negocios = 1`, y la asigna. (Los 6 comercios actuales quedan cada uno en su cuenta con
   límite 1: cero cambio de comportamiento.)
+  **Por qué nullable y no `NOT NULL`:** un `NOT NULL` rompería ~18 helpers de test y seeds que insertan
+  comercios con solo `{nombre, slug}` (p. ej. `acreditar.test.ts`, `canje.test.ts`,
+  `registrarCliente.test.ts`, los `route.test.ts` de Apple/portal, etc.), y con `fileParallelism:false`
+  contra la BD viva un solo helper olvidado tumba la suite entera. La defensa real es la capa lib
+  (`validar()` en `guardarComercio.ts`), exactamente el patrón documentado del proyecto ("la BD casi no
+  respalda la validación; `validar()` es la ÚNICA defensa"). Un `cuenta_id` null degrada con gracia
+  (queda fuera de los reportes agrupados por cuenta y fuera de cualquier límite), no rompe nada. Los
+  seeds REALES (`scripts/seed-demo-comercios.ts`, `scripts/seed-pilot-comercio.ts`) SÍ se actualizan
+  para crear+asignar una cuenta (son datos que se muestran); los helpers de test sintéticos se dejan
+  como están (filas descartables que se limpian en teardown y prueban otra cosa).
 - Swap del unique de email (§3).
 - `sucursales (id uuid pk, comercio_id uuid not null references comercios(id), nombre text not null,
   activa boolean not null default true, created_at timestamptz)` + RLS.
@@ -77,25 +87,53 @@ al usuario**. Pasar a una lista lo elimina de raíz.
 - Extender `scripts/verify-schema.ts` (`TABLAS`) con `cuentas_comercio`, `sucursales`; correr
   `npm run verify-schema`.
 
-**`0009_rpc_atomico.sql`** — dos funciones `plpgsql SECURITY DEFINER` (`set search_path = public`).
-La función entera es la transacción; el `UPDATE ... RETURNING` toma lock de fila y serializa cajeros
-concurrentes — eso es lo que reemplaza el leer-luego-escribir:
+**`0009_rpc_atomico.sql`** — dos funciones `plpgsql` (`set search_path = public`). La función entera
+es la transacción; el `UPDATE ... RETURNING` toma lock de fila y serializa cajeros concurrentes — eso
+es lo que reemplaza el leer-luego-escribir.
+
+**SEGURIDAD (crítico) — las funciones son `SECURITY INVOKER` (default), NO `SECURITY DEFINER`, y se
+les REVOCA `EXECUTE` de los roles públicos.** Razón: Supabase expone toda función del schema `public`
+en `POST /rest/v1/rpc/<nombre>` a cualquier rol con `EXECUTE`, y `CREATE FUNCTION` otorga `EXECUTE` a
+`PUBLIC` por defecto. La anon key va al bundle del navegador (`lib/supabase/client.ts`), así que es
+pública. Una función `SECURITY DEFINER` corre con privilegios del dueño (superusuario, ignora RLS):
+sin protección, cualquiera podría `POST .../rpc/acreditar_puntos_atomico` con un `p_comercio_id`
+ajeno y acreditar/canjear en cualquier tarjeta, saltándose `verifyComercioAcceso` por completo (el
+gate solo protege el camino de Server Action, no el endpoint REST directo). `SECURITY DEFINER` ni
+siquiera se necesita: TODOS los callers usan `createServiceClient()` (service_role, que ya ignora
+RLS) — escáner, ruta de puntos, seed, tests. Con `SECURITY INVOKER`, si `anon` invocara la función,
+el cuerpo corre como `anon` y choca con el RLS deny-all de `tarjetas`/`transacciones_puntos`/`canjes`
+(migración 0001) → no escribe nada. Defensa en profundidad, en el MISMO `.sql`:
+```sql
+revoke execute on function acreditar_puntos_atomico(...) from public, anon, authenticated;
+revoke execute on function canjear_recompensa_atomico(...) from public, anon, authenticated;
+grant execute on function acreditar_puntos_atomico(...) to service_role;
+grant execute on function canjear_recompensa_atomico(...) to service_role;
+```
+Esto mismo aplica a TODAS las funciones de reportes de 0010 (un `p_comercio_id` ajeno filtraría BI
+cross-tenant). Verificación manual obligatoria tras aplicar: intentar el RPC con la anon key debe
+fallar/no escribir. Es el primer RPC del proyecto — no hay de dónde "copiarlo bien", por eso queda
+explícito acá.
+
+Las dos funciones:
 - `acreditar_puntos_atomico(p_comercio_id, p_tarjeta_id, p_delta, p_sucursal_id, p_cajero_usuario_id)`
-  → `returns table(estado text, puntos_actuales int)`. Valida sucursal∈comercio (si no null);
-  `update tarjetas ... where id = p_tarjeta_id and comercio_id = p_comercio_id returning` (not found →
-  `tarjeta_no_encontrada`); inserta en `transacciones_puntos` con `sucursal_id` + `cajero_usuario_id`;
-  devuelve `ok`.
+  → `returns table(estado text, puntos_actuales int)`. Valida sucursal∈comercio Y `activa = true` (si
+  no null) → si no cumple, `sucursal_invalida`; `update tarjetas ... where id = p_tarjeta_id and
+  comercio_id = p_comercio_id returning` (not found → `tarjeta_no_encontrada`); inserta en
+  `transacciones_puntos` con `sucursal_id` + `cajero_usuario_id`; devuelve `ok`.
 - `canjear_recompensa_atomico(p_comercio_id, p_tarjeta_id, p_recompensa_id, p_sucursal_id,
   p_cajero_usuario_id)` → `returns table(estado text, puntos_actuales int, nombre_recompensa text,
   costo_puntos int)`. Lee recompensa scoped + activa (si no → `recompensa_no_disponible`); valida
-  sucursal; `update tarjetas ... where ... and puntos_actuales >= v_costo returning` (not found →
+  sucursal∈comercio Y activa (si no → `sucursal_invalida`);
+  `update tarjetas ... where ... and puntos_actuales >= v_costo returning` (not found →
   re-lee la tarjeta scoped: falta la tarjeta → `tarjeta_no_encontrada`, o `saldo_insuficiente`
   devolviendo saldo + costo para el mensaje "le faltan N"); inserta en `canjes`; devuelve `ok`.
   **Elimina la reversa best-effort** de `canje.ts` (ya no hace falta: decremento + insert en una sola
   transacción).
 
-**`0010_reportes.sql`** — funciones `SECURITY DEFINER` set-returning (scope por `p_comercio_id` que
-viene del gate, nunca del cliente), agregación en SQL (`count`/`group by`, no en JS):
+**`0010_reportes.sql`** — funciones set-returning `SECURITY INVOKER` con el MISMO `revoke execute ...
+from public, anon, authenticated` + `grant ... to service_role` que 0009 (crítico: un `p_comercio_id`
+ajeno vía anon key filtraría BI cross-tenant). Scope por `p_comercio_id` que viene del gate, nunca del
+cliente; agregación en SQL (`count`/`group by`, no en JS):
 - `reporte_sucursales(p_comercio_id)` → por sucursal: acreditaciones, puntos_otorgados, canjes,
   clientes_unicos (join a `tarjetas` porque las tablas de ledger no tienen `comercio_id`; bucket NULL
   para filas legacy sin sucursal).
@@ -109,20 +147,36 @@ viene del gate, nunca del cliente), agregación en SQL (`count`/`group by`, no e
 Nuevas tablas `cuentas_comercio` y `sucursales`; columna `cuenta_id` (Row/Insert requeridos) en
 `comercios`; `sucursal_id` nullable en `usuarios_comercio`/`transacciones_puntos`/`canjes`. **Entradas
 `Relationships`** para cada FK nueva — son load-bearing: sin ellas los joins embebidos no tipan (ver
-comentario en `types.ts:182-185`). Reemplazar `Functions: { [_ in never]: never }` por entradas de los
-6 RPC (si no, `supabase.rpc()` no tipa).
+comentario en `types.ts:182-185`). Reemplazar `Functions: { [_ in never]: never }` por una entrada por
+cada RPC que exista al final (2 de 0009 + las de 0010 — `reporte_sucursales`, `reporte_top_clientes`,
+`reporte_tendencia`, `reporte_fm_comercios`, y `reporte_fm_cuentas` si se incluye); si falta la
+entrada, `supabase.rpc()` no tipa. Las entradas de `Functions` se agregan en el commit de la migración
+que crea cada función (las de 0009 en el paso 8, las de 0010 en el paso 10 — ver §6).
 
 ### 4.3 Cuentas + límite (panel FM)
 
-- `lib/comercios/cuentas.ts` (nuevo): `crearCuenta`, `actualizarCuenta`, `verificarLimiteCuenta`
-  (bloquea cuando `count >= limite`; TOCTOU aceptable en una superficie de un solo admin, se documenta,
-  no se sobre-ingenieriza con trigger), `asignarComercioACuenta`. Validación en la capa lib (patrón
-  "`validar()` es la única defensa" de `guardarComercio.ts`).
+- `lib/comercios/cuentas.ts` (nuevo): `crearCuenta`, `actualizarCuenta`, `verificarLimiteCuenta`,
+  `asignarComercioACuenta`. Validación en la capa lib (patrón "`validar()` es la única defensa" de
+  `guardarComercio.ts`).
+- **El límite se aplica en TODOS los caminos que meten un comercio bajo una cuenta, no solo al crear**
+  (esto es lo que corrige el hueco: el caso real — agrupar los 2 comercios del cliente que ya viene, o
+  los 6 comercios que el backfill dejó cada uno en su cuenta de límite 1 — se hace REASIGNANDO
+  `cuenta_id`, no creando). `verificarLimiteCuenta(supabase, cuentaId, { excluyendoComercioId? })`
+  cuenta los comercios de la cuenta DESTINO (excluyendo el propio comercio si ya pertenece a ella,
+  para que un update que no cambia de cuenta no se auto-bloquee) y falla si `count >= limite_negocios`
+  con "Esta cuenta ya alcanzó su límite de N negocios." Lo llaman: `crearComercio` (antes del insert),
+  `asignarComercioACuenta`, y `actualizarComercio` cuando `cuenta_id` cambia. El TOCTOU (check-luego-
+  escribir) se acepta y documenta en una superficie de un solo admin FM; no se sobre-ingenieriza con
+  trigger.
 - `lib/comercios/guardarComercio.ts`: `DatosComercio` gana `cuenta_id`; `crearComercio` llama
-  `verificarLimiteCuenta` antes del insert; `validar()` agrega "La cuenta es obligatoria."
+  `verificarLimiteCuenta` antes del insert; `actualizarComercio` lo llama cuando `cuenta_id` cambia;
+  `validar()` agrega "La cuenta es obligatoria." (defensa a nivel app del `cuenta_id` nullable, §4.1).
 - Panel FM: nueva área `app/admin/(protegido)/cuentas/` (listar/crear/editar límite/vincular
   comercios), gate `verifyFmAdmin()` en cada página y cada acción (fuera de try/catch); selector
-  `cuenta_id` en `FormularioComercio.tsx`; link de nav en `app/admin/(protegido)/layout.tsx`.
+  `cuenta_id` en `FormularioComercio.tsx`; link de nav en `app/admin/(protegido)/layout.tsx`. La lista
+  de cuentas muestra el conteo de negocios de cada una; una cuenta que queda con 0 comercios (tras
+  reasignar) se puede eliminar desde ahí (borrar `cuentas_comercio` sin comercios que la referencien es
+  seguro; con comercios, el FK 23503 lo impide — mismo patrón que `eliminarComercio`).
 
 ### 4.4 Login multi-comercio + selector
 
@@ -136,8 +190,14 @@ comentario en `types.ts:182-185`). Reemplazar `Functions: { [_ in never]: never 
   1 membresía → esa; 2+ sin cookie válida → `redirect('/comercio/elegir')`.
 - `verifyComercioOwner` → wrapper que además exige `rol === 'owner'`; conserva su return actual y le
   agrega `comercios` (la lista, para el selector del header). Las páginas/acciones de dueño existentes
-  lo siguen llamando sin cambios. `ownerDeSesion` → resuelve el comercio activo o `null` (2+ sin cookie
-  válida → 401).
+  lo siguen llamando sin cambios. Si el usuario NO es owner del comercio activo pero SÍ tiene una
+  membresía de cajero → `redirect('/comercio/escanear')` (no `sin-permiso`: es un cajero legítimo en la
+  página equivocada); sin ninguna membresía → `redirect('/comercio/login?error=sin-permiso')`.
+- `ownerDeSesion` (route handler `app/api/tarjetas/[tarjetaId]/puntos/route.ts`) → resuelve el comercio
+  activo o `null` (2+ comercios sin cookie válida → `null` → 401). Es un endpoint legacy (el flujo real
+  es `/comercio/escanear`): tras el RPC sigue funcionando, puebla `cajero_usuario_id` desde la sesión
+  pero deja `sucursal_id` en null (no tiene contexto de sucursal). Ese 401 para un dueño de 2+ sin
+  cookie es aceptable y se documenta, no se resuelve acá.
 - Pantalla `app/comercio/elegir/` (FUERA de `(protegido)`, hermana de `login` — evita el loop de
   layout que documenta `CLAUDE.md:29-31`). `actions.ts`: `elegirComercio(comercioId)` revalida que
   `comercioId ∈ membresías`, setea la cookie httpOnly sameSite=lax, redirect al panel.
@@ -172,7 +232,10 @@ seed que no pasan por el chat.
 ### 4.6 Escáner: cajero-fijo vs dueño-selector + atribución
 
 - `escanear/page.tsx`: gate → `verifyComercioAcceso()`. Cajero → pasa `sucursalFija = {id, nombre}` a
-  `Escaner`; owner → `listarSucursales(comercioId)` activas → picker.
+  `Escaner`; owner → `listarSucursales(comercioId)` activas → picker. **Si el cajero tiene su
+  `sucursal_id` apuntando a una sucursal desactivada** (`activa = false`), el escáner muestra un estado
+  "tu sucursal está desactivada, contactá al dueño" y no permite acreditar — coherente con que el RPC
+  también rechaza sucursal inactiva (§4.1). (Al owner no le afecta: el picker solo lista activas.)
 - `Escaner.tsx`: etiqueta read-only (cajero) o `<select>` (owner); pasa `sucursalIdSeleccionada` a las
   acciones. El resto (cámara jsQR, token manual, lista de recompensas) sin cambios.
 - `escanear/actions.ts`: gate → `verifyComercioAcceso()` en las tres acciones. Cajero → fuerza
@@ -203,13 +266,20 @@ seed que no pasan por el chat.
   `ATAJOS` (panel) + `NavInferior`. Primer lugar donde se LEEN `transacciones_puntos`/`canjes`.
 - FM: `app/admin/(protegido)/reportes/page.tsx` (gate `verifyFmAdmin`) — tabla agregada cross-cliente
   por comercio y por cuenta; link de nav en el layout admin.
+- **Ajuste de copy (cosmético):** `app/mi-tarjeta/PortalCliente.tsx` dice "El canje se hace en el
+  local" (singular); con multi-sucursal se ajusta a un texto neutral. El portal y los passes por lo
+  demás son 100% compatibles con sucursales compartidas: leen saldo a nivel `tarjetas` y branding a
+  nivel `comercios`, nunca tocan `transacciones_puntos`/`canjes`.
 
 ## 5. Testing (TDD + mutation testing obligatorio en lo crítico)
 
 Tests de integración contra Supabase vivo (`fileParallelism:false`), asertan el mensaje específico,
-limpian en `afterEach` con teardown FK-ordenado (extender con `sucursales`, `cuentas_comercio`, y las
-columnas nuevas). Mutation-testear (romper la línea guardada, confirmar que la prueba falla por la
-razón correcta con el mensaje correcto, restaurar):
+limpian en `afterEach` con teardown FK-ordenado. **El orden de borrado importa por las aristas nuevas:**
+`transacciones_puntos`/`canjes` → antes de `sucursales`; `usuarios_comercio` → antes de `sucursales`;
+`sucursales` → antes de `comercios`; `comercios` → antes de `cuentas_comercio`. (Como `cuenta_id` es
+nullable, los helpers sintéticos que no crean cuenta no necesitan borrar `cuentas_comercio`; los que sí
+la crean, la borran al final.) Mutation-testear (romper la línea guardada, confirmar que la prueba
+falla por la razón correcta con el mensaje correcto, restaurar):
 
 - **`membresiasDeUsuario`/`esOwnerDeComercio` (lista):** un usuario dueño de DOS comercios devuelve
   AMBOS (el caso que antes bloqueaba con PGRST116). Mutación: volver a `.maybeSingle()` → el test de
@@ -228,6 +298,11 @@ razón correcta con el mensaje correcto, restaurar):
 - **Atribución del cajero:** la acción de un cajero ignora un `sucursalId` ajeno enviado por el cliente
   y registra el suyo. Mutación: hacer que la acción confíe en el valor del cliente → falla.
 - **`sucursalPerteneceAComercio`:** una sucursal de otro comercio se rechaza.
+- **Blindaje REST de los RPC (C1, verificación manual obligatoria tras aplicar 0009 y 0010):** con la
+  anon key (no la service key), un `POST /rest/v1/rpc/acreditar_puntos_atomico` con parámetros
+  arbitrarios debe fallar o no escribir NADA (el `revoke execute` lo corta; el RLS deny-all lo
+  respalda). Igual para las funciones de reportes con un `p_comercio_id` ajeno: no deben devolver datos.
+  Se corre una vez con un script descartable de solo-verificación y se documenta el resultado.
 
 ## 6. Orden de construcción (⚑ = requiere migración aplicada a mano ANTES)
 
