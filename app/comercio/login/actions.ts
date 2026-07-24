@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClienteServidor, createServiceClient } from '@/lib/supabase/server';
 import { membresiasDeUsuario } from '@/lib/comercio/membresiasDeUsuario';
-import { COOKIE_COMERCIO_ACTIVO } from '@/lib/comercio/cookieComercio';
+import { COOKIE_COMERCIO_ACTIVO, opcionesCookieComercio } from '@/lib/comercio/cookieComercio';
 
 export type EstadoLogin = { error: string } | undefined;
 
@@ -46,12 +46,12 @@ export async function iniciarSesionComercio(
     redirect('/comercio/elegir');
   }
   if (owners.length === 1) {
-    cookieStore.set(COOKIE_COMERCIO_ACTIVO, owners[0].comercioId, { httpOnly: true, sameSite: 'lax', path: '/' });
+    cookieStore.set(COOKIE_COMERCIO_ACTIVO, owners[0].comercioId, opcionesCookieComercio());
     redirect('/comercio/panel');
   }
   if (membresias.length > 0) {
     // Sin comercios propios pero sí membresía de cajero: su lugar es el escáner.
-    cookieStore.set(COOKIE_COMERCIO_ACTIVO, membresias[0].comercioId, { httpOnly: true, sameSite: 'lax', path: '/' });
+    cookieStore.set(COOKIE_COMERCIO_ACTIVO, membresias[0].comercioId, opcionesCookieComercio());
     redirect('/comercio/escanear');
   }
   // Autenticó pero no tiene ninguna membresía: sin acceso al panel.
