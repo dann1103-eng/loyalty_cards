@@ -6,12 +6,28 @@ const supabase = createServiceClient();
 const comerciosDePrueba: string[] = [];
 const clientesDePrueba: string[] = [];
 const tarjetasDePrueba: string[] = [];
+const sucursalesDePrueba: string[] = [];
+const usuariosComercioDePrueba: string[] = [];
 
 afterEach(async () => {
-  // Orden FK: canjes → recompensas/tarjetas; transacciones → tarjetas; tarjetas → clientes/comercios.
+  // Orden FK: canjes/transacciones (→ tarjetas/sucursales/usuarios_comercio) van primero; luego
+  // usuarios_comercio y sucursales (→ comercios; usuarios_comercio también → sucursales, por eso va
+  // antes) → tarjetas → recompensas → clientes → comercios.
   if (tarjetasDePrueba.length) {
     await supabase.from('canjes').delete().in('tarjeta_id', tarjetasDePrueba);
     await supabase.from('transacciones_puntos').delete().in('tarjeta_id', tarjetasDePrueba);
+  }
+  if (usuariosComercioDePrueba.length) {
+    const { error } = await supabase.from('usuarios_comercio').delete().in('id', usuariosComercioDePrueba);
+    if (error) console.error('[test] no se pudieron borrar los cajeros:', error);
+    usuariosComercioDePrueba.length = 0;
+  }
+  if (sucursalesDePrueba.length) {
+    const { error } = await supabase.from('sucursales').delete().in('id', sucursalesDePrueba);
+    if (error) console.error('[test] no se pudieron borrar las sucursales:', error);
+    sucursalesDePrueba.length = 0;
+  }
+  if (tarjetasDePrueba.length) {
     const { error } = await supabase.from('tarjetas').delete().in('id', tarjetasDePrueba);
     if (error) console.error('[test] no se pudieron borrar las tarjetas:', error);
     tarjetasDePrueba.length = 0;
@@ -68,6 +84,31 @@ async function crearRecompensa(comercioId: string, costo: number, activa = true)
     .select('id')
     .single();
   if (error) throw error;
+  return data.id;
+}
+
+async function crearSucursal(comercioId: string, activa = true): Promise<string> {
+  const { data, error } = await supabase
+    .from('sucursales')
+    .insert({ comercio_id: comercioId, nombre: 'Sucursal Prueba', activa })
+    .select('id')
+    .single();
+  if (error) throw error;
+  sucursalesDePrueba.push(data.id);
+  return data.id;
+}
+
+// Cajero mínimo (usuarios_comercio) para el cajero_usuario_id del canje: sin cuenta de Auth
+// (auth_user_id nullable) — el RPC solo exige que la FK a usuarios_comercio(id) resuelva.
+async function crearCajero(comercioId: string): Promise<string> {
+  const email = `cajero-${Date.now()}-${Math.random().toString(36).slice(2)}@ejemplo.test`;
+  const { data, error } = await supabase
+    .from('usuarios_comercio')
+    .insert({ comercio_id: comercioId, email, rol: 'cajero' })
+    .select('id')
+    .single();
+  if (error) throw error;
+  usuariosComercioDePrueba.push(data.id);
   return data.id;
 }
 
@@ -147,5 +188,65 @@ describe('canjearRecompensa', () => {
     expect(res.ok).toBe(false);
     const { data: tarjeta } = await supabase.from('tarjetas').select('puntos_actuales').eq('id', tarjetaAjena).single();
     expect(tarjeta!.puntos_actuales).toBe(50);
+  });
+
+  it('persiste sucursalId y cajeroUsuarioId en la fila de canjes', async () => {
+    // Atribución (Fase 8): al canjear con sucursal/cajero, la fila de canjes debe quedar con esos
+    // ids. Si el wrapper no reenvía las opciones al RPC, quedan null y esto FALLA.
+    const comercioId = await crearComercio();
+    const tarjetaId = await crearTarjeta(comercioId, 12);
+    const recompensaId = await crearRecompensa(comercioId, 10);
+    const sucursalId = await crearSucursal(comercioId);
+    const cajeroUsuarioId = await crearCajero(comercioId);
+
+    const res = await canjearRecompensa(supabase, comercioId, tarjetaId, recompensaId, {
+      sucursalId,
+      cajeroUsuarioId,
+    });
+
+    expect(res.ok).toBe(true);
+    const { data: canjes } = await supabase
+      .from('canjes')
+      .select('sucursal_id, cajero_usuario_id, puntos_gastados')
+      .eq('tarjeta_id', tarjetaId);
+    expect(canjes).toHaveLength(1);
+    expect(canjes![0].sucursal_id).toBe(sucursalId);
+    expect(canjes![0].cajero_usuario_id).toBe(cajeroUsuarioId);
+    expect(canjes![0].puntos_gastados).toBe(10);
+  });
+
+  it('rechaza una sucursalId de OTRO comercio sin descontar ni registrar', async () => {
+    const comercioA = await crearComercio();
+    const comercioB = await crearComercio();
+    const tarjetaId = await crearTarjeta(comercioA, 50);
+    const recompensaId = await crearRecompensa(comercioA, 10);
+    const sucursalAjena = await crearSucursal(comercioB);
+
+    const res = await canjearRecompensa(supabase, comercioA, tarjetaId, recompensaId, {
+      sucursalId: sucursalAjena,
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toBe('La sucursal no es válida.');
+    const { data: tarjeta } = await supabase.from('tarjetas').select('puntos_actuales').eq('id', tarjetaId).single();
+    expect(tarjeta!.puntos_actuales).toBe(50); // intacta: la sucursal inválida aborta antes de descontar
+    const { data: canjes } = await supabase.from('canjes').select('id').eq('tarjeta_id', tarjetaId);
+    expect(canjes).toHaveLength(0);
+  });
+
+  it('rechaza una sucursalId del MISMO comercio pero inactiva', async () => {
+    const comercioId = await crearComercio();
+    const tarjetaId = await crearTarjeta(comercioId, 50);
+    const recompensaId = await crearRecompensa(comercioId, 10);
+    const sucursalInactiva = await crearSucursal(comercioId, false);
+
+    const res = await canjearRecompensa(supabase, comercioId, tarjetaId, recompensaId, {
+      sucursalId: sucursalInactiva,
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toBe('La sucursal no es válida.');
+    const { data: tarjeta } = await supabase.from('tarjetas').select('puntos_actuales').eq('id', tarjetaId).single();
+    expect(tarjeta!.puntos_actuales).toBe(50); // intacta
   });
 });

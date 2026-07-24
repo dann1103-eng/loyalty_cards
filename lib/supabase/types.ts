@@ -106,6 +106,7 @@ export type Database = {
           rol: string;
           auth_user_id: string | null;
           sucursal_id: string | null;
+          activo: boolean;
           created_at: string;
         };
         Insert: {
@@ -115,6 +116,7 @@ export type Database = {
           rol: string;
           auth_user_id?: string | null;
           sucursal_id?: string | null;
+          activo?: boolean;
           created_at?: string;
         };
         Update: {
@@ -124,6 +126,7 @@ export type Database = {
           rol?: string;
           auth_user_id?: string | null;
           sucursal_id?: string | null;
+          activo?: boolean;
           created_at?: string;
         };
         // FKs inline: 0001 (`comercio_id → comercios`) y 0008 (`sucursal_id → sucursales`, solo
@@ -525,7 +528,40 @@ export type Database = {
     // OJO: NO usar Record<string, never> aquí — su keyof es string y abre un agujero en el
     // overload de .from()/.rpc() que aceptaría cualquier nombre de tabla/función.
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    // Migración 0009: RPC atómicos (una transacción, lock de fila) con atribución sucursal/cajero.
+    // Como son `returns table(...)`, `.rpc()` devuelve `data` como ARRAY de filas — por eso `Returns`
+    // es `[]` y los wrappers leen `data?.[0]`. Los p_sucursal_id/p_cajero_usuario_id son `string | null`:
+    // el uuid del arg es nullable en la BD y los wrappers pasan `null` cuando no hay atribución.
+    Functions: {
+      acreditar_puntos_atomico: {
+        Args: {
+          p_comercio_id: string;
+          p_tarjeta_id: string;
+          p_delta: number;
+          p_sucursal_id: string | null;
+          p_cajero_usuario_id: string | null;
+        };
+        Returns: {
+          estado: string;
+          saldo: number;
+        }[];
+      };
+      canjear_recompensa_atomico: {
+        Args: {
+          p_comercio_id: string;
+          p_tarjeta_id: string;
+          p_recompensa_id: string;
+          p_sucursal_id: string | null;
+          p_cajero_usuario_id: string | null;
+        };
+        Returns: {
+          estado: string;
+          saldo: number;
+          nombre_recompensa: string;
+          costo: number;
+        }[];
+      };
+    };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };
