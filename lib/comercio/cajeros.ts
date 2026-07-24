@@ -122,10 +122,16 @@ export async function listarCajeros(
 }
 
 // Da de baja a un cajero borrando su fila usuarios_comercio: la cuenta de Auth sigue existiendo pero
-// pierde la membresía → pierde el acceso al panel del comercio. Es un DELETE (no soft): el ledger
-// (transacciones_puntos/canjes) atribuye por sucursal_id, no por usuario_comercio_id, así que borrar
-// esta fila no deja FKs colgando. Scopeado por comercio_id (del gate) y por rol='cajero' para que
-// esta ruta nunca pueda borrar a un owner. id de otro comercio → 0 filas → PGRST116 → "ya no existe".
+// pierde la membresía → pierde el acceso. Scopeado por comercio_id (del gate) y por rol='cajero' para
+// que esta ruta nunca pueda borrar a un owner. id de otro comercio → 0 filas → PGRST116 → "ya no existe".
+//
+// OJO (deuda conocida, se resuelve en Fase 9): el ledger SÍ atribuye por usuario_comercio_id —
+// `transacciones_puntos.cajero_usuario_id` y `canjes.cajero_usuario_id` son FK a usuarios_comercio(id)
+// SIN ON DELETE (migración 0001). HOY esas columnas están VACÍAS (nadie las escribe todavía), así que
+// el DELETE siempre funciona. Cuando la Fase 9 empiece a poblar cajero_usuario_id, dar de baja a un
+// cajero que ya operó lanzaría 23503 (abajo se traduce a un mensaje claro). Por eso la Fase 9 cambia
+// esto a SOFT-delete (columna usuarios_comercio.activo en la migración 0009) ANTES de escribir la
+// atribución — así se preserva el historial del ledger, igual que el soft-delete de sucursales.
 export async function desactivarCajero(
   supabase: SupabaseClient<Database>,
   id: string,
@@ -143,6 +149,11 @@ export async function desactivarCajero(
   if (error) {
     if (error.code === 'PGRST116') {
       return { ok: false, error: 'Ese cajero ya no existe.' };
+    }
+    if (error.code === '23503') {
+      // El cajero ya registró operaciones (el ledger lo referencia). Hasta que la Fase 9 introduzca
+      // el soft-delete, no se puede borrar sin perder ese historial — mensaje claro en vez de genérico.
+      return { ok: false, error: 'Este cajero ya registró operaciones y no se puede eliminar todavía.' };
     }
     console.error('[comercio] falló la baja del cajero:', error.message);
     return { ok: false, error: 'No se pudo dar de baja al cajero.' };

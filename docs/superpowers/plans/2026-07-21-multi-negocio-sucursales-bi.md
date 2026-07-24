@@ -489,6 +489,13 @@ git commit -m "Cajeros: alta en runtime por el dueño, atados a una sucursal (ro
 -- usan service_role (ignora RLS). Se REVOCA execute de public/anon/authenticated para que la anon
 -- key (pública, va al bundle) NO pueda invocarlas por REST saltándose el gate de la app.
 
+-- Soft-delete de cajeros (hallazgo del review de Fase 7): el ledger va a referenciar
+-- usuarios_comercio.id por cajero_usuario_id (abajo), y un DELETE físico de un cajero que ya operó
+-- lanzaría 23503. Se agrega la columna `activo` para dar de baja sin borrar la fila (preserva la
+-- atribución del ledger, igual que el soft-delete de sucursales). La Fase 9 cambia desactivarCajero
+-- a UPDATE activo=false y filtra membresiasDeUsuario/listarCajeros por activo.
+alter table usuarios_comercio add column activo boolean not null default true;
+
 -- IMPORTANTE (plpgsql): en `returns table(...)` cada columna de salida es una variable OUT dentro
 -- del cuerpo. Por eso las columnas OUT se llaman `saldo`/`costo` y NO `puntos_actuales`/`costo_puntos`:
 -- si se llamaran igual que las columnas de las tablas, una referencia sin calificar (en el update,
@@ -577,7 +584,7 @@ grant execute on function canjear_recompensa_atomico(uuid, uuid, uuid, uuid, uui
 **Files:**
 - Modify: `lib/supabase/types.ts`, `lib/comercio/acreditar.ts`, `lib/comercio/acreditar.test.ts`
 
-- [ ] **Step 1:** Agregar a `Functions` de `types.ts` las entradas de `acreditar_puntos_atomico` y `canjear_recompensa_atomico`. OJO: por ser `returns table(...)`, el tipo de `Returns` es un ARRAY (`{estado: string; saldo: number}[]` / `{estado; saldo; nombre_recompensa; costo}[]`) — por eso los wrappers leen `data?.[0]`.
+- [ ] **Step 1:** Agregar a `Functions` de `types.ts` las entradas de `acreditar_puntos_atomico` y `canjear_recompensa_atomico`. OJO: por ser `returns table(...)`, el tipo de `Returns` es un ARRAY (`{estado: string; saldo: number}[]` / `{estado; saldo; nombre_recompensa; costo}[]`) — por eso los wrappers leen `data?.[0]`. **Además, la 0009 agregó `usuarios_comercio.activo`: agregar `activo: boolean` a su Row/Insert/Update en el MISMO commit** (Fase 9 lo consume para el soft-delete de cajeros).
 - [ ] **Step 2: Adaptar el test** de `acreditar.test.ts`: mantener TODOS los casos actuales (delta inválido, tarjeta ajena, saldo/ledger). `acreditarPuntos` ahora acepta `opciones?: {sucursalId?, cajeroUsuarioId?}`. NUEVOS casos: (a) al acreditar con `sucursalId` + `cajeroUsuarioId`, la fila de `transacciones_puntos` queda con esos valores; (b) `sucursalId` de OTRO comercio → `{ok:false}` (estado `sucursal_invalida`); (c) **`sucursalId` del MISMO comercio pero `activa=false` → `{ok:false}` `sucursal_invalida`** (cubre el `and activa` del RPC; sin este caso, quitar `and activa` no se detecta). Fixtures crean sucursales (activa e inactiva). Teardown FK: `transacciones_puntos` → `sucursales` → `tarjetas`/`clientes` → `comercios`. Correr → FAIL (la firma/impl aún no cambia).
 - [ ] **Step 3: Reimplementar** `acreditarPuntos(supabase, comercioId, tarjetaId, delta, opciones?)`: conservar la validación de `delta` (mensaje idéntico); reemplazar el read+insert+update por `supabase.rpc('acreditar_puntos_atomico', {p_comercio_id, p_tarjeta_id, p_delta:delta, p_sucursal_id:opciones?.sucursalId ?? null, p_cajero_usuario_id:opciones?.cajeroUsuarioId ?? null})`; leer `const fila = data?.[0]`; **guard: `if (error || !fila) return {ok:false, error:'No se pudo registrar la transacción.'}`** (log del error); mapear `fila.estado`: `ok`→`{ok:true, puntosActuales: fila.saldo}`; `tarjeta_no_encontrada`→`{ok:false, error:'Esa tarjeta no existe en tu comercio.'}` (byte-idéntico); `sucursal_invalida`→`{ok:false, error:'La sucursal no es válida.'}`.
 - [ ] **Step 4:** Correr → PASS.
@@ -605,6 +612,19 @@ git commit -m "Migración 0009: RPC atómicos (INVOKER+revoke) y acreditar/canje
 ## Fase 9 — Escáner: sucursal fija (cajero) vs selector (dueño) + atribución
 
 **Objetivo:** que cada acreditación/canje registre su sucursal y cajero. Depende de Fases 3, 6, 8.
+
+### Task 9.0: Soft-delete de cajeros (precondición — la 0009 ya agregó `usuarios_comercio.activo`)
+
+**Files:**
+- Modify: `lib/supabase/types.ts` (agregar `activo: boolean` a `usuarios_comercio` Row/Insert/Update — si no se hizo en Fase 8)
+- Modify: `lib/comercio/cajeros.ts` (`desactivarCajero` → soft), `lib/comercio/cajeros.test.ts`
+- Modify: `lib/comercio/membresiasDeUsuario.ts` (filtrar `activo`), `lib/comercio/listarCajeros` (filtrar/exponer `activo`)
+
+Antes de que este mismo escáner escriba `cajero_usuario_id` (Task 9.2), cambiar la baja de cajero a soft-delete para no romper con el FK del ledger (hallazgo del review de Fase 7).
+- [ ] **Step 1:** `desactivarCajero` pasa de `.delete()` a `.update({ activo: false })` (mismo scoping `comercio_id` + `rol='cajero'`, mismo PGRST116→"ya no existe"). Quitar la traducción interina del 23503 (ya no aplica). Test: la fila NO se borra, queda `activo=false`; el cajero pierde acceso.
+- [ ] **Step 2:** `membresiasDeUsuario` agrega `.eq('activo', true)` — un cajero (u owner) con `activo=false` no tiene membresía → sin acceso. (Los owners nacen `activo=true` por default, no se afectan.) `listarCajeros` filtra `activo=true` (o expone el estado). Test: un cajero dado de baja no aparece en la lista ni puede entrar.
+- [ ] **Step 3:** Mutation — quitar el `.eq('activo', true)` de `membresiasDeUsuario`; el test "cajero dado de baja no entra" debe FALLAR. Restaurar.
+- [ ] **Step 4:** `npx vitest run lib/comercio/` verde; `npx tsc --noEmit` limpio.
 
 ### Task 9.1: Resolver PURO de atribución (control de seguridad, mutation-testeable)
 

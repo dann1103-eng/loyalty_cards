@@ -14,7 +14,10 @@ export default async function PaginaCajeros() {
 
   const cajeros = await listarCajeros(supabase, comercioId);
   // Solo sucursales ACTIVAS se pueden elegir al dar de alta: no atar un cajero a una apagada.
+  // null = error de BD (distinto de [] = no hay sucursales): ante un fallo transitorio no queremos
+  // decirle "agregá una sucursal" a un dueño que sí tiene, y ocultarle el alta de cajeros.
   const sucursales = await listarSucursales(supabase, comercioId);
+  const errorSucursales = sucursales === null;
   const sucursalesActivas = (sucursales ?? []).filter((s) => s.activa);
 
   return (
@@ -25,7 +28,9 @@ export default async function PaginaCajeros() {
       </div>
 
       <div className="reveal d2">
-        {sucursalesActivas.length === 0 ? (
+        {errorSucursales ? (
+          <p className="admin-error" role="alert">No se pudieron cargar las sucursales. Recargá la página.</p>
+        ) : sucursalesActivas.length === 0 ? (
           <p className="admin-vacio">
             Primero agregá una sucursal activa: cada cajero atiende en una.{' '}
             <Link className="admin-fila-slug" href="/comercio/sucursales">Ir a Sucursales →</Link>
