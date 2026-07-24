@@ -40,6 +40,7 @@ export type Database = {
           sello_icono_url: string | null;
           sello_meta: number | null;
           difuminado_franja: string;
+          cuenta_id: string | null;
         };
         Insert: {
           id?: string;
@@ -61,6 +62,7 @@ export type Database = {
           sello_icono_url?: string | null;
           sello_meta?: number | null;
           difuminado_franja?: string;
+          cuenta_id?: string | null;
         };
         Update: {
           id?: string;
@@ -82,8 +84,19 @@ export type Database = {
           sello_icono_url?: string | null;
           sello_meta?: number | null;
           difuminado_franja?: string;
+          cuenta_id?: string | null;
         };
-        Relationships: [];
+        // FK de la 0008 (`cuenta_id ... references cuentas_comercio(id)`). Necesaria para el join
+        // embebido `cuentas_comercio(...)` desde comercios (panel FM, reportes).
+        Relationships: [
+          {
+            foreignKeyName: 'comercios_cuenta_id_fkey';
+            columns: ['cuenta_id'];
+            isOneToOne: false;
+            referencedRelation: 'cuentas_comercio';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       usuarios_comercio: {
         Row: {
@@ -92,6 +105,7 @@ export type Database = {
           email: string;
           rol: string;
           auth_user_id: string | null;
+          sucursal_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -100,6 +114,7 @@ export type Database = {
           email: string;
           rol: string;
           auth_user_id?: string | null;
+          sucursal_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -108,18 +123,25 @@ export type Database = {
           email?: string;
           rol?: string;
           auth_user_id?: string | null;
+          sucursal_id?: string | null;
           created_at?: string;
         };
-        // FK inline en la migración 0001 (`comercio_id ... references comercios(id)`) — Postgres
-        // la nombra `usuarios_comercio_comercio_id_fkey`. Necesaria para que el join embebido
-        // `comercios(nombre)` de esOwnerDeComercio resuelva su tipo (sin la entrada da
-        // SelectQueryError, igual que documenta la entrada de `tarjetas`).
+        // FKs inline: 0001 (`comercio_id → comercios`) y 0008 (`sucursal_id → sucursales`, solo
+        // cajeros). La de comercio es necesaria para el join embebido `comercios(nombre)` de
+        // membresiasDeUsuario/esOwnerDeComercio (sin la entrada da SelectQueryError).
         Relationships: [
           {
             foreignKeyName: 'usuarios_comercio_comercio_id_fkey';
             columns: ['comercio_id'];
             isOneToOne: false;
             referencedRelation: 'comercios';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'usuarios_comercio_sucursal_id_fkey';
+            columns: ['sucursal_id'];
+            isOneToOne: false;
+            referencedRelation: 'sucursales';
             referencedColumns: ['id'];
           },
         ];
@@ -270,6 +292,7 @@ export type Database = {
           cajero_usuario_id: string | null;
           puntos_delta: number;
           monto_compra: number | null;
+          sucursal_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -278,6 +301,7 @@ export type Database = {
           cajero_usuario_id?: string | null;
           puntos_delta: number;
           monto_compra?: number | null;
+          sucursal_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -286,9 +310,27 @@ export type Database = {
           cajero_usuario_id?: string | null;
           puntos_delta?: number;
           monto_compra?: number | null;
+          sucursal_id?: string | null;
           created_at?: string;
         };
-        Relationships: [];
+        // FKs inline de la 0001 (tarjeta_id) y 0008 (sucursal_id). Necesarias para que futuros joins
+        // embebidos (reportes) tipen sin SelectQueryError.
+        Relationships: [
+          {
+            foreignKeyName: 'transacciones_puntos_tarjeta_id_fkey';
+            columns: ['tarjeta_id'];
+            isOneToOne: false;
+            referencedRelation: 'tarjetas';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'transacciones_puntos_sucursal_id_fkey';
+            columns: ['sucursal_id'];
+            isOneToOne: false;
+            referencedRelation: 'sucursales';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       canjes: {
         Row: {
@@ -298,6 +340,7 @@ export type Database = {
           cajero_usuario_id: string | null;
           puntos_gastados: number;
           estado: string;
+          sucursal_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -307,6 +350,7 @@ export type Database = {
           cajero_usuario_id?: string | null;
           puntos_gastados: number;
           estado?: string;
+          sucursal_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -316,9 +360,33 @@ export type Database = {
           cajero_usuario_id?: string | null;
           puntos_gastados?: number;
           estado?: string;
+          sucursal_id?: string | null;
           created_at?: string;
         };
-        Relationships: [];
+        // FKs inline de la 0001 (tarjeta_id, recompensa_id) y 0008 (sucursal_id).
+        Relationships: [
+          {
+            foreignKeyName: 'canjes_tarjeta_id_fkey';
+            columns: ['tarjeta_id'];
+            isOneToOne: false;
+            referencedRelation: 'tarjetas';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'canjes_recompensa_id_fkey';
+            columns: ['recompensa_id'];
+            isOneToOne: false;
+            referencedRelation: 'recompensas';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'canjes_sucursal_id_fkey';
+            columns: ['sucursal_id'];
+            isOneToOne: false;
+            referencedRelation: 'sucursales';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       apple_push_registrations: {
         Row: {
@@ -393,6 +461,64 @@ export type Database = {
           created_at?: string;
         };
         Relationships: [];
+      };
+      // Migración 0008: el "cliente que paga" que agrupa comercios. limite_negocios se aplica en la
+      // capa app (validar()); la BD solo garantiza el rango con un CHECK.
+      cuentas_comercio: {
+        Row: {
+          id: string;
+          nombre: string;
+          limite_negocios: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          nombre: string;
+          limite_negocios?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          nombre?: string;
+          limite_negocios?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      // Migración 0008: sucursales de un comercio (comparten su tarjeta/branding/QR).
+      sucursales: {
+        Row: {
+          id: string;
+          comercio_id: string;
+          nombre: string;
+          activa: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          comercio_id: string;
+          nombre: string;
+          activa?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          comercio_id?: string;
+          nombre?: string;
+          activa?: boolean;
+          created_at?: string;
+        };
+        // FK inline de la 0008 (`comercio_id ... references comercios(id)`). Necesaria para joins
+        // embebidos `comercios(...)` desde sucursales si se usan.
+        Relationships: [
+          {
+            foreignKeyName: 'sucursales_comercio_id_fkey';
+            columns: ['comercio_id'];
+            isOneToOne: false;
+            referencedRelation: 'comercios';
+            referencedColumns: ['id'];
+          },
+        ];
       };
     };
     // Secciones vacías en la forma canónica de `supabase gen types` ({ [_ in never]: never }).

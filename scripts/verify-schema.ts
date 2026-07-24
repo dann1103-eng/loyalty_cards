@@ -9,6 +9,7 @@ const TABLAS = [
   'comercios', 'usuarios_comercio', 'clientes', 'tarjetas',
   'reglas_puntos', 'recompensas', 'transacciones_puntos', 'canjes',
   'apple_push_registrations', 'usuarios_fm', 'intentos_consulta_portal',
+  'cuentas_comercio', 'sucursales',
 ] as const;
 
 async function main() {
