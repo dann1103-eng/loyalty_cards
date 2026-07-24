@@ -123,6 +123,7 @@ describe('cambiarEstadoSucursal', () => {
 
     const res = await cambiarEstadoSucursal(supabase, creada.id, comercioB, false);
     expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/ya no existe/i); // scoping da el mismo mensaje que renombrar
 
     const { data } = await supabase.from('sucursales').select('activa').eq('id', creada.id).single();
     expect(data!.activa).toBe(true); // intacta: no era de comercioB
@@ -138,8 +139,9 @@ describe('listarSucursales', () => {
     await crearSucursal(supabase, comercioB, { nombre: 'B1' });
 
     const lista = await listarSucursales(supabase, comercioA);
-    expect(lista.length).toBe(2);
-    const nombres = lista.map((s) => s.nombre).sort();
+    expect(lista).not.toBeNull(); // null = error de BD, distinto de [] = vacío
+    expect(lista!.length).toBe(2);
+    const nombres = lista!.map((s) => s.nombre).sort();
     expect(nombres).toEqual(['A1', 'A2']);
   });
 });

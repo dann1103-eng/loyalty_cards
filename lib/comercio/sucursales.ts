@@ -96,11 +96,13 @@ export async function cambiarEstadoSucursal(
 }
 
 // Lista TODAS las sucursales del comercio (activas e inactivas): el dueño necesita ver las
-// desactivadas para poder reactivarlas con el toggle.
+// desactivadas para poder reactivarlas con el toggle. Devuelve null ante un ERROR de BD (distinto de
+// [] = "no hay sucursales"): sin esa distinción, la página mostraría el vacío "agregá la primera" ante
+// un fallo transitorio, invitando a crear un duplicado (paridad con recompensas/page.tsx).
 export async function listarSucursales(
   supabase: SupabaseClient<Database>,
   comercioId: string,
-): Promise<SucursalListada[]> {
+): Promise<SucursalListada[] | null> {
   const { data, error } = await supabase
     .from('sucursales')
     .select('id, nombre, activa')
@@ -109,7 +111,7 @@ export async function listarSucursales(
 
   if (error) {
     console.error('[comercio] falló la consulta de sucursales:', error);
-    return [];
+    return null;
   }
   return data ?? [];
 }
@@ -122,12 +124,17 @@ export async function sucursalPerteneceAComercio(
   sucursalId: string,
   comercioId: string,
 ): Promise<boolean> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('sucursales')
     .select('id')
     .eq('id', sucursalId)
     .eq('comercio_id', comercioId)
     .maybeSingle();
 
+  if (error) {
+    // Falla cerrado (data null → false), pero deja rastro: un error de infra no debe rechazar en
+    // silencio una sucursal legítima.
+    console.error('[comercio] falló la verificación de pertenencia de sucursal:', error);
+  }
   return data !== null;
 }

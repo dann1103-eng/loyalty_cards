@@ -25,7 +25,9 @@ export default async function PaginaSucursales() {
       </div>
 
       <div className="admin-lista reveal d3" style={{ marginTop: 22 }}>
-        {sucursales.length === 0 ? (
+        {sucursales === null ? (
+          <p className="admin-error" role="alert">No se pudieron cargar las sucursales. Recargá la página.</p>
+        ) : sucursales.length === 0 ? (
           <p className="admin-vacio">Todavía no hay sucursales. Agregá la primera.</p>
         ) : (
           sucursales.map((s) => (
