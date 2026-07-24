@@ -12,12 +12,16 @@ const ENLACES = [
   { href: '/comercio/clientes', icono: 'group', etiqueta: 'Clientes' },
 ] as const;
 
-export default function NavInferior() {
+export default function NavInferior({ rol }: { rol: string }) {
   const ruta = usePathname();
+
+  // El cajero solo opera el escáner; el owner ve la nav completa. (Los ítems Sucursales/Cajeros/
+  // Reportes se agregan en sus fases.)
+  const enlaces = rol === 'owner' ? ENLACES : ENLACES.filter((e) => e.href === '/comercio/escanear');
 
   return (
     <nav className="nav-inferior" aria-label="Secciones del panel">
-      {ENLACES.map((e) => {
+      {enlaces.map((e) => {
         const activo = ruta === e.href || ruta.startsWith(`${e.href}/`);
         return (
           <Link key={e.href} href={e.href} className={activo ? 'activo' : undefined}>
