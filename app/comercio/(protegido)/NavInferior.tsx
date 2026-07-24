@@ -9,14 +9,15 @@ const ENLACES = [
   { href: '/comercio/escanear', icono: 'qr_code_scanner', etiqueta: 'Escanear' },
   { href: '/comercio/branding', icono: 'palette', etiqueta: 'Marca' },
   { href: '/comercio/recompensas', icono: 'redeem', etiqueta: 'Premios' },
+  { href: '/comercio/sucursales', icono: 'store', etiqueta: 'Sucursales' },
   { href: '/comercio/clientes', icono: 'group', etiqueta: 'Clientes' },
 ] as const;
 
 export default function NavInferior({ rol }: { rol: string }) {
   const ruta = usePathname();
 
-  // El cajero solo opera el escáner; el owner ve la nav completa. (Los ítems Sucursales/Cajeros/
-  // Reportes se agregan en sus fases.)
+  // El cajero solo opera el escáner; el owner ve la nav completa. (Los ítems Cajeros/Reportes se
+  // agregan en sus fases.)
   const enlaces = rol === 'owner' ? ENLACES : ENLACES.filter((e) => e.href === '/comercio/escanear');
 
   return (
