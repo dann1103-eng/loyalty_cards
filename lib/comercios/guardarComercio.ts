@@ -80,9 +80,10 @@ function validar(datos: DatosComercio): string | null {
   }
   if (!TIPOS_TARJETA.some((t) => t.valor === datos.tipo_tarjeta)) {
     // Sin esto, un valor inválido cae en un 23514 de la BD que el manejo de errores (solo
-    // distingue 23505) convierte en un genérico "No se pudo crear el comercio". Se valida contra los 8 valores válidos de la BD (no solo los `disponible`): el
-    // <select> ya deshabilita los no disponibles, y el pass renderiza cualquier tipo != 'sellos'
-    // como número de forma segura, así que un tipo no disponible guardado no rompe nada.
+    // distingue 23505) convierte en un genérico "No se pudo crear el comercio". Se valida contra
+    // los 8 valores válidos de la BD (no solo los `disponible`): el <select> ya deshabilita los no
+    // disponibles, y el pass renderiza cualquier tipo != 'sellos' como número de forma segura, así
+    // que un tipo no disponible guardado no rompe nada.
     return 'El tipo de tarjeta no es válido.';
   }
   const colores: [string, string][] = [
