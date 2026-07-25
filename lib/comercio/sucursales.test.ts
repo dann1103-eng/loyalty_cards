@@ -10,14 +10,21 @@ import {
 
 const supabase = createServiceClient();
 const comerciosDePrueba: string[] = [];
+const cuentasDePrueba: string[] = [];
 
 afterEach(async () => {
-  if (!comerciosDePrueba.length) return;
-  // sucursales apunta a comercios sin cascade: borrar sucursales antes que su comercio (orden FK).
-  await supabase.from('sucursales').delete().in('comercio_id', comerciosDePrueba);
-  const { error } = await supabase.from('comercios').delete().in('id', comerciosDePrueba);
-  if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
-  comerciosDePrueba.length = 0;
+  if (comerciosDePrueba.length) {
+    // sucursales apunta a comercios sin cascade: borrar sucursales antes que su comercio.
+    await supabase.from('sucursales').delete().in('comercio_id', comerciosDePrueba);
+    const { error } = await supabase.from('comercios').delete().in('id', comerciosDePrueba);
+    if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
+    comerciosDePrueba.length = 0;
+  }
+  if (cuentasDePrueba.length) {
+    const { error } = await supabase.from('cuentas_comercio').delete().in('id', cuentasDePrueba);
+    if (error) console.error('[test] no se pudieron borrar las cuentas de prueba:', error);
+    cuentasDePrueba.length = 0;
+  }
 });
 
 async function crearComercio(): Promise<string> {
@@ -26,6 +33,25 @@ async function crearComercio(): Promise<string> {
   const { data, error } = await supabase.from('comercios').insert({ nombre: 'Suc', slug }).select('id').single();
   if (error) throw error;
   comerciosDePrueba.push(data.id);
+  return data.id;
+}
+
+async function crearCuentaFixture(limite: number | null): Promise<string> {
+  const { data, error } = await supabase
+    .from('cuentas_comercio')
+    .insert({ nombre: `Cuenta Test ${Date.now()}-${Math.random().toString(36).slice(2)}`, limite_negocios: limite })
+    .select('id').single();
+  if (error) throw error;
+  cuentasDePrueba.push(data.id);
+  return data.id;
+}
+
+async function crearComercioConCuenta(cuentaId: string | null): Promise<string> {
+  const slug = `test-suc-cuenta-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const { data, error } = await supabase
+    .from('comercios').insert({ nombre: 'Suc Cuenta', slug, cuenta_id: cuentaId }).select('id').single();
+  if (error) throw error;
+  comerciosDePrueba.push(data.id); // mismo array/afterEach que crearComercio(): comparten teardown.
   return data.id;
 }
 
@@ -166,5 +192,50 @@ describe('sucursalPerteneceAComercio', () => {
 
     // sucursalId real, pero consultada con el comercio EQUIVOCADO → debe dar false.
     expect(await sucursalPerteneceAComercio(supabase, creada.id, comercioB)).toBe(false);
+  });
+});
+
+describe('crearSucursal — límite combinado de la cuenta', () => {
+  it('rechaza cuando la cuenta del comercio ya alcanzó su límite combinado', async () => {
+    // MUTATION: quitar la llamada a verificarLimiteCuenta en crearSucursal deja pasar esto con
+    // ok:true indebidamente — el comercio YA consume el único cupo (límite 1).
+    const cuentaId = await crearCuentaFixture(1);
+    const comercioId = await crearComercioConCuenta(cuentaId);
+
+    const res = await crearSucursal(supabase, comercioId, { nombre: 'Sucursal Nueva' });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/límite/i);
+  });
+
+  it('permite crear cuando la cuenta tiene cupo, y la sucursal queda registrada', async () => {
+    const cuentaId = await crearCuentaFixture(3);
+    const comercioId = await crearComercioConCuenta(cuentaId);
+
+    const res = await crearSucursal(supabase, comercioId, { nombre: 'Sucursal Nueva' });
+
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      // Limpieza vía afterEach existente: borra sucursales por comercio_id, no hace falta trackear.
+      const { data } = await supabase.from('sucursales').select('nombre').eq('id', res.id).single();
+      expect(data!.nombre).toBe('Sucursal Nueva');
+    }
+  });
+
+  it('permite crear sin límite cuando la cuenta tiene limite_negocios null (plan Pro)', async () => {
+    const cuentaId = await crearCuentaFixture(null);
+    const comercioId = await crearComercioConCuenta(cuentaId);
+
+    const res = await crearSucursal(supabase, comercioId, { nombre: 'Sucursal Sin Tope' });
+
+    expect(res.ok).toBe(true);
+  });
+
+  it('degrada con gracia cuando el comercio no tiene cuenta_id (sin límite que verificar)', async () => {
+    const comercioId = await crearComercioConCuenta(null);
+
+    const res = await crearSucursal(supabase, comercioId, { nombre: 'Sucursal Sin Cuenta' });
+
+    expect(res.ok).toBe(true);
   });
 });

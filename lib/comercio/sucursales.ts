@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
+import { verificarLimiteCuenta } from '../comercios/cuentas';
 
 // Capa de datos de sucursales (migración 0008). Espeja recompensas.ts: TODA operación se scopea por
 // comercio_id (que viene SIEMPRE del gate, nunca del formulario) y la validación vive acá, en la capa
@@ -25,6 +26,21 @@ export async function crearSucursal(
 ): Promise<ResultadoSucursal> {
   const nombre = datos.nombre.trim();
   if (!nombre) return { ok: false, error: 'El nombre de la sucursal es obligatorio.' };
+
+  // El límite del plan cubre comercios Y sucursales juntos (migración 0011): antes de crear, hay
+  // que saber a qué cuenta pertenece este comercio y verificar su cupo ahí. Un comercio sin
+  // cuenta_id (legado/fixture de test) no tiene límite que verificar — degrada con gracia, mismo
+  // criterio que el resto del proyecto para cuenta_id nulo (spec Fase 6 §4.1).
+  const { data: comercio, error: eComercio } = await supabase
+    .from('comercios').select('cuenta_id').eq('id', comercioId).maybeSingle();
+  if (eComercio) {
+    console.error('[comercio] no se pudo leer el comercio para verificar el límite:', eComercio);
+    return { ok: false, error: 'No se pudo crear la sucursal.' };
+  }
+  if (comercio?.cuenta_id) {
+    const limite = await verificarLimiteCuenta(supabase, comercio.cuenta_id);
+    if (!limite.ok) return { ok: false, error: limite.error };
+  }
 
   const { data, error } = await supabase
     .from('sucursales')
