@@ -35,10 +35,6 @@ export type Database = {
           hero_url: string | null;
           google_class_id: string | null;
           created_at: string;
-          licencia_estado: string;
-          licencia_plan: string | null;
-          licencia_monto_mensual: number | null;
-          licencia_activa_desde: string | null;
           tipo_tarjeta: string;
           sello_icono_url: string | null;
           sello_meta: number | null;
@@ -57,10 +53,6 @@ export type Database = {
           hero_url?: string | null;
           google_class_id?: string | null;
           created_at?: string;
-          licencia_estado?: string;
-          licencia_plan?: string | null;
-          licencia_monto_mensual?: number | null;
-          licencia_activa_desde?: string | null;
           tipo_tarjeta?: string;
           sello_icono_url?: string | null;
           sello_meta?: number | null;
@@ -79,10 +71,6 @@ export type Database = {
           hero_url?: string | null;
           google_class_id?: string | null;
           created_at?: string;
-          licencia_estado?: string;
-          licencia_plan?: string | null;
-          licencia_monto_mensual?: number | null;
-          licencia_activa_desde?: string | null;
           tipo_tarjeta?: string;
           sello_icono_url?: string | null;
           sello_meta?: number | null;
@@ -474,19 +462,32 @@ export type Database = {
         Row: {
           id: string;
           nombre: string;
-          limite_negocios: number;
+          // null = sin límite (plan Pro). Antes NOT NULL (Fase 6) — migración 0011 lo relaja.
+          limite_negocios: number | null;
+          plan: string | null;
+          licencia_estado: string;
+          licencia_monto_mensual: number | null;
+          licencia_activa_desde: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           nombre: string;
-          limite_negocios?: number;
+          limite_negocios?: number | null;
+          plan?: string | null;
+          licencia_estado?: string;
+          licencia_monto_mensual?: number | null;
+          licencia_activa_desde?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           nombre?: string;
-          limite_negocios?: number;
+          limite_negocios?: number | null;
+          plan?: string | null;
+          licencia_estado?: string;
+          licencia_monto_mensual?: number | null;
+          licencia_activa_desde?: string | null;
           created_at?: string;
         };
         Relationships: [];
