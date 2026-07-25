@@ -1,57 +1,140 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 
+// Catálogo de planes de Cardly (fm-ai-website.vercel.app/productos/cardly). Fuente única de verdad
+// de nombre/monto/límite sugerido: el <select> de FormularioCuenta se construye desde esta MISMA
+// constante para que el formulario y el validador no puedan divergir (mismo patrón que
+// TIPOS_TARJETA en guardarComercio.ts). `limiteSugerido: null` en 'pro' = sin tope — ver
+// verificarLimiteCuenta más abajo.
+export const PLANES = [
+  { valor: 'starter', etiqueta: 'Starter', montoMensual: 29, limiteSugerido: 1 },
+  { valor: 'growth', etiqueta: 'Growth', montoMensual: 49, limiteSugerido: 2 },
+  { valor: 'pro', etiqueta: 'Pro', montoMensual: 89, limiteSugerido: null },
+] as const;
+export type Plan = (typeof PLANES)[number]['valor'];
+
+// Fuente única de verdad: la BD tiene check (licencia_estado in ('activo','inactivo')) en la
+// migración 0011 (antes vivía en comercios, migración 0003 — Fase 6 la movió acá).
+export const ESTADOS_LICENCIA = ['activo', 'inactivo'] as const;
+export type EstadoLicencia = (typeof ESTADOS_LICENCIA)[number];
+
+export interface DatosCuenta {
+  nombre: string;
+  // null = sin límite (Pro). La capa app (validarDatosCuenta) es la única defensa del rango — la
+  // BD solo garantiza limite_negocios > 0 CUANDO no es null (migración 0011).
+  limiteNegocios: number | null;
+  plan: string;
+  licenciaEstado: string;
+  licenciaMontoMensual: number | null;
+  licenciaActivaDesde: string | null;
+}
+
 export type ResultadoCuenta =
   | { ok: true; id: string }
   | { ok: false; error: string };
 
-// ¿Cabe un negocio más en esta cuenta? El límite (cuentas_comercio.limite_negocios) se APLICA
-// aquí, en la capa app — la BD solo garantiza el rango del propio límite con un CHECK, no cuántos
-// comercios lo respetan. Se cuenta con head:true (sin traer filas) los comercios con este
-// cuenta_id; `excluyendoComercioId` deja fuera del conteo al comercio que se está reasignando a su
-// PROPIA cuenta (editar sin moverlo no debe contar contra su cupo).
+// ¿Es una fecha real en formato AAAA-MM-DD? Movida acá desde guardarComercio.ts (Fase 6): licencia_
+// activa_desde ahora es de la cuenta, no del comercio. Ver el comentario original en el historial
+// de guardarComercio.ts para el detalle de por qué existe el (?!0000) y el round-trip.
+function esFechaValida(valor: string): boolean {
+  if (!/^(?!0000)\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const fecha = new Date(`${valor}T00:00:00Z`);
+  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === valor;
+}
+
+function validarDatosCuenta(datos: DatosCuenta): string | null {
+  if (!datos.nombre) return 'El nombre de la cuenta es obligatorio.';
+  if (datos.limiteNegocios !== null && (!Number.isInteger(datos.limiteNegocios) || datos.limiteNegocios < 1)) {
+    return 'El límite de negocios/sucursales debe ser un número entero mayor o igual a 1 (o vacío para "sin límite").';
+  }
+  if (!(PLANES as readonly { valor: string }[]).some((p) => p.valor === datos.plan)) {
+    return 'El plan no es válido.';
+  }
+  if (!(ESTADOS_LICENCIA as readonly string[]).includes(datos.licenciaEstado)) {
+    return 'El estado de la licencia debe ser "activo" o "inactivo".';
+  }
+  const monto = datos.licenciaMontoMensual;
+  if (monto !== null && !Number.isFinite(monto)) return 'El monto mensual debe ser un número.';
+  if (monto !== null && monto < 0) return 'El monto mensual no puede ser negativo.';
+  const fecha = datos.licenciaActivaDesde;
+  if (fecha !== null && !esFechaValida(fecha)) {
+    return 'La fecha de inicio de la licencia debe ser una fecha real en formato AAAA-MM-DD.';
+  }
+  return null;
+}
+
+// ¿Cabe un negocio/sucursal más en esta cuenta? El límite se APLICA acá, en la capa app —
+// la BD solo garantiza el rango del propio límite (o que sea null) con un CHECK, no cuántas filas
+// lo respetan.
+//
+// El límite cubre comercios DISTINTOS y SUCURSALES juntos (decisión revisada 2026-07-25 — antes
+// solo contaba comercios; QA manual sobre "Verde Raíz" encontró que las sucursales no tenían
+// NINGÚN tope). sucursales no tiene cuenta_id directo (solo comercio_id), así que se cuentan vía
+// los ids de comercio de esta cuenta.
+//
+// `unidadesAAgregar` (default 1): cuántas unidades va a sumar la operación que está preguntando.
+// Un alta nueva (comercio o sucursal) siempre agrega 1. PERO mover un comercio EXISTENTE a esta
+// cuenta (asignarComercioACuenta) no solo agrega el comercio: también arrastra sus propias
+// sucursales, que hasta el momento del move NO están bajo cuenta_id=cuentaId (así que
+// excluyendoComercioId no las excluye — nunca se contaron, ni tampoco llegan a sumarse solas). Sin
+// este parámetro, mover un comercio con sucursales a una cuenta casi llena la deja MUY por encima
+// de su límite sin ningún bloqueo — el mismo tipo de hueco que este fix existe para cerrar.
 export async function verificarLimiteCuenta(
   supabase: SupabaseClient<Database>,
   cuentaId: string,
-  opciones?: { excluyendoComercioId?: string },
+  opciones?: { excluyendoComercioId?: string; unidadesAAgregar?: number },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { data: cuenta, error: eCuenta } = await supabase
     .from('cuentas_comercio').select('limite_negocios').eq('id', cuentaId).maybeSingle();
   if (eCuenta) { console.error('[fm] no se pudo leer la cuenta:', eCuenta); return { ok: false, error: 'No se pudo verificar el límite de la cuenta.' }; }
   if (!cuenta) return { ok: false, error: 'La cuenta no existe.' };
 
-  let q = supabase.from('comercios').select('id', { count: 'exact', head: true }).eq('cuenta_id', cuentaId);
-  if (opciones?.excluyendoComercioId) q = q.neq('id', opciones.excluyendoComercioId);
-  const { count, error } = await q;
-  if (error) { console.error('[fm] no se pudo contar comercios de la cuenta:', error); return { ok: false, error: 'No se pudo verificar el límite de la cuenta.' }; }
+  // null = plan sin tope (Pro): nada que contar, se aprueba directo.
+  if (cuenta.limite_negocios === null) return { ok: true };
 
-  if ((count ?? 0) >= cuenta.limite_negocios) {
-    return { ok: false, error: `Esta cuenta ya alcanzó su límite de ${cuenta.limite_negocios} negocio(s).` };
+  // count Y data en la misma llamada: count trae el total de comercios de la cuenta, data trae sus
+  // ids (para contar sucursales vía el .in() de abajo) — un solo round-trip para las dos cosas.
+  let qComercios = supabase.from('comercios').select('id', { count: 'exact' }).eq('cuenta_id', cuentaId);
+  if (opciones?.excluyendoComercioId) qComercios = qComercios.neq('id', opciones.excluyendoComercioId);
+  const { data: comerciosDeCuenta, count: countComercios, error: eComercios } = await qComercios;
+  if (eComercios) { console.error('[fm] no se pudo contar comercios de la cuenta:', eComercios); return { ok: false, error: 'No se pudo verificar el límite de la cuenta.' }; }
+
+  let countSucursales = 0;
+  const ids = (comerciosDeCuenta ?? []).map((c) => c.id);
+  if (ids.length > 0) {
+    const { count, error: eSucursales } = await supabase
+      .from('sucursales').select('id', { count: 'exact', head: true }).in('comercio_id', ids);
+    if (eSucursales) { console.error('[fm] no se pudo contar sucursales de la cuenta:', eSucursales); return { ok: false, error: 'No se pudo verificar el límite de la cuenta.' }; }
+    countSucursales = count ?? 0;
+  }
+
+  const total = (countComercios ?? 0) + countSucursales;
+  const unidades = opciones?.unidadesAAgregar ?? 1;
+  if (total + unidades > cuenta.limite_negocios) {
+    return { ok: false, error: `Esta cuenta ya alcanzó su límite de ${cuenta.limite_negocios} negocio(s)/sucursal(es).` };
   }
   return { ok: true };
 }
 
-// Valida en la capa lib (única capa con tests), igual que guardarComercio.ts: la BD solo respalda
-// el rango del límite con un CHECK, no el nombre.
-function validarDatosCuenta(nombre: string, limiteNegocios: number): string | null {
-  if (!nombre) return 'El nombre de la cuenta es obligatorio.';
-  if (!Number.isInteger(limiteNegocios) || limiteNegocios < 1) {
-    return 'El límite de negocios debe ser un número entero mayor o igual a 1.';
-  }
-  return null;
-}
-
 export async function crearCuenta(
   supabase: SupabaseClient<Database>,
-  datos: { nombre: string; limiteNegocios: number },
+  datos: DatosCuenta,
 ): Promise<ResultadoCuenta> {
   const nombre = datos.nombre.trim();
-  const problema = validarDatosCuenta(nombre, datos.limiteNegocios);
+  const limpios: DatosCuenta = { ...datos, nombre };
+  const problema = validarDatosCuenta(limpios);
   if (problema) return { ok: false, error: problema };
 
   const { data, error } = await supabase
     .from('cuentas_comercio')
-    .insert({ nombre, limite_negocios: datos.limiteNegocios })
+    .insert({
+      nombre: limpios.nombre,
+      limite_negocios: limpios.limiteNegocios,
+      plan: limpios.plan,
+      licencia_estado: limpios.licenciaEstado,
+      licencia_monto_mensual: limpios.licenciaMontoMensual,
+      licencia_activa_desde: limpios.licenciaActivaDesde,
+    })
     .select('id')
     .single();
 
@@ -65,23 +148,28 @@ export async function crearCuenta(
 export async function actualizarCuenta(
   supabase: SupabaseClient<Database>,
   id: string,
-  datos: { nombre: string; limiteNegocios: number },
+  datos: DatosCuenta,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const nombre = datos.nombre.trim();
-  const problema = validarDatosCuenta(nombre, datos.limiteNegocios);
+  const limpios: DatosCuenta = { ...datos, nombre };
+  const problema = validarDatosCuenta(limpios);
   if (problema) return { ok: false, error: problema };
 
   const { error } = await supabase
     .from('cuentas_comercio')
-    .update({ nombre, limite_negocios: datos.limiteNegocios })
+    .update({
+      nombre: limpios.nombre,
+      limite_negocios: limpios.limiteNegocios,
+      plan: limpios.plan,
+      licencia_estado: limpios.licenciaEstado,
+      licencia_monto_mensual: limpios.licenciaMontoMensual,
+      licencia_activa_desde: limpios.licenciaActivaDesde,
+    })
     .eq('id', id)
     .select('id')
     .single();
 
   if (error) {
-    // PGRST116 = la consulta no devolvió exactamente una fila (mismo patrón que actualizarComercio):
-    // el .select('id').single() convierte un update que no tocó nada en un error explícito en vez
-    // de un ok:true habiendo escrito cero.
     if (error.code === 'PGRST116') {
       return { ok: false, error: 'Esa cuenta ya no existe.' };
     }
@@ -91,14 +179,27 @@ export async function actualizarCuenta(
   return { ok: true };
 }
 
-// Reasigna un comercio a otra cuenta, respetando el límite de la cuenta DESTINO. Excluye el propio
-// comercio del conteo para que reguardarlo en su cuenta actual nunca se bloquee a sí mismo.
+// Reasigna un comercio a otra cuenta, respetando el límite combinado de la cuenta DESTINO. El
+// comercio movido trae SUS PROPIAS sucursales con él — hay que contarlas y pasarlas como
+// unidadesAAgregar (1 por el comercio + N por sus sucursales), porque en el momento de este
+// chequeo esas sucursales todavía cuelgan del comercio con su cuenta_id VIEJO: el conteo interno
+// de verificarLimiteCuenta (que solo mira comercios YA en cuentaId) nunca las ve.
 export async function asignarComercioACuenta(
   supabase: SupabaseClient<Database>,
   comercioId: string,
   cuentaId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const limite = await verificarLimiteCuenta(supabase, cuentaId, { excluyendoComercioId: comercioId });
+  const { count: sucursalesPropias, error: eSucursales } = await supabase
+    .from('sucursales').select('id', { count: 'exact', head: true }).eq('comercio_id', comercioId);
+  if (eSucursales) {
+    console.error('[fm] no se pudo contar las sucursales del comercio a reasignar:', eSucursales);
+    return { ok: false, error: 'No se pudo reasignar el comercio a la cuenta.' };
+  }
+
+  const limite = await verificarLimiteCuenta(supabase, cuentaId, {
+    excluyendoComercioId: comercioId,
+    unidadesAAgregar: 1 + (sucursalesPropias ?? 0),
+  });
   if (!limite.ok) return limite;
 
   const { error } = await supabase
@@ -118,9 +219,6 @@ export async function asignarComercioACuenta(
   return { ok: true };
 }
 
-// comercios.cuenta_id apunta aquí SIN cascada (migración 0008), así que borrar una cuenta con
-// negocios asignados da un 23503 — igual que eliminarComercio, solo traducimos ese código a un
-// mensaje legible y dejamos que Postgres sea quien haga cumplir la regla (fuente única de verdad).
 export async function eliminarCuenta(
   supabase: SupabaseClient<Database>,
   id: string,
