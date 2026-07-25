@@ -10,19 +10,26 @@ import {
   eliminarCuenta,
   asignarComercioACuenta,
 } from '@/lib/comercios/cuentas';
+import type { DatosCuenta } from '@/lib/comercios/cuentas';
 
 export type EstadoFormulario = { error: string } | undefined;
 
 // Las acciones NO validan: toda la validación vive en la capa lib (cuentas.ts), que es la que
 // tiene tests de integración. Aquí solo: autenticar, parsear, delegar. Mismo patrón que
 // comercios/actions.ts.
-function leerDatos(formData: FormData): { nombre: string; limiteNegocios: number } {
+function leerDatos(formData: FormData): DatosCuenta {
   const limiteRaw = String(formData.get('limite_negocios') ?? '').trim();
+  const montoRaw = String(formData.get('licencia_monto_mensual') ?? '').trim();
+  const fechaRaw = String(formData.get('licencia_activa_desde') ?? '').trim();
   return {
     nombre: String(formData.get('nombre') ?? '').trim(),
-    // Number('') es 0 y Number('3a') es NaN; en ambos casos validarDatosCuenta lo rechaza (exige
-    // entero ≥ 1). Se mapea '' a NaN para que el vacío no se lea como el número 0.
-    limiteNegocios: limiteRaw === '' ? NaN : Number(limiteRaw),
+    // '' = sin límite (null). Number('3a') es NaN → validarDatosCuenta lo rechaza (no matchea
+    // "es null" ni "es entero >= 1", cae en el mensaje de rango).
+    limiteNegocios: limiteRaw === '' ? null : Number(limiteRaw),
+    plan: String(formData.get('plan') ?? ''),
+    licenciaEstado: String(formData.get('licencia_estado') ?? 'activo'),
+    licenciaMontoMensual: montoRaw === '' ? null : Number(montoRaw),
+    licenciaActivaDesde: fechaRaw === '' ? null : fechaRaw,
   };
 }
 

@@ -20,7 +20,7 @@ export default async function PaginaEditarCuenta({
   const supabase = createServiceClient();
   const { data: cuenta, error } = await supabase
     .from('cuentas_comercio')
-    .select('id, nombre, limite_negocios')
+    .select('id, nombre, limite_negocios, plan, licencia_estado, licencia_monto_mensual, licencia_activa_desde')
     .eq('id', id)
     .maybeSingle();
 
@@ -58,7 +58,14 @@ export default async function PaginaEditarCuenta({
   const todos = comercios ?? [];
   const negocios = todos.filter((c) => c.cuenta_id === id);
   const disponibles = todos.filter((c) => c.cuenta_id !== id).map((c) => ({ id: c.id, nombre: c.nombre }));
-  const hayCupo = negocios.length < cuenta.limite_negocios;
+  const idsDeNegocios = negocios.map((n) => n.id);
+  let sucursalesDeLaCuenta = 0;
+  if (idsDeNegocios.length > 0) {
+    const { data } = await supabase.from('sucursales').select('id').in('comercio_id', idsDeNegocios);
+    sucursalesDeLaCuenta = data?.length ?? 0;
+  }
+  const usados = negocios.length + sucursalesDeLaCuenta;
+  const hayCupo = cuenta.limite_negocios === null || usados < cuenta.limite_negocios;
 
   // bind() fija el id como primer argumento; la firma que ve useActionState sigue siendo
   // (estado, formData).
@@ -79,13 +86,20 @@ export default async function PaginaEditarCuenta({
 
       <FormularioCuenta
         accion={accion}
-        inicial={{ nombre: cuenta.nombre, limite_negocios: cuenta.limite_negocios }}
+        inicial={{
+          nombre: cuenta.nombre,
+          limite_negocios: cuenta.limite_negocios,
+          plan: cuenta.plan,
+          licencia_estado: cuenta.licencia_estado,
+          licencia_monto_mensual: cuenta.licencia_monto_mensual,
+          licencia_activa_desde: cuenta.licencia_activa_desde,
+        }}
         textoBoton="Guardar cambios"
       />
 
       <section className="panel reveal d2" style={{ marginTop: 18 }}>
         <p className="titulo-seccion" style={{ marginBottom: 12 }}>
-          Negocios de esta cuenta ({negocios.length} de {cuenta.limite_negocios})
+          Negocios de esta cuenta ({usados} de {cuenta.limite_negocios ?? '∞'})
         </p>
         {negocios.length === 0 ? (
           <p className="field-aviso">Esta cuenta no tiene negocios asignados todavía.</p>
@@ -112,7 +126,7 @@ export default async function PaginaEditarCuenta({
           <FormularioVincular accion={vincular} disponibles={disponibles} />
         ) : (
           <p className="field-aviso" style={{ marginTop: 14 }}>
-            La cuenta alcanzó su límite de {cuenta.limite_negocios} negocio(s). Subí el límite para
+            La cuenta alcanzó su límite de {cuenta.limite_negocios ?? '∞'} negocio(s). Subí el límite para
             vincular más.
           </p>
         )}

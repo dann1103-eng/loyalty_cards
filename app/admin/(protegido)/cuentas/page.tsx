@@ -22,11 +22,22 @@ export default async function PaginaCuentas() {
   }
 
   // Conteo de negocios por cuenta (una sola consulta liviana; se agrupa acá, como comercios/page).
-  const { data: comercios, error: errorComercios } = await supabase.from('comercios').select('cuenta_id');
+  const { data: comercios, error: errorComercios } = await supabase.from('comercios').select('id, cuenta_id');
   if (errorComercios) console.error('[fm] falló el conteo de negocios por cuenta:', errorComercios);
+  const cuentaPorComercio = new Map<string, string>();
   const negociosPorCuenta = new Map<string, number>();
   for (const c of comercios ?? []) {
-    if (c.cuenta_id) negociosPorCuenta.set(c.cuenta_id, (negociosPorCuenta.get(c.cuenta_id) ?? 0) + 1);
+    if (!c.cuenta_id) continue;
+    cuentaPorComercio.set(c.id, c.cuenta_id);
+    negociosPorCuenta.set(c.cuenta_id, (negociosPorCuenta.get(c.cuenta_id) ?? 0) + 1);
+  }
+  // El límite cuenta sucursales también (ver verificarLimiteCuenta) — sucursales no tiene
+  // cuenta_id directo, se suma vía el mapa de comercio→cuenta de arriba.
+  const { data: sucursales, error: errorSucursales } = await supabase.from('sucursales').select('comercio_id');
+  if (errorSucursales) console.error('[fm] falló el conteo de sucursales por cuenta:', errorSucursales);
+  for (const s of sucursales ?? []) {
+    const cuentaId = cuentaPorComercio.get(s.comercio_id);
+    if (cuentaId) negociosPorCuenta.set(cuentaId, (negociosPorCuenta.get(cuentaId) ?? 0) + 1);
   }
 
   return (
@@ -49,7 +60,7 @@ export default async function PaginaCuentas() {
         <div className="admin-lista reveal d2">
           {cuentas.map((c) => {
             const usados = negociosPorCuenta.get(c.id) ?? 0;
-            const llena = usados >= c.limite_negocios;
+            const llena = c.limite_negocios !== null && usados >= c.limite_negocios;
             return (
               <Link key={c.id} className="admin-fila" href={`/admin/cuentas/${c.id}`}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -60,7 +71,7 @@ export default async function PaginaCuentas() {
                     <div className="admin-fila-nombre">{c.nombre}</div>
                     <div className="admin-fila-slug">
                       <span className="dato-mono">{usados}</span> de{' '}
-                      <span className="dato-mono">{c.limite_negocios}</span> negocio(s)
+                      <span className="dato-mono">{c.limite_negocios ?? '∞'}</span> negocio(s)/sucursal(es)
                     </div>
                   </div>
                 </div>
