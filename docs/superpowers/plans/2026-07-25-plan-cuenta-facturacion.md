@@ -18,7 +18,7 @@
 **Explícitamente fuera de alcance (detectado durante el diseño, no pedido):**
 - Catálogo Cardly también menciona **límite de clientes** (500/2500/sin límite) y un **setup inicial $149 único** — ninguno de los dos se modela en este fix. Si se quieren, son un fix aparte.
 - "Soporte multi-sucursal" de Pro es descriptivo/comercial, no se traduce en una restricción técnica adicional (ya cubierto por el límite combinado).
-- No se agrega cobertura retroactiva para `renombrarSucursal`/`cambiarEstadoSucursal`/`listarSucursales`/`sucursalPerteneceAComercio` (gap preexistente de Fase 6, sin tests desde que se escribieron) — la Tarea 4 solo cubre el comportamiento NUEVO (límite en `crearSucursal`).
+- La Tarea 4 solo agrega cobertura para el comportamiento NUEVO (el límite en `crearSucursal`) — `renombrarSucursal`/`cambiarEstadoSucursal`/`listarSucursales`/`sucursalPerteneceAComercio` YA tienen 9 tests propios desde Fase 6 (incluyendo mutation-testing de seguridad en `sucursalPerteneceAComercio`), que este fix no toca ni necesita ampliar.
 
 ---
 
@@ -646,7 +646,12 @@ Expected: PASS (todos, incluyendo los 3 nuevos de límite combinado).
 Para CADA mutación listada en los comentarios `// MUTATION:` de arriba: aplicarla a mano en
 `cuentas.ts`, correr `npm test -- --run cuentas.test`, confirmar que el test específico FALLA con
 el mensaje esperado (no otro), restaurar con el contenido original. Documentar en el mensaje de
-commit cuáles se verificaron.
+commit cuáles se verificaron. **También re-verificar los 2 comentarios `MUTATION A`/`MUTATION B`
+preexistentes** (en los tests `'bloquea cuando la cuenta ya alcanzó su límite...'` y `'NO reasigna
+cuando la cuenta destino ya alcanzó su límite'`) — `verificarLimiteCuenta` se reescribió por
+completo en este task (el operador cambió de `total >= limite` a `total + unidades > limite`), así
+que aunque el resultado sea equivalente, vale la pena confirmar que esas dos mutaciones siguen
+disparando el fallo esperado bajo la lógica nueva, no solo asumirlo.
 
 - [ ] **Step 6: Commit**
 
@@ -659,7 +664,9 @@ git commit -m "Cuentas: catálogo de 3 planes + límite combinado comercios+sucu
 
 ### Task 3: `lib/comercios/guardarComercio.ts` — quitar licencia (se mudó a cuentas)
 
-**Precondición:** Task 1 aplicada en la BD viva (⚑).
+**Precondición:** Task 1 aplicada en la BD viva (⚑) Y Task 2 completa (Step 3 de este task llama
+`verificarLimiteCuenta(..., { unidadesAAgregar })` — ese parámetro no existe hasta que Task 2 lo
+agrega).
 
 **Files:**
 - Modify: `lib/comercios/guardarComercio.ts`
@@ -700,7 +707,10 @@ paso 1 — ya están ahí como parte del catálogo de planes/monto/fecha):
 - `'rechaza un monto que no es un número'` (líneas 193-201) — BORRAR.
 - `'actualiza licencia y branding de un comercio existente'` (líneas 266-286) — renombrar a
   `'actualiza el nombre y branding de un comercio existente'`, quitar
-  `licencia_estado: 'inactivo',` del objeto y el assert correspondiente.
+  `licencia_estado: 'inactivo',` del objeto, quitar `licencia_estado` del
+  `.select('nombre, licencia_estado')` (queda `.select('nombre')` — esa columna ya no existe en
+  `comercios` tras la migración 0011, dejarla en el `.select()` rompe la consulta) y el assert
+  correspondiente.
 
 - [ ] **Step 2: Correr los tests y confirmar que fallan por el motivo correcto**
 
@@ -712,9 +722,13 @@ licencia que se acaban de quitar del objeto; error de tipos/runtime hasta el Ste
 
 Quitar el export de `ESTADOS_LICENCIA`/`EstadoLicencia` (líneas 6-10 — se mudó a `cuentas.ts`, Task
 2). Quitar las 4 líneas de `DatosComercio` (`licencia_estado`, `licencia_plan`,
-`licencia_monto_mensual`, `licencia_activa_desde`). En `normalizar()`, quitar las líneas
-`licencia_estado: datos.licencia_estado.trim(),` y `licencia_activa_desde:
-limpiarOpcional(datos.licencia_activa_desde),`. En `validar()`, quitar el bloque del chequeo de
+`licencia_monto_mensual`, `licencia_activa_desde`). En `normalizar()`, quitar las TRES líneas
+`licencia_estado: datos.licencia_estado.trim(),`, `licencia_plan:
+limpiarOpcional(datos.licencia_plan),` y `licencia_activa_desde:
+limpiarOpcional(datos.licencia_activa_desde),` (las tres, no solo dos — dejar
+`licencia_plan` referencia una propiedad que `DatosComercio` ya no tiene: error de compilación, y si
+se pasara por alto, un `.insert()`/`.update()` contra una columna que la migración 0011 borró). En
+`validar()`, quitar el bloque del chequeo de
 `licencia_estado` (con su comentario), el bloque de `monto`/`licencia_monto_mensual`, y el bloque de
 `fecha`/`licencia_activa_desde`. Quitar la función `esFechaValida()` completa (se mudó a
 `cuentas.ts`, Task 2 — ya no tiene ningún consumidor acá).
@@ -752,7 +766,7 @@ por:
 ```
 
 El archivo resultante conserva: `TIPOS_TARJETA`/`TipoTarjeta`, `DatosComercio` (sin los 4 campos de
-licencia), `normalizar()` (sin las 2 líneas de licencia), `validar()` (sin los 3 bloques de
+licencia), `normalizar()` (sin las 3 líneas de licencia), `validar()` (sin los 3 bloques de
 licencia — conserva `cuenta_id`, `nombre`, `slug`, `tipo_tarjeta`, los 3 colores).
 
 Agregar a `guardarComercio.test.ts` (mismo archivo de este task, describe `actualizarComercio`):
@@ -1064,7 +1078,8 @@ directo al botón de submit.
 - [ ] **Step 2: `actions.ts` — quitar el parseo de los 4 campos**
 
 En `leerDatos()`, quitar la línea `const monto = textoONull(formData.get('licencia_monto_mensual'));`
-y las 4 líneas correspondientes del objeto devuelto (`licencia_estado`, `licencia_plan`,
+(y el comentario de 2 líneas justo arriba, sobre `Number('25a')` — queda huérfano sin esa línea) y
+las 4 líneas correspondientes del objeto devuelto (`licencia_estado`, `licencia_plan`,
 `licencia_monto_mensual`, `licencia_activa_desde`).
 
 - [ ] **Step 3: `page.tsx` — la lista muestra el estado/monto de la CUENTA (join), no del comercio**
