@@ -3,12 +3,6 @@ import type { Database } from '../supabase/types';
 import { validarColorRgb } from './validarColorRgb';
 import { verificarLimiteCuenta } from './cuentas';
 
-// Fuente única de verdad: la BD tiene check (licencia_estado in ('activo','inactivo')) en la
-// migración 0003. El <select> de la Tarea 9 se construye desde esta misma constante para que el
-// formulario y el validador no puedan divergir.
-export const ESTADOS_LICENCIA = ['activo', 'inactivo'] as const;
-export type EstadoLicencia = (typeof ESTADOS_LICENCIA)[number];
-
 // Fuente única de verdad del catálogo de tipos de tarjeta: la BD tiene
 // check (tipo_tarjeta in (...8 valores...)) en la migración 0005. El <select> de FM (Tarea 3) se
 // construye desde esta MISMA constante. `disponible: false` = el tipo existe en el catálogo pero
@@ -35,14 +29,10 @@ export interface DatosComercio {
   logo_url: string | null;
   strip_url: string | null;
   hero_url: string | null;
-  licencia_estado: string;
-  licencia_plan: string | null;
-  licencia_monto_mensual: number | null;
-  licencia_activa_desde: string | null;
   tipo_tarjeta: string;
   // La cuenta (cliente que paga) a la que pertenece el comercio. Obligatorio en la capa app —
   // la columna es nullable en la BD a propósito (migración 0008), así que validar() es la única
-  // defensa, igual que con los colores y el monto.
+  // defensa, igual que con los colores.
   cuenta_id: string;
 }
 
@@ -72,30 +62,9 @@ function normalizar(datos: DatosComercio): DatosComercio {
     logo_url: limpiarOpcional(datos.logo_url),
     strip_url: limpiarOpcional(datos.strip_url),
     hero_url: limpiarOpcional(datos.hero_url),
-    licencia_estado: datos.licencia_estado.trim(),
-    licencia_plan: limpiarOpcional(datos.licencia_plan),
-    licencia_activa_desde: limpiarOpcional(datos.licencia_activa_desde),
     tipo_tarjeta: datos.tipo_tarjeta.trim(),
     cuenta_id: datos.cuenta_id.trim(),
   };
-}
-
-// ¿Es una fecha real en formato AAAA-MM-DD? El <input type="date"> del navegador ya lo
-// garantiza, pero un Server Action es un POST: no se le cree al formulario. Sin esto, teclear
-// "16/07/2026" —el formato natural en El Salvador— revienta en la BD y sale como un genérico
-// "No se pudo crear el comercio", sin decir qué está mal.
-function esFechaValida(valor: string): boolean {
-  // El (?!0000) va aquí porque el round-trip de abajo NO atrapa el año cero: JS representa el
-  // año 0 sin problema y lo devuelve idéntico. Postgres no — no existe el año cero, y rechaza
-  // "0000-01-01" con un 22008, o sea el genérico "No se pudo crear el comercio" que esta
-  // función existe para evitar. Solo el 0000: "0001-01-01" sí es válido en Postgres.
-  // El orden importa: la regex admite exactamente \d{4}-\d{2}-\d{2}, así que Date nunca ve un
-  // año expandido ni un signo, y nunca cae al parser legacy que varía entre motores.
-  if (!/^(?!0000)\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
-  // El round-trip atrapa fechas con forma correcta pero imposibles ("2026-02-31"): según el
-  // motor, Date las rueda a marzo o da Invalid Date. Comparar contra la entrada cubre ambos.
-  const fecha = new Date(`${valor}T00:00:00Z`);
-  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === valor;
 }
 
 // Devuelve el primer problema encontrado, o null si todo está bien.
@@ -109,16 +78,9 @@ function validar(datos: DatosComercio): string | null {
   if (!/^[a-z0-9-]+$/.test(datos.slug)) {
     return 'El slug solo puede tener minúsculas, números y guiones.';
   }
-  if (!(ESTADOS_LICENCIA as readonly string[]).includes(datos.licencia_estado)) {
-    // Sin esto, un estado inválido no falla aquí: falla en la BD con un 23514 (violación de
-    // CHECK), que el manejo de errores —que solo distingue 23505— convierte en un genérico
-    // "No se pudo crear el comercio". El admin se queda sin saber qué escribió mal.
-    return 'El estado de la licencia debe ser "activo" o "inactivo".';
-  }
   if (!TIPOS_TARJETA.some((t) => t.valor === datos.tipo_tarjeta)) {
-    // Mismo motivo que licencia_estado: sin esto, un valor inválido cae en un 23514 de la BD que
-    // el manejo de errores (solo distingue 23505) convierte en un genérico "No se pudo crear el
-    // comercio". Se valida contra los 8 valores válidos de la BD (no solo los `disponible`): el
+    // Sin esto, un valor inválido cae en un 23514 de la BD que el manejo de errores (solo
+    // distingue 23505) convierte en un genérico "No se pudo crear el comercio". Se valida contra los 8 valores válidos de la BD (no solo los `disponible`): el
     // <select> ya deshabilita los no disponibles, y el pass renderiza cualquier tipo != 'sellos'
     // como número de forma segura, así que un tipo no disponible guardado no rompe nada.
     return 'El tipo de tarjeta no es válido.';
@@ -132,20 +94,6 @@ function validar(datos: DatosComercio): string | null {
     if (!validarColorRgb(valor)) {
       return `El ${nombre} debe tener el formato rgb(r, g, b) con valores de 0 a 255.`;
     }
-  }
-  const monto = datos.licencia_monto_mensual;
-  if (monto !== null && !Number.isFinite(monto)) {
-    // Ruta real: la Tarea 9 hace Number(monto), así que un "25a" llega como NaN. Va aparte del
-    // chequeo de negativo porque decirle "no puede ser negativo" a un NaN es, literalmente,
-    // afirmar algo falso sobre el valor.
-    return 'El monto mensual debe ser un número.';
-  }
-  if (monto !== null && monto < 0) {
-    return 'El monto mensual no puede ser negativo.';
-  }
-  const fecha = datos.licencia_activa_desde;
-  if (fecha !== null && !esFechaValida(fecha)) {
-    return 'La fecha de inicio de la licencia debe ser una fecha real en formato AAAA-MM-DD.';
   }
   return null;
 }
@@ -210,7 +158,18 @@ export async function actualizarComercio(
     return { ok: false, error: 'No se pudo actualizar el comercio.' };
   }
   if (actual && actual.cuenta_id !== limpios.cuenta_id) {
-    const limite = await verificarLimiteCuenta(supabase, limpios.cuenta_id, { excluyendoComercioId: id });
+    // El comercio que cambia de cuenta trae sus propias sucursales — igual que
+    // asignarComercioACuenta en cuentas.ts, hay que contarlas y pasarlas como unidadesAAgregar.
+    const { count: sucursalesPropias, error: eSucursales } = await supabase
+      .from('sucursales').select('id', { count: 'exact', head: true }).eq('comercio_id', id);
+    if (eSucursales) {
+      console.error('[fm] no se pudo contar las sucursales del comercio a reasignar:', eSucursales);
+      return { ok: false, error: 'No se pudo actualizar el comercio.' };
+    }
+    const limite = await verificarLimiteCuenta(supabase, limpios.cuenta_id, {
+      excluyendoComercioId: id,
+      unidadesAAgregar: 1 + (sucursalesPropias ?? 0),
+    });
     if (!limite.ok) return { ok: false, error: limite.error };
   }
 

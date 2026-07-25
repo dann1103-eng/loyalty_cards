@@ -25,6 +25,11 @@ afterEach(async () => {
     clientesDePrueba.length = 0;
   }
   if (slugsDePrueba.length) {
+    const { data: comerciosDeSlugs } = await supabase.from('comercios').select('id').in('slug', slugsDePrueba);
+    const idsDeSlugs = (comerciosDeSlugs ?? []).map((c) => c.id);
+    if (idsDeSlugs.length) {
+      await supabase.from('sucursales').delete().in('comercio_id', idsDeSlugs);
+    }
     const { error } = await supabase.from('comercios').delete().in('slug', slugsDePrueba);
     if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
     slugsDePrueba.length = 0;
@@ -65,35 +70,19 @@ async function datosValidos(slug: string): Promise<DatosComercio> {
     logo_url: null,
     strip_url: null,
     hero_url: null,
-    licencia_estado: 'activo',
-    licencia_plan: 'Básico',
-    licencia_monto_mensual: 25,
-    licencia_activa_desde: '2026-07-16',
     tipo_tarjeta: 'puntos',
     cuenta_id: await cuentaDePrueba(),
   };
 }
 
 describe('crearComercio', () => {
-  it('crea un comercio con licencia y branding', async () => {
+  it('crea un comercio con branding', async () => {
     const slug = `test-crear-${Date.now()}`;
     const res = await crearComercio(supabase, await datosValidos(slug));
 
     expect(res.ok).toBe(true);
-    const { data } = await supabase
-      .from('comercios')
-      .select('nombre, licencia_estado, licencia_monto_mensual, licencia_activa_desde')
-      .eq('slug', slug)
-      .single();
+    const { data } = await supabase.from('comercios').select('nombre').eq('slug', slug).single();
     expect(data!.nombre).toBe('Comercio Test');
-    expect(data!.licencia_estado).toBe('activo');
-    // Sin Number(): PostgREST devuelve numeric como número JSON. Aserción más fuerte —
-    // fallaría ruidosamente si eso cambiara, en vez de que Number() lo tapara en silencio.
-    expect(data!.licencia_monto_mensual).toBe(25);
-    // Fija la migración 0004: la columna es `date`, no timestamptz, y PostgREST la devuelve
-    // como "2026-07-16" tal cual. Si alguien la revierte a timestamptz, esto falla — que es el
-    // punto: con timestamptz, El Salvador (UTC-6) renderizaría el 15 de julio en cada fila.
-    expect(data!.licencia_activa_desde).toBe('2026-07-16');
   });
 
   it('rechaza un slug duplicado con un mensaje claro, sin lanzar', async () => {
@@ -111,30 +100,6 @@ describe('crearComercio', () => {
 
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/color/i);
-  });
-
-  it('rechaza un monto mensual negativo', async () => {
-    const slug = `test-monto-${Date.now()}`;
-    const res = await crearComercio(supabase, {
-      ...(await datosValidos(slug)),
-      licencia_monto_mensual: -50,
-    });
-
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toMatch(/monto/i);
-  });
-
-  it('rechaza un estado de licencia que la BD no acepta', async () => {
-    const slug = `test-estado-${Date.now()}`;
-    const res = await crearComercio(supabase, {
-      ...(await datosValidos(slug)),
-      licencia_estado: 'suspendido',
-    });
-
-    expect(res.ok).toBe(false);
-    // Debe explicar QUÉ está mal. Sin la validación, esto igual daría ok:false — pero por un
-    // 23514 traducido a "No se pudo crear el comercio", que no le dice nada a nadie.
-    if (!res.ok) expect(res.error).toMatch(/estado/i);
   });
 
   it('rechaza un nombre vacío', async () => {
@@ -190,51 +155,22 @@ describe('crearComercio', () => {
     }
   });
 
-  it('rechaza un monto que no es un número', async () => {
-    const slug = `test-nan-${Date.now()}`;
-    // La Tarea 9 hace Number(monto): un "25a" en el formulario llega como NaN. Sin el
-    // Number.isFinite, JSON.stringify(NaN) es "null" y el monto se guardaría VACÍO en silencio.
-    const res = await crearComercio(supabase, { ...(await datosValidos(slug)), licencia_monto_mensual: NaN });
-
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toMatch(/monto/i);
-  });
-
-  it('rechaza fechas inválidas o con el formato equivocado', async () => {
-    // '16/07/2026' es lo que teclea alguien en El Salvador; '2026-02-31' tiene forma correcta
-    // pero no existe. Las dos deben explicar qué pasa, no dar un error genérico.
-    // '0000-01-01' pasa el round-trip de Date (JS representa el año 0 y lo devuelve igual) pero
-    // Postgres lo rechaza con un 22008: no existe el año cero. Sin el (?!0000) sale el genérico.
-    for (const mala of ['16/07/2026', 'ayer', '2026-02-31', '2026-7-6', '0000-01-01']) {
-      const res = await crearComercio(supabase, {
-        ...(await datosValidos(`test-fecha-${Date.now()}`)),
-        licencia_activa_desde: mala,
-      });
-      expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toMatch(/fecha/i);
-    }
-  });
-
   it('normaliza espacios y guarda los opcionales vacíos como null', async () => {
     const slug = `test-normalizar-${Date.now()}`;
     const res = await crearComercio(supabase, {
       ...(await datosValidos(slug)),
       nombre: '  Café con Espacios  ',
       color_fondo: '  rgb(35, 24, 18)  ',
-      licencia_estado: '  activo  ',
       logo_url: '',
     });
 
     expect(res.ok).toBe(true);
     const { data } = await supabase
       .from('comercios')
-      .select('nombre, color_fondo, licencia_estado, logo_url')
+      .select('nombre, color_fondo, logo_url')
       .eq('slug', slug)
       .single();
     expect(data!.nombre).toBe('Café con Espacios');
-    // licencia_estado es el único string que normalizar() podría olvidar trimear, y sin trim
-    // '  activo  ' se rechaza con un mensaje que se ve idéntico a lo que el admin escribió.
-    expect(data!.licencia_estado).toBe('activo');
     // validarColorRgb hace su propio .trim() interno, así que sin normalizar ANTES del insert
     // este valor pasaría la validación y se guardaría con los espacios intactos.
     expect(data!.color_fondo).toBe('rgb(35, 24, 18)');
@@ -263,7 +199,7 @@ describe('crearComercio', () => {
 });
 
 describe('actualizarComercio', () => {
-  it('actualiza licencia y branding de un comercio existente', async () => {
+  it('actualiza el nombre y branding de un comercio existente', async () => {
     const slug = `test-editar-${Date.now()}`;
     const datos = await datosValidos(slug);
     const creado = await crearComercio(supabase, datos);
@@ -272,17 +208,15 @@ describe('actualizarComercio', () => {
     const res = await actualizarComercio(supabase, creado.id, {
       ...datos,
       nombre: 'Nombre Editado',
-      licencia_estado: 'inactivo',
     });
 
     expect(res.ok).toBe(true);
     const { data } = await supabase
       .from('comercios')
-      .select('nombre, licencia_estado')
+      .select('nombre')
       .eq('id', creado.id)
       .single();
     expect(data!.nombre).toBe('Nombre Editado');
-    expect(data!.licencia_estado).toBe('inactivo');
   });
 
   it('valida igual que crearComercio', async () => {
@@ -326,6 +260,30 @@ describe('actualizarComercio', () => {
     expect(res.ok).toBe(true);
     const { data } = await supabase.from('comercios').select('tipo_tarjeta').eq('id', creado.id).single();
     expect(data!.tipo_tarjeta).toBe('sellos');
+  });
+
+  it('al cambiar de cuenta, cuenta las sucursales propias contra el límite de la cuenta destino', async () => {
+    // Mismo caso que el test análogo de asignarComercioACuenta en cuentas.test.ts (Task 2), pero
+    // por el camino de "editar comercio y cambiarle la cuenta" en vez del botón "Vincular".
+    const cuentaDestino = (await (await import('./cuentas')).crearCuenta(supabase, {
+      nombre: `Destino ${Date.now()}`, limiteNegocios: 1, plan: 'starter',
+      licenciaEstado: 'activo', licenciaMontoMensual: null, licenciaActivaDesde: null,
+    }));
+    if (!cuentaDestino.ok) throw new Error('setup falló');
+    cuentasDePrueba.push(cuentaDestino.id);
+
+    const slug = `test-mover-cuenta-${Date.now()}`;
+    const datos = await datosValidos(slug);
+    const creado = await crearComercio(supabase, datos);
+    if (!creado.ok) throw new Error('el setup falló');
+    await supabase.from('sucursales').insert({ comercio_id: creado.id, nombre: 'Sucursal Propia' });
+
+    // Destino ya tiene límite 1 y 0 comercios — cabría el comercio SOLO, pero trae 1 sucursal
+    // consigo: 1 (comercio) + 1 (sucursal) = 2 > 1, debe rechazar.
+    const res = await actualizarComercio(supabase, creado.id, { ...datos, cuenta_id: cuentaDestino.id });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/límite/i);
   });
 });
 
