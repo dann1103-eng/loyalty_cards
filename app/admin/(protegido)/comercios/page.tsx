@@ -12,7 +12,7 @@ export default async function PaginaComercios() {
   const supabase = createServiceClient();
   const { data: comercios, error } = await supabase
     .from('comercios')
-    .select('id, nombre, slug, licencia_estado, licencia_monto_mensual')
+    .select('id, nombre, slug, cuentas_comercio(licencia_estado, licencia_monto_mensual)')
     .order('nombre');
 
   if (error) {
@@ -64,16 +64,18 @@ export default async function PaginaComercios() {
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                {c.licencia_monto_mensual != null && (
-                  <span className="admin-fila-slug dato-mono">${c.licencia_monto_mensual}/mes</span>
+                {c.cuentas_comercio?.licencia_monto_mensual != null && (
+                  <span className="admin-fila-slug dato-mono">${c.cuentas_comercio.licencia_monto_mensual}/mes</span>
                 )}
-                <span
-                  className={`pastilla ${
-                    c.licencia_estado === 'activo' ? 'pastilla-activo' : 'pastilla-inactivo'
-                  }`}
-                >
-                  {c.licencia_estado}
-                </span>
+                {c.cuentas_comercio && (
+                  <span
+                    className={`pastilla ${
+                      c.cuentas_comercio.licencia_estado === 'activo' ? 'pastilla-activo' : 'pastilla-inactivo'
+                    }`}
+                  >
+                    {c.cuentas_comercio.licencia_estado}
+                  </span>
+                )}
               </div>
             </Link>
           ))}

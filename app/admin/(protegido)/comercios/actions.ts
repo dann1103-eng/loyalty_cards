@@ -21,7 +21,6 @@ function textoONull(valor: FormDataEntryValue | null): string | null {
 }
 
 function leerDatos(formData: FormData): DatosComercio {
-  const monto = textoONull(formData.get('licencia_monto_mensual'));
   return {
     nombre: String(formData.get('nombre') ?? '').trim(),
     slug: String(formData.get('slug') ?? '').trim(),
@@ -31,12 +30,6 @@ function leerDatos(formData: FormData): DatosComercio {
     logo_url: textoONull(formData.get('logo_url')),
     strip_url: textoONull(formData.get('strip_url')),
     hero_url: textoONull(formData.get('hero_url')),
-    licencia_estado: String(formData.get('licencia_estado') ?? 'activo'),
-    licencia_plan: textoONull(formData.get('licencia_plan')),
-    // Number('25a') es NaN, no una excepción. No lo atajamos aquí: validar() lo rechaza con
-    // "El monto mensual debe ser un número", y esa capa sí tiene pruebas.
-    licencia_monto_mensual: monto === null ? null : Number(monto),
-    licencia_activa_desde: textoONull(formData.get('licencia_activa_desde')),
     tipo_tarjeta: String(formData.get('tipo_tarjeta') ?? 'puntos'),
     cuenta_id: String(formData.get('cuenta_id') ?? ''),
   };

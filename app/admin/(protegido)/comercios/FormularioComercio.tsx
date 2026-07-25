@@ -3,7 +3,7 @@
 import { useState, type ChangeEvent } from 'react';
 import { useActionState } from 'react';
 import type { EstadoFormulario } from './actions';
-import { ESTADOS_LICENCIA, TIPOS_TARJETA, type DatosComercio } from '@/lib/comercios/guardarComercio';
+import { TIPOS_TARJETA, type DatosComercio } from '@/lib/comercios/guardarComercio';
 
 type Valores = {
   nombre: string;
@@ -14,10 +14,6 @@ type Valores = {
   logo_url: string;
   strip_url: string;
   hero_url: string;
-  licencia_estado: string;
-  licencia_plan: string;
-  licencia_monto_mensual: string;
-  licencia_activa_desde: string;
   tipo_tarjeta: string;
   cuenta_id: string;
 };
@@ -32,11 +28,6 @@ function valoresIniciales(inicial?: Partial<DatosComercio>, cuentas: { id: strin
     logo_url: inicial?.logo_url ?? '',
     strip_url: inicial?.strip_url ?? '',
     hero_url: inicial?.hero_url ?? '',
-    licencia_estado: inicial?.licencia_estado ?? 'activo',
-    licencia_plan: inicial?.licencia_plan ?? '',
-    licencia_monto_mensual:
-      inicial?.licencia_monto_mensual != null ? String(inicial.licencia_monto_mensual) : '',
-    licencia_activa_desde: inicial?.licencia_activa_desde ?? '',
     tipo_tarjeta: inicial?.tipo_tarjeta ?? 'puntos',
     // Al crear (sin inicial) se preselecciona la primera cuenta para que el <select> nunca envíe ''
     // — validar() exige cuenta_id, y un dropdown vacío sería un rechazo garantizado en el primer
@@ -195,55 +186,6 @@ export default function FormularioComercio({
             </option>
           ))}
         </select>
-      </div>
-      <div className="field">
-        <label htmlFor="licencia_estado">Estado de licencia</label>
-        {/* Las opciones salen de ESTADOS_LICENCIA, la MISMA constante contra la que valida
-            guardarComercio.ts y que refleja el check de la BD. Hardcodearlas aquí crearía tres
-            copias de una sola regla: si mañana se agrega un estado, se agrega en un solo lugar. */}
-        <select
-          id="licencia_estado"
-          name="licencia_estado"
-          value={valores.licencia_estado}
-          onChange={cambiar('licencia_estado')}
-        >
-          {ESTADOS_LICENCIA.map((e) => (
-            <option key={e} value={e}>
-              {e.charAt(0).toUpperCase() + e.slice(1)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="field">
-        <label htmlFor="licencia_plan">Plan (opcional)</label>
-        <input
-          id="licencia_plan"
-          name="licencia_plan"
-          value={valores.licencia_plan}
-          onChange={cambiar('licencia_plan')}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="licencia_monto_mensual">Monto mensual (opcional)</label>
-        <input
-          id="licencia_monto_mensual"
-          name="licencia_monto_mensual"
-          type="number"
-          min="0"
-          step="0.01"
-          value={valores.licencia_monto_mensual}
-          onChange={cambiar('licencia_monto_mensual')}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="licencia_activa_desde">Activa desde (opcional)</label>
-        <input
-          id="licencia_activa_desde"
-          name="licencia_activa_desde"
-          type="date"
-          value={valores.licencia_activa_desde}
-          onChange={cambiar('licencia_activa_desde')}
-        />
       </div>
 
       <button className="btn-primary" type="submit" disabled={pendiente}>
