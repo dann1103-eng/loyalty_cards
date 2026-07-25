@@ -51,15 +51,35 @@ alter table cuentas_comercio
   add column licencia_estado text not null default 'activo'
     check (licencia_estado in ('activo', 'inactivo')),
   add column licencia_monto_mensual numeric,
-  add column licencia_activa_desde timestamptz;
+  -- date, NO timestamptz: fix de la migración 0004 sobre esta MISMA columna en comercios ("es
+  -- semánticamente una FECHA... con timestamptz, El Salvador (UTC-6) renderizaría el día anterior
+  -- en cada fila"). Revertir a timestamptz reintroduciría ese off-by-one silencioso. PostgREST
+  -- sigue devolviendo `date` como "2026-07-16" (string) — el tipo de TypeScript no cambia.
+  add column licencia_activa_desde date;
 
--- Backfill: sigue 1:1 comercio↔cuenta hoy (verificado a mano antes de escribir esta migración con
--- un script de solo lectura: 6/6 comercios con cuenta_id único, ninguno reasignado todavía). Se
--- copia estado/monto/fecha de cada comercio a su cuenta. `plan` se deja NULL a propósito: los 6
--- comercios reales hoy tienen licencia_plan='Demo' o null (piloto/demo, ninguno es un cliente
--- pagando un plan real de Cardly) — mapearlos a 'starter'/'growth'/'pro' inventaría un dato que no
--- existe. FM le asigna un plan real a cada cuenta la próxima vez que la edite (la capa app lo exige
--- desde este fix en adelante — ver validarDatosCuenta en cuentas.ts).
+-- Guardia defensiva: el backfill de abajo asume 1:1 comercio↔cuenta (verificado a mano antes de
+-- escribir esta migración con un script de solo lectura: 6/6 comercios con cuenta_id único). Si
+-- para cuando esto se corre en Studio algún comercio YA se reasignó a una cuenta compartida (el
+-- flujo "Vincular" del panel FM ya existe en producción), el UPDATE de abajo matchearía varias
+-- filas de comercios contra una sola fila de cuentas_comercio y Postgres elegiría una de forma no
+-- determinística — descartando en silencio los datos de licencia de las demás. Esto lo convierte
+-- en un error ruidoso en vez de una corrupción silenciosa.
+do $$
+begin
+  if exists (
+    select cuenta_id from comercios where cuenta_id is not null
+    group by cuenta_id having count(*) > 1
+  ) then
+    raise exception 'Hay cuentas con más de un comercio — revisar el backfill manualmente antes de continuar.';
+  end if;
+end $$;
+
+-- Backfill: se copia estado/monto/fecha de cada comercio a su cuenta (1:1, ver guardia arriba).
+-- `plan` se deja NULL a propósito: los 6 comercios reales hoy tienen licencia_plan='Demo' o null
+-- (piloto/demo, ninguno es un cliente pagando un plan real de Cardly) — mapearlos a
+-- 'starter'/'growth'/'pro' inventaría un dato que no existe. FM le asigna un plan real a cada
+-- cuenta la próxima vez que la edite (la capa app lo exige desde este fix en adelante — ver
+-- validarDatosCuenta en cuentas.ts).
 update cuentas_comercio c
 set licencia_estado = co.licencia_estado,
     licencia_monto_mensual = co.licencia_monto_mensual,
@@ -227,6 +247,37 @@ Agregar a `lib/comercios/cuentas.test.ts`, dentro de `describe('verificarLimiteC
 
     const res = await verificarLimiteCuenta(supabase, data.id);
     expect(res.ok).toBe(true);
+  });
+```
+
+Agregar también, dentro del MISMO `describe('asignarComercioACuenta', ...)` ya existente (después de
+sus 2 tests actuales — "NO reasigna cuando..." y "reasigna cuando..."):
+
+```ts
+  it('cuenta las sucursales del comercio que se está moviendo, no solo lo que YA hay en destino', async () => {
+    // MUTATION: este es el hueco que motivó este fix (caso real "Verde Raíz"). Si
+    // asignarComercioACuenta deja de sumar las sucursales PROPIAS del comercio que se mueve al
+    // unidadesAAgregar, este test pasa con ok:true indebidamente. Destino: límite 3, ya tiene 2
+    // comercios (0 sucursales) = 2 unidades usadas, 1 de cupo libre. El comercio que se mueve trae
+    // 1 (él mismo) + 2 sucursales propias = 3 unidades → 2+3=5 > 3, debe rechazar.
+    const cuentaDestino = await crearCuentaFixture(3);
+    await crearComercioFixture(cuentaDestino);
+    await crearComercioFixture(cuentaDestino);
+
+    const cuentaOrigen = await crearCuentaFixture(99);
+    const comercioAMover = await crearComercioFixture(cuentaOrigen);
+    await supabase.from('sucursales').insert([
+      { comercio_id: comercioAMover, nombre: 'Sucursal 1' },
+      { comercio_id: comercioAMover, nombre: 'Sucursal 2' },
+    ]);
+
+    const res = await asignarComercioACuenta(supabase, comercioAMover, cuentaDestino);
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain('3');
+    // Y NO quedó reasignado: sigue en la cuenta de origen.
+    const { data } = await supabase.from('comercios').select('cuenta_id').eq('id', comercioAMover).single();
+    expect(data!.cuenta_id).toBe(cuentaOrigen);
   });
 ```
 
@@ -416,10 +467,18 @@ function validarDatosCuenta(datos: DatosCuenta): string | null {
 // solo contaba comercios; QA manual sobre "Verde Raíz" encontró que las sucursales no tenían
 // NINGÚN tope). sucursales no tiene cuenta_id directo (solo comercio_id), así que se cuentan vía
 // los ids de comercio de esta cuenta.
+//
+// `unidadesAAgregar` (default 1): cuántas unidades va a sumar la operación que está preguntando.
+// Un alta nueva (comercio o sucursal) siempre agrega 1. PERO mover un comercio EXISTENTE a esta
+// cuenta (asignarComercioACuenta) no solo agrega el comercio: también arrastra sus propias
+// sucursales, que hasta el momento del move NO están bajo cuenta_id=cuentaId (así que
+// excluyendoComercioId no las excluye — nunca se contaron, ni tampoco llegan a sumarse solas). Sin
+// este parámetro, mover un comercio con sucursales a una cuenta casi llena la deja MUY por encima
+// de su límite sin ningún bloqueo — el mismo tipo de hueco que este fix existe para cerrar.
 export async function verificarLimiteCuenta(
   supabase: SupabaseClient<Database>,
   cuentaId: string,
-  opciones?: { excluyendoComercioId?: string },
+  opciones?: { excluyendoComercioId?: string; unidadesAAgregar?: number },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { data: cuenta, error: eCuenta } = await supabase
     .from('cuentas_comercio').select('limite_negocios').eq('id', cuentaId).maybeSingle();
@@ -429,15 +488,12 @@ export async function verificarLimiteCuenta(
   // null = plan sin tope (Pro): nada que contar, se aprueba directo.
   if (cuenta.limite_negocios === null) return { ok: true };
 
-  let qComercios = supabase.from('comercios').select('id', { count: 'exact', head: true }).eq('cuenta_id', cuentaId);
+  // count Y data en la misma llamada: count trae el total de comercios de la cuenta, data trae sus
+  // ids (para contar sucursales vía el .in() de abajo) — un solo round-trip para las dos cosas.
+  let qComercios = supabase.from('comercios').select('id', { count: 'exact' }).eq('cuenta_id', cuentaId);
   if (opciones?.excluyendoComercioId) qComercios = qComercios.neq('id', opciones.excluyendoComercioId);
-  const { count: countComercios, error: eComercios } = await qComercios;
+  const { data: comerciosDeCuenta, count: countComercios, error: eComercios } = await qComercios;
   if (eComercios) { console.error('[fm] no se pudo contar comercios de la cuenta:', eComercios); return { ok: false, error: 'No se pudo verificar el límite de la cuenta.' }; }
-
-  let qIdsComercio = supabase.from('comercios').select('id').eq('cuenta_id', cuentaId);
-  if (opciones?.excluyendoComercioId) qIdsComercio = qIdsComercio.neq('id', opciones.excluyendoComercioId);
-  const { data: comerciosDeCuenta, error: eIds } = await qIdsComercio;
-  if (eIds) { console.error('[fm] no se pudo listar comercios de la cuenta:', eIds); return { ok: false, error: 'No se pudo verificar el límite de la cuenta.' }; }
 
   let countSucursales = 0;
   const ids = (comerciosDeCuenta ?? []).map((c) => c.id);
@@ -449,7 +505,8 @@ export async function verificarLimiteCuenta(
   }
 
   const total = (countComercios ?? 0) + countSucursales;
-  if (total >= cuenta.limite_negocios) {
+  const unidades = opciones?.unidadesAAgregar ?? 1;
+  if (total + unidades > cuenta.limite_negocios) {
     return { ok: false, error: `Esta cuenta ya alcanzó su límite de ${cuenta.limite_negocios} negocio(s)/sucursal(es).` };
   }
   return { ok: true };
@@ -518,13 +575,27 @@ export async function actualizarCuenta(
   return { ok: true };
 }
 
-// Reasigna un comercio a otra cuenta, respetando el límite combinado de la cuenta DESTINO.
+// Reasigna un comercio a otra cuenta, respetando el límite combinado de la cuenta DESTINO. El
+// comercio movido trae SUS PROPIAS sucursales con él — hay que contarlas y pasarlas como
+// unidadesAAgregar (1 por el comercio + N por sus sucursales), porque en el momento de este
+// chequeo esas sucursales todavía cuelgan del comercio con su cuenta_id VIEJO: el conteo interno
+// de verificarLimiteCuenta (que solo mira comercios YA en cuentaId) nunca las ve.
 export async function asignarComercioACuenta(
   supabase: SupabaseClient<Database>,
   comercioId: string,
   cuentaId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const limite = await verificarLimiteCuenta(supabase, cuentaId, { excluyendoComercioId: comercioId });
+  const { count: sucursalesPropias, error: eSucursales } = await supabase
+    .from('sucursales').select('id', { count: 'exact', head: true }).eq('comercio_id', comercioId);
+  if (eSucursales) {
+    console.error('[fm] no se pudo contar las sucursales del comercio a reasignar:', eSucursales);
+    return { ok: false, error: 'No se pudo reasignar el comercio a la cuenta.' };
+  }
+
+  const limite = await verificarLimiteCuenta(supabase, cuentaId, {
+    excluyendoComercioId: comercioId,
+    unidadesAAgregar: 1 + (sucursalesPropias ?? 0),
+  });
   if (!limite.ok) return limite;
 
   const { error } = await supabase
@@ -648,25 +719,92 @@ limpiarOpcional(datos.licencia_activa_desde),`. En `validar()`, quitar el bloque
 `fecha`/`licencia_activa_desde`. Quitar la función `esFechaValida()` completa (se mudó a
 `cuentas.ts`, Task 2 — ya no tiene ningún consumidor acá).
 
+`crearComercio`/`eliminarComercio` no cambian de cuerpo. **`actualizarComercio` SÍ cambia** su
+llamada a `verificarLimiteCuenta` (mismo motivo que `asignarComercioACuenta` en `cuentas.ts`, Task
+2 Step 3: el comercio que cambia de cuenta arrastra sus propias sucursales, que el conteo interno
+de `verificarLimiteCuenta` no ve todavía en ese momento). Reemplazar el bloque:
+
+```ts
+  if (actual && actual.cuenta_id !== limpios.cuenta_id) {
+    const limite = await verificarLimiteCuenta(supabase, limpios.cuenta_id, { excluyendoComercioId: id });
+    if (!limite.ok) return { ok: false, error: limite.error };
+  }
+```
+
+por:
+
+```ts
+  if (actual && actual.cuenta_id !== limpios.cuenta_id) {
+    // El comercio que cambia de cuenta trae sus propias sucursales — igual que
+    // asignarComercioACuenta en cuentas.ts, hay que contarlas y pasarlas como unidadesAAgregar.
+    const { count: sucursalesPropias, error: eSucursales } = await supabase
+      .from('sucursales').select('id', { count: 'exact', head: true }).eq('comercio_id', id);
+    if (eSucursales) {
+      console.error('[fm] no se pudo contar las sucursales del comercio a reasignar:', eSucursales);
+      return { ok: false, error: 'No se pudo actualizar el comercio.' };
+    }
+    const limite = await verificarLimiteCuenta(supabase, limpios.cuenta_id, {
+      excluyendoComercioId: id,
+      unidadesAAgregar: 1 + (sucursalesPropias ?? 0),
+    });
+    if (!limite.ok) return { ok: false, error: limite.error };
+  }
+```
+
 El archivo resultante conserva: `TIPOS_TARJETA`/`TipoTarjeta`, `DatosComercio` (sin los 4 campos de
 licencia), `normalizar()` (sin las 2 líneas de licencia), `validar()` (sin los 3 bloques de
-licencia — conserva `cuenta_id`, `nombre`, `slug`, `tipo_tarjeta`, los 3 colores),
-`crearComercio`/`actualizarComercio`/`eliminarComercio` sin cambios en su cuerpo (siguen llamando
-`verificarLimiteCuenta` igual que antes — esa función ahora vive con lógica ampliada en `cuentas.ts`
-pero su firma no cambió).
+licencia — conserva `cuenta_id`, `nombre`, `slug`, `tipo_tarjeta`, los 3 colores).
+
+Agregar a `guardarComercio.test.ts` (mismo archivo de este task, describe `actualizarComercio`):
+
+```ts
+  it('al cambiar de cuenta, cuenta las sucursales propias contra el límite de la cuenta destino', async () => {
+    // Mismo caso que el test análogo de asignarComercioACuenta en cuentas.test.ts (Task 2), pero
+    // por el camino de "editar comercio y cambiarle la cuenta" en vez del botón "Vincular".
+    const cuentaDestino = (await (await import('../comercios/cuentas')).crearCuenta(supabase, {
+      nombre: `Destino ${Date.now()}`, limiteNegocios: 1, plan: 'starter',
+      licenciaEstado: 'activo', licenciaMontoMensual: null, licenciaActivaDesde: null,
+    }));
+    if (!cuentaDestino.ok) throw new Error('setup falló');
+    cuentasDePrueba.push(cuentaDestino.id);
+
+    const slug = `test-mover-cuenta-${Date.now()}`;
+    const datos = await datosValidos(slug);
+    const creado = await crearComercio(supabase, datos);
+    if (!creado.ok) throw new Error('el setup falló');
+    await supabase.from('sucursales').insert({ comercio_id: creado.id, nombre: 'Sucursal Propia' });
+
+    // Destino ya tiene límite 1 y 0 comercios — cabría el comercio SOLO, pero trae 1 sucursal
+    // consigo: 1 (comercio) + 1 (sucursal) = 2 > 1, debe rechazar.
+    const res = await actualizarComercio(supabase, creado.id, { ...datos, cuenta_id: cuentaDestino.id });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/límite/i);
+  });
+```
+
+(Import inline de `crearCuenta` para no reordenar los imports del archivo — si el linter se queja,
+mover el import a la cabecera junto a los demás.)
 
 - [ ] **Step 4: Correr los tests y confirmar que pasan**
 
 Run: `npm test -- --run guardarComercio.test`
 Expected: PASS.
 
-- [ ] **Step 5: Typecheck**
+- [ ] **Step 5: Mutation-testing manual del fix de `actualizarComercio` (obligatorio — rama crítica)**
+
+Quitar temporalmente el `unidadesAAgregar: 1 + (sucursalesPropias ?? 0)` (volver a la llamada vieja,
+sin ese campo — equivale a `unidadesAAgregar` por defecto = 1, ignorando las sucursales propias),
+correr `npm test -- --run guardarComercio.test`, confirmar que **"al cambiar de cuenta, cuenta las
+sucursales propias..."** falla (esperaba `ok:false`, recibe `ok:true`), restaurar.
+
+- [ ] **Step 6: Typecheck**
 
 Run: `npx tsc --noEmit`
 Expected: los errores de `guardarComercio.ts`/`.test.ts` desaparecen. Quedan los de las UI de FM y
 el seed (Tasks 5, 6, 7).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add lib/comercios/guardarComercio.ts lib/comercios/guardarComercio.test.ts
@@ -681,41 +819,74 @@ git commit -m "guardarComercio: quitar licencia_estado/plan/monto/fecha (se muda
 
 **Files:**
 - Modify: `lib/comercio/sucursales.ts`
-- Create: `lib/comercio/sucursales.test.ts`
+- Modify: `lib/comercio/sucursales.test.ts`
 
-**Nota de alcance:** este test file es NUEVO — Fase 6 nunca escribió pruebas para `sucursales.ts`.
-Este task solo cubre el comportamiento NUEVO (el límite en `crearSucursal`); no agrega cobertura
-retroactiva para `renombrarSucursal`/`cambiarEstadoSucursal`/`listarSucursales`/
-`sucursalPerteneceAComercio` (gap preexistente, fuera de alcance de este fix).
+**⚠️ Este archivo YA EXISTE con 11 tests reales** (5 `describe`: `crearSucursal`,
+`renombrarSucursal`, `cambiarEstadoSucursal` — incluye el guard de soft-delete contra las FKs de
+`transacciones_puntos`/`canjes` —, `listarSucursales`, `sucursalPerteneceAComercio` — incluye el
+control de seguridad del picker del dueño, con su propio comentario `MUTATION-TESTING`). **Este
+task EXTIENDE el archivo, no lo reemplaza.** Solo cubre el comportamiento NUEVO (el límite en
+`crearSucursal`); no agrega cobertura retroactiva para las funciones ya cubiertas.
 
-- [ ] **Step 1: Escribir el test file (falla primero)**
+- [ ] **Step 1: Extender el test file existente (falla primero)**
+
+El archivo actual empieza así (NO tocar, queda igual):
 
 ```ts
 import { describe, it, expect, afterEach } from 'vitest';
 import { createServiceClient } from '../supabase/server';
-import { crearSucursal } from './sucursales';
+import {
+  crearSucursal,
+  renombrarSucursal,
+  cambiarEstadoSucursal,
+  listarSucursales,
+  sucursalPerteneceAComercio,
+} from './sucursales';
 
 const supabase = createServiceClient();
-const cuentasDePrueba: string[] = [];
 const comerciosDePrueba: string[] = [];
-const sucursalesDePrueba: string[] = [];
+```
 
+Inmediatamente después de esa línea (`const comerciosDePrueba: string[] = [];`), agregar una línea
+nueva:
+
+```ts
+const cuentasDePrueba: string[] = [];
+```
+
+El `afterEach` existente queda:
+```ts
 afterEach(async () => {
-  // Orden FK: sucursales → comercios → cuentas_comercio.
-  if (sucursalesDePrueba.length) {
-    await supabase.from('sucursales').delete().in('id', sucursalesDePrueba);
-    sucursalesDePrueba.length = 0;
-  }
+  if (!comerciosDePrueba.length) return;
+  // sucursales apunta a comercios sin cascade: borrar sucursales antes que su comercio (orden FK).
+  await supabase.from('sucursales').delete().in('comercio_id', comerciosDePrueba);
+  const { error } = await supabase.from('comercios').delete().in('id', comerciosDePrueba);
+  if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
+  comerciosDePrueba.length = 0;
+});
+```
+Reemplazarlo por (agrega el borrado de cuentas DESPUÉS de comercios — orden FK):
+```ts
+afterEach(async () => {
   if (comerciosDePrueba.length) {
-    await supabase.from('comercios').delete().in('id', comerciosDePrueba);
+    // sucursales apunta a comercios sin cascade: borrar sucursales antes que su comercio.
+    await supabase.from('sucursales').delete().in('comercio_id', comerciosDePrueba);
+    const { error } = await supabase.from('comercios').delete().in('id', comerciosDePrueba);
+    if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
     comerciosDePrueba.length = 0;
   }
   if (cuentasDePrueba.length) {
-    await supabase.from('cuentas_comercio').delete().in('id', cuentasDePrueba);
+    const { error } = await supabase.from('cuentas_comercio').delete().in('id', cuentasDePrueba);
+    if (error) console.error('[test] no se pudieron borrar las cuentas de prueba:', error);
     cuentasDePrueba.length = 0;
   }
 });
+```
 
+Justo después del helper existente `crearComercio()` (el que inserta SIN `cuenta_id` — no tocar),
+agregar dos helpers nuevos con nombres DISTINTOS para no chocar con él:
+
+```ts
 async function crearCuentaFixture(limite: number | null): Promise<string> {
   const { data, error } = await supabase
     .from('cuentas_comercio')
@@ -726,23 +897,29 @@ async function crearCuentaFixture(limite: number | null): Promise<string> {
   return data.id;
 }
 
-async function crearComercioFixture(cuentaId: string | null): Promise<string> {
-  const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+async function crearComercioConCuenta(cuentaId: string | null): Promise<string> {
+  const slug = `test-suc-cuenta-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const { data, error } = await supabase
-    .from('comercios')
-    .insert({ nombre: 'Comercio Sucursal Test', slug: `test-sucursal-${sufijo}`, cuenta_id: cuentaId })
-    .select('id').single();
+    .from('comercios').insert({ nombre: 'Suc Cuenta', slug, cuenta_id: cuentaId }).select('id').single();
   if (error) throw error;
-  comerciosDePrueba.push(data.id);
+  comerciosDePrueba.push(data.id); // mismo array/afterEach que crearComercio(): comparten teardown.
   return data.id;
 }
+```
+
+El resto del archivo (los 5 `describe` existentes: `crearSucursal`, `renombrarSucursal`,
+`cambiarEstadoSucursal`, `listarSucursales`, `sucursalPerteneceAComercio`) **queda exactamente
+igual, sin tocar una sola línea**. Al FINAL del archivo (después del último `});` que cierra
+`describe('sucursalPerteneceAComercio', ...)`), agregar un `describe` nuevo:
+
+```ts
 
 describe('crearSucursal — límite combinado de la cuenta', () => {
   it('rechaza cuando la cuenta del comercio ya alcanzó su límite combinado', async () => {
     // MUTATION: quitar la llamada a verificarLimiteCuenta en crearSucursal deja pasar esto con
     // ok:true indebidamente — el comercio YA consume el único cupo (límite 1).
     const cuentaId = await crearCuentaFixture(1);
-    const comercioId = await crearComercioFixture(cuentaId);
+    const comercioId = await crearComercioConCuenta(cuentaId);
 
     const res = await crearSucursal(supabase, comercioId, { nombre: 'Sucursal Nueva' });
 
@@ -752,13 +929,13 @@ describe('crearSucursal — límite combinado de la cuenta', () => {
 
   it('permite crear cuando la cuenta tiene cupo, y la sucursal queda registrada', async () => {
     const cuentaId = await crearCuentaFixture(3);
-    const comercioId = await crearComercioFixture(cuentaId);
+    const comercioId = await crearComercioConCuenta(cuentaId);
 
     const res = await crearSucursal(supabase, comercioId, { nombre: 'Sucursal Nueva' });
 
     expect(res.ok).toBe(true);
     if (res.ok) {
-      sucursalesDePrueba.push(res.id);
+      // Limpieza vía afterEach existente: borra sucursales por comercio_id, no hace falta trackear.
       const { data } = await supabase.from('sucursales').select('nombre').eq('id', res.id).single();
       expect(data!.nombre).toBe('Sucursal Nueva');
     }
@@ -766,41 +943,32 @@ describe('crearSucursal — límite combinado de la cuenta', () => {
 
   it('permite crear sin límite cuando la cuenta tiene limite_negocios null (plan Pro)', async () => {
     const cuentaId = await crearCuentaFixture(null);
-    const comercioId = await crearComercioFixture(cuentaId);
+    const comercioId = await crearComercioConCuenta(cuentaId);
 
     const res = await crearSucursal(supabase, comercioId, { nombre: 'Sucursal Sin Tope' });
 
     expect(res.ok).toBe(true);
-    if (res.ok) sucursalesDePrueba.push(res.id);
   });
 
   it('degrada con gracia cuando el comercio no tiene cuenta_id (sin límite que verificar)', async () => {
-    const comercioId = await crearComercioFixture(null);
+    const comercioId = await crearComercioConCuenta(null);
 
     const res = await crearSucursal(supabase, comercioId, { nombre: 'Sucursal Sin Cuenta' });
 
     expect(res.ok).toBe(true);
-    if (res.ok) sucursalesDePrueba.push(res.id);
-  });
-
-  it('rechaza un nombre vacío (regla preexistente, sin cambios)', async () => {
-    const cuentaId = await crearCuentaFixture(3);
-    const comercioId = await crearComercioFixture(cuentaId);
-
-    const res = await crearSucursal(supabase, comercioId, { nombre: '   ' });
-
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toMatch(/nombre/i);
   });
 });
 ```
 
+(La regla preexistente "rechaza un nombre vacío" YA está cubierta por el `describe('crearSucursal',
+...)` original — no se duplica acá.)
+
 - [ ] **Step 2: Correr y confirmar que fallan las 3 que dependen del límite**
 
 Run: `npm test -- --run sucursales.test`
-Expected: FAIL en "rechaza cuando la cuenta... alcanzó su límite" y las dos de "permite... con
-cupo/sin tope" (esta última puede pasar por accidente si no hay chequeo — revisar que sea por la
-razón correcta). PASS ya en "nombre vacío" (regla preexistente).
+Expected: los 11 tests preexistentes siguen en PASS (no se tocaron). De los 4 nuevos: FAIL en
+"rechaza cuando la cuenta... alcanzó su límite" y en "permite... con cupo"/"sin tope" (pueden pasar
+por accidente si no hay chequeo — revisar que el fallo, cuando lo hay, sea por la razón correcta).
 
 - [ ] **Step 3: Editar `lib/comercio/sucursales.ts`**
 
@@ -856,7 +1024,7 @@ export async function crearSucursal(
 - [ ] **Step 4: Correr los tests y confirmar que pasan**
 
 Run: `npm test -- --run sucursales.test`
-Expected: PASS (las 5).
+Expected: PASS — los 11 preexistentes + los 4 nuevos (15 en total).
 
 - [ ] **Step 5: Mutation-testing manual (obligatorio — rama crítica)**
 
@@ -994,7 +1162,11 @@ export default function FormularioCuenta({
   // Campos CONTROLADOS por el mismo motivo que FormularioComercio: React 19 resetea los campos no
   // controlados cuando una action del formulario termina, incluso si devolvió un error.
   const [nombre, setNombre] = useState(inicial?.nombre ?? '');
-  const [plan, setPlan] = useState(inicial?.plan ?? PLANES[0].valor);
+  // Cuenta NUEVA (sin `inicial`): precargar el primer plan, igual que el resto de los defaults.
+  // Cuenta EXISTENTE con plan:null (backfill de la migración 0011 — demo/piloto, nunca tuvo un
+  // plan real): dejar '' para forzar una elección explícita, en vez de mostrar "Starter" ya
+  // seleccionado como si alguien lo hubiera decidido (ver placeholder deshabilitado más abajo).
+  const [plan, setPlan] = useState(inicial?.plan ?? (inicial ? '' : PLANES[0].valor));
   const [limite, setLimite] = useState(
     inicial?.limite_negocios !== undefined
       ? (inicial.limite_negocios === null ? '' : String(inicial.limite_negocios))
@@ -1027,6 +1199,7 @@ export default function FormularioCuenta({
       <div className="field">
         <label htmlFor="plan">Plan</label>
         <select id="plan" name="plan" value={plan} onChange={(e) => cambiarPlan(e.target.value)}>
+          {plan === '' && <option value="" disabled>— Elegí un plan —</option>}
           {PLANES.map((p) => (
             <option key={p.valor} value={p.valor}>
               {p.etiqueta} (${p.montoMensual}/mes, {p.limiteSugerido ?? 'sin límite'})
@@ -1200,18 +1373,20 @@ Ampliar el `.select()` de la cuenta:
     .maybeSingle();
 ```
 
-Reemplazar el cálculo de `hayCupo` (necesita el conteo combinado, no solo `negocios.length`):
+Reemplazar el cálculo de `hayCupo` (necesita el conteo combinado, no solo `negocios.length`).
+**Misma guardia que Task 2 Step 3** (`ids.length > 0` antes del `.in()`): una cuenta recién creada
+sin comercios todavía es un caso normal, no un edge case — sin la guardia, `.in('comercio_id', [])`
+en cada visita a `/admin/cuentas/[id]` de una cuenta nueva es innecesario en el mejor caso.
 ```ts
-  const { data: sucursalesDeLaCuenta } = await supabase
-    .from('sucursales')
-    .select('id')
-    .in('comercio_id', negocios.map((n) => n.id));
-  const usados = negocios.length + (sucursalesDeLaCuenta?.length ?? 0);
+  const idsDeNegocios = negocios.map((n) => n.id);
+  let sucursalesDeLaCuenta = 0;
+  if (idsDeNegocios.length > 0) {
+    const { data } = await supabase.from('sucursales').select('id').in('comercio_id', idsDeNegocios);
+    sucursalesDeLaCuenta = data?.length ?? 0;
+  }
+  const usados = negocios.length + sucursalesDeLaCuenta;
   const hayCupo = cuenta.limite_negocios === null || usados < cuenta.limite_negocios;
 ```
-
-(Nota: si `negocios` está vacío, `.in('comercio_id', [])` — verificar que el cliente de Supabase lo
-maneje bien devolviendo `[]` sin error; si no, envolver en `negocios.length > 0 ? await ... : { data: [] }`.)
 
 Pasar los campos nuevos a `FormularioCuenta`:
 ```tsx
