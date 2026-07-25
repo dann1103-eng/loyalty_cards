@@ -11,6 +11,7 @@
 //   - supabase/migrations/0008_cuentas_sucursales_cajeros.sql (tablas cuentas_comercio/sucursales; comercios.cuenta_id; usuarios_comercio.sucursal_id; sucursal_id en transacciones_puntos/canjes)
 //   - supabase/migrations/0009_rpc_atomico.sql (usuarios_comercio.activo; funciones acreditar_puntos_atomico/canjear_recompensa_atomico en Functions)
 //   - supabase/migrations/0010_reportes.sql (funciones de reportes en Functions; índices; no cambia columnas)
+//   - supabase/migrations/0011_plan_cuenta.sql (licencia_estado/plan/monto_mensual/activa_desde: de comercios a cuentas_comercio; limite_negocios pasa a nullable)
 //
 // Hasta que `supabase gen types` esté cableado (requiere auth del CLI), este archivo se
 // mantiene a mano: si llega una migración nueva, hay que actualizarlo en el mismo commit.

@@ -44,6 +44,13 @@
 -- en vez de un número mágico grande. El check existente (limite_negocios > 0) ya permite NULL sin
 -- tocarlo: Postgres no rechaza una fila por un CHECK que evalúa a NULL, solo por uno que evalúa a
 -- false — por eso no hace falta drop/recreate del constraint.
+--
+-- Primera migración del proyecto con un DROP COLUMN (0001-0010 son solo aditivas o cambian tipo/
+-- constraint in-place). begin/commit explícitos para no depender de que el editor SQL de Studio
+-- trate el pegado completo como una sola transacción implícita: si la guardia de abajo aborta a
+-- mitad de camino, esto asegura que NADA quede a medio aplicar (ni las columnas nuevas en
+-- cuentas_comercio, ni el backfill, ni el drop en comercios) en vez de un estado parcial.
+begin;
 
 alter table cuentas_comercio
   alter column limite_negocios drop not null,
@@ -92,6 +99,8 @@ alter table comercios
   drop column licencia_plan,
   drop column licencia_monto_mensual,
   drop column licencia_activa_desde;
+
+commit;
 ```
 
 - [ ] **Step 2: Entregar la migración al usuario**
@@ -176,6 +185,13 @@ por:
         };
         Relationships: [];
       };
+```
+
+También actualizar el inventario de migraciones en el header del archivo (líneas ~4-13, el archivo
+mismo documenta la regla: "si llega una migración nueva, hay que actualizarlo en el mismo commit").
+Agregar después de la línea de `0010`:
+```
+//   - supabase/migrations/0011_plan_cuenta.sql (licencia_estado/plan/monto_mensual/activa_desde: de comercios a cuentas_comercio; limite_negocios pasa a nullable)
 ```
 
 - [ ] **Step 5: Typecheck**
