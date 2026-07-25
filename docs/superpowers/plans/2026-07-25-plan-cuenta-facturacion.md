@@ -205,7 +205,47 @@ git commit -m "Migración 0011: plan/monto/estado de licencia pasan de comercios
 
 - [ ] **Step 1: Escribir los tests nuevos primero (mutation-testing incluido)**
 
-Agregar a `lib/comercios/cuentas.test.ts`, dentro de `describe('verificarLimiteCuenta', ...)`
+**Primero, actualizar el `afterEach` de `lib/comercios/cuentas.test.ts`** — los tests nuevos de este
+Step insertan en `sucursales` directo (`supabase.from('sucursales').insert(...)`), y
+`sucursales.comercio_id` NO tiene `ON DELETE CASCADE` (migración 0008). Sin limpiarlas, el DELETE
+de `comercios` de abajo falla con 23503, se limita a un `console.error` (no lanza), y tanto el
+comercio como su sucursal quedan huérfanos PERMANENTEMENTE en la BD real del piloto (mismo patrón
+que Task 4 ya usa correctamente en `sucursales.test.ts`). El `afterEach` actual es:
+```ts
+afterEach(async () => {
+  // Orden FK: los comercios apuntan a cuentas_comercio vía cuenta_id, así que se borran ANTES
+  // que las cuentas (borrar la cuenta primero daría un 23503).
+  if (comerciosDePrueba.length) {
+    const { error } = await supabase.from('comercios').delete().in('id', comerciosDePrueba);
+    if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
+    comerciosDePrueba.length = 0;
+  }
+  if (cuentasDePrueba.length) {
+    const { error } = await supabase.from('cuentas_comercio').delete().in('id', cuentasDePrueba);
+    if (error) console.error('[test] no se pudieron borrar las cuentas de prueba:', error);
+    cuentasDePrueba.length = 0;
+  }
+});
+```
+Reemplazarlo por (agrega el borrado de sucursales ANTES de comercios — orden FK):
+```ts
+afterEach(async () => {
+  // Orden FK: sucursales → comercios (vía cuenta_id) → cuentas_comercio.
+  if (comerciosDePrueba.length) {
+    await supabase.from('sucursales').delete().in('comercio_id', comerciosDePrueba);
+    const { error } = await supabase.from('comercios').delete().in('id', comerciosDePrueba);
+    if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
+    comerciosDePrueba.length = 0;
+  }
+  if (cuentasDePrueba.length) {
+    const { error } = await supabase.from('cuentas_comercio').delete().in('id', cuentasDePrueba);
+    if (error) console.error('[test] no se pudieron borrar las cuentas de prueba:', error);
+    cuentasDePrueba.length = 0;
+  }
+});
+```
+
+Ahora sí, agregar a `lib/comercios/cuentas.test.ts`, dentro de `describe('verificarLimiteCuenta', ...)`
 (después del test existente de exclusión):
 
 ```ts
@@ -348,10 +388,28 @@ describe('crearCuenta', () => {
     if (!res.ok) expect(res.error).toMatch(/monto/i);
   });
 
+  it('rechaza un monto que no es un número', async () => {
+    // Portado de guardarComercio.test.ts ('rechaza un monto que no es un número'): la Tarea 9 del
+    // formulario hace Number(monto), así que un "25a" llega como NaN. Sin el Number.isFinite,
+    // JSON.stringify(NaN) es "null" y el monto se guardaría VACÍO en silencio.
+    const res = await crearCuenta(supabase, { nombre: 'Grupo NaN', limiteNegocios: 1, ...CUENTA_BASE, licenciaMontoMensual: NaN });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/monto/i);
+  });
+
   it('rechaza una fecha inválida', async () => {
     const res = await crearCuenta(supabase, { nombre: 'Grupo W', limiteNegocios: 1, ...CUENTA_BASE, licenciaActivaDesde: '31/07/2026' });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/fecha/i);
+  });
+
+  it('rechaza un estado de licencia que la BD no acepta', async () => {
+    // Portado de guardarComercio.test.ts ('rechaza un estado de licencia que la BD no acepta').
+    // MUTATION: quitar este chequeo de validarDatosCuenta deja pasar cualquier string a una
+    // columna con CHECK en la BD — el insert fallaría con un 23514 genérico en vez de este mensaje.
+    const res = await crearCuenta(supabase, { nombre: 'Grupo Suspendido', limiteNegocios: 1, ...CUENTA_BASE, licenciaEstado: 'suspendido' });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/estado/i);
   });
 });
 
@@ -674,7 +732,33 @@ agrega).
 
 - [ ] **Step 1: Actualizar `guardarComercio.test.ts` primero**
 
-En `datosValidos()`, quitar las 4 líneas de licencia:
+**Primero, actualizar el `afterEach`** — el test nuevo del Step 3 de este mismo task (`'al cambiar
+de cuenta, cuenta las sucursales propias...'`) inserta en `sucursales` directo, y esa FK no tiene
+`ON DELETE CASCADE` (mismo motivo que Task 2 Step 1). Este archivo limpia comercios por SLUG, no por
+id, así que hay que resolver los ids primero. El bloque de comercios del `afterEach` actual es:
+```ts
+  if (slugsDePrueba.length) {
+    const { error } = await supabase.from('comercios').delete().in('slug', slugsDePrueba);
+    if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
+    slugsDePrueba.length = 0;
+  }
+```
+Reemplazarlo por (resuelve los ids por slug y borra sus sucursales ANTES del delete de comercios):
+```ts
+  if (slugsDePrueba.length) {
+    const { data: comerciosDeSlugs } = await supabase.from('comercios').select('id').in('slug', slugsDePrueba);
+    const idsDeSlugs = (comerciosDeSlugs ?? []).map((c) => c.id);
+    if (idsDeSlugs.length) {
+      await supabase.from('sucursales').delete().in('comercio_id', idsDeSlugs);
+    }
+    const { error } = await supabase.from('comercios').delete().in('slug', slugsDePrueba);
+    if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
+    slugsDePrueba.length = 0;
+  }
+```
+(El resto del `afterEach` — `tarjetasDePrueba`, `clientesDePrueba`, `cuentasDePrueba` — no cambia.)
+
+Ahora sí, en `datosValidos()`, quitar las 4 líneas de licencia:
 ```ts
     licencia_estado: 'activo',
     licencia_plan: 'Básico',
@@ -1078,9 +1162,11 @@ directo al botón de submit.
 - [ ] **Step 2: `actions.ts` — quitar el parseo de los 4 campos**
 
 En `leerDatos()`, quitar la línea `const monto = textoONull(formData.get('licencia_monto_mensual'));`
-(y el comentario de 2 líneas justo arriba, sobre `Number('25a')` — queda huérfano sin esa línea) y
-las 4 líneas correspondientes del objeto devuelto (`licencia_estado`, `licencia_plan`,
-`licencia_monto_mensual`, `licencia_activa_desde`).
+y las 4 líneas correspondientes del objeto devuelto (`licencia_estado`, `licencia_plan`,
+`licencia_monto_mensual`, `licencia_activa_desde`) — esta última incluye el comentario de 2 líneas
+sobre `Number('25a')` que precede directamente a la línea `licencia_monto_mensual: monto === null
+? null : Number(monto),` del objeto devuelto (no al `const monto =` de arriba); queda huérfano al
+borrar esa línea, así que se borra junto con ella.
 
 - [ ] **Step 3: `page.tsx` — la lista muestra el estado/monto de la CUENTA (join), no del comercio**
 
