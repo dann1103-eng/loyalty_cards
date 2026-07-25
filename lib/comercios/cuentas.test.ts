@@ -66,8 +66,16 @@ describe('verificarLimiteCuenta', () => {
   });
 
   it('bloquea cuando la cuenta ya alcanzó su límite (2 == 2) y el mensaje menciona el límite', async () => {
-    // MUTATION A: cambiar `>=` por `>` en verificarLimiteCuenta hace que count(2) > limite(2) sea
-    // false → devolvería {ok:true} y este expect(res.ok).toBe(false) FALLA.
+    // MUTATION A: este test protege que una cuenta LLENA rechace un alta nueva. Lo atrapan las
+    // mutaciones que desarman el chequeo entero (borrar el `if`, o poner `unidadesAAgregar` en 0:
+    // 2 > 2 es false → devolvería {ok:true} y este expect(res.ok).toBe(false) FALLA).
+    // OJO — ya NO atrapa la mutación de operador (`>` → `>=`): con la fórmula actual
+    // `total + unidades > limite`, acá da 2+1=3, que bloquea con ambos operadores. Esa mutación la
+    // atrapan los tres tests que quedan JUSTO en el borde (existente+1 == limite): 'permite crear
+    // cuando la cuenta tiene 1 comercio', 'excluye el comercio indicado del conteo' y 'permite
+    // cuando el combinado de comercios + sucursales no llega al límite'. Verificado a mano al
+    // reescribir verificarLimiteCuenta (la fórmula vieja era `total >= limite`, y ahí el borde SÍ
+    // caía en este test).
     const cuentaId = await crearCuentaFixture(2);
     await crearComercioFixture(cuentaId);
     await crearComercioFixture(cuentaId);
