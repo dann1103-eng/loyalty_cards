@@ -218,7 +218,9 @@ comercio = 1, ninguna principal inactiva, columnas nuevas presentes).
      (lo traduce a mensaje), así que NO se matchea el error para reintentar: una colisión residual
      por carrera devuelve ese error tal cual y el usuario reintenta.
   3. Reusa `crearComercio` (que valida, verifica cupo y crea la sucursal Principal, §4.2) con
-     colores default del sistema (los mismos placeholder del formulario de FM). `sello_meta` queda
+     los colores default del editor de marca (`rgb(19, 19, 21)` fondo / `rgb(245, 245, 240)` texto /
+     `rgb(255, 157, 66)` etiqueta — los fallbacks de `branding/page.tsx`; los placeholder del
+     formulario de FM son blanco/blanco/blanco, una tarjeta ilegible). `sello_meta` queda
      NULL (la 0005 no define default y `DatosComercio` ni lo incluye; `formatearSaldo` tolera null)
      — la meta de sellos se configura después en /marca, como los colores.
   4. Crea la membresía owner en `usuarios_comercio` (`auth_user_id` de la sesión, email copiado de
