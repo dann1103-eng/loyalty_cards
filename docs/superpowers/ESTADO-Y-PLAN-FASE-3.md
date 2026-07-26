@@ -1,5 +1,9 @@
 # Estado del proyecto y plan para continuar — FM Lealtad
 
+> **⚠️ OBSOLETO — leé `ESTADO-Y-PLAN-2026-07-25.md` en su lugar.** Este documento quedó congelado en
+> 2026-07-17/20; desde entonces se construyeron y desplegaron cuentas multi-negocio, sucursales,
+> cajeros, BI, y el fix de plan/facturación a nivel cuenta. Se conserva como registro histórico.
+
 > **Propósito:** documento de retomada. Si empezás una sesión nueva, leé esto primero: dice qué
 > está hecho, qué falta, en qué orden, y las trampas que ya nos mordieron. Es la fuente de verdad
 > del estado; los planes (`plans/2026-07-16-*.md`) son la fuente de verdad del *cómo* de cada tarea.

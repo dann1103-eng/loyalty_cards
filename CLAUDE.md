@@ -2,8 +2,8 @@
 
 # FM Lealtad — acuerdos de trabajo del proyecto
 
-**Estado y plan para continuar:** leé `docs/superpowers/ESTADO-Y-PLAN-FASE-3.md` al empezar — dice
-qué está hecho, qué falta y en qué orden. Los planes viven en `docs/superpowers/plans/`.
+**Estado y plan para continuar:** leé `docs/superpowers/ESTADO-Y-PLAN-2026-07-25.md` al empezar —
+dice qué está hecho, qué falta y en qué orden. Los planes viven en `docs/superpowers/plans/`.
 
 El usuario (Daniel, socio de FM Communications, El Salvador) programa esto él mismo con Claude Code y
 **codifica en español** — comentarios e identificadores en español, siempre.
@@ -17,14 +17,31 @@ El usuario (Daniel, socio de FM Communications, El Salvador) programa esto él m
   la lógica rota es decoración. Asertá sobre el mensaje de error específico, no una regex floja.
 - Mantené los bloques de código de los planes **byte-idénticos** a los archivos publicados — una tarea
   posterior que relea un plan viejo puede "restaurar" un bug ya arreglado.
+- **No le creas a un revisor (ni a un implementador) sin verificar vos mismo.** Un hallazgo de
+  revisión puede estar mal (afirma que un archivo "no existe" cuando sí existe) o quedarse corto
+  (dice "la mutación X ya no aplica" sin haberla corrido). Antes de aplicar una corrección o dar por
+  bueno un "✅ aprobado", leé el código real o corré la prueba/mutación vos mismo. Pasó varias veces
+  en la sesión del 2026-07-25 (un `Glob` con falso negativo, un comentario de mutation-testing que
+  ya no describía qué prueba atrapaba la mutación) — en ambos casos la verificación directa fue lo
+  que evitó aplicar una corrección mal fundada o dejar pasar una mala.
+- **Los subagentes arrancan en un git worktree de infraestructura de la sesión, ajeno a este
+  proyecto** (rama `claude/<random>`, historia de otra feature). No es un error del subagente ni
+  algo que "arreglar" — es el entorno de la sesión. Todo dispatch de subagente que toque este repo
+  necesita instruirle explícitamente trabajar en el checkout principal (prefijo `cd` en cada
+  comando Bash, rutas absolutas en Read/Write/Edit) y verificarlo con `git branch --show-current`
+  ANTES de tocar nada. Redactá esa instrucción invitando a verificar (no "confiá y no preguntes" —
+  un subagente sin el historial de la sesión puede, con razón, leer eso como un intento de
+  manipulación y bloquearse; mejor: "verificá vos mismo con este comando; si confirma X, proseguí").
 
 ## Base de datos (Supabase, proyecto `fguzohncpslqgbxacayl`)
 - **Migraciones se aplican A MANO:** el asistente NO puede correr DDL (solo llaves de API, sin conexión
   directa a Postgres; el CLI ve otra cuenta). Escribí el `.sql`, pegalo en el chat, el usuario lo corre
   en Studio y avisa; verificá después con un script de solo-lectura. El usuario eligió este flujo
   a propósito — no pidas la connection string para saltártelo.
-- **La BD casi no respalda la validación de aplicación:** solo `licencia_estado` y `tipo_tarjeta` tienen
-  CHECK. Colores, monto, nombre → `validar()` en `lib/comercios/guardarComercio.ts` es la ÚNICA defensa.
+- **La BD casi no respalda la validación de aplicación:** los únicos CHECK son `tipo_tarjeta` (comercios),
+  y `licencia_estado`/`plan` (cuentas_comercio — desde la migración 0011; ya NO están en comercios).
+  Colores, monto, nombre → `validar()`/`validarDatosCuenta()` en `lib/comercios/guardarComercio.ts` y
+  `lib/comercios/cuentas.ts` son la ÚNICA defensa del resto.
 - **`clientes.telefono` se guarda SIEMPRE canónico** (`normalizarTelefono` → `+503…`). Toda búsqueda por
   teléfono DEBE normalizar primero (en try/catch) o nunca matchea.
 
