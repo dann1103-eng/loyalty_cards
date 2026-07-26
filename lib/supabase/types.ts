@@ -41,6 +41,15 @@ export type Database = {
           sello_meta: number | null;
           difuminado_franja: string;
           cuenta_id: string | null;
+          // Reverso configurable del pass (migración 0013). La sección "Cómo funciona" NO vive acá:
+          // se arma en cada generación desde reglas_puntos y recompensas, para que no pueda quedar
+          // prometiendo una recompensa que el dueño ya cambió.
+          terminos_uso: string | null;
+          red_instagram: string | null;
+          red_facebook: string | null;
+          red_whatsapp: string | null;
+          sitio_web: string | null;
+          mostrar_como_funciona: boolean;
         };
         Insert: {
           id?: string;
@@ -59,6 +68,12 @@ export type Database = {
           sello_meta?: number | null;
           difuminado_franja?: string;
           cuenta_id?: string | null;
+          terminos_uso?: string | null;
+          red_instagram?: string | null;
+          red_facebook?: string | null;
+          red_whatsapp?: string | null;
+          sitio_web?: string | null;
+          mostrar_como_funciona?: boolean;
         };
         Update: {
           id?: string;
@@ -77,6 +92,12 @@ export type Database = {
           sello_meta?: number | null;
           difuminado_franja?: string;
           cuenta_id?: string | null;
+          terminos_uso?: string | null;
+          red_instagram?: string | null;
+          red_facebook?: string | null;
+          red_whatsapp?: string | null;
+          sitio_web?: string | null;
+          mostrar_como_funciona?: boolean;
         };
         // FK de la 0008 (`cuenta_id ... references cuentas_comercio(id)`). Necesaria para el join
         // embebido `cuentas_comercio(...)` desde comercios (panel FM, reportes).
