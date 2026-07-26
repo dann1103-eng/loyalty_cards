@@ -178,8 +178,9 @@ comercio = 1, ninguna principal inactiva, columnas nuevas presentes).
   membresías y siempre termina en `redirect('/comercio/panel')`, `Promise<never>`): reusa el
   *patrón* — revalidar contra membresías antes de escribir la cookie. Comportamiento: si cambia el
   comercio → fija cookie de comercio, escribe/borra la de sucursal y redirect a `/comercio/panel`
-  (mundo de datos distinto); si el comercio no cambia → solo la cookie de sucursal,
-  `revalidatePath('/comercio', 'layout')` y SIN redirect (te quedás donde estás).
+  (mundo de datos distinto); si el comercio no cambia → solo la cookie de sucursal (un id la
+  escribe; `null` la BORRA = "todas"), `revalidatePath('/comercio', 'layout')` y SIN redirect
+  (te quedás donde estás).
 - Qué scopea la sucursal activa (owner): **Escanear** (el picker de atribución arranca
   preseleccionado en ella, editable por operación — hoy arranca en "Sin especificar"),
   **Cajeros** (lista filtrada a esa sucursal y `FormularioCajero` con `defaultValue` en ella;
