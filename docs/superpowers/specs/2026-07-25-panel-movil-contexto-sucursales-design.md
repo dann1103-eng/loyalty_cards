@@ -40,9 +40,9 @@ Cinco problemas/pedidos del usuario sobre el panel comercio, todos encima de lo 
    y tipo de tarjeta; al crear, el panel se switchea al comercio nuevo y aterriza en
    `/comercio/branding` (el editor real, con preview) para terminar la identidad. Se descartó
    embeber el editor de marca en el modal (duplicaría el formulario y podrían divergir).
-3. **Reportes = toda la cuenta, filtrable.** Ignora el switcher: agrega todos los comercios donde la
-   sesión es owner, con filtro propio Todo · comercio · sucursal. Se descartó "solo comercio activo
-   + filtro sucursal".
+3. **Reportes = todos los comercios que administrás como owner, filtrable.** Ignora el switcher:
+   agrega los comercios de las membresías owner de la sesión (la lista que ya devuelve el gate), con
+   filtro propio Todo · comercio · sucursal. Se descartó "solo comercio activo + filtro sucursal".
 4. **La nav se vuelve deslizable** (carrusel horizontal con snap y fades), no se recorta a un menú
    "Más". Se agrega Reglas a la nav (hoy solo alcanzable desde los atajos del panel).
 5. **El cajero conserva el escáner como pantalla de aterrizaje post-login**; gana Resumen y Clientes
@@ -117,7 +117,7 @@ comercio = 1, ninguna principal inactiva, columnas nuevas presentes).
   principal. Renombrarla sigue permitido.
 - `crearSucursalPrincipal(supabase, comercioId)`: helper que inserta la fila
   `{ nombre: 'Principal', activa: true, es_principal: true }`. Lo llama `crearComercio`
-  (`guardarComercio.ts`) tras un insert exitoso — así el alta de FM y la self-serve (§4.5) crean la
+  (`guardarComercio.ts`) tras un insert exitoso — así el alta de FM y la self-serve (§4.6) crean la
   principal por el mismo camino y ningún caller puede olvidarla. Si el insert de la principal falla:
   se loguea y `crearComercio` devuelve igual `ok: true` (el comercio existe; la primera sucursal
   creada a mano se vuelve principal por la regla de auto-reparación).
@@ -151,13 +151,14 @@ comercio = 1, ninguna principal inactiva, columnas nuevas presentes).
   .eq('activa', true)`); para cajero, la de su membresía (absorbe el fetch ad-hoc que hoy hace el
   layout). `cache()` ya memoiza por request. La cookie es input del cliente: **nunca** se usa sin
   esta revalidación.
-- Setter `cambiarSucursalActiva(sucursalId | null)` en `app/comercio/actions.ts`: gate
-  `verifyComercioOwner` FUERA de try/catch; `null` borra la cookie ("todas"); un id se valida con
-  `sucursalPerteneceAComercio` + activa ANTES de escribir la cookie; `revalidatePath('/comercio',
-  'layout')` y SIN redirect (cambiar de sucursal te deja en la página donde estás).
+- El ÚNICO setter es `cambiarContextoActivo(comercioId, sucursalId | null)` (§4.5) — no hay una
+  acción separada solo-sucursal: cambiar de sucursal dentro del mismo comercio pasa por la misma
+  acción con el comercio actual.
 - `fijarComercioActivo` y el login **borran** `fm_sucursal_activa` al fijar comercio (cambiar de
   comercio resetea a "todas"; una cookie huérfana de otra sesión igual moriría en la revalidación,
-  esto solo la limpia antes).
+  esto solo la limpia antes). En `cambiarContextoActivo`, la cookie de sucursal se escribe DESPUÉS
+  del fijado/borrado del comercio — sin ese orden, elegir "Comercio B · Sucursal X" en el sheet
+  aterrizaría en "todas".
 
 ### 4.5 Switcher de contexto en el header (`SelectorContexto.tsx`, reemplaza `SelectorComercio.tsx`)
 
@@ -170,14 +171,20 @@ comercio = 1, ninguna principal inactiva, columnas nuevas presentes).
   cabecera ("todas las sucursales") y sus sucursales activas anidadas (la Principal etiquetada);
   selección actual resaltada; al final **"+ Agregar local…"** que navega a
   `/comercio/sucursales?agregar=1` (abre el modal de §4.6).
-- Acción única del sheet `cambiarContextoActivo(comercioId, sucursalId | null)`: valida el comercio
-  contra las membresías owner (reusa el camino de `fijarComercioActivo`) y la sucursal con
-  `sucursalPerteneceAComercio` + activa. Si cambia el comercio → redirect a `/comercio/panel`
-  (mundo de datos distinto); si solo cambia la sucursal → sin redirect (te quedás donde estás).
+- Acción única del sheet `cambiarContextoActivo(comercioId, sucursalId | null)` en
+  `app/comercio/actions.ts`: gates/redirects FUERA de try/catch; valida el comercio contra las
+  membresías **owner** de la sesión y la sucursal con `sucursalPerteneceAComercio` + activa, ANTES
+  de escribir cookie alguna. NO reusa `fijarComercioActivo` tal cual (esa valida contra TODAS las
+  membresías y siempre termina en `redirect('/comercio/panel')`, `Promise<never>`): reusa el
+  *patrón* — revalidar contra membresías antes de escribir la cookie. Comportamiento: si cambia el
+  comercio → fija cookie de comercio, escribe/borra la de sucursal y redirect a `/comercio/panel`
+  (mundo de datos distinto); si el comercio no cambia → solo la cookie de sucursal,
+  `revalidatePath('/comercio', 'layout')` y SIN redirect (te quedás donde estás).
 - Qué scopea la sucursal activa (owner): **Escanear** (el picker de atribución arranca
   preseleccionado en ella, editable por operación — hoy arranca en "Sin especificar"),
   **Cajeros** (lista filtrada a esa sucursal y `FormularioCajero` con `defaultValue` en ella;
-  en "todas" se comporta como hoy con la Principal preseleccionada), **Resumen** (se agrega una
+  en "todas", la lista completa como hoy pero con la Principal preseleccionada en el form —
+  preselección que es comportamiento NUEVO: hoy arranca en "Elegí una sucursal"), **Resumen** (se agrega una
   carta de actividad de esa sucursal con visitas/canjes desde `reporteSucursales`). Marca, Premios,
   Reglas y Clientes son del comercio (la tarjeta es compartida) y no cambian con la sucursal.
   Reportes ignora el contexto (§4.7).
@@ -205,11 +212,14 @@ comercio = 1, ninguna principal inactiva, columnas nuevas presentes).
   1. Deriva la **cuenta del comercio activo de la sesión** (nunca del formulario); sin `cuenta_id`
      → error claro.
   2. Slug autogenerado del nombre (minúsculas, sin acentos, espacios→guiones, colapsa guiones;
-     vacío → `comercio`) con desambiguación `-2`, `-3`… ante colisión (reintenta sobre el 23505 de
-     `crearComercio`, máx. 5 intentos).
+     vacío → `comercio`) con desambiguación `-2`, `-3`…: la disponibilidad se PRE-verifica con un
+     select sobre `comercios.slug` (máx. 5 candidatos). `crearComercio` no expone el código 23505
+     (lo traduce a mensaje), así que NO se matchea el error para reintentar: una colisión residual
+     por carrera devuelve ese error tal cual y el usuario reintenta.
   3. Reusa `crearComercio` (que valida, verifica cupo y crea la sucursal Principal, §4.2) con
-     colores default del sistema (los mismos placeholder del formulario de FM) y, para sellos, el
-     `sello_meta` default de la BD (migración 0005) — ambos ajustables después en /marca.
+     colores default del sistema (los mismos placeholder del formulario de FM). `sello_meta` queda
+     NULL (la 0005 no define default y `DatosComercio` ni lo incluye; `formatearSaldo` tolera null)
+     — la meta de sellos se configura después en /marca, como los colores.
   4. Crea la membresía owner en `usuarios_comercio` (`auth_user_id` de la sesión, email copiado de
      la fila de la membresía owner actual, `rol: 'owner'`, `activo: true`).
   5. Si la membresía falla, **compensación best-effort**: borra la principal y el comercio recién
@@ -219,9 +229,9 @@ comercio = 1, ninguna principal inactiva, columnas nuevas presentes).
 ### 4.7 Reportes conglomerado (`/comercio/reportes`)
 
 - El gate sigue `verifyComercioOwner`; el alcance pasa a **todos los comercios de `comercios`**
-  (la lista owner que el gate ya devuelve). Filtros por querystring, validados contra esa lista
-  ANTES de tocar la BD: `?comercio=<id>` (∈ owners) y `?sucursal=<id>` (pertenece al comercio
-  filtrado); un id ajeno/inválido cae a "Todo". UI de filtros con chips GET (sin JS): fila 1
+  (la lista owner que el gate ya devuelve). Filtros por querystring, validados ANTES de correr
+  cualquier RPC de reportes: `?comercio=<id>` contra esa lista en memoria, y `?sucursal=<id>` con
+  una consulta de pertenencia al comercio filtrado; un id ajeno/inválido cae a "Todo". UI de filtros con chips GET (sin JS): fila 1
   `Todo · {cada comercio}`; con comercio elegido, fila 2 `Todas · {sus sucursales}`.
 - **Todo**: métricas cabecera sumadas; sección por comercio (cada uno con sus sucursales, la
   Principal etiquetada); tendencia agregada día a día; top de clientes fusionado (orden por
@@ -252,7 +262,7 @@ comercio = 1, ninguna principal inactiva, columnas nuevas presentes).
 | Candado | Dónde | Mutación que la prueba debe atrapar |
 |---|---|---|
 | La cookie de sucursal se ignora para cajeros | `resolverSucursalActiva` | devolver la cookie para rol cajero |
-| Cookie de sucursal revalidada (pertenencia + activa) | `verifyComercioAcceso` / `cambiarSucursalActiva` / `cambiarContextoActivo` | quitar `.eq('comercio_id')` o el chequeo de `activa` |
+| Cookie de sucursal revalidada (pertenencia + activa) | `verifyComercioAcceso` / `cambiarContextoActivo` | quitar `.eq('comercio_id')` o el chequeo de `activa` |
 | La principal no consume cupo pero las extra sí | `verificarLimiteCuenta` | quitar `.eq('es_principal', false)` |
 | La principal no se desactiva | `cambiarEstadoSucursal` | quitar el candado → mensaje exacto |
 | Cuenta destino derivada de la sesión | `crearComercioPropio` | tomar `cuenta_id` de un parámetro del cliente |
@@ -281,10 +291,15 @@ sin revalidar server-side. `SUPABASE_SERVICE_ROLE_KEY` sigue solo en server (sin
 
 - **Puras (nuevas):** `resolverSucursalActiva`, `enlacesPorRol`, slugify + desambiguación,
   `sumarTendencias`, `fusionarTopClientes`.
-- **Lib con mock de Supabase (patrón existente):** cupo con `es_principal` (crear comercio 1
-  unidad, sucursal extra 1, principal gratis), auto-reparación de `crearSucursal`, candado de
-  `cambiarEstadoSucursal`, `crearComercioPropio` (cuenta de sesión, slug, membresía, compensación),
-  `crearComercio` crea principal, resolución de sucursal en `verifyComercioAcceso` (vía la pura).
+- **Lib: integración contra Supabase REAL con fixtures y teardown — el patrón existente de
+  `cuentas.test.ts`/`sucursales.test.ts`/`guardarComercio.test.ts`/`cajeros.test.ts` (en este repo
+  NO se mockea Supabase; los únicos mocks viven en `lib/google`/`lib/apple` y son de las APIs de
+  billeteras):** cupo con `es_principal` (crear comercio 1 unidad, sucursal extra 1, principal
+  gratis), auto-reparación de `crearSucursal`, candado de `cambiarEstadoSucursal`,
+  `crearComercioPropio` (cuenta de sesión, slug, membresía, compensación — "membresía falla" se
+  provoca DE VERDAD con un `auth_user_id` inexistente, que viola la FK a `auth.users`),
+  `crearComercio` crea principal. Inyección de fallos puntual (spy sobre el insert de la principal
+  para el caso "alta parcial") solo donde la integración real no puede provocar el fallo.
 - **Mutation-testing obligatorio** sobre los candados de §5: romper la línea, ver FALLAR la prueba
   por la razón correcta (mensaje/aserción específica), restaurar.
 - Migración 0012 la corre el usuario en Studio; verificación con `scripts/verificar-0012.ts`
