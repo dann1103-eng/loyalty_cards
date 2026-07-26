@@ -203,3 +203,27 @@ export async function crearSucursalPrincipal(
   }
   return { ok: true, id: data.id };
 }
+
+// La consulta de validación del contexto: id + nombre SOLO si la sucursal es de ESTE comercio y
+// está activa. La usan verifyComercioAcceso (cookie del owner y sucursal del cajero) y
+// cambiarContextoActivo (input del sheet). CONTROL DE SEGURIDAD: sin el .eq('comercio_id') una
+// cookie con sucursal ajena pasaría; sin el .eq('activa') se fijaría contexto en una apagada
+// (ver MUTATION-TESTING en el .test.ts).
+export async function obtenerSucursalActiva(
+  supabase: SupabaseClient<Database>,
+  sucursalId: string,
+  comercioId: string,
+): Promise<{ id: string; nombre: string } | null> {
+  const { data, error } = await supabase
+    .from('sucursales')
+    .select('id, nombre')
+    .eq('id', sucursalId)
+    .eq('comercio_id', comercioId)
+    .eq('activa', true)
+    .maybeSingle();
+  if (error) {
+    // Falla cerrado (null = "todas"), pero deja rastro: infra ≠ contexto inválido.
+    console.error('[comercio] falló la validación de la sucursal activa:', error);
+  }
+  return data ?? null;
+}

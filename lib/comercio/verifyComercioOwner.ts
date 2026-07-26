@@ -30,6 +30,7 @@ export async function verifyComercioOwner() {
     authUserId: acceso.authUserId,
     comercioId: acceso.comercioId,
     nombre: acceso.nombre,
+    sucursalActiva: acceso.sucursalActiva,
     comercios: acceso.membresias
       .filter((m) => m.rol === 'owner')
       .map((m) => ({ comercioId: m.comercioId, nombre: m.nombre })),

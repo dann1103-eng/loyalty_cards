@@ -7,6 +7,7 @@ import {
   cambiarEstadoSucursal,
   listarSucursales,
   sucursalPerteneceAComercio,
+  obtenerSucursalActiva,
 } from './sucursales';
 
 const supabase = createServiceClient();
@@ -363,5 +364,37 @@ describe('sucursal principal (0012)', () => {
     const { data } = await supabase
       .from('sucursales').select('nombre, activa, es_principal').eq('comercio_id', comercioId);
     expect(data).toEqual([{ nombre: 'Principal', activa: true, es_principal: true }]);
+  });
+});
+
+describe('obtenerSucursalActiva', () => {
+  it('devuelve id y nombre solo si es del comercio y está activa', async () => {
+    const comercioId = await crearComercio();
+    const creada = await crearSucursal(supabase, comercioId, { nombre: 'Principal' });
+    if (!creada.ok) throw new Error('fixture');
+
+    expect(await obtenerSucursalActiva(supabase, creada.id, comercioId)).toEqual({
+      id: creada.id,
+      nombre: 'Principal',
+    });
+  });
+
+  it('rechaza (null) una sucursal de OTRO comercio', async () => {
+    const comercioA = await crearComercio();
+    const comercioB = await crearComercio();
+    const deA = await crearSucursal(supabase, comercioA, { nombre: 'Principal' });
+    if (!deA.ok) throw new Error('fixture');
+
+    expect(await obtenerSucursalActiva(supabase, deA.id, comercioB)).toBeNull();
+  });
+
+  it('rechaza (null) una sucursal inactiva', async () => {
+    const comercioId = await crearComercio();
+    await crearSucursal(supabase, comercioId, { nombre: 'Principal' });
+    const extra = await crearSucursal(supabase, comercioId, { nombre: 'Centro' });
+    if (!extra.ok) throw new Error('fixture');
+    await cambiarEstadoSucursal(supabase, extra.id, comercioId, false);
+
+    expect(await obtenerSucursalActiva(supabase, extra.id, comercioId)).toBeNull();
   });
 });

@@ -4,6 +4,11 @@
 // vuelve un error de compilación.
 export const COOKIE_COMERCIO_ACTIVO = 'fm_comercio_activo';
 
+// Cookie hermana: la SUCURSAL activa del contexto del owner, dentro del comercio activo. Sin
+// cookie = "todas". Mismo contrato de seguridad: es input del cliente y SIEMPRE se revalida
+// (resolverSucursalActiva decide, obtenerSucursalActiva verifica pertenencia + activa).
+export const COOKIE_SUCURSAL_ACTIVA = 'fm_sucursal_activa';
+
 // Opciones de la cookie, también en UN solo lugar (todos los setters deben coincidir). `secure` solo
 // en producción: en prod el sitio es HTTPS (Vercel), pero en dev local es HTTP y una cookie `secure`
 // no se enviaría. httpOnly: no la lee JS del cliente. sameSite lax: no viaja en requests cross-site.

@@ -6,7 +6,9 @@ import { redirect } from 'next/navigation';
 import { createClienteServidor, createServiceClient } from '@/lib/supabase/server';
 import { membresiasDeUsuario } from './membresiasDeUsuario';
 import { resolverComercioActivo } from './comercioActivo';
-import { COOKIE_COMERCIO_ACTIVO } from './cookieComercio';
+import { resolverSucursalActiva } from './sucursalActiva';
+import { obtenerSucursalActiva } from './sucursales';
+import { COOKIE_COMERCIO_ACTIVO, COOKIE_SUCURSAL_ACTIVA } from './cookieComercio';
 
 // Gate COMPARTIDO de /comercio: resuelve la sesión + el "comercio activo" y devuelve TODO el
 // contexto (rol incluido). verifyComercioOwner() es un wrapper delgado encima que exige rol owner.
@@ -47,6 +49,21 @@ export const verifyComercioAcceso = cache(async () => {
     redirect('/comercio/elegir');
   }
 
+  // Contexto de SUCURSAL activa (plan 2026-07-25 §4.4): para el owner, la cookie (input del
+  // cliente) revalidada por obtenerSucursalActiva; para el cajero, SIEMPRE la de su membresía —
+  // la cookie se ignora (resolverSucursalActiva). Ajena, apagada o inexistente → null = "todas".
+  // (Un cajero cuya sucursal fue desactivada queda null acá: el header muestra solo el comercio;
+  // el escáner sigue usando sucursalId de la membresía para su propio bloqueo, sin cambios.)
+  const resolucion = resolverSucursalActiva(
+    r.membresia.rol,
+    r.membresia.sucursalId,
+    cookieStore.get(COOKIE_SUCURSAL_ACTIVA)?.value,
+  );
+  const sucursalActiva =
+    resolucion.tipo === 'todas'
+      ? null
+      : await obtenerSucursalActiva(createServiceClient(), resolucion.sucursalId, r.membresia.comercioId);
+
   return {
     authUserId: sub,
     comercioId: r.membresia.comercioId,
@@ -54,6 +71,7 @@ export const verifyComercioAcceso = cache(async () => {
     rol: r.membresia.rol,
     usuarioComercioId: r.membresia.usuarioComercioId,
     sucursalId: r.membresia.sucursalId,
+    sucursalActiva,
     membresias,
   };
 });
