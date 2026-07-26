@@ -500,6 +500,10 @@ export type Database = {
           comercio_id: string;
           nombre: string;
           activa: boolean;
+          // Migración 0012: la sucursal que representa al local del propio comercio. No consume
+          // cupo del plan y no se puede desactivar (ambas reglas viven en la capa app). La BD solo
+          // garantiza que haya como máximo UNA por comercio (índice parcial único).
+          es_principal: boolean;
           created_at: string;
         };
         Insert: {
@@ -507,6 +511,7 @@ export type Database = {
           comercio_id: string;
           nombre: string;
           activa?: boolean;
+          es_principal?: boolean;
           created_at?: string;
         };
         Update: {
@@ -514,6 +519,7 @@ export type Database = {
           comercio_id?: string;
           nombre?: string;
           activa?: boolean;
+          es_principal?: boolean;
           created_at?: string;
         };
         // FK inline de la 0008 (`comercio_id ... references comercios(id)`). Necesaria para joins
