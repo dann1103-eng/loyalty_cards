@@ -53,7 +53,7 @@ export default function SubidaImagen({
     // el redimensionado ANTES de enviar, así el FormData del Server Action lleva el liviano.
     // redimensionarImagen devuelve el original ante cualquier problema, así que este paso nunca
     // puede ser el motivo de que una imagen no se suba.
-    const liviano = await redimensionarImagen(archivo);
+    const liviano = await redimensionarImagen(archivo, campo);
     if (liviano !== archivo) {
       const dt = new DataTransfer();
       dt.items.add(liviano);

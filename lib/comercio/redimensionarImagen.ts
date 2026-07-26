@@ -9,14 +9,25 @@
 // pondría fondo negro. Redimensionar es lo que baja el peso de verdad; recodificar de formato sería
 // ganar unos KB a cambio de romper logos.
 
-// Lado máximo del lado más largo. 1400 px cubre con holgura el uso más exigente del pass
-// (strip@3x mide 1125×432) y una pantalla de escritorio; más allá de eso son píxeles que nadie ve
-// y que solo engordan el pass que descarga el cliente en su teléfono.
-export const LADO_MAXIMO = 1400;
+// Lado máximo POR CAMPO, porque cada imagen se muestra a un tamaño MUY distinto y un solo número
+// para todas fue un error caro: con 1400 px parejo, un logo de 1400×933 pesaba 777 KB y entraba
+// TRES veces al pass (logo, @2x y @3x) — 2,3 MB solo en logos, sobre un área de ~50 px. El pass de
+// ese comercio llegó a 2,9 MB contra los 200-690 KB de los demás, y el dueño notó que sus tarjetas
+// tardaban en actualizarse: el iPhone se baja el pass ENTERO en cada cambio de puntos.
+// Los números salen del uso real: strip@3x mide 1125 px de ancho; el logo del pass se dibuja en un
+// área chica (Apple sugiere ~480 px para @3x); el ícono del sello se ve a 44 px, así que 180 px le
+// dan de sobra hasta en @3x.
+export const LADOS_MAXIMOS: Record<string, number> = {
+  logo: 480,
+  sello_icono: 180,
+  hero: 1400,
+  strip: 1400,
+};
+export const LADO_MAXIMO_POR_DEFECTO = 1400;
 
-// Debajo de esto no vale la pena tocar nada: recodificar una imagen ya chica puede incluso
-// agrandarla (un PNG de pocos colores re-exportado por canvas pierde su paleta optimizada).
-export const PESO_QUE_NO_VALE_TOCAR = 600 * 1024;
+export function ladoMaximoDe(campo: string): number {
+  return LADOS_MAXIMOS[campo] ?? LADO_MAXIMO_POR_DEFECTO;
+}
 
 // Calidad para los formatos CON pérdida. 0.85 es el punto donde el archivo cae mucho y el ojo no
 // nota nada en una tarjeta de lealtad. No aplica a PNG (canvas lo ignora: PNG es sin pérdida).
@@ -27,7 +38,7 @@ const CALIDAD = 0.85;
 export function dimensionesDestino(
   ancho: number,
   alto: number,
-  ladoMaximo = LADO_MAXIMO,
+  ladoMaximo = LADO_MAXIMO_POR_DEFECTO,
 ): { ancho: number; alto: number } {
   const ladoMasLargo = Math.max(ancho, alto);
   if (ladoMasLargo <= ladoMaximo) return { ancho, alto };
@@ -39,15 +50,15 @@ export function dimensionesDestino(
   };
 }
 
-// ¿Hace falta procesarla? PURA y testeable.
+// ¿Hace falta procesarla? PURA y testeable. Decide SOLO por dimensiones, no por peso: un logo de
+// 1400 px que pesa 400 KB igual hay que achicarlo (se ve a 50 px y entra tres veces al pass), y el
+// riesgo de "recodificar una imagen chica y que quede más grande" ya lo cubre redimensionarImagen,
+// que compara el resultado contra el original y se queda con el más liviano.
 export function necesitaRedimensionar(
-  archivo: { size: number },
   ancho: number,
   alto: number,
-  ladoMaximo = LADO_MAXIMO,
-  pesoQueNoValeTocar = PESO_QUE_NO_VALE_TOCAR,
+  ladoMaximo = LADO_MAXIMO_POR_DEFECTO,
 ): boolean {
-  if (archivo.size <= pesoQueNoValeTocar) return false;
   return Math.max(ancho, alto) > ladoMaximo;
 }
 
@@ -55,15 +66,16 @@ export function necesitaRedimensionar(
 // formato no es de los que sabemos recodificar, o si algo falla: esta función NO puede ser la razón
 // por la que alguien no pueda subir su imagen — ante la duda, que suba la original y decida el
 // validador del servidor, que ya tiene su mensaje claro.
-export async function redimensionarImagen(archivo: File): Promise<File> {
+export async function redimensionarImagen(archivo: File, campo: string): Promise<File> {
   if (typeof document === 'undefined' || !archivo.type.startsWith('image/')) return archivo;
 
+  const ladoMaximo = ladoMaximoDe(campo);
   let bitmap: ImageBitmap | null = null;
   try {
     bitmap = await createImageBitmap(archivo);
-    if (!necesitaRedimensionar(archivo, bitmap.width, bitmap.height)) return archivo;
+    if (!necesitaRedimensionar(bitmap.width, bitmap.height, ladoMaximo)) return archivo;
 
-    const { ancho, alto } = dimensionesDestino(bitmap.width, bitmap.height);
+    const { ancho, alto } = dimensionesDestino(bitmap.width, bitmap.height, ladoMaximo);
     const lienzo = document.createElement('canvas');
     lienzo.width = ancho;
     lienzo.height = alto;
