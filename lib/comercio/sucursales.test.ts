@@ -6,6 +6,7 @@ import {
   renombrarSucursal,
   cambiarEstadoSucursal,
   listarSucursales,
+  idsSucursalesPrincipales,
   sucursalPerteneceAComercio,
   obtenerSucursalActiva,
 } from './sucursales';
@@ -198,6 +199,42 @@ describe('listarSucursales', () => {
     expect(lista!.length).toBe(2);
     const nombres = lista!.map((s) => s.nombre).sort();
     expect(nombres).toEqual(['A1', 'A2']);
+  });
+});
+
+describe('idsSucursalesPrincipales', () => {
+  it('devuelve SOLO las principales y SOLO de los comercios pedidos', async () => {
+    // MUTATION-TESTING: este test cubre los DOS filtros de la consulta a la vez.
+    //  - sin `.eq('es_principal', true)` entra "A Centro" (adicional del mismo comercio) → FALLA.
+    //  - sin `.in('comercio_id', …)` entra la principal del comercio ajeno → FALLA.
+    // Por eso el fixture necesita las tres piezas: una principal, una adicional y un comercio fuera
+    // del alcance. La aserción es igualdad EXACTA de conjunto contra ids propios, así que no depende
+    // de que la BD compartida esté limpia.
+    const comercioA = await crearComercio();
+    const comercioB = await crearComercio();
+    const comercioAjeno = await crearComercio();
+    // La PRIMERA sucursal de cada comercio nace principal (0012); las siguientes, adicionales.
+    const principalA = await crearSucursal(supabase, comercioA, { nombre: 'A Principal' });
+    await crearSucursal(supabase, comercioA, { nombre: 'A Centro' });
+    const principalB = await crearSucursal(supabase, comercioB, { nombre: 'B Principal' });
+    const principalAjena = await crearSucursal(supabase, comercioAjeno, { nombre: 'Ajena Principal' });
+    if (!principalA.ok || !principalB.ok || !principalAjena.ok) throw new Error('el setup falló');
+
+    const ids = await idsSucursalesPrincipales(supabase, [comercioA, comercioB]);
+
+    expect([...ids].sort()).toEqual([principalA.id, principalB.id].sort());
+  });
+
+  it('con lista vacía devuelve un Set vacío SIN tocar la BD', async () => {
+    // Cliente que explota si alguien saca el early return: un `.in(…, [])` sería un round-trip a la
+    // nada en cada carga de reportes con el alcance vacío.
+    const clienteQueExplota = {
+      from() {
+        throw new Error('no debería consultar la BD con la lista vacía');
+      },
+    } as unknown as typeof supabase;
+
+    expect([...(await idsSucursalesPrincipales(clienteQueExplota, []))]).toEqual([]);
   });
 });
 

@@ -161,6 +161,37 @@ export async function listarSucursales(
   return (data ?? []).map((s) => ({ id: s.id, nombre: s.nombre, activa: s.activa, esPrincipal: s.es_principal }));
 }
 
+// Ids de las sucursales PRINCIPALES de VARIOS comercios en UNA sola consulta. La usa la pantalla de
+// reportes (vista conglomerado): necesita etiquetar la Principal en cada carta y reporte_sucursales
+// (0010) no devuelve es_principal. Sin esto habría que llamar listarSucursales una vez POR comercio
+// — N round-trips extra por carga en una página force-dynamic que se abre seguido.
+//
+// El .eq('es_principal', true) es lo que hace que devuelva SOLO principales; el .in('comercio_id')
+// la scopea al alcance ya verificado por el gate (ver MUTATION-TESTING en el .test.ts).
+//
+// Fail-soft ante error: Set vacío, no null. A diferencia de listarSucursales —donde el vacío invita
+// a crear un duplicado y por eso hay que distinguirlo del error— acá lo único que se pierde es una
+// etiqueta cosmética; no justifica tumbar la pantalla (mismo criterio que lib/reportes/reportes.ts).
+export async function idsSucursalesPrincipales(
+  supabase: SupabaseClient<Database>,
+  comercioIds: string[],
+): Promise<Set<string>> {
+  // Sin comercios no hay nada que preguntar: un .in(…, []) sería un round-trip a la nada.
+  if (comercioIds.length === 0) return new Set();
+
+  const { data, error } = await supabase
+    .from('sucursales')
+    .select('id')
+    .eq('es_principal', true)
+    .in('comercio_id', comercioIds);
+
+  if (error) {
+    console.error('[comercio] falló la consulta de sucursales principales:', error);
+    return new Set();
+  }
+  return new Set((data ?? []).map((s) => s.id));
+}
+
 // Control de seguridad: el picker de sucursal del dueño y la atribución del escáner deben rechazar
 // un sucursal_id que no sea de ESTE comercio. El .eq('comercio_id') es el candado — sin él, una
 // sucursal ajena pasaría como válida (ver MUTATION-TESTING en el .test.ts).
