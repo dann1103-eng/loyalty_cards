@@ -98,8 +98,13 @@ function grillaSellos(datos: DatosStrip, escala: number, iconoDataUrl: string | 
   // sobrevivir cualquier recorte razonable.
   const margenLateral = 56;
   const gap = 8;
+  // Topes de diámetro: el sello se ve lo más grande posible sin desbordar. Se subieron de 40/34 a
+  // 52/44 cuando el ícono pasó a ir suelto (sin círculo): dentro del círculo, 34 alcanzaba porque
+  // el aro daba presencia; suelto, el ícono a 34 se veía diminuto en el teléfono. El alto también
+  // manda: dos filas de 44 + 7 de gap = 95 sobre los 123 de la franja, con aire arriba y abajo. El
+  // Math.min con el ancho disponible sigue siendo el que decide cuando hay muchos sellos por fila.
   const diametro =
-    Math.min(filas === 1 ? 40 : 34, Math.floor((375 - margenLateral * 2 - (porFila - 1) * gap) / porFila)) * escala;
+    Math.min(filas === 1 ? 52 : 44, Math.floor((375 - margenLateral * 2 - (porFila - 1) * gap) / porFila)) * escala;
   const sellos = Array.from({ length: meta }, (_, i) => i);
 
   const filasDeSellos = {
@@ -164,6 +169,10 @@ function grillaSellos(datos: DatosStrip, escala: number, iconoDataUrl: string | 
                             // para separarlos.
                             width: diametro,
                             height: diametro,
+                            // objectFit contain o el ícono se DEFORMA: width/height son una caja
+                            // cuadrada y casi ningún logo lo es — se veía estirado en vertical en el
+                            // pass real mientras la vista previa (que sí lo tenía) se veía bien.
+                            style: { objectFit: 'contain' },
                           },
                         }],
                       },

@@ -15,6 +15,8 @@ export interface DatosPass {
   serialNumber: string;
   qrToken: string;
   puntos: number;
+  // Titular de la tarjeta (clientes.nombre). null si no se pudo resolver: el pass sale sin el campo.
+  nombreCliente: string | null;
   nombreComercio: string;
   colorFondo: string;
   colorTexto: string;
@@ -117,17 +119,18 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
     });
   }
 
-  // El nombre del comercio, alineado a la DERECHA de la misma fila donde va el contador (pedido del
-  // usuario: "en el otro extremo de donde aparecen los puntos"). Sin label: el nombre se explica
-  // solo y un "COMERCIO" encima sería ruido. Va siempre en secondaryFields, así que en el caso de
-  // sellos-con-grilla comparte fila con el contador, y en los demás queda en la fila de abajo.
-  // organizationName ya lleva este dato pero Wallet no lo muestra en la tarjeta (lo usa en las
-  // notificaciones), y logoText solo aparece cuando el comercio NO subió logo.
-  pass.secondaryFields.push({
-    key: 'comercio',
-    value: datos.nombreComercio,
-    textAlignment: 'PKTextAlignmentRight',
-  });
+  // El TITULAR de la tarjeta, alineado a la derecha de la misma fila que el contador. Es el nombre
+  // que el cliente escribió al registrarse — como una tarjeta de socio física, que lleva el nombre
+  // de quien la usa. El nombre del COMERCIO no va acá: ya está arriba (logo, o logoText cuando no
+  // hay logo) y repetirlo dejaba la tarjeta sin decir de quién es.
+  // Se omite si falta: una tarjeta sin nombre es mejor que una que diga "null".
+  if (datos.nombreCliente) {
+    pass.secondaryFields.push({
+      key: 'titular',
+      value: datos.nombreCliente,
+      textAlignment: 'PKTextAlignmentRight',
+    });
+  }
 
   pass.setBarcodes(datos.qrToken);
 

@@ -13,9 +13,11 @@ export async function datosPassDeTarjeta(
     throw new Error('NEXT_PUBLIC_BASE_URL no está configurada — requerida para el webServiceURL del pass');
   }
 
+  // clientes(nombre) para el campo de la tarjeta: el pass muestra a QUIÉN pertenece, igual que una
+  // tarjeta de socio física. Sin join no habría forma de saberlo desde acá.
   const { data: tarjeta } = await supabase
     .from('tarjetas')
-    .select('*, comercios(*)')
+    .select('*, comercios(*), clientes(nombre)')
     .eq('apple_serial_number', serialNumber)
     .maybeSingle();
 
@@ -28,6 +30,9 @@ export async function datosPassDeTarjeta(
       qrToken: tarjeta.qr_token,
       puntos: tarjeta.puntos_actuales,
       nombreComercio: tarjeta.comercios.nombre,
+      // Puede faltar si el join falla o la fila del cliente se borró: el pass se genera igual, solo
+      // sin el campo del titular (generatePass lo omite si viene null).
+      nombreCliente: tarjeta.clientes?.nombre ?? null,
       colorFondo: tarjeta.comercios.color_fondo ?? 'rgb(35, 24, 18)',
       colorTexto: tarjeta.comercios.color_texto ?? 'rgb(255, 255, 255)',
       colorLabel: tarjeta.comercios.color_label ?? 'rgb(255, 255, 255)',

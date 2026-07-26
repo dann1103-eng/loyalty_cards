@@ -10,6 +10,7 @@ const PNG_1PX_B64 =
 function datosBase() {
   return {
     nombreComercio: 'Cafetería Piloto',
+    nombreCliente: 'María Rivera',
     colorFondo: 'rgb(35, 24, 18)',
     colorTexto: 'rgb(255, 255, 255)',
     colorLabel: 'rgb(255, 255, 255)',
@@ -50,6 +51,35 @@ describe('generarPassApple', () => {
     expect(Object.keys(zip.files)).toEqual(
       expect.arrayContaining(['strip.png', 'strip@2x.png', 'strip@3x.png']),
     );
+
+    // El TITULAR: la tarjeta dice de quién es, como una de socio física. Antes acá iba el nombre
+    // del COMERCIO, que ya está arriba en el logo — repetirlo dejaba la tarjeta sin dueño.
+    const titular = passJson.storeCard.secondaryFields?.find(
+      (f: { key: string }) => f.key === 'titular',
+    );
+    expect(titular?.value).toBe('María Rivera');
+    expect(titular?.textAlignment).toBe('PKTextAlignmentRight');
+  });
+
+  it('sin nombre de cliente el pass sale SIN el campo del titular (nunca con "null")', async () => {
+    // nombreCliente puede faltar si el join del cliente falla o su fila se borró: el pass tiene que
+    // generarse igual. Un campo con la palabra "null" en la billetera del cliente sería peor que
+    // no tener campo.
+    const buffer = await generarPassApple({
+      ...datosBase(),
+      nombreCliente: null,
+      serialNumber: 'test-serial-sin-cliente',
+      qrToken: 'abc123',
+      puntos: 3,
+      tipoTarjeta: 'puntos',
+      selloMeta: null,
+      stripUrl: null,
+    });
+
+    const zip = await JSZip.loadAsync(buffer);
+    const passJson = JSON.parse(await zip.file('pass.json')!.async('string'));
+    const claves = (passJson.storeCard.secondaryFields ?? []).map((f: { key: string }) => f.key);
+    expect(claves).not.toContain('titular');
   });
 
   it('el passTypeIdentifier y teamIdentifier del pass firmado vienen de env (fuente única)', async () => {
