@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { guardarBranding } from '@/lib/comercio/guardarBranding';
+import { guardarReverso } from '@/lib/comercio/guardarReverso';
 import { notificarCambioComercio } from '@/lib/apple/notificarCambioComercio';
 import { syncClaseComercio } from '@/lib/google/syncClase';
 import {
@@ -44,6 +45,42 @@ export async function accionGuardarBranding(
   // Google Wallet: una sola llamada actualiza la clase para TODOS los clientes de este comercio
   // (a diferencia de Apple, que necesita un push por tarjeta). Best-effort, igual que arriba.
   await syncClaseComercio(createServiceClient(), comercioId);
+
+  revalidatePath('/comercio/branding');
+  return { ok: true };
+}
+
+// Guarda el reverso del pass: términos de uso, redes y el interruptor de la sección automática.
+// comercio_id SIEMPRE del gate, nunca del formulario. verifyComercioOwner() va FUERA de todo
+// try/catch: redirige LANZANDO NEXT_REDIRECT, y un catch alrededor desactivaría el gate.
+export async function accionGuardarReverso(
+  _estadoPrevio: EstadoBranding,
+  formData: FormData,
+): Promise<EstadoBranding> {
+  const { comercioId } = await verifyComercioOwner();
+
+  const supabase = createServiceClient();
+  const res = await guardarReverso(supabase, comercioId, {
+    terminos_uso: String(formData.get('terminos_uso') ?? ''),
+    red_instagram: String(formData.get('red_instagram') ?? ''),
+    red_facebook: String(formData.get('red_facebook') ?? ''),
+    red_whatsapp: String(formData.get('red_whatsapp') ?? ''),
+    sitio_web: String(formData.get('sitio_web') ?? ''),
+    // Un checkbox HTML manda 'on' cuando está marcado y NO manda NADA cuando no lo está: la
+    // AUSENCIA de la clave es el false. La conversión vive acá, que es quien conoce el FormData;
+    // guardarReverso recibe el booleano ya resuelto y no adivina.
+    mostrar_como_funciona: formData.get('mostrar_como_funciona') !== null,
+  });
+
+  if (!res.ok) return { error: res.error };
+
+  // El reverso viaja DENTRO del .pkpass: sin este aviso el dueño guarda su Instagram y las tarjetas
+  // ya emitidas siguen mostrando el reverso viejo hasta el próximo cambio de puntos. Best-effort,
+  // igual que en el branding: notificarCambioComercio traga sus fallos y nunca revierte el guardado.
+  await notificarCambioComercio(supabase, comercioId);
+
+  // Google Wallet queda fuera de alcance (spec §11): su equivalente de reverso —textModulesData y
+  // linksModuleData— no se toca, así que acá no hay syncClaseComercio.
 
   revalidatePath('/comercio/branding');
   return { ok: true };

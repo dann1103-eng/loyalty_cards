@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import FormularioBranding from './FormularioBranding';
+import FormularioReverso from './FormularioReverso';
 import SubidaImagen from './SubidaImagen';
 import AvisoComercioActivo from '../AvisoComercioActivo';
 
@@ -21,7 +22,7 @@ export default async function PaginaBranding({
   const supabase = createServiceClient();
   const { data: c } = await supabase
     .from('comercios')
-    .select('nombre, tipo_tarjeta, color_fondo, color_texto, color_label, sello_meta, logo_url, strip_url, hero_url, sello_icono_url, difuminado_franja')
+    .select('nombre, tipo_tarjeta, color_fondo, color_texto, color_label, sello_meta, logo_url, strip_url, hero_url, sello_icono_url, difuminado_franja, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona')
     .eq('id', comercioId)
     .maybeSingle();
 
@@ -82,6 +83,23 @@ export default async function PaginaBranding({
         subidas={imagenes.map(([campo, etiqueta, url]) => (
           <SubidaImagen key={campo} campo={campo} etiqueta={etiqueta} urlActual={url} />
         ))}
+      />
+
+      {/* El reverso va al final del editor de marca y no en una pantalla aparte: es conceptualmente
+          lo mismo que ya vive acá —cómo se ve y qué dice tu tarjeta— y el nav inferior no tiene
+          espacio para otra entrada. Las columnas nulas entran como '' porque los campos son
+          controlados: un value={null} le pide a React cambiar de no-controlado a controlado. */}
+      <FormularioReverso
+        nombreComercio={c.nombre}
+        esSellos={esSellos}
+        inicial={{
+          terminos_uso: c.terminos_uso ?? '',
+          red_instagram: c.red_instagram ?? '',
+          red_facebook: c.red_facebook ?? '',
+          red_whatsapp: c.red_whatsapp ?? '',
+          sitio_web: c.sitio_web ?? '',
+          mostrar_como_funciona: c.mostrar_como_funciona,
+        }}
       />
     </main>
   );
