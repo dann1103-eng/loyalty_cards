@@ -673,3 +673,118 @@ Además de lo de la Parte 1: los comercios que crees con el alta self-serve **no
 dueño** — se eliminan desde FM admin (`/admin/comercios/[id]/editar`), y solo si no tienen
 actividad ni sucursales extra. Si creaste varios para probar la sección 19, conviene limpiarlos ahí
 mismo para que no te sigan comiendo cupo del plan de la cuenta.
+
+---
+
+# Parte 3 — Marca nueva y alta de dueños por link (2026-07-26)
+
+Dos cosas entraron después de la Parte 2: el **rebranding a Cardly SV** con dominio propio, y el
+**alta de dueños con link de invitación**, que reemplaza al script `npm run seed-comercio`.
+
+**Antes de empezar:** verificá que en Vercel `NEXT_PUBLIC_BASE_URL` sea `https://cardly-sv.site` y
+que hayas redesplegado después de cambiarla. Si no, los links que generes van a apuntar al dominio
+viejo — funcionan, pero le mandás a tu cliente un enlace que no dice Cardly.
+
+---
+
+## 24. La marca, de un vistazo
+
+1. Abrí `cardly-sv.site` (la portada pública).
+   ✅ Esperado: dice **Cardly SV**, y abajo "FM Communications" como empresa. El texto habla de "tu
+   negocio", no de "tu cafetería".
+2. Mirá el título de la pestaña del navegador y, si instalaste la app del cliente, su nombre.
+   ✅ Esperado: "Cardly SV" y "Mi Tarjeta — Cardly SV".
+3. Entrá al login del comercio y al de FM.
+   ✅ Esperado: los dos dicen Cardly SV. **CAMBIO respecto de antes.**
+4. Abrí el portal del cliente (`/mi-tarjeta`) y una pantalla de registro (`/registro/<slug>`).
+   ✅ Esperado: Cardly SV en ambas, y en la tarjeta que se dibuja arriba también.
+5. Abrí un pass que ya tengas en la billetera.
+   ✅ Esperado: **no cambió nada** — el pass muestra el nombre del comercio, nunca la marca de la
+   plataforma. Si cambió algo acá, reportalo.
+
+---
+
+## 25. Dar de alta el dueño de un comercio (el flujo nuevo)
+
+Reemplaza a correr `npm run seed-comercio` en la terminal. **Vos ya no elegís ni conocés la
+contraseña de tu cliente.**
+
+1. En FM admin, entrá a editar un comercio (`/admin/comercios/[id]/editar`) y bajá hasta la lista
+   de dueños.
+   ✅ Esperado: si no tiene ninguno, el vacío dice que generes el acceso abajo (ya **no** menciona
+   el script). **CAMBIO respecto de antes.**
+2. Escribí el correo del dueño y tocá **"Generar acceso"**.
+   ✅ Esperado: aparece el link completo, en un bloque fácil de copiar desde el teléfono, con el
+   correo al que corresponde y el aviso de que vence en 24 horas.
+3. Fijate en la lista de dueños.
+   ⚠️ El dueño nuevo **no aparece hasta que recargues** la página: es a propósito, recargar
+   automáticamente se llevaría puesto el link, que solo existe en pantalla. Recargá y confirmá que
+   ahora sí figura con rol `owner`.
+4. Copiá el link y mandátelo a vos mismo **por WhatsApp** (no lo pegues directo en el navegador:
+   ver la sección 27, que es justo el caso que falló la primera vez).
+5. Abrilo desde el teléfono.
+   ✅ Esperado: pantalla **"Activá tu acceso"** con un botón. Abrir el link NO activa nada todavía.
+6. Tocá "Activar mi acceso".
+   ✅ Esperado: pasás a "Definí tu contraseña", con tu correo a la vista.
+7. Poné una contraseña de 8+ caracteres, repetila y guardá.
+   ✅ Esperado: entrás directo al panel del comercio, ya con sesión.
+8. Cerrá sesión y volvé a entrar con ese correo y esa contraseña.
+   ✅ Esperado: entra normal. **Esa clave no la conoce nadie más que el dueño.**
+
+---
+
+## 26. Regenerar el link (link vencido u olvidó la contraseña)
+
+1. En la lista de dueños, tocá **"Regenerar link"** junto a uno existente.
+   ✅ Esperado: link nuevo, mismo comportamiento que el del alta.
+2. Fijate en los **cajeros** de la lista.
+   ✅ Esperado: se listan (para que veas quién entra) pero **sin botón de regenerar**, con la nota
+   de que los da de alta el dueño desde su panel. Es a propósito: regenerarle el acceso a un cajero
+   sería entregarte a vos un cambio de contraseña de un empleado de tu cliente.
+3. Probá regenerar para un dueño que **nunca abrió** su primer link.
+   ✅ Esperado: funciona igual, sin errores.
+
+---
+
+## 27. Los casos borde del link (acá está lo que ya falló una vez)
+
+1. **Compartir por WhatsApp — el caso que rompió en producción el 2026-07-26.** Generá un link
+   nuevo, pegalo en WhatsApp, esperá a que se arme la vista previa, y recién ahí tocalo.
+   ✅ Esperado: funciona. Aparece "Activá tu acceso" y al tocar el botón entrás.
+   ⚠️ **Por qué importa:** antes el link se canjeaba con solo abrirlo, y los servidores de WhatsApp
+   lo abren solos para armar la vista previa del mensaje — o sea que el preview quemaba el token y
+   el cliente llegaba a "ese link ya no sirve" sin haber hecho nada. Si alguna vez alguien mueve el
+   canje de vuelta al momento de abrir la página, esto vuelve a romperse. **Probalo siempre por
+   WhatsApp, no pegando el link en el navegador: pegarlo directo no reproduce el problema.**
+2. **Abrir el mismo link dos veces.** Después de activar, volvé a tocar el link en el chat.
+   ✅ Esperado: te lleva a "Definí tu contraseña" (porque la sesión ya existe), no a un error.
+3. **Abrir un link ya usado desde OTRO teléfono** (sin sesión).
+   ✅ Esperado: login con "Ese link de acceso ya no sirve: se usa una sola vez y vence a las 24
+   horas. Pedile a FM un link nuevo."
+4. **Link mal copiado** (borrale unos caracteres al final y abrilo).
+   ✅ Esperado: "Link incompleto" con un enlace al inicio de sesión. No una pantalla rota.
+5. **Definir la contraseña que ya tenías** (en un dueño que ya la había definido): abrí un link
+   nuevo y escribí su clave actual.
+   ✅ Esperado: mensaje pidiendo una distinta, con la salida "Entrá a tu panel" — no quedás
+   atrapado en esa pantalla.
+6. **Correo que ya es cajero de ESE comercio:** intentá generarle acceso de dueño.
+   ✅ Esperado: rechazo explicando que ese correo ya está registrado como cajero y que hay que usar
+   otro. **No** dice "dalo de baja primero": la baja de cajeros es lógica y la fila se conserva para
+   el historial, así que el correo seguiría ocupado. **CAMBIO respecto de antes** (esto antes daba
+   un "éxito" con link válido y la persona entraba sin permisos de dueño).
+7. **Correo que ya es dueño de OTRO comercio:** generale acceso en este.
+   ✅ Esperado: funciona; queda como dueño de los dos y el switcher del header le muestra ambos.
+
+---
+
+## Qué NO está cubierto (Parte 3)
+
+- **No hay servicio de correo.** Los links se reparten a mano (WhatsApp). Si algún día se agrega
+  envío de emails, este flujo se simplifica pero el canje debe seguir detrás del botón: los
+  escáneres de seguridad de las casillas corporativas abren los links igual que WhatsApp.
+- **La expiración de 24 horas es la de Supabase**, configurable en su panel, no en el código.
+- **El link no se guarda en ningún lado:** si cerrás la pantalla sin copiarlo, hay que regenerarlo.
+  Es a propósito (una credencial menos viviendo en la base).
+- **Si una fila de `usuarios_comercio` tuviera `auth_user_id` en NULL** (solo pasaría insertándola a
+  mano en Studio), el dueño completaría todo el flujo y chocaría con "sin permiso" al final. Hoy no
+  hay ninguna así; si aparece ese síntoma, es lo primero a mirar.
