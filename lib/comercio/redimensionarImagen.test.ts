@@ -3,6 +3,9 @@ import {
   dimensionesDestino,
   necesitaRedimensionar,
   ladoMaximoDe,
+  cajaDelContenido,
+  escalarCaja,
+  valeLaPenaRecortar,
   LADO_MAXIMO_POR_DEFECTO as LADO_MAXIMO,
 } from './redimensionarImagen';
 
@@ -72,5 +75,97 @@ describe('ladoMaximoDe', () => {
 
   it('un campo desconocido cae al máximo por defecto, no a 0 ni a undefined', () => {
     expect(ladoMaximoDe('campo_que_no_existe')).toBe(LADO_MAXIMO);
+  });
+});
+
+// Arma los píxeles RGBA que devolvería getImageData, con el alfa que dicte `alfaEn`.
+function pixeles(ancho: number, alto: number, alfaEn: (x: number, y: number) => number) {
+  const px = new Uint8ClampedArray(ancho * alto * 4);
+  for (let y = 0; y < alto; y++) {
+    for (let x = 0; x < ancho; x++) {
+      px[(y * ancho + x) * 4 + 3] = alfaEn(x, y);
+    }
+  }
+  return px;
+}
+
+// Un rectángulo opaco (de `x0,y0` a `x1,y1`, inclusive) sobre un fondo transparente.
+function conDibujoEn(ancho: number, alto: number, x0: number, y0: number, x1: number, y1: number) {
+  return pixeles(ancho, alto, (x, y) => (x >= x0 && x <= x1 && y >= y0 && y <= y1 ? 255 : 0));
+}
+
+// MUTATION-TESTING: esto es lo que hace que el sello se vea del tamaño que corresponde. El caso
+// real (2026-07-26): un ícono en un lienzo de 180×120 con el dibujo ocupando 87×86 salía a 21 px
+// dentro de la caja de 44 del sello, la mitad que el de otro comercio. Mutaciones a atrapar: que la
+// caja se quede corta y recorte el dibujo, que devuelva el lienzo entero (el recorte no haría nada
+// y el ícono seguiría diminuto), y que una imagen 100% transparente devuelva una caja de lado 0
+// —el canvas lanza con width 0 y el dueño se quedaría sin poder subir su imagen—.
+describe('cajaDelContenido', () => {
+  it('encuentra el dibujo que flota en un lienzo casi vacío', () => {
+    // El caso real, a escala: dibujo de 87×86 metido en un lienzo de 180×120.
+    const px = conDibujoEn(180, 120, 46, 17, 132, 102);
+    expect(cajaDelContenido(px, 180, 120)).toEqual({ x: 46, y: 17, ancho: 87, alto: 86 });
+  });
+
+  it('una imagen sin margen devuelve el lienzo entero (y así no se recorta nada)', () => {
+    const px = pixeles(40, 30, () => 255);
+    expect(cajaDelContenido(px, 40, 30)).toEqual({ x: 0, y: 0, ancho: 40, alto: 30 });
+  });
+
+  it('una imagen 100% transparente devuelve null, no una caja de lado 0', () => {
+    const px = pixeles(40, 30, () => 0);
+    expect(cajaDelContenido(px, 40, 30)).toBeNull();
+  });
+
+  it('el antialiasing casi invisible del borde no cuenta como dibujo', () => {
+    // Un halo de alfa 12 alrededor del dibujo: si contara, la caja sería el lienzo entero y el
+    // recorte no serviría de nada justo en las imágenes que más lo necesitan (los PNG exportados
+    // con sombra o brillo suave llevan un halo así por todo el lienzo).
+    const px = pixeles(20, 20, (x, y) => (x >= 8 && x <= 11 && y >= 8 && y <= 11 ? 255 : 12));
+    expect(cajaDelContenido(px, 20, 20)).toEqual({ x: 8, y: 8, ancho: 4, alto: 4 });
+    // Un alfa apenas por encima del umbral SÍ es dibujo.
+    const visible = pixeles(20, 20, () => 13);
+    expect(cajaDelContenido(visible, 20, 20)).toEqual({ x: 0, y: 0, ancho: 20, alto: 20 });
+  });
+});
+
+// MUTATION-TESTING: la caja se mide sobre una copia CHICA (recorrer una foto de 4000×3000 son 48 MB
+// de array en el teléfono) y hay que llevarla de vuelta al original. Si se pasa de los límites,
+// drawImage rellena con transparente y reaparece el margen que estábamos sacando.
+describe('escalarCaja', () => {
+  it('lleva la caja al tamaño del original y deja un píxel de holgura', () => {
+    // Medido en una copia al 50%: en el original todo vale el doble.
+    expect(escalarCaja({ x: 10, y: 10, ancho: 20, alto: 20 }, 2, 200, 200)).toEqual({
+      x: 19, // 20 - 1 de holgura
+      y: 19,
+      ancho: 42, // 40 + 2 (la holgura de cada lado)
+      alto: 42,
+    });
+  });
+
+  it('nunca se sale de la imagen', () => {
+    // Dibujo a sangre: la holgura no puede empujar la caja fuera del original.
+    expect(escalarCaja({ x: 0, y: 0, ancho: 50, alto: 50 }, 2, 100, 100)).toEqual({
+      x: 0,
+      y: 0,
+      ancho: 100,
+      alto: 100,
+    });
+  });
+});
+
+// MUTATION-TESTING: sin este freno, CUALQUIER imagen se recodificaría por un margen de un píxel.
+describe('valeLaPenaRecortar', () => {
+  it('sí en el caso real (el dibujo ocupa la mitad del ancho)', () => {
+    expect(valeLaPenaRecortar({ x: 46, y: 17, ancho: 87, alto: 86 }, 180, 120)).toBe(true);
+  });
+
+  it('no por uno o dos píxeles de borde', () => {
+    expect(valeLaPenaRecortar({ x: 1, y: 1, ancho: 178, alto: 118 }, 180, 120)).toBe(false);
+  });
+
+  it('alcanza con que UN lado sobre para recortar (un lienzo ancho con el dibujo al centro)', () => {
+    // Alto a sangre, ancho con márgenes: es exactamente la forma del ícono que se veía chico.
+    expect(valeLaPenaRecortar({ x: 40, y: 0, ancho: 100, alto: 120 }, 180, 120)).toBe(true);
   });
 });
