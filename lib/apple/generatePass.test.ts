@@ -20,6 +20,10 @@ function datosBase() {
     heroUrl: null,
     logoUrl: null,
     difuminadoFranja: 'medio',
+    // Reverso vacío por defecto: acá se prueba el CABLEADO (que los campos que llegan viajan al
+    // pass.json), no qué campos produce construirReverso — eso tiene su propio archivo de pruebas,
+    // sin firmar passes ni componer imágenes.
+    reverso: [],
   };
 }
 
@@ -159,6 +163,64 @@ describe('generarPassApple', () => {
     const zip = await JSZip.loadAsync(buffer);
     const guardado = Buffer.from(await zip.file('strip.png')!.async('nodebuffer'));
     expect(guardado.equals(esperado)).toBe(true);
+  });
+
+  it('los campos del reverso llegan al pass.json en el mismo orden, con su attributedValue', async () => {
+    // Prueba de CABLEADO: que DatosPass.reverso viaje entero hasta los backFields del pass firmado.
+    // El orden importa — es el de §3 del spec, lo que el cliente lee de arriba hacia abajo — y
+    // FieldsArray descarta en silencio (console.warn, sin lanzar) cualquier campo que no valide,
+    // así que un campo perdido no rompería la generación: solo desaparecería de la tarjeta.
+    const buffer = await generarPassApple({
+      ...datosBase(),
+      serialNumber: 'test-serial-reverso',
+      qrToken: 'rev555',
+      puntos: 4,
+      tipoTarjeta: 'puntos',
+      selloMeta: null,
+      stripUrl: null,
+      reverso: [
+        // Texto plano y multilínea: la forma del pie del emisor, que va en TODOS los passes.
+        { key: 'terminos', label: 'Términos de uso', value: '1. Primera.\n2. Segunda.' },
+        {
+          key: 'instagram',
+          label: 'Instagram',
+          value: 'https://instagram.com/cafeteria',
+          attributedValue: '<a href="https://instagram.com/cafeteria">Instagram</a>',
+        },
+      ],
+    });
+
+    const zip = await JSZip.loadAsync(buffer);
+    const passJson = JSON.parse(await zip.file('pass.json')!.async('string'));
+    const backFields = passJson.storeCard.backFields ?? [];
+
+    expect(backFields.map((f: { key: string }) => f.key)).toEqual(['terminos', 'instagram']);
+    expect(backFields[0].label).toBe('Términos de uso');
+    expect(backFields[0].value).toBe('1. Primera.\n2. Segunda.');
+    // Sin esto el link sale como texto muerto: Apple solo lo pinta tocable si viaja el
+    // attributedValue, y `value` existe únicamente como degradación legible.
+    expect(backFields[1].value).toBe('https://instagram.com/cafeteria');
+    expect(backFields[1].attributedValue).toBe('<a href="https://instagram.com/cafeteria">Instagram</a>');
+  });
+
+  it('con reverso vacío el pass sale sin backFields (nunca una sección en blanco)', async () => {
+    // El caso best-effort de datosPassDeTarjeta: si las consultas de reglas y recompensas fallan,
+    // el reverso llega vacío y el pass tiene que emitirse igual. Un cliente con un reverso
+    // incompleto está infinitamente mejor que uno sin tarjeta.
+    const buffer = await generarPassApple({
+      ...datosBase(),
+      serialNumber: 'test-serial-reverso-vacio',
+      qrToken: 'rev000',
+      puntos: 1,
+      tipoTarjeta: 'puntos',
+      selloMeta: null,
+      stripUrl: null,
+      reverso: [],
+    });
+
+    const zip = await JSZip.loadAsync(buffer);
+    const passJson = JSON.parse(await zip.file('pass.json')!.async('string'));
+    expect(passJson.storeCard.backFields ?? []).toHaveLength(0);
   });
 
   it('el nivel de difuminado queda conectado al pass: "ninguno" y "fuerte" con la misma foto producen strips distintos', async () => {

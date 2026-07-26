@@ -2,6 +2,7 @@ import { PKPass } from 'passkit-generator';
 import path from 'node:path';
 import { requireEnv } from '@/lib/env';
 import { componerStrips, descargarImagen } from './stripPass';
+import type { CampoReverso } from './construirReverso';
 
 function cargarCertificados() {
   return {
@@ -30,6 +31,13 @@ export interface DatosPass {
   heroUrl: string | null;
   logoUrl: string | null;
   difuminadoFranja: string;
+  // Campos del reverso del pass, ya armados por construirReverso. Arreglo vacio = pass sin reverso
+  // (es lo que pasa si las consultas de reglas/recompensas fallan: best-effort, ver datosPassDeTarjeta).
+  //
+  // OBLIGATORIO a proposito, no `reverso?:`: hacerlo opcional dejaria que una ruta de emision nueva
+  // arme un pass sin pasar por el constructor del reverso y nadie se enteraria — el pass saldria
+  // mudo al tocar la "i" y ninguna prueba lo atraparia.
+  reverso: CampoReverso[];
 }
 
 export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
@@ -130,6 +138,14 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
       value: datos.nombreCliente,
       textAlignment: 'PKTextAlignmentRight',
     });
+  }
+
+  // El REVERSO (lo que ve el cliente al tocar la "i"), ya armado por construirReverso. De a uno y
+  // no `push(...datos.reverso)`: FieldsArray valida cada campo y DESCARTA el inválido con un
+  // console.warn sin lanzar (FieldsArray.js, registerWithValidation), así que empujarlos uno por
+  // uno no cambia el comportamiento pero deja el bucle donde se puede depurar cuál se perdió.
+  for (const campo of datos.reverso) {
+    pass.backFields.push(campo);
   }
 
   pass.setBarcodes(datos.qrToken);

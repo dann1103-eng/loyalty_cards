@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import type { DatosPass } from './generatePass';
+import { construirReverso } from './construirReverso';
 
 export async function datosPassDeTarjeta(
   supabase: SupabaseClient<Database>,
@@ -23,6 +24,39 @@ export async function datosPassDeTarjeta(
 
   if (!tarjeta || !tarjeta.comercios || !tarjeta.apple_auth_token) return null;
 
+  // Reglas y recompensas para la sección automática del reverso. BEST-EFFORT: si fallan, el pass
+  // sale SIN esa sección en vez de no salir. Un cliente con un reverso incompleto está
+  // infinitamente mejor que uno sin tarjeta — un throw acá devuelve 401/500 y se queda sin nada.
+  // Por eso se avisa por consola y se sigue con arreglos vacíos, sin relanzar.
+  //
+  // Las dos consultas van en paralelo: son independientes entre sí y este código corre en el
+  // camino de emisión de CADA pass (registro, acreditación, refresco de Wallet).
+  const [reglas, recompensas] = await Promise.all([
+    // Todas las filas, sin filtrar por tipo: construirReverso elige la vigente de cada tipo (la de
+    // activa_desde mayor) porque reglas_puntos no tiene unique y admite duplicados.
+    supabase
+      .from('reglas_puntos')
+      .select('tipo, valor, activa_desde')
+      .eq('comercio_id', tarjeta.comercio_id),
+    // El `.eq('activa', true)` y el `.order(...)` van acá y NO en construirReverso: esa función es
+    // pura y ni siquiera recibe el campo `activa`. Sin el .order(), PostgREST devuelve el orden
+    // FÍSICO de la tabla, que cambia cada vez que desactivarRecompensa reescribe una fila: el
+    // reverso saldría con las recompensas en distinto orden de una emisión a otra y nada lo
+    // detectaría.
+    supabase
+      .from('recompensas')
+      .select('nombre, descripcion, costo_puntos')
+      .eq('comercio_id', tarjeta.comercio_id)
+      .eq('activa', true)
+      .order('costo_puntos', { ascending: true }),
+  ]);
+  if (reglas.error) {
+    console.warn('[apple] no se pudieron leer las reglas para el reverso:', reglas.error.message);
+  }
+  if (recompensas.error) {
+    console.warn('[apple] no se pudieron leer las recompensas para el reverso:', recompensas.error.message);
+  }
+
   return {
     authTokenAlmacenado: tarjeta.apple_auth_token,
     datos: {
@@ -43,6 +77,23 @@ export async function datosPassDeTarjeta(
       heroUrl: tarjeta.comercios.hero_url,
       logoUrl: tarjeta.comercios.logo_url,
       difuminadoFranja: tarjeta.comercios.difuminado_franja,
+      // El reverso se ARMA en cada generación, nunca se congela una copia: un reverso que promete
+      // una recompensa que el dueño ya cambió es una promesa incumplida frente al cliente final.
+      reverso: construirReverso({
+        nombreComercio: tarjeta.comercios.nombre,
+        tipoTarjeta: tarjeta.comercios.tipo_tarjeta,
+        selloMeta: tarjeta.comercios.sello_meta,
+        mostrarComoFunciona: tarjeta.comercios.mostrar_como_funciona,
+        terminosUso: tarjeta.comercios.terminos_uso,
+        redInstagram: tarjeta.comercios.red_instagram,
+        redFacebook: tarjeta.comercios.red_facebook,
+        redWhatsapp: tarjeta.comercios.red_whatsapp,
+        sitioWeb: tarjeta.comercios.sitio_web,
+        // `?? []` es la mitad del best-effort: con error, `data` viene null y la sección automática
+        // simplemente no se emite.
+        reglas: reglas.data ?? [],
+        recompensas: recompensas.data ?? [],
+      }),
       webServiceURL: `${baseUrl}/api/apple`,
       authenticationToken: tarjeta.apple_auth_token,
     },
