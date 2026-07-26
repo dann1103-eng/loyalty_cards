@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { verifyFmAdmin } from '@/lib/fm/verifyFmAdmin';
 import { createServiceClient } from '@/lib/supabase/server';
+import { cupoDeCuenta } from '@/lib/comercios/cuentas';
 import FormularioCuenta from '../FormularioCuenta';
 import FormularioVincular from '../FormularioVincular';
 import BotonEliminarCuenta from '../BotonEliminarCuenta';
@@ -58,13 +59,14 @@ export default async function PaginaEditarCuenta({
   const todos = comercios ?? [];
   const negocios = todos.filter((c) => c.cuenta_id === id);
   const disponibles = todos.filter((c) => c.cuenta_id !== id).map((c) => ({ id: c.id, nombre: c.nombre }));
-  const idsDeNegocios = negocios.map((n) => n.id);
-  let sucursalesDeLaCuenta = 0;
-  if (idsDeNegocios.length > 0) {
-    const { data } = await supabase.from('sucursales').select('id').in('comercio_id', idsDeNegocios);
-    sucursalesDeLaCuenta = data?.length ?? 0;
-  }
-  const usados = negocios.length + sucursalesDeLaCuenta;
+  // El cupo lo calcula la MISMA función que lo APLICA al vincular (cupoDeCuenta comparte el conteo
+  // con verificarLimiteCuenta): contarlo a mano acá ya divergió una vez — sumaba las sucursales
+  // principales, que desde la 0012 no consumen cupo, y esta pantalla escondía el formulario de
+  // vincular en cuentas que el backend sí aceptaba (una Growth con 1 comercio + su Principal se
+  // veía 2/2 estando 1/2). Si el conteo falla, se cae a los comercios visibles: subestima y deja
+  // el formulario a la vista — la barrera real es el Server Action, no esta pantalla.
+  const cupo = await cupoDeCuenta(supabase, id);
+  const usados = cupo.ok ? cupo.usadas : negocios.length;
   const hayCupo = cuenta.limite_negocios === null || usados < cuenta.limite_negocios;
 
   // bind() fija el id como primer argumento; la firma que ve useActionState sigue siendo

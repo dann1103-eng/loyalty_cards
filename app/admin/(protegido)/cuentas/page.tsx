@@ -32,8 +32,13 @@ export default async function PaginaCuentas() {
     negociosPorCuenta.set(c.cuenta_id, (negociosPorCuenta.get(c.cuenta_id) ?? 0) + 1);
   }
   // El límite cuenta sucursales también (ver verificarLimiteCuenta) — sucursales no tiene
-  // cuenta_id directo, se suma vía el mapa de comercio→cuenta de arriba.
-  const { data: sucursales, error: errorSucursales } = await supabase.from('sucursales').select('comercio_id');
+  // cuenta_id directo, se suma vía el mapa de comercio→cuenta de arriba. Las PRINCIPALES quedan
+  // fuera (migración 0012): no consumen cupo, así que contarlas acá mostraría "2 de 1" en una
+  // cuenta que en realidad está 1/1, y marcaría como llenas cuentas que no lo están.
+  const { data: sucursales, error: errorSucursales } = await supabase
+    .from('sucursales')
+    .select('comercio_id')
+    .eq('es_principal', false);
   if (errorSucursales) console.error('[fm] falló el conteo de sucursales por cuenta:', errorSucursales);
   for (const s of sucursales ?? []) {
     const cuentaId = cuentaPorComercio.get(s.comercio_id);
