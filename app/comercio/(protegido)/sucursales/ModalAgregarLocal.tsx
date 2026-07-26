@@ -1,9 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { accionCrearSucursal, accionCrearComercioPropio } from './actions';
 import { TIPOS_TARJETA } from '@/lib/comercios/guardarComercio';
+
+// "¿Ya estamos en el navegador?" sin setState en un effect (esa regla es ERROR en este repo).
+// Hace falta porque el sheet se monta con createPortal sobre document.body, que no existe en el
+// servidor: en SSR devuelve false y el portal no se renderiza. Con ?agregar=1 el modal aparece
+// entonces recién tras la hidratación, que es instantáneo.
+const suscribirNada = () => () => {};
+const useEstaEnCliente = () => useSyncExternalStore(suscribirNada, () => true, () => false);
 
 type Paso = 'elegir' | 'sucursal' | 'comercio';
 
@@ -21,6 +29,7 @@ export default function ModalAgregarLocal({
 }) {
   const [abierto, setAbierto] = useState(abrirAlCargar);
   const [paso, setPaso] = useState<Paso>('elegir');
+  const enCliente = useEstaEnCliente();
 
   const router = useRouter();
 
@@ -110,21 +119,29 @@ export default function ModalAgregarLocal({
     </button>
   );
 
-  if (!abierto) return boton;
+  if (!abierto || !enCliente) return boton;
 
   const tiposDisponibles = TIPOS_TARJETA.filter((t) => t.disponible);
 
   return (
     <>
       {boton}
-      <div className="sheet-fondo" onClick={cerrar}>
-        <div
-          className="sheet-panel"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Agregar local"
-          onClick={(e) => e.stopPropagation()}
-        >
+      {/* PORTAL A document.body, NO lo saques: el sheet es position:fixed y se ancla al viewport
+          SOLO si ningún ancestro crea un containing block. Este vive dentro de un <div className=
+          "reveal d2">, y la animación .reveal termina con `transform: translateY(0)` que queda fijo
+          por el `forwards` — un transform, aunque sea cero, convierte al elemento en el marco de
+          referencia de sus descendientes fixed. Sin el portal el modal se dibujaba dentro de ese div
+          (del alto del botón): recortado por arriba y sin scroll posible. Reportado en producción el
+          2026-07-26; el switcher del header tenía el mismo bug por el backdrop-filter de .admin-top. */}
+      {createPortal(
+        <div className="sheet-fondo" onClick={cerrar}>
+          <div
+            className="sheet-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Agregar local"
+            onClick={(e) => e.stopPropagation()}
+          >
           {paso === 'elegir' && (
             <>
               <p className="titulo-seccion" style={{ marginBottom: 10 }}>¿Qué estás creando?</p>
@@ -217,8 +234,10 @@ export default function ModalAgregarLocal({
               {errorComercio && <p className="alerta" role="alert">{errorComercio}</p>}
             </form>
           )}
-        </div>
-      </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </>
   );
 }

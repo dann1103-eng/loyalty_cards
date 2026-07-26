@@ -1,8 +1,15 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useState, useSyncExternalStore, useTransition } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { cambiarContextoActivo } from '../actions';
+
+// "¿Ya estamos en el navegador?" sin setState en un effect (esa regla es ERROR en este repo).
+// Hace falta porque el sheet se monta con createPortal sobre document.body, que no existe en el
+// servidor: en SSR devuelve false y el portal simplemente no se renderiza.
+const suscribirNada = () => () => {};
+const useEstaEnCliente = () => useSyncExternalStore(suscribirNada, () => true, () => false);
 
 export interface ComercioConSucursales {
   comercioId: string;
@@ -24,6 +31,7 @@ export default function SelectorContexto({
 }) {
   const [abierto, setAbierto] = useState(false);
   const [pendiente, startTransition] = useTransition();
+  const enCliente = useEstaEnCliente();
 
   const activo = comercios.find((c) => c.comercioId === comercioActivoId);
   // La pastilla dice QUÉ REBANADA de datos estás viendo; QUÉ COMERCIO ya lo dice la marca del
@@ -79,7 +87,14 @@ export default function SelectorContexto({
         <span className="contexto-etiqueta">{etiqueta}</span>
       </button>
 
-      {abierto && (
+      {/* PORTAL A document.body, NO lo saques: el sheet es position:fixed y se ancla al viewport
+          SOLO si ningún ancestro crea un containing block. Este vive dentro de .admin-top, que
+          tiene `backdrop-filter` para el efecto vidrio — y backdrop-filter (igual que transform o
+          filter) convierte al elemento en el marco de referencia de sus descendientes fixed. Sin el
+          portal, el panel se dibujaba pegado al header en vez de subir desde abajo, cortado y sin
+          scroll (reportado en producción el 2026-07-26). El mismo bug tenía el modal de Sucursales,
+          ahí por el transform que deja la animación .reveal al terminar con `forwards`. */}
+      {abierto && enCliente && createPortal(
         <div className="sheet-fondo" onClick={() => setAbierto(false)}>
           <div
             className="sheet-panel"
@@ -134,7 +149,8 @@ export default function SelectorContexto({
               Agregar local…
             </Link>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
