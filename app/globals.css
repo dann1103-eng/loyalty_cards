@@ -1002,23 +1002,42 @@ a {
 }
 
 /* ---------- nav inferior móvil (C2/C3) ---------- */
+/* Barra fija + carril deslizable adentro. El mask va en el CARRIL (no en la barra) para desvanecer
+   los íconos en los bordes sin comerse el fondo/blur de la barra. flex: 1 0 auto en los enlaces:
+   pocos ítems (cajero) se reparten el ancho; muchos (owner) desbordan y se deslizan. */
 .nav-inferior {
   position: fixed;
   bottom: 0;
   left: 0;
   width: 100%;
   z-index: 50;
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  padding: 10px 8px calc(10px + env(safe-area-inset-bottom));
+  padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
   background: rgba(28, 27, 27, 0.92);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border-top: 1px solid var(--linea);
   border-radius: 20px 20px 0 0;
 }
+.nav-carril {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-inline: 14px;
+  mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+}
+.nav-carril::-webkit-scrollbar {
+  display: none;
+}
 .nav-inferior a {
+  flex: 1 0 auto;
+  scroll-snap-align: center;
+  white-space: nowrap;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1030,6 +1049,9 @@ a {
   color: var(--texto-3);
   padding: 6px 14px;
   border-radius: var(--radius-pill);
+  /* El overflow del carril recorta el anillo de foco, que por defecto se dibuja FUERA del borde:
+     con offset negativo se dibuja hacia adentro y queda visible al navegar con Tab. */
+  outline-offset: -2px;
   transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
 }
 .nav-inferior a:active {
