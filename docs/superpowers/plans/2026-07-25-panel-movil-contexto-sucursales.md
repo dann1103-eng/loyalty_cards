@@ -1873,186 +1873,43 @@ git commit -m "Slug autogenerado con desambiguacion pre-verificada para el alta 
 - Create: `lib/comercios/crearComercioPropio.ts`
 - Create: `lib/comercios/crearComercioPropio.test.ts`
 
-- [ ] **Paso 1: Tests que fallan** — archivo nuevo completo:
+- [ ] **Paso 1: Tests que fallan.** Archivo nuevo `lib/comercios/crearComercioPropio.test.ts`, de
+integración contra Supabase REAL (patrón del proyecto; mirá `lib/comercio/cajeros.test.ts`, que
+también crea usuarios de Auth). **La fuente de verdad del contenido es el archivo publicado** — acá
+va la especificación, porque el bloque literal que vivía en este plan tenía un agujero de teardown
+que llegó a ensuciar la base de producción, y copiarlo de nuevo lo restauraría.
 
-```ts
-import { describe, it, expect, afterEach } from 'vitest';
-import { createServiceClient } from '../supabase/server';
-import { crearComercioPropio } from './crearComercioPropio';
+**Siete casos:**
+1. Crea comercio + Principal + membresía owner, con la cuenta **derivada de la sesión**. Asertá el
+   shape completo del comercio: `nombre`, `slug`, `tipo_tarjeta`, `cuenta_id` (el CONTROL),
+   `sello_meta: null` y **los tres colores** (sin ellos, mutar `COLORES_DEFAULT` a blanco sobre
+   blanco —lo que la constante existe para evitar— deja la suite verde).
+2. Cuenta llena → error de límite exacto.
+3. Comercio activo sin cuenta → `'Tu comercio no está asociado a una cuenta. Contactá a FM.'`
+4. Tipo no disponible (`cashback`) → `'El tipo de tarjeta no es válido.'`
+5. Membresía falla → COMPENSA (borra comercio y principal) y devuelve
+   `'No se pudo crear el comercio. Intentá de nuevo.'`. Inyección puntual: delegá todo al cliente
+   real salvo el `insert` de `usuarios_comercio`; el `select` del paso 2 DEBE seguir siendo real o
+   la función aborta antes. Cast `as unknown as ReturnType<typeof createServiceClient>` (el directo
+   da TS2352).
+6 y 7. **El candado de membresía owner**, que necesita DOS intrusos porque ninguna fila puede fallar
+   por rol y por estado a la vez: un **cajero activo** y un **owner dado de baja** (`activo:false`),
+   ambos con el owner legítimo presente en el comercio activo. Cada uno espera
+   `{ ok:false, error:'No se pudo crear el comercio.' }` y **cero filas creadas**.
 
-const supabase = createServiceClient();
-const cuentasDePrueba: string[] = [];
-const comerciosDePrueba: string[] = [];
-const usuariosAuthDePrueba: string[] = [];
-
-afterEach(async () => {
-  // Orden FK: usuarios_comercio y sucursales → comercios → cuentas → auth.users (el FK de
-  // auth_user_id bloquea el deleteUser si quedan membresías).
-  if (comerciosDePrueba.length) {
-    await supabase.from('usuarios_comercio').delete().in('comercio_id', comerciosDePrueba);
-    await supabase.from('sucursales').delete().in('comercio_id', comerciosDePrueba);
-    await supabase.from('comercios').delete().in('id', comerciosDePrueba);
-    comerciosDePrueba.length = 0;
-  }
-  if (cuentasDePrueba.length) {
-    await supabase.from('cuentas_comercio').delete().in('id', cuentasDePrueba);
-    cuentasDePrueba.length = 0;
-  }
-  for (const id of usuariosAuthDePrueba) {
-    const { error } = await supabase.auth.admin.deleteUser(id);
-    if (error) console.error('[test] no se pudo borrar el usuario de Auth de prueba:', error.message);
-  }
-  usuariosAuthDePrueba.length = 0;
-});
-
-async function crearCuentaFixture(limite: number): Promise<string> {
-  const { data, error } = await supabase
-    .from('cuentas_comercio')
-    .insert({ nombre: `Cuenta Propio ${Date.now()}`, limite_negocios: limite })
-    .select('id').single();
-  if (error) throw error;
-  cuentasDePrueba.push(data.id);
-  return data.id;
-}
-
-async function crearComercioActivoFixture(cuentaId: string | null): Promise<string> {
-  const { data, error } = await supabase
-    .from('comercios')
-    .insert({ nombre: 'Activo', slug: `activo-${Date.now()}-${Math.random().toString(36).slice(2)}`, cuenta_id: cuentaId })
-    .select('id').single();
-  if (error) throw error;
-  comerciosDePrueba.push(data.id);
-  return data.id;
-}
-
-async function crearOwnerFixture(comercioId: string): Promise<{ authUserId: string; email: string }> {
-  const email = `owner-propio-${Date.now()}-${Math.random().toString(36).slice(2)}@test.fm`;
-  const { data, error } = await supabase.auth.admin.createUser({
-    email,
-    password: 'secreta-de-test-123',
-    email_confirm: true,
-  });
-  if (error || !data.user) throw error ?? new Error('sin usuario de Auth');
-  usuariosAuthDePrueba.push(data.user.id);
-  const { error: eMembresia } = await supabase.from('usuarios_comercio').insert({
-    comercio_id: comercioId,
-    auth_user_id: data.user.id,
-    email,
-    rol: 'owner',
-  });
-  if (eMembresia) throw eMembresia;
-  return { authUserId: data.user.id, email };
-}
-
-// Registra para el teardown lo que la función crea (el id vuelve en el resultado).
-function registrar(id: string) {
-  comerciosDePrueba.push(id);
-}
-
-describe('crearComercioPropio', () => {
-  it('crea comercio + Principal + membresía owner, con la cuenta DERIVADA de la sesión', async () => {
-    const cuentaId = await crearCuentaFixture(2);
-    const activoId = await crearComercioActivoFixture(cuentaId);
-    const { authUserId, email } = await crearOwnerFixture(activoId);
-
-    const res = await crearComercioPropio(
-      supabase,
-      { authUserId, comercioActivoId: activoId },
-      { nombre: 'Mi Segunda Marca', tipoTarjeta: 'sellos' },
-    );
-    expect(res.ok).toBe(true);
-    if (!res.ok) return;
-    registrar(res.id);
-
-    const { data: comercio } = await supabase
-      .from('comercios').select('nombre, slug, tipo_tarjeta, cuenta_id, sello_meta').eq('id', res.id).single();
-    expect(comercio).toEqual({
-      nombre: 'Mi Segunda Marca',
-      slug: 'mi-segunda-marca',
-      tipo_tarjeta: 'sellos',
-      cuenta_id: cuentaId, // CONTROL: derivada del comercio activo, nunca de un input
-      sello_meta: null, // se configura en /marca
-    });
-
-    const { data: principal } = await supabase
-      .from('sucursales').select('nombre, activa, es_principal').eq('comercio_id', res.id);
-    expect(principal).toEqual([{ nombre: 'Principal', activa: true, es_principal: true }]);
-
-    const { data: membresia } = await supabase
-      .from('usuarios_comercio').select('email, rol, activo').eq('comercio_id', res.id);
-    expect(membresia).toEqual([{ email, rol: 'owner', activo: true }]);
-  });
-
-  it('cuenta llena: rechaza con el error de límite', async () => {
-    const cuentaId = await crearCuentaFixture(1); // el comercio activo ya la llena
-    const activoId = await crearComercioActivoFixture(cuentaId);
-    const { authUserId } = await crearOwnerFixture(activoId);
-
-    const res = await crearComercioPropio(
-      supabase,
-      { authUserId, comercioActivoId: activoId },
-      { nombre: 'No Cabe', tipoTarjeta: 'puntos' },
-    );
-    expect(res).toEqual({ ok: false, error: 'Esta cuenta ya alcanzó su límite de 1 negocio(s)/sucursal(es).' });
-  });
-
-  it('comercio activo sin cuenta: error claro', async () => {
-    const activoId = await crearComercioActivoFixture(null);
-    const { authUserId } = await crearOwnerFixture(activoId);
-
-    const res = await crearComercioPropio(
-      supabase,
-      { authUserId, comercioActivoId: activoId },
-      { nombre: 'Sin Cuenta', tipoTarjeta: 'puntos' },
-    );
-    expect(res).toEqual({ ok: false, error: 'Tu comercio no está asociado a una cuenta. Contactá a FM.' });
-  });
-
-  it('tipo de tarjeta no disponible (cashback): rechazado', async () => {
-    const cuentaId = await crearCuentaFixture(5);
-    const activoId = await crearComercioActivoFixture(cuentaId);
-    const { authUserId } = await crearOwnerFixture(activoId);
-
-    const res = await crearComercioPropio(
-      supabase,
-      { authUserId, comercioActivoId: activoId },
-      { nombre: 'Cash', tipoTarjeta: 'cashback' },
-    );
-    expect(res).toEqual({ ok: false, error: 'El tipo de tarjeta no es válido.' });
-  });
-
-  it('si la membresía falla, COMPENSA: borra comercio y principal, y devuelve error', async () => {
-    const cuentaId = await crearCuentaFixture(5);
-    const activoId = await crearComercioActivoFixture(cuentaId);
-    const { authUserId } = await crearOwnerFixture(activoId);
-
-    // Inyección puntual: el insert de usuarios_comercio falla; el SELECT (membresía actual) sigue
-    // real. Todo lo demás pega a la BD de verdad — la compensación borra filas reales.
-    const real = createServiceClient();
-    const conMembresiasRotas = {
-      from(tabla: string) {
-        const builder = real.from(tabla as never);
-        if (tabla !== 'usuarios_comercio') return builder;
-        return {
-          select: builder.select.bind(builder),
-          insert: () => ({ error: { message: 'roto a propósito' } }),
-        } as never;
-      },
-    } as ReturnType<typeof createServiceClient>;
-
-    const res = await crearComercioPropio(
-      conMembresiasRotas,
-      { authUserId, comercioActivoId: activoId },
-      { nombre: 'Huerfano Imposible', tipoTarjeta: 'puntos' },
-    );
-    expect(res).toEqual({ ok: false, error: 'No se pudo crear el comercio. Intentá de nuevo.' });
-
-    // Ni el comercio ni su principal sobrevivieron.
-    const { data: huerfanos } = await real.from('comercios').select('id').eq('slug', 'huerfano-imposible');
-    expect(huerfanos).toEqual([]);
-  });
-});
-```
+**Reglas obligatorias de los fixtures** (son las que impiden que una corrida ensucie la base real
+del usuario, que es donde hace QA):
+- **Todo nombre que consuma la función lleva sufijo por corrida** (`${Date.now()}-${random}`), y el
+  slug esperado se escribe a mano a partir de ese nombre — nunca derivándolo con `slugificarNombre`,
+  que es parte de lo que se prueba. Sin esto, una sola fuga hace que la corrida siguiente obtenga
+  `-2` y el test quede fallando para siempre, sin poder auto-curarse.
+- **`registrarSiCreo(res)` en TODOS los casos de rechazo (2, 3, 4, 6, 7) y ANTES de cada
+  aserción**, no después: si una mutación convierte un rechazo en éxito, el comercio se crea de
+  verdad, y si la aserción lanza antes del registro queda huérfano (con su sucursal, su membresía y
+  su usuario de Auth, que además bloquea el `deleteUser` por FK). Esto ya pasó una vez.
+- Teardown en orden FK: `usuarios_comercio` → `sucursales` → `comercios` → `cuentas_comercio` →
+  `auth.admin.deleteUser`, **logueando el error de cada delete** (un fallo silencioso deja basura
+  que recién se descubre cuando otra corrida choca con ella).
 
 - [ ] **Paso 2: Ver FALLAR** — `npm test -- lib/comercios/crearComercioPropio.test.ts`.
 
@@ -2164,13 +2021,13 @@ export async function crearComercioPropio(
 
 - [ ] **Paso 4: Ver PASAR** — `npm test -- lib/comercios/crearComercioPropio.test.ts`.
 
-- [ ] **Paso 5: MUTATION-TESTS (tres candados).** (a) En el paso 5 de la función, comentá los DOS deletes de la compensación → FALLA "si la membresía falla, COMPENSA" (queda la fila con slug `huerfano-imposible`). Restaurá. (b) En la validación del tipo, quitá `&& t.disponible` → FALLA "tipo de tarjeta no disponible" (cashback se crearía). Restaurá. (c) **Cuenta derivada de la sesión** (fila de la tabla §5 del spec): en el paso 4, cambiá `cuenta_id: cuentaId` por `cuenta_id: '00000000-0000-0000-0000-000000000000'` (la cuenta deja de venir de la sesión) y corré SOLO el primer test:
+- [ ] **Paso 5: MUTATION-TESTS (siete).** (a) Comentá los DOS deletes de la compensación → FALLA "si la membresía falla, COMPENSA" (queda el comercio huérfano). (b) Quitá `&& t.disponible` de la validación del tipo → FALLA "tipo de tarjeta no disponible". (d) Quitá `.eq('auth_user_id', …)` del paso 2 → FALLAN **los dos** casos del candado. (e) Quitá `.eq('rol','owner')` → falla SOLO el del cajero activo. (f) Quitá `.eq('activo', true)` → falla SOLO el del owner dado de baja. **Las tres últimas son el motivo de que el candado necesite dos intrusos y no uno:** ninguna fila puede fallar por rol y por estado a la vez, así que un solo caso deja sobrevivir una de las mutaciones. (g) Poné los tres `COLORES_DEFAULT` en `rgb(255,255,255)` → FALLA el test 1 (es lo que la constante existe para evitar). Y (c) **Cuenta derivada de la sesión** (fila de la tabla §5 del spec): cambiá `cuenta_id: cuentaId` por `cuenta_id: '00000000-0000-0000-0000-000000000000'` y corré SOLO el primer test:
 
 ```bash
 npm test -- lib/comercios/crearComercioPropio.test.ts -t "cuenta DERIVADA"
 ```
 
-Esperado: FALLA en `expect(res.ok).toBe(true)` con `error: 'La cuenta no existe.'` — `verificarLimiteCuenta` rechaza el uuid inventado antes de cualquier insert. **Esta mutación NO escribe en la BD, y por eso es esta y no otra:** una variante que apunte a una cuenta REAL con cupo haría que el test "cuenta llena" (que no registra su comercio para el teardown) cree un comercio + principal + membresía huérfanos en el proyecto de producción, donde el usuario hace QA — y encima la membresía bloquearía por FK el `deleteUser` del `afterEach`. Restaurá y corré el archivo completo en verde.
+Esperado: FALLA en `expect(res.ok).toBe(true)` con `error: 'La cuenta no existe.'` — `verificarLimiteCuenta` rechaza el uuid inventado antes de cualquier insert. **Esta mutación NO escribe en la BD, y por eso es esta y no otra:** una variante que apunte a una cuenta REAL con cupo crearía comercios de verdad desde los tests de rechazo. Ese riesgo es general a TODA mutación que convierta un rechazo en éxito —ya ocurrió con la (b), que dejó comercio, sucursal, membresía, cuenta y usuario de Auth huérfanos en producción—, y es exactamente lo que el `registrarSiCreo` de los fixtures existe para contener. Restaurá y corré el archivo completo en verde.
 
   Nota de desviación deliberada respecto al spec §7: ahí se sugería provocar el fallo de membresía con un `auth_user_id` inexistente (FK real). No sirve acá: el paso 2 de la función busca la membresía owner ACTUAL por ese mismo `auth_user_id` y abortaría antes de llegar al insert. Por eso el test usa inyección puntual del insert de `usuarios_comercio` (el resto pega a la BD real y la compensación borra filas reales).
 
