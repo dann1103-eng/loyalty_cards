@@ -70,15 +70,21 @@ www.cardly-sv.site
 ```
 
 Va por `value` y no por `attributedValue` porque `attributedValue` de Apple **solo admite `<a>`** — no
-`<br>` ni marcado de bloque — así que no hay forma de apilar tres líneas ahí. Se le agrega
-`dataDetectorTypes: ['PKDataDetectorTypeLink']` para que iOS convierta el correo y el sitio en
-tocables por su cuenta. Si el detector no dispara, el texto igual se lee y se copia: degradación
-aceptable.
+`<br>` ni marcado de bloque — así que no hay forma de apilar tres líneas ahí.
 
-El dominio va **con `www`**: `https://www.cardly-sv.site`. El dominio raíz redirige, y esa redirección
-ya rompió el registro de passes en producción el 2026-07-26
-(`docs/guia-pruebas-manuales-cuentas-sucursales.md:687-691`). Escribir la URL sin `www` acá sería
-sembrar el mismo bug en la tarjeta de cada cliente.
+**`dataDetectorTypes` se OMITE**, no se fija. Omitir la clave deja activos todos los detectores de
+iOS; fijarla los RESTRINGE a los que se listen. Poner `['PKDataDetectorTypeLink']` corre el riesgo de
+que el correo no caiga bajo esa categoría y quede como texto muerto — justo el dato que se acaba de
+comprar y agregar. Y no fallaría en ninguna prueba: el esquema Joi acepta el valor sin chistar
+(`node_modules/passkit-generator/lib/cjs/schemas/PassFieldContent.js:10`), así que se descubriría en
+un iPhone. Si los detectores no disparan, el texto igual se lee y se copia: degradación aceptable.
+
+El dominio se escribe **con `www` y sin esquema**: `www.cardly-sv.site`, exactamente como en el bloque
+de arriba (las pruebas de §10 asertan ese campo carácter por carácter, así que la cadena tiene que ser
+una sola en todo el spec). El `www` no es cosmético: el dominio raíz redirige, y esa redirección ya
+rompió el registro de passes en producción el 2026-07-26
+(`docs/guia-pruebas-manuales-cuentas-sucursales.md:687-691`). Escribirlo sin `www` acá sería sembrar
+el mismo bug en la tarjeta de cada cliente.
 
 Los datos de Cardly viven como constante en código (`lib/apple/emisorCardly.ts`), no en la base: son
 nuestros, idénticos para todos los comercios, y ponerlos en `comercios` invitaría a que un comercio
@@ -146,6 +152,12 @@ Si tiene `descripcion`, esa descripción va en la línea siguiente: son las pala
 **Sin reglas Y sin recompensas activas, la sección entera se omite** (nada de encabezado huérfano).
 Con una de las dos, se emite solo esa parte.
 
+**`sello_meta` NO revive la sección.** Un comercio de sellos que configuró la meta en el editor de
+marca pero todavía no cargó ninguna regla ni recompensa **no ve la sección**: "Completá tus 10 sellos."
+a solas, sin decir cómo se consigue uno ni qué se gana al completarlos, no le sirve a nadie. La línea
+de la meta es un complemento de las otras dos, no un motivo para emitir la sección. Es un estado
+alcanzable y la prueba de §10 lo cubre.
+
 ### Sobre el largo
 
 **Sin tope de cantidad.** Un comercio con veinte recompensas produce un reverso largo y Apple lo hace
@@ -191,6 +203,16 @@ cambian lo que el reverso muestra:
 Igual que en branding: best-effort, después de que el cambio se guardó, y su falla nunca revierte el
 guardado.
 
+**Costo aceptado a sabiendas:** `notificarCambioComercio` recorre TODAS las tarjetas del comercio con
+`await` secuencial (`lib/apple/notificarCambioComercio.ts:27-29`), y cada `notificarCambioTarjeta`
+hace otra consulta más un push por dispositivo, también en serie
+(`lib/apple/notificarCambioTarjeta.ts:10-37`). Colgarlo de "eliminar regla" y "desactivar recompensa"
+mete N×M llamadas a APNs dentro de un Server Action. Es el patrón que branding ya usa —preexistente,
+no lo introduce este trabajo— pero branding se toca una vez en la vida y reglas/recompensas se tocan
+seguido. Se acepta así por ahora: un comercio del piloto tiene decenas de tarjetas, no miles. Si
+alguno crece, la corrección es paralelizar o encolar dentro de `notificarCambioComercio`, que
+beneficia a todos sus llamadores por igual.
+
 ## 6. Modelo de datos — migración 0013
 
 Sobre `comercios`, todas nullable salvo el interruptor:
@@ -226,9 +248,16 @@ lectura.
 La base no respalda nada de esto (sin CHECKs, como el resto del esquema).
 `lib/comercio/guardarReverso.ts` es la única barrera:
 
-- **URLs**: se parsean con `new URL()` y **el protocolo debe ser exactamente `https:`**. Se rechaza
-  `http:` y cualquier otro esquema — `javascript:` sobre todo, porque ese valor termina dentro de un
-  `href` en el pass.
+- **URLs**: se exigen **las DOS cosas** sobre la cadena ya recortada con `trim()`:
+  1. `raw.startsWith('https://')`, y
+  2. que `new URL(raw)` parsee y su `protocol` sea exactamente `https:`.
+
+  Las dos, no una. El parser WHATWG **borra tabs y saltos de línea antes de parsear**, así que
+  `"ht\ntps://ex.com"` produce `protocol === 'https:'` — comprobado en el Node de este proyecto — y
+  pasaría un chequeo que mire solo el protocolo. Como se guarda la cadena CRUDA (abajo), lo que
+  terminaría en el `href` del pass no empezaría con `https://`: el validador estaría juzgando una
+  cadena distinta de la que se guarda. El `startsWith` cierra esa brecha; el `new URL()` rechaza
+  `javascript:`, `http:` y cualquier basura que sí empiece bien pero no sea una URL.
 - **Se guarda la cadena cruda** (con `trim()`), no `new URL().href`: la normalización de `URL` agrega
   barras finales y percent-encodea, y devolverle al dueño algo distinto de lo que escribió es
   desconcertante. La defensa contra comillas es el escape de §7.1, no la normalización.
@@ -304,8 +333,19 @@ emita un pass. Si la consulta de reglas o recompensas falla, se omite la secció
 sale con el resto. Un cliente con un reverso incompleto está infinitamente mejor que uno sin tarjeta.
 
 `datosPassDeTarjeta` ya trae el comercio entero (`select('*, comercios(*)')`), así que las columnas
-nuevas llegan sin consulta extra. Reglas y recompensas sí necesitan dos consultas más, que se hacen
-en paralelo.
+nuevas llegan sin consulta extra.
+
+**Las dos consultas nuevas (reglas y recompensas) viven en `datosPassDeTarjeta`**, en paralelo entre
+sí, y su resultado viaja hasta `generarPassApple` como un campo nuevo de `DatosPass`. Esto no es un
+detalle libre:
+
+- `DatosPass` es hoy una interfaz plana que las dos rutas de emisión llenan ÚNICAMENTE vía
+  `datosPassDeTarjeta` (`lib/apple/generatePass.ts:14-31`). Meter consultas dentro de `generatePass`
+  le daría acceso a la base a una función que hoy es pura respecto de Supabase, y rompería la prueba
+  de §10, que arma un pass con reverso pasando datos a mano.
+- El envoltorio best-effort va ahí: si esas consultas fallan, el campo llega vacío y el pass sale sin
+  la sección automática. Un `throw` en `datosPassDeTarjeta` devuelve 401/500 y el cliente se queda
+  **sin tarjeta**, que es exactamente lo que la garantía de §9 promete evitar.
 
 ## 10. Pruebas
 
