@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useActionState } from 'react';
 import { accionSubirImagen, accionQuitarImagen, type EstadoBranding } from './actions';
+import { redimensionarImagen } from '@/lib/comercio/redimensionarImagen';
 
 export default function SubidaImagen({
   campo,
@@ -33,21 +34,36 @@ export default function SubidaImagen({
     };
   }, []);
 
-  const alElegir = (e: ChangeEvent<HTMLInputElement>) => {
-    const archivo = e.target.files?.[0];
+  const alElegir = async (e: ChangeEvent<HTMLInputElement>) => {
+    const input = e.currentTarget;
+    const archivo = input.files?.[0];
     if (urlLocalRef.current) URL.revokeObjectURL(urlLocalRef.current);
-    if (archivo && archivo.type.startsWith('image/')) {
-      const url = URL.createObjectURL(archivo);
-      urlLocalRef.current = url;
-      setPreviewLocal(url);
-      // La subida arranca SOLA al elegir el archivo. Antes exigía apretar "Subir" aparte, y la
-      // vista previa instantánea hacía creer que ya estaba aplicado — al refrescar "volvía" la
-      // imagen vieja porque nunca se subió (bug de UX visto en el piloto).
-      e.currentTarget.form?.requestSubmit();
-    } else {
+    if (!archivo || !archivo.type.startsWith('image/')) {
       urlLocalRef.current = null;
       setPreviewLocal(null);
+      return;
     }
+
+    const url = URL.createObjectURL(archivo);
+    urlLocalRef.current = url;
+    setPreviewLocal(url);
+
+    // Una foto sacada con el teléfono pesa 3-6 MB y la app acepta 2: sin achicarla acá, el dueño
+    // no puede poner una foto de su local desde el celular. Se reemplaza el archivo del input por
+    // el redimensionado ANTES de enviar, así el FormData del Server Action lleva el liviano.
+    // redimensionarImagen devuelve el original ante cualquier problema, así que este paso nunca
+    // puede ser el motivo de que una imagen no se suba.
+    const liviano = await redimensionarImagen(archivo);
+    if (liviano !== archivo) {
+      const dt = new DataTransfer();
+      dt.items.add(liviano);
+      input.files = dt.files;
+    }
+
+    // La subida arranca SOLA al elegir el archivo. Antes exigía apretar "Subir" aparte, y la
+    // vista previa instantánea hacía creer que ya estaba aplicado — al refrescar "volvía" la
+    // imagen vieja porque nunca se subió (bug de UX visto en el piloto).
+    input.form?.requestSubmit();
   };
 
   const mostrada = previewLocal ?? urlActual;
