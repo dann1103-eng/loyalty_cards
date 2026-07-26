@@ -40,8 +40,10 @@ export interface DatosReverso {
   redWhatsapp: string | null;
   sitioWeb: string | null;
   reglas: ReglaReverso[];
-  // SOLO las activas, y ya ordenadas por costo_puntos ascendente: el filtro `activa = true` y el
-  // orden los hace quien consulta. Esta funcion no re-filtra porque no puede: no recibe ese campo.
+  // Llegan YA filtradas (`activa = true`) y YA ordenadas por costo_puntos ascendente: las dos cosas
+  // las hace quien consulta (datosPassDeTarjeta). Esta funcion RESPETA el orden que recibe y no
+  // reordena — si ordenara acá tambien, el orden quedaria definido en dos lugares que pueden
+  // discrepar. Y re-filtrar no podria aunque quisiera: no recibe el campo `activa`.
   recompensas: RecompensaReverso[];
 }
 

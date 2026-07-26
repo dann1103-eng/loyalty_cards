@@ -200,6 +200,12 @@ describe('construirReverso — cuándo aparece la sección automática', () => {
   });
 
   it('el interruptor apagado la quita aunque haya reglas y recompensas', () => {
+    // CONTROL POSITIVO, y no es decorativo: datosCompletos() tiene reglas Y recompensas, así que la
+    // sección SÍ sale con el interruptor encendido. Sin esta primera aserción, un escenario sin
+    // datos haría pasar la prueba aunque el interruptor se ignorara por completo — la sección se
+    // omitiría igual, por la otra razón, y la mutación "ignorá mostrarComoFunciona" quedaría verde.
+    expect(claves(construirReverso(datosCompletos()))).toContain('como_funciona');
+
     const campos = construirReverso({ ...datosCompletos(), mostrarComoFunciona: false });
 
     expect(claves(campos)).not.toContain('como_funciona');
@@ -226,18 +232,23 @@ describe('construirReverso — cuándo aparece la sección automática', () => {
     expect(textoComoFunciona(campos)).toBe('Ganás 2 puntos por cada $1 de compra.');
   });
 
-  it('respeta el orden de recompensas que recibe (el llamador las trae por costo ascendente)', () => {
-    // Esta función es PURA: no ordena ni filtra por `activa`. El .order()/.eq('activa', true) vive
-    // en la consulta, y esta prueba fija ese contrato para que nadie lo mueva de lugar a medias.
+  it('respeta el orden en que recibe las recompensas y NO reordena', () => {
+    // El .order('costo_puntos', { ascending: true }) y el .eq('activa', true) viven en la consulta
+    // (datosPassDeTarjeta). Acá se pasan a propósito EN DESORDEN: si esta función ordenara por su
+    // cuenta, el orden quedaría definido en dos lugares que pueden discrepar — y esta prueba lo
+    // delata, porque la salida saldría ascendente en vez de como llegó.
     const campos = construirReverso({
       ...datosBase(),
       recompensas: [
-        { nombre: 'Barata', descripcion: null, costo_puntos: 5 },
+        { nombre: 'Media', descripcion: null, costo_puntos: 20 },
         { nombre: 'Cara', descripcion: null, costo_puntos: 50 },
+        { nombre: 'Barata', descripcion: null, costo_puntos: 5 },
       ],
     });
 
-    expect(textoComoFunciona(campos)).toBe('• Barata — 5 puntos\n• Cara — 50 puntos');
+    expect(textoComoFunciona(campos)).toBe(
+      '• Media — 20 puntos\n• Cara — 50 puntos\n• Barata — 5 puntos',
+    );
   });
 });
 
