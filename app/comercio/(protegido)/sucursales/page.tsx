@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { listarSucursales } from '@/lib/comercio/sucursales';
+import { cupoDeCuenta } from '@/lib/comercios/cuentas';
 import FormularioSucursal from './FormularioSucursal';
 import BotonEstadoSucursal from './BotonEstadoSucursal';
 
@@ -9,9 +10,23 @@ export const dynamic = 'force-dynamic';
 
 export default async function PaginaSucursales() {
   const { comercioId } = await verifyComercioOwner();
+  const supabase = createServiceClient();
 
   // listarSucursales trae activas e inactivas: el dueño necesita ver las apagadas para reactivarlas.
-  const sucursales = await listarSucursales(createServiceClient(), comercioId);
+  const sucursales = await listarSucursales(supabase, comercioId);
+
+  // Cupo del plan: si la cuenta está llena, el alta se reemplaza por el aviso (crear igual
+  // rechazaría — esto lo dice ANTES y sin formulario inútil). Comercio sin cuenta (legado): sin
+  // tope conocido, se muestra el formulario (paridad con crearSucursal, que tampoco bloquea ahí).
+  const { data: comercio } = await supabase
+    .from('comercios').select('cuenta_id').eq('id', comercioId).maybeSingle();
+  let avisoCupo: string | null = null;
+  if (comercio?.cuenta_id) {
+    const cupo = await cupoDeCuenta(supabase, comercio.cuenta_id);
+    if (cupo.ok && cupo.limite !== null && cupo.usadas >= cupo.limite) {
+      avisoCupo = `Alcanzaste el límite de tu plan (${cupo.limite} ${cupo.limite === 1 ? 'local' : 'locales'}). Hablá con FM para ampliarlo.`;
+    }
+  }
 
   return (
     <main className="admin-main" style={{ maxWidth: 640 }}>
@@ -21,7 +36,7 @@ export default async function PaginaSucursales() {
       </div>
 
       <div className="reveal d2">
-        <FormularioSucursal />
+        {avisoCupo ? <p className="admin-vacio">{avisoCupo}</p> : <FormularioSucursal />}
       </div>
 
       <div className="admin-lista reveal d3" style={{ marginTop: 22 }}>
@@ -39,9 +54,12 @@ export default async function PaginaSucursales() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <span className="icono-circulo acento" aria-hidden="true">
-                    <span className="icono">store</span>
+                    <span className="icono">{s.esPrincipal ? 'home_pin' : 'store'}</span>
                   </span>
-                  <div className="admin-fila-nombre">{s.nombre}</div>
+                  <div>
+                    <div className="admin-fila-nombre">{s.nombre}</div>
+                    {s.esPrincipal && <div className="admin-fila-slug">Sucursal principal</div>}
+                  </div>
                 </div>
                 <span className={`pastilla ${s.activa ? 'pastilla-activo' : 'pastilla-inactivo'}`}>
                   {s.activa ? 'Activa' : 'Inactiva'}
@@ -51,7 +69,8 @@ export default async function PaginaSucursales() {
                 <div style={{ flex: '1 1 220px' }}>
                   <FormularioSucursal sucursal={{ id: s.id, nombre: s.nombre }} />
                 </div>
-                <BotonEstadoSucursal id={s.id} nombre={s.nombre} activa={s.activa} />
+                {/* La principal no se puede desactivar (candado en la capa lib): sin botón acá. */}
+                {!s.esPrincipal && <BotonEstadoSucursal id={s.id} nombre={s.nombre} activa={s.activa} />}
               </div>
             </div>
           ))
