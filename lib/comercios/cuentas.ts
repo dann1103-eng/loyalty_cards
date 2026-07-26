@@ -63,14 +63,65 @@ function validarDatosCuenta(datos: DatosCuenta): string | null {
   return null;
 }
 
-// ¿Cabe un negocio/sucursal más en esta cuenta? El límite se APLICA acá, en la capa app —
-// la BD solo garantiza el rango del propio límite (o que sea null) con un CHECK, no cuántas filas
-// lo respetan.
+// Conteo compartido de unidades de una cuenta: comercios + sucursales ADICIONALES. La sucursal
+// PRINCIPAL de cada comercio no consume cupo (0012: representa el mismo local que el comercio —
+// sin esta exclusión, una cuenta Starter con su comercio y su Principal ya estaría 2/1 y el
+// callejón "Starter sin cajeros" volvería). Lo usan verificarLimiteCuenta (aplicar el tope) y
+// cupoDeCuenta (mostrarlo): UNA implementación — dos copias divergirían.
 //
 // El límite cubre comercios DISTINTOS y SUCURSALES juntos (decisión revisada 2026-07-25 — antes
 // solo contaba comercios; QA manual sobre "Verde Raíz" encontró que las sucursales no tenían
 // NINGÚN tope). sucursales no tiene cuenta_id directo (solo comercio_id), así que se cuentan vía
 // los ids de comercio de esta cuenta.
+// Exportado: la UI (página Sucursales, switcher de comercio) recibe el cupo como prop y necesita
+// poder nombrar este tipo.
+export type ConteoUnidades =
+  | { ok: true; limite: number | null; usadas: number }
+  | { ok: false; error: string };
+
+async function contarUnidadesCuenta(
+  supabase: SupabaseClient<Database>,
+  cuentaId: string,
+  excluyendoComercioId?: string,
+): Promise<ConteoUnidades> {
+  const { data: cuenta, error: eCuenta } = await supabase
+    .from('cuentas_comercio').select('limite_negocios').eq('id', cuentaId).maybeSingle();
+  if (eCuenta) { console.error('[fm] no se pudo leer la cuenta:', eCuenta); return { ok: false, error: 'No se pudo verificar el límite de la cuenta.' }; }
+  if (!cuenta) return { ok: false, error: 'La cuenta no existe.' };
+
+  // count Y data en la misma llamada: count trae el total de comercios de la cuenta, data trae sus
+  // ids (para contar sucursales vía el .in() de abajo) — un solo round-trip para las dos cosas.
+  let qComercios = supabase.from('comercios').select('id', { count: 'exact' }).eq('cuenta_id', cuentaId);
+  if (excluyendoComercioId) qComercios = qComercios.neq('id', excluyendoComercioId);
+  const { data: comerciosDeCuenta, count: countComercios, error: eComercios } = await qComercios;
+  if (eComercios) { console.error('[fm] no se pudo contar comercios de la cuenta:', eComercios); return { ok: false, error: 'No se pudo verificar el límite de la cuenta.' }; }
+
+  let countSucursales = 0;
+  const ids = (comerciosDeCuenta ?? []).map((c) => c.id);
+  if (ids.length > 0) {
+    const { count, error: eSucursales } = await supabase
+      .from('sucursales').select('id', { count: 'exact', head: true })
+      .in('comercio_id', ids)
+      .eq('es_principal', false); // CONTROL: la principal es gratis; las adicionales consumen cupo
+    if (eSucursales) { console.error('[fm] no se pudo contar sucursales de la cuenta:', eSucursales); return { ok: false, error: 'No se pudo verificar el límite de la cuenta.' }; }
+    countSucursales = count ?? 0;
+  }
+
+  return { ok: true, limite: cuenta.limite_negocios, usadas: (countComercios ?? 0) + countSucursales };
+}
+
+// Cupo para la UI (página Sucursales, switcher): cuántas unidades usa la cuenta y cuál es su tope.
+// `limite: null` = sin tope (Pro). NO aplica el tope — eso es de verificarLimiteCuenta.
+export async function cupoDeCuenta(
+  supabase: SupabaseClient<Database>,
+  cuentaId: string,
+): Promise<ConteoUnidades> {
+  return contarUnidadesCuenta(supabase, cuentaId);
+}
+
+// ¿Cabe un negocio/sucursal más en esta cuenta? El límite se APLICA acá, en la capa app —
+// la BD solo garantiza el rango del propio límite (o que sea null) con un CHECK, no cuántas filas
+// lo respetan.
 //
 // `unidadesAAgregar` (default 1): cuántas unidades va a sumar la operación que está preguntando.
 // Un alta nueva (comercio o sucursal) siempre agrega 1. PERO mover un comercio EXISTENTE a esta
@@ -84,34 +135,15 @@ export async function verificarLimiteCuenta(
   cuentaId: string,
   opciones?: { excluyendoComercioId?: string; unidadesAAgregar?: number },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { data: cuenta, error: eCuenta } = await supabase
-    .from('cuentas_comercio').select('limite_negocios').eq('id', cuentaId).maybeSingle();
-  if (eCuenta) { console.error('[fm] no se pudo leer la cuenta:', eCuenta); return { ok: false, error: 'No se pudo verificar el límite de la cuenta.' }; }
-  if (!cuenta) return { ok: false, error: 'La cuenta no existe.' };
+  const conteo = await contarUnidadesCuenta(supabase, cuentaId, opciones?.excluyendoComercioId);
+  if (!conteo.ok) return conteo;
 
-  // null = plan sin tope (Pro): nada que contar, se aprueba directo.
-  if (cuenta.limite_negocios === null) return { ok: true };
+  // null = plan sin tope (Pro): nada que aplicar.
+  if (conteo.limite === null) return { ok: true };
 
-  // count Y data en la misma llamada: count trae el total de comercios de la cuenta, data trae sus
-  // ids (para contar sucursales vía el .in() de abajo) — un solo round-trip para las dos cosas.
-  let qComercios = supabase.from('comercios').select('id', { count: 'exact' }).eq('cuenta_id', cuentaId);
-  if (opciones?.excluyendoComercioId) qComercios = qComercios.neq('id', opciones.excluyendoComercioId);
-  const { data: comerciosDeCuenta, count: countComercios, error: eComercios } = await qComercios;
-  if (eComercios) { console.error('[fm] no se pudo contar comercios de la cuenta:', eComercios); return { ok: false, error: 'No se pudo verificar el límite de la cuenta.' }; }
-
-  let countSucursales = 0;
-  const ids = (comerciosDeCuenta ?? []).map((c) => c.id);
-  if (ids.length > 0) {
-    const { count, error: eSucursales } = await supabase
-      .from('sucursales').select('id', { count: 'exact', head: true }).in('comercio_id', ids);
-    if (eSucursales) { console.error('[fm] no se pudo contar sucursales de la cuenta:', eSucursales); return { ok: false, error: 'No se pudo verificar el límite de la cuenta.' }; }
-    countSucursales = count ?? 0;
-  }
-
-  const total = (countComercios ?? 0) + countSucursales;
   const unidades = opciones?.unidadesAAgregar ?? 1;
-  if (total + unidades > cuenta.limite_negocios) {
-    return { ok: false, error: `Esta cuenta ya alcanzó su límite de ${cuenta.limite_negocios} negocio(s)/sucursal(es).` };
+  if (conteo.usadas + unidades > conteo.limite) {
+    return { ok: false, error: `Esta cuenta ya alcanzó su límite de ${conteo.limite} negocio(s)/sucursal(es).` };
   }
   return { ok: true };
 }
@@ -190,7 +222,8 @@ export async function asignarComercioACuenta(
   cuentaId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { count: sucursalesPropias, error: eSucursales } = await supabase
-    .from('sucursales').select('id', { count: 'exact', head: true }).eq('comercio_id', comercioId);
+    .from('sucursales').select('id', { count: 'exact', head: true }).eq('comercio_id', comercioId)
+    .eq('es_principal', false); // CONTROL: la principal viaja gratis con su comercio
   if (eSucursales) {
     console.error('[fm] no se pudo contar las sucursales del comercio a reasignar:', eSucursales);
     return { ok: false, error: 'No se pudo reasignar el comercio a la cuenta.' };

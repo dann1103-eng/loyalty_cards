@@ -162,7 +162,8 @@ export async function actualizarComercio(
     // El comercio que cambia de cuenta trae sus propias sucursales — igual que
     // asignarComercioACuenta en cuentas.ts, hay que contarlas y pasarlas como unidadesAAgregar.
     const { count: sucursalesPropias, error: eSucursales } = await supabase
-      .from('sucursales').select('id', { count: 'exact', head: true }).eq('comercio_id', id);
+      .from('sucursales').select('id', { count: 'exact', head: true }).eq('comercio_id', id)
+      .eq('es_principal', false); // CONTROL: la principal viaja gratis con su comercio
     if (eSucursales) {
       console.error('[fm] no se pudo contar las sucursales del comercio a reasignar:', eSucursales);
       return { ok: false, error: 'No se pudo actualizar el comercio.' };

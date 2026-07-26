@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createServiceClient } from '../supabase/server';
 import {
   verificarLimiteCuenta,
+  cupoDeCuenta,
   crearCuenta,
   actualizarCuenta,
   asignarComercioACuenta,
@@ -27,7 +28,8 @@ afterEach(async () => {
   }
 });
 
-async function crearCuentaFixture(limite: number): Promise<string> {
+// `limite` acepta null (plan Pro, sin tope): la columna es nullable desde la migración 0011.
+async function crearCuentaFixture(limite: number | null): Promise<string> {
   const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const { data, error } = await supabase
     .from('cuentas_comercio')
@@ -131,6 +133,76 @@ describe('verificarLimiteCuenta', () => {
 
     const res = await verificarLimiteCuenta(supabase, data.id);
     expect(res.ok).toBe(true);
+  });
+});
+
+// Los DOS candados de la 0012 son independientes y cada uno lo atrapa un test distinto de este
+// bloque: (a) el `.eq('es_principal', false)` de contarUnidadesCuenta → lo atrapan los tres tests
+// de cupo; (b) el `.eq('es_principal', false)` de asignarComercioACuenta → lo atrapa el test del
+// move. El test del move NO falla con la mutación (a) —y está bien—: sus cuentas destino no tienen
+// comercios, así que el conteo de sucursales ni se ejecuta (ids.length === 0).
+describe('cupo con sucursal principal (0012)', () => {
+  it('la principal NO consume cupo: comercio + principal caben en limite 1', async () => {
+    const cuentaId = await crearCuentaFixture(1);
+    const comercioId = await crearComercioFixture(cuentaId);
+    // El insert se chequea (convención del archivo): si fallara en silencio —una columna NOT NULL
+    // nueva, RLS, cache de PostgREST— este test seguiría VERDE sin haber creado la principal (el
+    // comercio solo ya da usadas:1) y dejaría de proteger nada.
+    const { error } = await supabase.from('sucursales').insert({ comercio_id: comercioId, nombre: 'Principal', es_principal: true });
+    if (error) throw error;
+
+    const cupo = await cupoDeCuenta(supabase, cuentaId);
+    expect(cupo).toEqual({ ok: true, limite: 1, usadas: 1 });
+
+    // La cuenta está LLENA por el comercio (1/1): una unidad más se rechaza…
+    const lleno = await verificarLimiteCuenta(supabase, cuentaId);
+    expect(lleno).toEqual({ ok: false, error: 'Esta cuenta ya alcanzó su límite de 1 negocio(s)/sucursal(es).' });
+  });
+
+  it('una sucursal ADICIONAL sí consume cupo', async () => {
+    const cuentaId = await crearCuentaFixture(2);
+    const comercioId = await crearComercioFixture(cuentaId);
+    const { error } = await supabase.from('sucursales').insert([
+      { comercio_id: comercioId, nombre: 'Principal', es_principal: true },
+      { comercio_id: comercioId, nombre: 'Centro', es_principal: false },
+    ]);
+    if (error) throw error;
+
+    const cupo = await cupoDeCuenta(supabase, cuentaId);
+    expect(cupo).toEqual({ ok: true, limite: 2, usadas: 2 });
+    const lleno = await verificarLimiteCuenta(supabase, cuentaId);
+    expect(lleno).toEqual({ ok: false, error: 'Esta cuenta ya alcanzó su límite de 2 negocio(s)/sucursal(es).' });
+  });
+
+  it('cupoDeCuenta con limite null (Pro) reporta usadas sin tope', async () => {
+    const cuentaId = await crearCuentaFixture(null);
+    const comercioId = await crearComercioFixture(cuentaId);
+    const { error } = await supabase.from('sucursales').insert({ comercio_id: comercioId, nombre: 'Principal', es_principal: true });
+    if (error) throw error;
+
+    const cupo = await cupoDeCuenta(supabase, cuentaId);
+    expect(cupo).toEqual({ ok: true, limite: null, usadas: 1 });
+  });
+
+  it('mover un comercio excluye su principal del conteo de unidades', async () => {
+    // Comercio con principal + 1 extra = 2 unidades al moverse (1 comercio + 1 extra), no 3.
+    const cuentaOrigen = await crearCuentaFixture(5);
+    const comercioId = await crearComercioFixture(cuentaOrigen);
+    const { error } = await supabase.from('sucursales').insert([
+      { comercio_id: comercioId, nombre: 'Principal', es_principal: true },
+      { comercio_id: comercioId, nombre: 'Centro', es_principal: false },
+    ]);
+    if (error) throw error;
+    const destinoJusto = await crearCuentaFixture(2);
+    expect(await asignarComercioACuenta(supabase, comercioId, destinoJusto)).toEqual({ ok: true });
+
+    const devuelta = await asignarComercioACuenta(supabase, comercioId, cuentaOrigen);
+    expect(devuelta).toEqual({ ok: true });
+    const destinoChico = await crearCuentaFixture(1);
+    expect(await asignarComercioACuenta(supabase, comercioId, destinoChico)).toEqual({
+      ok: false,
+      error: 'Esta cuenta ya alcanzó su límite de 1 negocio(s)/sucursal(es).',
+    });
   });
 });
 
