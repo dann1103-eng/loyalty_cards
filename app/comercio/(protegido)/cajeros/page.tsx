@@ -9,7 +9,7 @@ import BotonBajaCajero from './BotonBajaCajero';
 export const dynamic = 'force-dynamic';
 
 export default async function PaginaCajeros() {
-  const { comercioId } = await verifyComercioOwner();
+  const { comercioId, sucursalActiva } = await verifyComercioOwner();
   const supabase = createServiceClient();
 
   const cajeros = await listarCajeros(supabase, comercioId);
@@ -19,6 +19,13 @@ export default async function PaginaCajeros() {
   const sucursales = await listarSucursales(supabase, comercioId);
   const errorSucursales = sucursales === null;
   const sucursalesActivas = (sucursales ?? []).filter((s) => s.activa);
+
+  // Contexto de sucursal (plan 2026-07-25 §4.5): con una elegida, la lista se filtra a ella y el
+  // alta la preselecciona; en "todas", lista completa con la Principal preseleccionada (que la
+  // preselección exista es comportamiento nuevo — antes arrancaba en "Elegí una sucursal").
+  const cajerosVisibles =
+    cajeros === null ? null : sucursalActiva ? cajeros.filter((c) => c.sucursalId === sucursalActiva.id) : cajeros;
+  const sucursalPreseleccionadaId = sucursalActiva?.id ?? sucursalesActivas.find((s) => s.esPrincipal)?.id;
 
   return (
     <main className="admin-main" style={{ maxWidth: 640 }}>
@@ -36,17 +43,21 @@ export default async function PaginaCajeros() {
             <Link className="admin-fila-slug" href="/comercio/sucursales">Ir a Sucursales →</Link>
           </p>
         ) : (
-          <FormularioCajero sucursales={sucursalesActivas} />
+          <FormularioCajero sucursales={sucursalesActivas} sucursalPreseleccionadaId={sucursalPreseleccionadaId} />
         )}
       </div>
 
       <div className="admin-lista reveal d3" style={{ marginTop: 22 }}>
-        {cajeros === null ? (
+        {cajerosVisibles === null ? (
           <p className="admin-error" role="alert">No se pudieron cargar los cajeros. Recargá la página.</p>
-        ) : cajeros.length === 0 ? (
-          <p className="admin-vacio">Todavía no hay cajeros. Agregá el primero.</p>
+        ) : cajerosVisibles.length === 0 ? (
+          <p className="admin-vacio">
+            {sucursalActiva
+              ? `No hay cajeros en ${sucursalActiva.nombre}.`
+              : 'Todavía no hay cajeros. Agregá el primero.'}
+          </p>
         ) : (
-          cajeros.map((c) => (
+          cajerosVisibles.map((c) => (
             <div key={c.id} className="admin-fila">
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <span className="icono-circulo acento" aria-hidden="true">
@@ -54,7 +65,21 @@ export default async function PaginaCajeros() {
                 </span>
                 <div>
                   <div className="admin-fila-nombre">{c.email}</div>
-                  <div className="admin-fila-slug">{c.sucursalNombre ?? 'Sin sucursal'}</div>
+                  {/* Sucursal apagada: el cajero SIGUE en la lista (es donde el dueño puede darlo de
+                      baja) pero marcado, con la misma pastilla que la lista de Sucursales usa para
+                      ese estado. El texto dice la CONSECUENCIA, no solo el estado: "inactiva" a
+                      secas no le dice al dueño que su cajero no puede cobrar. */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span className="admin-fila-slug">{c.sucursalNombre ?? 'Sin sucursal'}</span>
+                    {c.sucursalActiva === false && (
+                      <span className="pastilla pastilla-inactivo">Sucursal desactivada</span>
+                    )}
+                  </div>
+                  {c.sucursalActiva === false && (
+                    <div className="admin-fila-slug" style={{ marginTop: 4 }}>
+                      No puede operar hasta que reactives la sucursal o le crees una cuenta en otra.
+                    </div>
+                  )}
                 </div>
               </div>
               <BotonBajaCajero id={c.id} email={c.email} />

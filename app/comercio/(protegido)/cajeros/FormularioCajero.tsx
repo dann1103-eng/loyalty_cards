@@ -8,7 +8,13 @@ import type { SucursalListada } from '@/lib/comercio/sucursales';
 // y FormularioSucursal en modo crear): React 19 limpia el formulario al terminar la action con
 // éxito, listo para el próximo cajero. La contraseña viaja en el submit y NUNCA se loguea (ni acá
 // ni en la action ni en la capa lib).
-export default function FormularioCajero({ sucursales }: { sucursales: SucursalListada[] }) {
+export default function FormularioCajero({
+  sucursales,
+  sucursalPreseleccionadaId,
+}: {
+  sucursales: SucursalListada[];
+  sucursalPreseleccionadaId?: string;
+}) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoCajero, FormData>(
     accionCrearCajero,
     undefined,
@@ -41,7 +47,7 @@ export default function FormularioCajero({ sucursales }: { sucursales: SucursalL
       </div>
       <div className="field">
         <label htmlFor="sucursalId">Sucursal</label>
-        <select id="sucursalId" name="sucursalId" defaultValue="" required>
+        <select id="sucursalId" name="sucursalId" defaultValue={sucursalPreseleccionadaId ?? ''} required>
           <option value="" disabled>Elegí una sucursal</option>
           {sucursales.map((s) => (
             <option key={s.id} value={s.id}>{s.nombre}</option>

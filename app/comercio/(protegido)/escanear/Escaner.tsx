@@ -20,10 +20,12 @@ export default function Escaner({
   tokenInicial,
   sucursalFija,
   sucursales,
+  sucursalInicialId,
 }: {
   tokenInicial?: string;
   sucursalFija?: SucursalOpcion;
   sucursales?: SucursalOpcion[];
+  sucursalInicialId?: string;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -37,9 +39,9 @@ export default function Escaner({
   const [error, setError] = useState<string | null>(null);
   const [deltaPuntos, setDeltaPuntos] = useState('1');
   const [tokenManual, setTokenManual] = useState('');
-  // Solo aplica al owner (con picker). '' = "Sin especificar" → null (sin atribución). El cajero no
-  // usa este estado: su sucursal es fija y el servidor la impone.
-  const [sucursalIdSeleccionada, setSucursalIdSeleccionada] = useState('');
+  // Solo aplica al owner (con picker). Arranca en la sucursal activa del contexto si hay una
+  // (plan 2026-07-25 §4.5) — editable por operación; '' = "Sin especificar" → null.
+  const [sucursalIdSeleccionada, setSucursalIdSeleccionada] = useState(sucursalInicialId ?? '');
   const [pendiente, iniciarTransicion] = useTransition();
 
   // Valor que se manda a las acciones como "sucursal del cliente". Para el cajero es su sucursal fija

@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { verifyComercioAcceso } from '@/lib/comercio/verifyComercioAcceso';
 import { createServiceClient } from '@/lib/supabase/server';
 import { TIPOS_TARJETA } from '@/lib/comercios/guardarComercio';
+import { reporteSucursales } from '@/lib/reportes/reportes';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,7 @@ export default async function PaginaPanel() {
   // Gate COMPARTIDO (plan 2026-07-25 §4.8): el cajero también ve el Resumen — métricas y QR de
   // registro le sirven en caja. No hay Server Actions en esta página; las secciones owner-only
   // siguen detrás de verifyComercioOwner en sus propias páginas.
-  const { comercioId, rol } = await verifyComercioAcceso();
+  const { comercioId, rol, sucursalActiva } = await verifyComercioAcceso();
   const esOwner = rol === 'owner';
   const atajos = esOwner ? ATAJOS : ATAJOS.filter((a) => RUTAS_ATAJOS_CAJERO.includes(a.href));
 
@@ -46,6 +47,20 @@ export default async function PaginaPanel() {
 
   const totalClientes = count ?? 0;
   const totalSaldo = (tarjetas ?? []).reduce((suma, t) => suma + (t.puntos_actuales ?? 0), 0);
+
+  // Contexto de sucursal (owner): actividad de ESA sucursal, con los reportes por sucursal ya
+  // existentes. Sin contexto no se consulta nada extra. Una sucursal sin actividad todavía no
+  // aparece en el reporte → carta en cero (no "sin carta": el contexto elegido siempre se ve).
+  let actividadSucursal: { acreditaciones: number; canjes: number; clientes_unicos: number } | null = null;
+  if (esOwner && sucursalActiva) {
+    const filas = await reporteSucursales(supabase, comercioId);
+    const fila = filas.find((f) => f.sucursal_id === sucursalActiva.id);
+    actividadSucursal = {
+      acreditaciones: fila?.acreditaciones ?? 0,
+      canjes: fila?.canjes ?? 0,
+      clientes_unicos: fila?.clientes_unicos ?? 0,
+    };
+  }
 
   const tipo = TIPOS_TARJETA.find((t) => t.valor === comercio?.tipo_tarjeta);
   const esSellos = comercio?.tipo_tarjeta === 'sellos';
@@ -89,6 +104,31 @@ export default async function PaginaPanel() {
           </div>
         </div>
       </section>
+
+      {sucursalActiva && actividadSucursal && (
+        <section className="panel reveal d3" style={{ marginTop: 0, marginBottom: 22 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h2 className="admin-fila-nombre" style={{ fontSize: '1.05rem' }}>
+              Actividad en {sucursalActiva.nombre}
+            </h2>
+            <span className="admin-fila-slug">contexto activo</span>
+          </div>
+          <div style={{ display: 'flex', gap: 28 }}>
+            {[
+              [actividadSucursal.clientes_unicos, 'Clientes'],
+              [actividadSucursal.acreditaciones, 'Visitas'],
+              [actividadSucursal.canjes, 'Premios'],
+            ].map(([valor, etiqueta]) => (
+              <div key={etiqueta}>
+                <div className="dato-mono" style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--texto)', lineHeight: 1 }}>
+                  {valor}
+                </div>
+                <div className="admin-fila-slug" style={{ marginTop: 4 }}>{etiqueta}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Tu programa */}
       <section className="panel reveal d3" style={{ marginTop: 0, marginBottom: 22 }}>

@@ -59,7 +59,11 @@ export default async function PaginaEscanear({
       ) : sesion.rol === 'cajero' ? (
         <Escaner tokenInicial={token} sucursalFija={{ id: suya!.id, nombre: suya!.nombre }} />
       ) : (
-        <Escaner tokenInicial={token} sucursales={activas.map((s) => ({ id: s.id, nombre: s.nombre }))} />
+        <Escaner
+          tokenInicial={token}
+          sucursales={activas.map((s) => ({ id: s.id, nombre: s.nombre }))}
+          sucursalInicialId={sesion.sucursalActiva?.id}
+        />
       )}
     </main>
   );
