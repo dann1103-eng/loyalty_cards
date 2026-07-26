@@ -2379,8 +2379,11 @@ git commit -m "Modal '¿Que estas creando?': sucursal o comercio nuevo self-serv
 import { describe, it, expect } from 'vitest';
 import { sumarTendencias, fusionarTopClientes, resolverFiltrosReportes } from './agregados';
 
-// MUTATION-TESTING: el orden es el contrato (visitas desc, puntos como desempate — el MISMO
-// criterio que la SQL de reporte_top_clientes). Mutación a atrapar: invertir el sort.
+// MUTATION-TESTING: el contrato son dos cosas — sumar día a día entre series y devolverlas en orden
+// ascendente por día. La mutación interesante es la tercera: sin la copia `{ ...fila }`, el Map se
+// queda con la MISMA fila que entró y sumar la muta; como los RPC devuelven arreglos nuevos por
+// request nadie lo notaría en producción hasta que dos series compartan objeto. La atrapa
+// "no muta las series de entrada" (verificada: falla con acreditaciones 1 → 2).
 describe('sumarTendencias', () => {
   it('suma día a día entre series y ordena ascendente', () => {
     const a = [
@@ -2463,6 +2466,11 @@ describe('resolverFiltrosReportes', () => {
   });
 });
 
+// MUTATION-TESTING: el orden es el contrato (visitas desc, puntos como desempate — el MISMO
+// criterio que la SQL de reporte_top_clientes). Mutaciones a atrapar: invertir el sort, y quitar el
+// desempate. Además la fila lleva `comercio_id` (no solo el nombre) porque `comercios.nombre` NO es
+// unique: con dos comercios homónimos y un cliente en ambos, una key armada con el nombre se
+// duplica y React recicla filas mal.
 describe('fusionarTopClientes', () => {
   const fila = (nombre: string, visitas: number, puntos: number) => ({
     cliente_id: `id-${nombre}`,
