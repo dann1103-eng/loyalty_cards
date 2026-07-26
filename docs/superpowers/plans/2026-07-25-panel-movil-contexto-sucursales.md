@@ -556,7 +556,7 @@ describe('sucursal principal en el alta (0012)', () => {
   });
 
   it('crearComercio crea el comercio Y su sucursal Principal activa', async () => {
-    const res = await crearComercio(supabase, datosValidosConCuenta()); // ajustá al helper real del archivo
+    const res = await crearComercio(supabase, await datosValidos(`test-alta-principal-${Date.now()}`));
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     const { data } = await supabase
@@ -582,7 +582,7 @@ describe('sucursal principal en el alta (0012)', () => {
       },
     } as ReturnType<typeof createServiceClient>;
 
-    const res = await crearComercio(conSucursalesRotas, datosValidosConCuenta());
+    const res = await crearComercio(conSucursalesRotas, await datosValidos(`test-principal-rota-${Date.now()}`));
     expect(res.ok).toBe(true); // el comercio NO se pierde por la principal
     if (!res.ok) return;
     const { data } = await real.from('sucursales').select('id').eq('comercio_id', res.id);
