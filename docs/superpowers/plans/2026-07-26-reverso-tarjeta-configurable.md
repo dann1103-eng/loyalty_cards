@@ -66,19 +66,26 @@ Tarea 2 mientras tanto: las tareas 2 y 3 no tocan la base.
 
 - [ ] **Paso 1: Escribir la migración**
 
+Contenido **byte-idéntico** al archivo publicado (`supabase/migrations/0013_reverso_tarjeta.sql`): si
+divergen, una tarea posterior que relea este plan puede "restaurar" una versión vieja.
+
 ```sql
 -- 0013: reverso configurable de la tarjeta.
--- El pass no tenia reverso; estas columnas guardan lo que el dueno escribe y aporta. La seccion
--- "Como funciona" NO se guarda: se arma en cada generacion desde reglas_puntos y recompensas, para
--- que no pueda quedar prometiendo una recompensa que ya cambio.
+--
+-- El pass de Apple no tenia reverso: el cliente que tocaba la "i" de su tarjeta no encontraba nada.
+-- Estas columnas guardan lo que el dueno escribe (terminos de uso) y lo que aporta (sus redes).
+--
+-- La seccion "Como funciona" NO se guarda acá a proposito: se arma en cada generacion del pass
+-- leyendo reglas_puntos y recompensas, para que no pueda quedar prometiendole al cliente una
+-- recompensa que el dueno ya cambio. Ver docs/superpowers/specs/2026-07-26-reverso-tarjeta-configurable-design.md
 alter table comercios
   add column terminos_uso text,
   add column red_instagram text,
   add column red_facebook text,
   add column red_whatsapp text,
   add column sitio_web text,
-  -- default true: los comercios que ya existen quedan con la seccion automatica encendida, que es
-  -- el comportamiento deseado. El dueno la apaga si prefiere redactar todo el mismo.
+  -- default true: los comercios que ya existen quedan con la seccion automatica encendida, que es el
+  -- comportamiento deseado. El dueno la apaga si prefiere redactar todo el mismo en los terminos.
   add column mostrar_como_funciona boolean not null default true;
 ```
 
@@ -226,8 +233,10 @@ export interface DatosReverso {
   redWhatsapp: string | null;
   sitioWeb: string | null;
   reglas: ReglaReverso[];
-  // SOLO las activas: el filtro `activa = true` lo hace quien consulta. Esta funcion no re-filtra
-  // porque no puede: no recibe ese campo.
+  // SOLO las activas y YA ORDENADAS por costo ascendente: filtrar y ordenar es responsabilidad de
+  // quien consulta (ver datosPassDeTarjeta). Esta funcion no re-filtra porque no puede —no recibe
+  // `activa`— y no re-ordena a proposito: si ordenara acá tambien, el orden quedaria definido en dos
+  // lugares que pueden discrepar. Respeta el orden que recibe.
   recompensas: RecompensaReverso[];
 }
 
@@ -282,6 +291,11 @@ no te conformes con "falló"):
 3. En `unidad`, devolvé siempre el plural → debe fallar la 4.
 4. Invertí dos campos en el orden de emisión → debe fallar la 8.
 5. Hacé que `sello_meta` habilite la sección por sí sola → debe fallar la 6.
+6. **Ignorá `mostrarComoFunciona`** (emití la sección siempre) → debe fallar la 7. El spec §10 la exige
+   por nombre. Ojo: si la prueba 7 arma un escenario SIN reglas ni recompensas, pasa verde aunque el
+   interruptor se ignore por completo (la sección se omite igual, por otro motivo). Ese caso tiene que
+   tener reglas Y recompensas, y lo único que lo apague debe ser el interruptor.
+7. Reordená las recompensas dentro de `construirReverso` → debe fallar la prueba de orden preservado.
 
 Restaurá el archivo después de cada una. Si alguna mutación deja las pruebas VERDES, la prueba es
 decoración: arreglá la prueba, no el código.
@@ -334,12 +348,36 @@ Uno por uno y no `push(...datos.reverso)`: `FieldsArray` valida cada campo y **d
 con un `console.warn` sin lanzar**, así que empujarlos de a uno no cambia el comportamiento pero deja
 el bucle donde se puede depurar.
 
-- [ ] **Paso 4: Pruebas verdes** — `npx vitest run lib/apple/generatePass.test.ts`
+- [ ] **Paso 4: Dejar `datosPassDeTarjeta` compilando con `reverso: []` provisional**
 
-- [ ] **Paso 5: Commit**
+⚠️ `reverso` es **obligatorio** en `DatosPass`, y `lib/apple/datosPassDeTarjeta.ts` construye ese
+objeto literal. En cuanto agregues el campo, `npx tsc --noEmit` va a decir
+`Property 'reverso' is missing` ahí — y la Tarea 4, que lo llena de verdad, puede estar bloqueada
+esperando que el usuario corra la migración.
+
+**NO lo "arregles" haciendo el campo opcional (`reverso?:`)**: eso destruye la garantía de que todo
+pass pase por el constructor del reverso. Agregá en `datosPassDeTarjeta.ts`, dentro del objeto
+`datos`, exactamente esto:
+
+```ts
+      // Provisional: lo llena la Tarea 4 con las consultas de reglas y recompensas. Vacio = pass sin
+      // reverso, que es la degradacion correcta y no rompe nada mientras tanto.
+      reverso: [],
+```
+
+Es el mismo archivo que toca la Tarea 4 y las tareas son secuenciales, así que no hay conflicto.
+
+- [ ] **Paso 5: Pruebas verdes y typecheck**
 
 ```bash
-git add lib/apple/generatePass.ts lib/apple/generatePass.test.ts
+npx vitest run lib/apple/generatePass.test.ts
+npx tsc --noEmit
+```
+
+- [ ] **Paso 6: Commit**
+
+```bash
+git add lib/apple/generatePass.ts lib/apple/generatePass.test.ts lib/apple/datosPassDeTarjeta.ts
 git commit -m "El pass emite los campos del reverso"
 ```
 
@@ -363,7 +401,7 @@ que su falla no tumbe la emisión:
   // mejor que uno sin tarjeta. Por eso el catch devuelve arreglos vacios y no relanza.
   const [reglas, recompensas] = await Promise.all([
     supabase.from('reglas_puntos').select('tipo, valor, activa_desde').eq('comercio_id', tarjeta.comercio_id),
-    supabase.from('recompensas').select('nombre, descripcion, costo_puntos').eq('comercio_id', tarjeta.comercio_id).eq('activa', true),
+    supabase.from('recompensas').select('nombre, descripcion, costo_puntos').eq('comercio_id', tarjeta.comercio_id).eq('activa', true).order('costo_puntos', { ascending: true }),
   ]);
   if (reglas.error) console.warn('[apple] no se pudieron leer las reglas para el reverso:', reglas.error.message);
   if (recompensas.error) console.warn('[apple] no se pudieron leer las recompensas para el reverso:', recompensas.error.message);
@@ -372,18 +410,22 @@ que su falla no tumbe la emisión:
 Y en el objeto devuelto, `reverso: construirReverso({ … })` con los campos del comercio y
 `reglas: reglas.data ?? []`, `recompensas: recompensas.data ?? []`.
 
-`.eq('activa', true)` en recompensas: el filtro va acá porque `construirReverso` es pura y no recibe
-ese campo (ver su comentario).
+`.eq('activa', true)` y `.order('costo_puntos', …)` van acá y no en `construirReverso`: esa función es
+pura, no recibe `activa`, y si además ordenara, el orden quedaría definido en dos lugares que pueden
+discrepar. **Sin el `.order()`, PostgREST devuelve el orden físico de la tabla**, que cambia cada vez
+que `desactivarRecompensa` reescribe una fila: el reverso saldría con las recompensas en distinto
+orden de una emisión a otra y nada lo detectaría.
 
 - [ ] **Paso 2: `npx tsc --noEmit`** — sin salida.
 
-- [ ] **Paso 3: Verificar contra producción con un pass real**
+- [ ] **Paso 3: Suite completa** — `npx vitest run`
 
-```bash
-npx tsx --conditions=react-server scripts/verificar-wallet.ts https://www.cardly-sv.site
-```
+Las pruebas de `generatePass` generan passes REALES (firmados, con imágenes), así que son la
+verificación local de que la emisión sigue sana.
 
-No es una prueba unitaria: confirma que un pass real sigue generándose y que su peso no se disparó.
+⚠️ **NO uses `scripts/verificar-wallet.ts` acá.** Ese script hace `fetch` contra el dominio desplegado
+(`lib` no se ejecuta): no prueba tu código local, y menos si todavía no commiteaste. Su lugar es la
+Tarea 8, **después** del push y del despliegue. Usarlo antes da un verde que no significa nada.
 
 - [ ] **Paso 4: Commit**
 
@@ -414,10 +456,18 @@ Seguí el patrón EXACTO de `lib/comercio/guardarBranding.ts`: mismo shape de re
    borra los saltos de línea antes de parsear, así que `new URL()` devuelve `protocol === 'https:'` y
    solo el `startsWith` lo atrapa. Verificado en Node. Sin esta prueba, alguien "simplifica" el
    validador a una sola condición y abre el hueco de nuevo.
-4. Términos de 2001 caracteres se rechazan; 2000 pasan.
-5. Una URL de 501 caracteres se rechaza.
-6. Cadenas vacías o solo-espacios se guardan como `null`, no como `''`.
-7. **La URL se guarda CRUDA**: `https://ejemplo.com/a b` no se convierte en `.../a%20b`.
+4. **`https://` a secas y `https://[bad` se rechazan** — la otra mitad del validador. Los dos PASAN el
+   `startsWith` y revientan en `new URL()` (comprobado en el Node de este proyecto: `TypeError` en
+   ambos). Sin este caso, alguien "simplifica" `validarUrlHttps` a solo el `startsWith` y **la suite
+   queda verde**: los casos 1, 2 y 3 los atrapa el `startsWith` por sí solo, así que ninguno protege
+   el `new URL()`.
+5. Términos de 2001 caracteres se rechazan; 2000 pasan.
+6. Una URL de 501 caracteres se rechaza.
+7. Cadenas vacías o solo-espacios se guardan como `null`, no como `''`.
+8. **La URL se guarda CRUDA**: `https://ejemplo.com/a b` no se convierte en `.../a%20b`.
+9. **Un comercio que ya no existe devuelve `{ ok: false }`**, no `{ ok: true }`. Es el caso que
+   justifica el `.select('id').single()`: sin él, un update de 0 filas devuelve 204 sin error y esto
+   reportaría éxito. Copiá el caso de `lib/comercio/guardarBranding.test.ts:91-103`.
 
 - [ ] **Paso 2: Verlas fallar.**
 
@@ -445,13 +495,35 @@ export function validarUrlHttps(valor: string): boolean {
 Y `normalizarOpcional(v: string): string | null` que hace `trim()` y devuelve `null` si queda vacío,
 para que la lógica de omitir secciones del reverso tenga un solo caso que mirar.
 
+La interfaz de entrada, para que no quede a criterio de nadie:
+
+```ts
+export interface DatosReversoComercio {
+  terminos_uso: string;
+  red_instagram: string;
+  red_facebook: string;
+  red_whatsapp: string;
+  sitio_web: string;
+  mostrar_como_funciona: boolean;
+}
+```
+
+Las cinco cadenas llegan tal cual del formulario (la acción hace `String(formData.get(...) ?? '')`) y
+las normaliza esta función. **`mostrar_como_funciona` llega YA como booleano**: un checkbox HTML manda
+`'on'` cuando está marcado y **no manda nada** cuando no lo está, así que la conversión
+(`formData.get('mostrar_como_funciona') !== null`) va en la acción, que es quien conoce el `FormData`.
+Esta función recibe un booleano y no adivina.
+
 - [ ] **Paso 4: Verde.**
 
 - [ ] **Paso 5: Mutation-testing (OBLIGATORIO)**
 
 1. Quitá el `startsWith` de `validarUrlHttps` → debe fallar la prueba 3 (la del salto de línea).
-2. Cambiá `> LARGO_MAXIMO_TERMINOS` por `>=` → debe fallar el borde de la prueba 4.
-3. Devolvé `''` en vez de `null` en `normalizarOpcional` → debe fallar la 6.
+2. **Quitá el `new URL()`** y dejá solo el `startsWith` → debe fallar la prueba 4. Las dos mutaciones
+   son necesarias: cada una mata una mitad distinta del validador, y el spec §7 insiste en que hacen
+   falta las dos condiciones.
+3. Cambiá `> LARGO_MAXIMO_TERMINOS` por `>=` → debe fallar el borde de la prueba 5.
+4. Devolvé `''` en vez de `null` en `normalizarOpcional` → debe fallar la 7.
 
 - [ ] **Paso 6: Commit**
 
@@ -523,9 +595,16 @@ reverso de sus clientes sigue prometiendo lo viejo hasta que cada uno pase por c
 - Modificar: `app/comercio/(protegido)/reglas/FormularioRegla.tsx`
 
 - [ ] **Paso 1:** En las cuatro acciones —crear regla, eliminar regla, crear recompensa, desactivar
-recompensa— agregá `await notificarCambioComercio(supabase, comercioId)` **después** de que el cambio
-se guardó y solo si salió bien. Copiá el patrón de `branding/actions.ts:43`, incluido el comentario
-que explica por qué existe.
+recompensa— agregá **después** de que el cambio se guardó y solo si salió bien:
+
+```ts
+  await notificarCambioComercio(createServiceClient(), comercioId);
+```
+
+`createServiceClient()` en la llamada y **no una variable `supabase`**: esos cuatro handlers llaman al
+cliente en línea dentro del argumento (`crearRegla(createServiceClient(), comercioId, …)`) y no tienen
+ninguna variable `supabase` en alcance. Es el mismo patrón de `branding/actions.ts:43`. Copiá también
+el comentario que explica por qué existe la llamada.
 
 Best-effort: su falla nunca revierte el guardado.
 
@@ -549,11 +628,15 @@ git commit -m "Avisar a Wallet cuando cambian reglas o recompensas"
 
 - [ ] **Paso 1: Suite completa** — `npx vitest run`. Todo verde, sin excepciones.
 - [ ] **Paso 2: `npx tsc --noEmit`** — sin salida.
-- [ ] **Paso 3: Verificación del pass real**
+- [ ] **Paso 3: DESPUÉS del push y del despliegue de Vercel**, verificación del pass real:
 
 ```bash
 npx tsx --conditions=react-server scripts/verificar-wallet.ts https://www.cardly-sv.site
 ```
+
+Este script baja el pass del **sitio desplegado**, no ejecuta el código local: por eso va acá y no
+antes. Lo que confirma es que el reverso no disparó el peso del pass — el iPhone se lo baja entero en
+cada acreditación, y el umbral del script son 700 KB.
 
 - [ ] **Paso 4:** Agregá a `docs/guia-pruebas-manuales-cuentas-sucursales.md` una Parte 4 con el
 paso a paso manual: configurar el reverso, guardar, abrir la tarjeta en el iPhone, tocar la "i", y
