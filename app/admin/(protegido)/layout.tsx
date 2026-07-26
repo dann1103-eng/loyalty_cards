@@ -14,7 +14,7 @@ export default async function LayoutProtegido({ children }: { children: React.Re
           <span className="icono-circulo" aria-hidden="true" style={{ background: 'var(--acento-fuerte)', color: 'var(--sobre-acento)', width: 34, height: 34, minWidth: 34 }}>
             <span className="icono icono-lleno" style={{ fontSize: 18 }}>shield_person</span>
           </span>
-          FM Lealtad · Interno
+          Cardly SV · Interno
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* Nav interna del panel FM. Reusa el estilo pastilla de .admin-salir para no depender de

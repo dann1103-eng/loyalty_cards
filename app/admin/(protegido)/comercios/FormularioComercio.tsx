@@ -76,7 +76,7 @@ export default function FormularioComercio({
       <div className="cardface reveal d2" style={{ background: valores.color_fondo, color: valores.color_texto, maxWidth: 360, margin: '0 auto 22px' }}>
         <div className="cardface-top" style={{ color: valores.color_label }}>
           <span>Comercio afiliado</span>
-          <span>FM Lealtad</span>
+          <span>Cardly SV</span>
         </div>
         <div className="cardface-name">{valores.nombre || 'Nombre del comercio'}</div>
         <div className="cardface-points">

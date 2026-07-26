@@ -22,7 +22,7 @@ export default async function PaginaLogin({
         <div className="icono-circulo reveal d1" style={{ width: 48, height: 48, background: 'var(--acento-fuerte)', color: 'var(--sobre-acento)', borderRadius: 14 }}>
           <span className="icono icono-lleno" style={{ fontSize: 26 }} aria-hidden="true">shield_person</span>
         </div>
-        <h1 className="title reveal d2" style={{ marginTop: 12 }}>FM Lealtad</h1>
+        <h1 className="title reveal d2" style={{ marginTop: 12 }}>Cardly SV</h1>
         <p className="lede reveal d2" style={{ marginTop: 6, color: 'var(--texto-2)' }}>
           Panel interno
         </p>

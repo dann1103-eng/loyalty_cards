@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Mi Tarjeta — FM Lealtad',
+    name: 'Mi Tarjeta — Cardly SV',
     short_name: 'Mi Tarjeta',
     description: 'Consulta el saldo de tus tarjetas de lealtad y las recompensas que puedes canjear.',
     start_url: '/mi-tarjeta',

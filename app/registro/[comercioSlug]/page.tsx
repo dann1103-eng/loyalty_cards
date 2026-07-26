@@ -20,7 +20,7 @@ export default async function PaginaRegistro({
     return (
       <main className="shell">
         <div className="stack">
-          <p className="kicker reveal d1">FM Lealtad</p>
+          <p className="kicker reveal d1">Cardly SV</p>
           <h1 className="title reveal d2">
             Comercio <em>no encontrado</em>
           </h1>

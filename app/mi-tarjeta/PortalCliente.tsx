@@ -14,7 +14,7 @@ function CaraTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
     <div className="cardface" style={{ background: fondo, color: texto }}>
       <div className="cardface-top" style={label ? { color: label } : undefined}>
         <span>Tarjeta de lealtad</span>
-        <span>FM Lealtad</span>
+        <span>Cardly SV</span>
       </div>
       <div className="cardface-name">{tarjeta.comercioNombre}</div>
       <div className="portal-saldo">{tarjeta.saldoTexto}</div>
@@ -163,7 +163,7 @@ export default function PortalCliente() {
   return (
     <main className="shell">
       <div className="stack">
-        <p className="kicker reveal d1">FM Lealtad</p>
+        <p className="kicker reveal d1">Cardly SV</p>
         <h1 className="title reveal d2">Mi tarjeta</h1>
         <p className="lede reveal d2">
           Ingresa tu teléfono para ver tus puntos, tus sellos y las recompensas que puedes canjear.

@@ -23,7 +23,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FM Lealtad",
+  title: "Cardly SV",
   description:
     "Tarjetas de lealtad digitales para tu comercio — puntos y sellos directo en la billetera del teléfono.",
 };
