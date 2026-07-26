@@ -5,7 +5,8 @@ import { verifyFmAdmin } from '@/lib/fm/verifyFmAdmin';
 import { createServiceClient } from '@/lib/supabase/server';
 import FormularioComercio from '../../FormularioComercio';
 import BotonEliminar from '../../BotonEliminar';
-import { accionActualizarComercio, accionEliminarComercio } from '../../actions';
+import FormularioAccesoDueno from '../../FormularioAccesoDueno';
+import { accionActualizarComercio, accionEliminarComercio, accionGenerarAcceso } from '../../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +74,7 @@ export default async function PaginaEditarComercio({
   // (estado, formData).
   const accion = accionActualizarComercio.bind(null, id);
   const eliminar = accionEliminarComercio.bind(null, id);
+  const generarAcceso = accionGenerarAcceso.bind(null, id);
 
   // Las columnas de color son nullable en la BD (migración 0001: `color_fondo text`) pero
   // DatosComercio las declara string, así que Partial<DatosComercio> las vuelve
@@ -133,23 +135,10 @@ export default async function PaginaEditarComercio({
               </a>
             </div>
           )}
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <p className="admin-fila-slug" style={{ marginBottom: 6 }}>
-              Los clientes escanean el QR y crean su tarjeta. Cuentas con acceso al panel del comercio:
-            </p>
-            {(duenos ?? []).length === 0 ? (
-              <p className="field-aviso">
-                Sin cuentas todavía — creá una con <code className="dato-mono">npm run seed-comercio</code>.
-              </p>
-            ) : (
-              (duenos ?? []).map((u) => (
-                <p key={u.email} style={{ margin: '4px 0' }}>
-                  <span className="dato-mono" style={{ fontSize: '0.85rem' }}>{u.email}</span>{' '}
-                  <span className="pastilla pastilla-activo">{u.rol}</span>
-                </p>
-              ))
-            )}
-          </div>
+          {/* La lista de cuentas + el alta del dueño viven en un Client Component: el link que
+              devuelve la acción NO se persiste en ninguna tabla, solo en el estado del formulario
+              (por eso tampoco hay revalidatePath en accionGenerarAcceso). */}
+          <FormularioAccesoDueno accion={generarAcceso} duenos={duenos ?? []} />
         </div>
       </section>
       <FormularioComercio accion={accion} inicial={inicial} textoBoton="Guardar cambios" cuentas={cuentas ?? []} esEdicion />
