@@ -232,6 +232,25 @@ export async function actualizarComercio(
 // invariante que el proyecto protege es no arrastrar datos de CLIENTES; una sucursal es estructura
 // del comercio. Las sucursales ADICIONALES sí siguen bloqueando el borrado, como antes.
 //
+// DEUDA CONOCIDA — las membresías (usuarios_comercio) NO se retiran, así que un comercio con dueño
+// o cajeros NO se puede borrar desde el panel. Aplica a TODO comercio creado self-serve:
+// crearComercioPropio siempre le inserta su membresía owner. Se evaluó retirarlas por simetría con
+// la principal y se decidió que NO, por tres razones:
+//   1. Esa tabla es soft-delete POR POLÍTICA ESCRITA del proyecto (migración 0009 y desactivarCajero:
+//      "NUNCA .delete()"). El ledger atribuye por usuarios_comercio.id —transacciones_puntos y
+//      canjes tienen FK ahí— y para dar de baja sin borrar se agregó la columna `activo`. Esta sería
+//      la única ruta del repo que borra esas filas.
+//   2. La ventana sin atomicidad de más abajo es tolerable para una sucursal, pero perder una
+//      membresía owner deja al dueño SIN VER su propio comercio (membresiasDeUsuario filtra por
+//      membresía) con las tarjetas de sus clientes adentro; y el panel de FM solo LEE
+//      usuarios_comercio —no hay UI para reponerla—, así que se arreglaría a mano en la BD.
+//   3. Esa ventana se ejercita en el camino COMÚN, no en el raro: es justo el clic de FM sobre un
+//      comercio con tarjetas, el que falla y repone.
+// La cura correcta es de esquema, no de capa app: `on delete cascade` en usuarios_comercio.comercio_id
+// (el ledger seguiría bloqueando por su propio FK) o un RPC transaccional como los de la 0009.
+// Mientras tanto el mensaje nombra los accesos, para que el admin no salga a buscar tarjetas que no
+// existen, y FM puede limpiar el comercio desde Studio.
+//
 // PRECONDICIÓN: `supabase` DEBE ser createServiceClient(). Un id ya borrado da ok:true a
 // propósito (idempotente) — pero eso solo es seguro si `supabase` ignora RLS. Con un cliente
 // de sesión, comercios es deny-all desde la 0001: un update bloqueado por RLS y un id que ya
@@ -307,10 +326,14 @@ export async function eliminarComercio(
       }
     }
     if (error.code === '23503') {
+      // Los "accesos de dueño/cajero" (usuarios_comercio) NO son un adorno de la lista: son la causa
+      // MÁS común, porque todo comercio creado self-serve nace con su membresía owner y esta función
+      // no la retira (ver DEUDA CONOCIDA en la cabecera). Sin nombrarlos, el admin sale a buscar
+      // tarjetas, reglas o recompensas que no existen.
       return {
         ok: false,
         error:
-          'No se puede eliminar: tiene datos asociados (tarjetas, reglas de puntos, recompensas o sucursales). Solo se pueden eliminar comercios sin actividad.',
+          'No se puede eliminar: tiene datos asociados (tarjetas, reglas de puntos, recompensas, sucursales o accesos de dueño/cajero). Solo se pueden eliminar comercios sin actividad.',
       };
     }
     console.error('[fm] falló el borrado de comercio:', error);

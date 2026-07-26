@@ -412,6 +412,47 @@ describe('eliminarComercio', () => {
     expect(todas).toEqual([{ nombre: 'Sucursal del Dueño' }]);
   });
 
+  it('rechaza eliminar un comercio self-serve nombrando los accesos, y le repone la principal', async () => {
+    // El caso REAL más común: crearComercioPropio siempre inserta la membresía owner (sin ella el
+    // dueño no vería su comercio), con sucursal_id null — así que NO bloquea el retiro de la
+    // principal, bloquea el delete del comercio. Antes de este arreglo el admin leía "tiene datos
+    // asociados (tarjetas, reglas de puntos, recompensas o sucursales)" y salía a buscar cuatro
+    // cosas que no existían. Las membresías NO se retiran a propósito (ver DEUDA CONOCIDA en
+    // guardarComercio.ts): esta prueba fija que el bloqueo es honesto, no que desaparezca.
+    const slug = `test-eliminar-self-serve-${Date.now()}`;
+    const creado = await crearComercio(supabase, await datosValidos(slug));
+    if (!creado.ok) throw new Error('el setup falló');
+
+    const { data: antes, error: ePrincipal } = await supabase
+      .from('sucursales').select('id, nombre, activa, created_at')
+      .eq('comercio_id', creado.id).eq('es_principal', true).single();
+    if (ePrincipal) throw ePrincipal;
+    // Igual que crearComercioPropio: rol owner, SIN sucursal_id.
+    const { error: eOwner } = await supabase.from('usuarios_comercio').insert({
+      comercio_id: creado.id,
+      email: `owner-self-serve-${Date.now()}-${Math.random().toString(36).slice(2)}@test.fm`,
+      rol: 'owner',
+    });
+    if (eOwner) throw eOwner;
+
+    const res = await eliminarComercio(supabase, creado.id);
+
+    expect(res.ok).toBe(false);
+    // La causa verdadera, nombrada. La regex floja /datos asociados/i pasaría igual con el mensaje
+    // viejo y mentiroso, así que se ancla a los accesos.
+    if (!res.ok) expect(res.error).toMatch(/accesos de dueño\/cajero/i);
+
+    const { data: comercio } = await supabase.from('comercios').select('id').eq('id', creado.id).maybeSingle();
+    expect(comercio).not.toBeNull();
+
+    // Y la principal volvió idéntica: el retiro SÍ ocurrió (la membresía no la referencia), así que
+    // este es un camino real de compensación, no uno donde no se retiró nada.
+    const { data: despues } = await supabase
+      .from('sucursales').select('id, nombre, activa, created_at')
+      .eq('comercio_id', creado.id).eq('es_principal', true).single();
+    expect(despues).toEqual(antes);
+  });
+
   it('rechaza eliminar si la principal tiene un cajero asignado, nombrando la causa real', async () => {
     // Camino del 23503 EN EL RETIRO (no en el delete del comercio): usuarios_comercio.sucursal_id
     // apunta a la principal, así que ni siquiera se puede retirar. Es justo el caso que la 0012 vino
