@@ -147,7 +147,11 @@ describe('cupo con sucursal principal (0012)', () => {
   it('la principal NO consume cupo: comercio + principal caben en limite 1', async () => {
     const cuentaId = await crearCuentaFixture(1);
     const comercioId = await crearComercioFixture(cuentaId);
-    await supabase.from('sucursales').insert({ comercio_id: comercioId, nombre: 'Principal', es_principal: true });
+    // El insert se chequea (convención del archivo): si fallara en silencio —una columna NOT NULL
+    // nueva, RLS, cache de PostgREST— este test seguiría VERDE sin haber creado la principal (el
+    // comercio solo ya da usadas:1) y dejaría de proteger nada.
+    const { error } = await supabase.from('sucursales').insert({ comercio_id: comercioId, nombre: 'Principal', es_principal: true });
+    if (error) throw error;
 
     const cupo = await cupoDeCuenta(supabase, cuentaId);
     expect(cupo).toEqual({ ok: true, limite: 1, usadas: 1 });
@@ -160,10 +164,11 @@ describe('cupo con sucursal principal (0012)', () => {
   it('una sucursal ADICIONAL sí consume cupo', async () => {
     const cuentaId = await crearCuentaFixture(2);
     const comercioId = await crearComercioFixture(cuentaId);
-    await supabase.from('sucursales').insert([
+    const { error } = await supabase.from('sucursales').insert([
       { comercio_id: comercioId, nombre: 'Principal', es_principal: true },
       { comercio_id: comercioId, nombre: 'Centro', es_principal: false },
     ]);
+    if (error) throw error;
 
     const cupo = await cupoDeCuenta(supabase, cuentaId);
     expect(cupo).toEqual({ ok: true, limite: 2, usadas: 2 });
@@ -174,7 +179,8 @@ describe('cupo con sucursal principal (0012)', () => {
   it('cupoDeCuenta con limite null (Pro) reporta usadas sin tope', async () => {
     const cuentaId = await crearCuentaFixture(null);
     const comercioId = await crearComercioFixture(cuentaId);
-    await supabase.from('sucursales').insert({ comercio_id: comercioId, nombre: 'Principal', es_principal: true });
+    const { error } = await supabase.from('sucursales').insert({ comercio_id: comercioId, nombre: 'Principal', es_principal: true });
+    if (error) throw error;
 
     const cupo = await cupoDeCuenta(supabase, cuentaId);
     expect(cupo).toEqual({ ok: true, limite: null, usadas: 1 });
@@ -184,10 +190,11 @@ describe('cupo con sucursal principal (0012)', () => {
     // Comercio con principal + 1 extra = 2 unidades al moverse (1 comercio + 1 extra), no 3.
     const cuentaOrigen = await crearCuentaFixture(5);
     const comercioId = await crearComercioFixture(cuentaOrigen);
-    await supabase.from('sucursales').insert([
+    const { error } = await supabase.from('sucursales').insert([
       { comercio_id: comercioId, nombre: 'Principal', es_principal: true },
       { comercio_id: comercioId, nombre: 'Centro', es_principal: false },
     ]);
+    if (error) throw error;
     const destinoJusto = await crearCuentaFixture(2);
     expect(await asignarComercioACuenta(supabase, comercioId, destinoJusto)).toEqual({ ok: true });
 
@@ -333,8 +340,10 @@ describe('sucursal principal (0012)', () => {
     const cuentaId = await crearCuentaFixture(1);
     const comercioId = await crearComercioConCuenta(cuentaId);
 
+    // Shape completo, no `res.ok`: con la mutación de esPrimera el fallo debe MOSTRAR el motivo
+    // (el error de límite) en el diff, no un "expected false to be true" que no distingue causas.
     const res = await crearSucursal(supabase, comercioId, { nombre: 'Casa matriz' });
-    expect(res.ok).toBe(true);
+    expect(res).toEqual({ ok: true, id: expect.any(String) });
     const { data } = await supabase
       .from('sucursales').select('nombre, activa, es_principal').eq('comercio_id', comercioId);
     expect(data).toEqual([{ nombre: 'Casa matriz', activa: true, es_principal: true }]);
@@ -382,15 +391,42 @@ describe('sucursal principal (0012)', () => {
   });
 
   it('listarSucursales expone esPrincipal y ordena la principal primera', async () => {
+    // Inserts DIRECTOS (dos statements separados, para que created_at difiera) en vez de
+    // crearSucursal: con crearSucursal la principal es siempre la MÁS VIEJA, así que el orden
+    // esperado coincidiría con el `ORDER BY created_at` y borrar el .order('es_principal') no
+    // rompería nada. Acá la principal es la más NUEVA: sin ese order, el resultado sale [Alfa, Zeta].
     const comercioId = await crearComercio();
-    await crearSucursal(supabase, comercioId, { nombre: 'Zeta' });
-    await crearSucursal(supabase, comercioId, { nombre: 'Alfa' });
+    const { error: eAlfa } = await supabase
+      .from('sucursales').insert({ comercio_id: comercioId, nombre: 'Alfa', es_principal: false });
+    if (eAlfa) throw eAlfa;
+    const { error: eZeta } = await supabase
+      .from('sucursales').insert({ comercio_id: comercioId, nombre: 'Zeta', es_principal: true });
+    if (eZeta) throw eZeta;
 
     const lista = await listarSucursales(supabase, comercioId);
     expect(lista?.map((s) => ({ nombre: s.nombre, esPrincipal: s.esPrincipal }))).toEqual([
       { nombre: 'Zeta', esPrincipal: true },
       { nombre: 'Alfa', esPrincipal: false },
     ]);
+  });
+
+  it('no REACTIVA una sucursal de OTRO comercio', async () => {
+    // El gemelo de arriba llama con activa=false y hoy corta en el CANDADO de la principal (que
+    // hace su propio pre-read scopeado), así que ya no cubre el .eq('comercio_id') del UPDATE. En
+    // el camino activa=true el candado ni corre: ese .eq es la ÚNICA defensa contra que un comercio
+    // reactive una sucursal ajena — y es lo que este test protege (ver MUTATION-TESTING).
+    const comercioA = await crearComercio();
+    const comercioB = await crearComercio();
+    await crearSucursal(supabase, comercioA, { nombre: 'Principal' });
+    const extra = await crearSucursal(supabase, comercioA, { nombre: 'Centro' });
+    if (!extra.ok) throw new Error('el setup falló');
+    expect((await cambiarEstadoSucursal(supabase, extra.id, comercioA, false)).ok).toBe(true);
+
+    const res = await cambiarEstadoSucursal(supabase, extra.id, comercioB, true);
+    expect(res).toEqual({ ok: false, error: 'Esa sucursal ya no existe.' });
+
+    const { data } = await supabase.from('sucursales').select('activa').eq('id', extra.id).single();
+    expect(data!.activa).toBe(false); // sigue apagada: comercioB no pudo tocarla
   });
 
   it('crearSucursalPrincipal inserta la fila Principal activa', async () => {
