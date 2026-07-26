@@ -337,3 +337,22 @@ describe('escaparHtml', () => {
     expect(instagram.value).toBe('https://instagram.com/x"><script>alert(1)</script>');
   });
 });
+
+// MUTATION-TESTING: la 0005 tiene `check (sello_meta is null or sello_meta > 0)`, asi que hoy un 0 es
+// inalcanzable — pero generatePass.ts decide `esSellos` con `> 0` y este archivo tenia solo
+// `!== null`. Dos archivos hermanos con criterios distintos sobre el mismo campo divergen tarde o
+// temprano. Si alguien "simplifica" esta condicion a `!== null`, esta prueba falla y la tarjeta se
+// salva de decir "Completá tus 0 sellos.".
+describe('meta de sellos en 0', () => {
+  it('no emite la línea de la meta (simetría con generatePass)', () => {
+    const campos = construirReverso({
+      ...datosBase(),
+      tipoTarjeta: 'sellos',
+      selloMeta: 0,
+      reglas: [{ tipo: 'por_visita', valor: 1, activa_desde: '2026-07-01T00:00:00+00:00' }],
+    });
+    const comoFunciona = campos.find((c) => c.key === 'como_funciona');
+    expect(comoFunciona!.value).toContain('Ganás 1 sello por cada visita.');
+    expect(comoFunciona!.value).not.toContain('Completá');
+  });
+});

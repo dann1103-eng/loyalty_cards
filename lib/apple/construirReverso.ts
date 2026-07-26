@@ -132,7 +132,12 @@ function lineasComoFunciona(datos: DatosReverso): string[] {
   // La meta es un COMPLEMENTO de las otras líneas, nunca un motivo para emitir la sección:
   // "Completá tus 10 sellos." a solas, sin decir cómo se consigue uno ni qué se gana al
   // completarlos, no le sirve a nadie. Por eso exige que ya haya alguna línea.
-  if (datos.tipoTarjeta === 'sellos' && datos.selloMeta !== null && lineas.length > 0) {
+  // El `> 0` no es defensa contra la BD (la 0005 tiene `check (sello_meta is null or sello_meta > 0)`)
+  // sino simetría con generatePass.ts, que decide `esSellos` con la misma condición: dos archivos
+  // hermanos que miran el mismo campo con criterios distintos es una divergencia esperando a pasar.
+  // Y si algún día se cayera ese CHECK, "Completá tus 0 sellos." sería una línea absurda en la
+  // tarjeta de un cliente.
+  if (datos.tipoTarjeta === 'sellos' && datos.selloMeta !== null && datos.selloMeta > 0 && lineas.length > 0) {
     lineas.push(`Completá tus ${datos.selloMeta} ${unidad(datos.tipoTarjeta, datos.selloMeta)}.`);
   }
 
