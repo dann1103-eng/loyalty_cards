@@ -681,9 +681,25 @@ mismo para que no te sigan comiendo cupo del plan de la cuenta.
 Dos cosas entraron después de la Parte 2: el **rebranding a Cardly SV** con dominio propio, y el
 **alta de dueños con link de invitación**, que reemplaza al script `npm run seed-comercio`.
 
-**Antes de empezar:** verificá que en Vercel `NEXT_PUBLIC_BASE_URL` sea `https://cardly-sv.site` y
-que hayas redesplegado después de cambiarla. Si no, los links que generes van a apuntar al dominio
-viejo — funcionan, pero le mandás a tu cliente un enlace que no dice Cardly.
+**Antes de empezar:** verificá que en Vercel `NEXT_PUBLIC_BASE_URL` sea **`https://www.cardly-sv.site`**
+(con `www`) y que hayas redesplegado después de cambiarla.
+
+⚠️ El `www` NO es un detalle de estilo. En Vercel el dominio primario es `www.cardly-sv.site` y el
+dominio raíz (`cardly-sv.site`, sin `www`) **redirige** hacia él. Esa dirección queda grabada DENTRO
+de cada pass de Apple Wallet, y cuando el iPhone la usa para registrarse, el salto de un dominio al
+otro le tira el header de autorización: el registro devuelve 401 y **la tarjeta nunca vuelve a
+actualizarse sola**, sin un solo error visible en ningún lado. Pasó en producción el 2026-07-26.
+
+Para comprobarlo en cualquier momento, con el proyecto abierto en la compu:
+
+```bash
+npx tsx --conditions=react-server scripts/verificar-wallet.ts https://www.cardly-sv.site
+```
+
+Tiene que decir "el webServiceURL contesta 200 directo, sin redirects". Si dice que redirige,
+arreglá la variable en Vercel, redesplegá, y volvé a agregar las tarjetas al teléfono: las que ya
+estaban instaladas siguen con la dirección vieja grabada adentro y hay que borrarlas y crearlas de
+nuevo.
 
 ---
 
