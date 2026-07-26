@@ -43,7 +43,17 @@ export default async function PaginaCajeros() {
             <Link className="admin-fila-slug" href="/comercio/sucursales">Ir a Sucursales →</Link>
           </p>
         ) : (
-          <FormularioCajero sucursales={sucursalesActivas} sucursalPreseleccionadaId={sucursalPreseleccionadaId} />
+          <FormularioCajero
+            // NO BORRAR esta key, por lo mismo que la del escáner: cambiar de sucursal no redirige
+            // ni remonta, y sucursalPreseleccionadaId entra como defaultValue de un <select> NO
+            // controlado — o sea que solo se lee al montar. Sin la key, el alta seguiría apuntando a
+            // la sucursal anterior mientras el header dice otra cosa, y el dueño crearía el cajero
+            // donde no quiere. Acá el desajuste se VE (el select está a la vista), pero igual es un
+            // error real y silencioso si no lo mira.
+            key={sucursalPreseleccionadaId ?? 'sin-preseleccion'}
+            sucursales={sucursalesActivas}
+            sucursalPreseleccionadaId={sucursalPreseleccionadaId}
+          />
         )}
       </div>
 

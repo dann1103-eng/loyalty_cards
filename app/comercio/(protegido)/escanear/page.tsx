@@ -60,6 +60,14 @@ export default async function PaginaEscanear({
         <Escaner tokenInicial={token} sucursalFija={{ id: suya!.id, nombre: suya!.nombre }} />
       ) : (
         <Escaner
+          // NO BORRAR esta key: no es decoración, es lo único que mantiene el picker sincronizado
+          // con el switcher. Cambiar de sucursal DENTRO del mismo comercio NO redirige a propósito
+          // (cambiarContextoActivo solo redirige si cambia el comercio): hace revalidatePath y React
+          // reconcilia el árbol SIN remontar. Como sucursalInicialId solo se lee en el useState
+          // inicial del picker, sin la key la pastilla del header diría "Centro" mientras el picker
+          // sigue en la sucursal anterior — y la siguiente acreditación se atribuiría a la
+          // EQUIVOCADA, en silencio. Con la key, cambiar de contexto remonta el escáner ya alineado.
+          key={sesion.sucursalActiva?.id ?? 'todas'}
           tokenInicial={token}
           sucursales={activas.map((s) => ({ id: s.id, nombre: s.nombre }))}
           sucursalInicialId={sesion.sucursalActiva?.id}
