@@ -509,7 +509,7 @@ export async function crearSucursalPrincipal(
 }
 ```
 
-- [ ] **Paso 4: Ver PASAR** — `npm test -- lib/comercio/sucursales.test.ts`. **Tests EXISTENTES que van a fallar y hay que ajustar** (su única sucursal ahora nace principal): `cambiarEstadoSucursal` → "desactiva con SOFT-DELETE: la fila SIGUE existiendo con activa=false" (`sucursales.test.ts:116`) y "reactiva una sucursal desactivada" (`:131`). Arreglo: en ambos, crear PRIMERO una sucursal ("Principal") y operar sobre una SEGUNDA ("Centro") — la intención de cada test (soft-delete real, reactivación) no cambia. **No aflojes el linchpin del soft-delete** (`expect(data).not.toBeNull()`): ese es el control que impide implementar el desactivar con `.delete()`. Lo mismo si algún test de cupo asumía que la primera sucursal lo verifica.
+- [ ] **Paso 4: Ver PASAR** — `npm test -- lib/comercio/sucursales.test.ts`. **Tests EXISTENTES que hay que ajustar** (su única sucursal ahora nace principal): `cambiarEstadoSucursal` → "desactiva con SOFT-DELETE: la fila SIGUE existiendo con activa=false" (`sucursales.test.ts:116`) y "reactiva una sucursal desactivada" (`:131`). Arreglo en ambos: crear PRIMERO una sucursal ("Principal") y operar sobre una SEGUNDA ("Centro") — la intención de cada test (soft-delete real, reactivación) no cambia. **OJO con el segundo: hay que arreglarlo aunque siga VERDE.** Al bloquearse el apagado, la fila nunca queda inactiva y sus dos aserciones (`res.ok` y `activa === true`) se cumplen trivialmente: pasa sin probar nada — decoración exacta de lo que el proyecto prohíbe. **No aflojes el linchpin del soft-delete** (`expect(data).not.toBeNull()`): ese es el control que impide implementar el desactivar con `.delete()`. Lo mismo si algún test de cupo asumía que la primera sucursal lo verifica.
 
 - [ ] **Paso 5: MUTATION-TESTS.** (a) En `crearSucursal`, cambiá `const esPrimera = (count ?? 0) === 0;` por `const esPrimera = false;` → deben FALLAR "la PRIMERA sucursal…" (por error de límite) y "crearSucursalPrincipal…" NO (no usa esa función) — verificá que el fallo sea el error de límite, no otro. Restaurá. (b) En `cambiarEstadoSucursal`, borrá la línea `if (fila.es_principal) return ...` → FALLA "la principal no se puede desactivar" (recibe ok:true y activa=false). Restaurá. Corré en verde.
 
@@ -532,19 +532,26 @@ git commit -m "Sucursales 0012: primera nace principal (gratis, auto-reparacion)
 
 ```ts
 describe('sucursal principal en el alta (0012)', () => {
-  it('mover un comercio a otra cuenta no cuenta su principal (gemelo del test de asignarComercioACuenta)', async () => {
+  it('mover un comercio a otra cuenta NO cuenta su principal (gemelo del de asignarComercioACuenta)', async () => {
     // actualizarComercio tiene SU PROPIO conteo de sucursales propias — el .eq('es_principal',
     // false) de allá necesita su propia prueba, o esa copia puede regresar sin que nadie se entere.
-    const cuentaOrigen = await crearCuentaFixture(5);
-    const creado = await crearComercio(supabase, { ...datosValidosConCuenta(), cuenta_id: cuentaOrigen });
-    if (!creado.ok) throw new Error('fixture');
-    await supabase.from('sucursales').insert({ comercio_id: creado.id, nombre: 'Centro' }); // adicional
+    // Espeja el test vecino "al cambiar de cuenta, cuenta las sucursales propias…" (mismos helpers:
+    // datosValidos(slug) trae su cuenta de límite 999, y el destino se crea con crearCuenta), pero
+    // con un destino de límite 2 que SÍ debe aceptar el move: 1 comercio + 1 sucursal adicional
+    // (la principal viaja gratis con su comercio).
+    const cuentaDestino = await (await import('./cuentas')).crearCuenta(supabase, {
+      nombre: `Destino principal ${Date.now()}`, limiteNegocios: 2, plan: 'growth',
+      licenciaEstado: 'activo', licenciaMontoMensual: null, licenciaActivaDesde: null,
+    });
+    if (!cuentaDestino.ok) throw new Error('setup falló');
+    cuentasDePrueba.push(cuentaDestino.id);
 
-    // Destino con cupo justo para 1 comercio + 1 sucursal adicional (la principal viaja gratis).
-    const destino = await crearCuentaFixture(2);
-    const { data: comercioActual } = await supabase
-      .from('comercios').select('*').eq('id', creado.id).single();
-    const res = await actualizarComercio(supabase, creado.id, { ...comercioActual!, cuenta_id: destino });
+    const datos = await datosValidos(`test-mover-principal-${Date.now()}`);
+    const creado = await crearComercio(supabase, datos); // crea también su Principal
+    if (!creado.ok) throw new Error('el setup falló');
+    await supabase.from('sucursales').insert({ comercio_id: creado.id, nombre: 'Sucursal Propia' });
+
+    const res = await actualizarComercio(supabase, creado.id, { ...datos, cuenta_id: cuentaDestino.id });
     expect(res.ok).toBe(true);
   });
 
@@ -584,9 +591,9 @@ describe('sucursal principal en el alta (0012)', () => {
 });
 ```
 
-(Acordate de pushear los ids creados a los arreglos de teardown del archivo, incluidas las cuentas. `datosValidosConCuenta()` es el helper del archivo que arma un `DatosComercio` válido con su cuenta — usá el nombre real que encuentres ahí y ajustá la firma si toma parámetros; el spread `{ ...comercioActual!, cuenta_id: destino }` funciona porque `actualizarComercio` recibe el shape completo de la fila.)
+Notas de fixtures (verificadas contra el archivo vivo): `datosValidos(slug)` es `async` y devuelve un `DatosComercio` completo con su cuenta (límite 999) — **conservá ese objeto y hacele spread**, NO leas la fila con `select('*')`: el `Row` de comercios tiene `color_fondo/color_texto/color_label` como `string | null` y `DatosComercio` los exige `string`, así que el spread de la fila no compila en modo strict. `crearCuenta` se importa dinámicamente como en el test vecino, y su id va a `cuentasDePrueba`. Los slugs se registran solos dentro de `datosValidos`.
 
-- [ ] **Paso 2: Ver FALLAR** — `npm test -- lib/comercios/guardarComercio.test.ts` (no existe la principal tras el alta).
+- [ ] **Paso 2: Ver FALLAR** — `npm test -- lib/comercios/guardarComercio.test.ts`. Esperado: fallan los DOS tests de principal ("crearComercio crea el comercio Y su sucursal Principal" y el best-effort). **El test gemelo del move queda VERDE en esta fase roja y está bien:** sin principal no hay nada que excluir del conteo, así que su fase roja real es la mutación (b) del Paso 5. No salgas a "arreglar" código correcto por verlo pasar.
 
 - [ ] **Paso 3: Implementar.** En `crearComercio`, entre el insert exitoso y el `return`:
 
@@ -2057,7 +2064,13 @@ export async function crearComercioPropio(
 
 - [ ] **Paso 4: Ver PASAR** — `npm test -- lib/comercios/crearComercioPropio.test.ts`.
 
-- [ ] **Paso 5: MUTATION-TESTS (tres candados).** (a) En el paso 5 de la función, comentá los DOS deletes de la compensación → FALLA "si la membresía falla, COMPENSA" (queda la fila con slug `huerfano-imposible`). Restaurá. (b) En la validación del tipo, quitá `&& t.disponible` → FALLA "tipo de tarjeta no disponible" (cashback se crearía). Restaurá. (c) **Cuenta derivada de la sesión** (fila de la tabla §5 del spec): en el paso 4, cambiá `cuenta_id: cuentaId` por `cuenta_id: (await supabase.from('cuentas_comercio').insert({ nombre: 'Ajena', limite_negocios: 9 }).select('id').single()).data!.id` (simula tomar la cuenta de otro lado en vez de la sesión) → FALLA la aserción `cuenta_id: cuentaId` del primer test. Restaurá y limpiá la cuenta huérfana que haya quedado (`delete from cuentas_comercio where nombre = 'Ajena'` vía un script descartable o el teardown). Verde final.
+- [ ] **Paso 5: MUTATION-TESTS (tres candados).** (a) En el paso 5 de la función, comentá los DOS deletes de la compensación → FALLA "si la membresía falla, COMPENSA" (queda la fila con slug `huerfano-imposible`). Restaurá. (b) En la validación del tipo, quitá `&& t.disponible` → FALLA "tipo de tarjeta no disponible" (cashback se crearía). Restaurá. (c) **Cuenta derivada de la sesión** (fila de la tabla §5 del spec): en el paso 4, cambiá `cuenta_id: cuentaId` por `cuenta_id: '00000000-0000-0000-0000-000000000000'` (la cuenta deja de venir de la sesión) y corré SOLO el primer test:
+
+```bash
+npm test -- lib/comercios/crearComercioPropio.test.ts -t "cuenta DERIVADA"
+```
+
+Esperado: FALLA en `expect(res.ok).toBe(true)` con `error: 'La cuenta no existe.'` — `verificarLimiteCuenta` rechaza el uuid inventado antes de cualquier insert. **Esta mutación NO escribe en la BD, y por eso es esta y no otra:** una variante que apunte a una cuenta REAL con cupo haría que el test "cuenta llena" (que no registra su comercio para el teardown) cree un comercio + principal + membresía huérfanos en el proyecto de producción, donde el usuario hace QA — y encima la membresía bloquearía por FK el `deleteUser` del `afterEach`. Restaurá y corré el archivo completo en verde.
 
   Nota de desviación deliberada respecto al spec §7: ahí se sugería provocar el fallo de membresía con un `auth_user_id` inexistente (FK real). No sirve acá: el paso 2 de la función busca la membresía owner ACTUAL por ese mismo `auth_user_id` y abortaría antes de llegar al insert. Por eso el test usa inyección puntual del insert de `usuarios_comercio` (el resto pega a la BD real y la compensación borra filas reales).
 
@@ -2353,7 +2366,7 @@ export default async function PaginaSucursales({
   const { agregar } = await searchParams;
 ```
 
-y (reemplaza el bloque del formulario de la Tarea 5; `tieneCuenta` sale del mismo fetch de `cuenta_id` ya presente):
+y (reemplaza el bloque del formulario de la Tarea 5; `comercio` es el mismo fetch de `cuenta_id` que esa tarea ya dejó en la página):
 
 ```tsx
       <div className="reveal d2">
@@ -2990,9 +3003,9 @@ git commit -m "Guia de pruebas manuales: panel movil, sucursal principal, contex
   desactivable + primera-gratis → Tarea 3 Paso 5; cookie de sucursal (cajero la ignora,
   pertenencia, activa) → Tarea 8 Paso 5 (a,b,c); alta principal → Tarea 4 Paso 5 (a); cuenta
   derivada de la sesión, tipo de tarjeta y compensación → Tarea 12 Paso 5 (a,b,c); filtros de
-  reportes validados → Tarea 14 Paso 5 (c,d); nav por rol → Tarea 6 Paso 7. El único control sin
-  mutación automatizable es el `enlacesPorRol` del render (cubierto por su test puro) y la
-  verificación visual de cada checkpoint, que va a la guía manual (Tarea 16).
+  reportes validados → Tarea 14 Paso 5 (c,d); nav por rol → Tarea 6 Paso 7. Lo único que queda
+  fuera del mutation-testing es el comportamiento puramente visual (el carrusel de la nav, el
+  sheet, los chips): va a la guía de pruebas manuales (Tarea 16).
 - Guía de pruebas manuales extendida; la verificación visual la hace el controlador con las
   herramientas de navegador o el usuario en producción (los checkpoints de cada fase).
 - El merge a `master` es fast-forward (patrón del proyecto) y lo decide el usuario.
