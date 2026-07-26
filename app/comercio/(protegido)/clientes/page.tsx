@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import QRCode from 'qrcode';
-import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
+import { verifyComercioAcceso } from '@/lib/comercio/verifyComercioAcceso';
 import { createServiceClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +21,10 @@ export default async function PaginaClientes({
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
-  const { comercioId } = await verifyComercioOwner();
+  // Gate COMPARTIDO (plan 2026-07-25 §4.8): el cajero usa el directorio para la asignación manual
+  // de puntos — el botón "Acreditar / Canjear" entra al escáner, cuyas acciones ya re-verifican con
+  // gate compartido y atribución server-side. Esta página es de solo lectura (sin Server Actions).
+  const { comercioId } = await verifyComercioAcceso();
   const { q } = await searchParams;
   const busqueda = (q ?? '').trim();
 

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import QRCode from 'qrcode';
-import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
+import { verifyComercioAcceso } from '@/lib/comercio/verifyComercioAcceso';
 import { createServiceClient } from '@/lib/supabase/server';
 import { TIPOS_TARJETA } from '@/lib/comercios/guardarComercio';
 
@@ -17,10 +17,19 @@ const ATAJOS = [
   { href: '/comercio/reportes', icono: 'insights', tono: 'menta', titulo: 'Reportes', sub: 'Actividad por sucursal y clientes frecuentes' },
 ] as const;
 
+// El cajero solo ve los atajos de SUS secciones (las demás lo rebotarían en su gate de página).
+const RUTAS_ATAJOS_CAJERO = ['/comercio/escanear', '/comercio/clientes'];
+
 export default async function PaginaPanel() {
   // Defensa en profundidad: el layout ya verificó, pero no se re-ejecuta en navegación del
   // cliente. cache() hace que no cueste una consulta extra.
-  const { comercioId } = await verifyComercioOwner();
+  //
+  // Gate COMPARTIDO (plan 2026-07-25 §4.8): el cajero también ve el Resumen — métricas y QR de
+  // registro le sirven en caja. No hay Server Actions en esta página; las secciones owner-only
+  // siguen detrás de verifyComercioOwner en sus propias páginas.
+  const { comercioId, rol } = await verifyComercioAcceso();
+  const esOwner = rol === 'owner';
+  const atajos = esOwner ? ATAJOS : ATAJOS.filter((a) => RUTAS_ATAJOS_CAJERO.includes(a.href));
 
   const supabase = createServiceClient();
   const { data: comercio } = await supabase
@@ -125,7 +134,7 @@ export default async function PaginaPanel() {
       <section className="reveal d5">
         <p className="titulo-seccion" style={{ marginBottom: 10 }}>Gestión rápida</p>
         <div className="panel-atajos" style={{ marginTop: 0 }}>
-          {ATAJOS.map((a) => (
+          {atajos.map((a) => (
             <Link key={a.href} className="admin-fila" href={a.href}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <span className={`icono-circulo ${a.tono}`} aria-hidden="true">
