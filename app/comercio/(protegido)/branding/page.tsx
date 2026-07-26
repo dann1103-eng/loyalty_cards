@@ -6,8 +6,16 @@ import SubidaImagen from './SubidaImagen';
 
 export const dynamic = 'force-dynamic';
 
-export default async function PaginaBranding() {
+// `?nuevo=1` lo pone accionCrearComercioPropio al aterrizar acá tras el alta self-serve: sin ese
+// aviso, el dueño llega al editor de marca de un comercio que acaba de crear sin saber POR QUÉ está
+// en esta pantalla (el header ya cambió de comercio bajo sus pies).
+export default async function PaginaBranding({
+  searchParams,
+}: {
+  searchParams: Promise<{ nuevo?: string }>;
+}) {
   const { comercioId } = await verifyComercioOwner();
+  const { nuevo } = await searchParams;
 
   const supabase = createServiceClient();
   const { data: c } = await supabase
@@ -46,6 +54,13 @@ export default async function PaginaBranding() {
         </div>
         <Link className="admin-fila-slug" href="/comercio/panel">← Volver</Link>
       </div>
+
+      {nuevo === '1' && (
+        <p className="admin-vacio" role="status" style={{ marginBottom: 18 }}>
+          Tu comercio nuevo ya está creado. Este es su editor de marca: configurá colores, logo e
+          imágenes de la tarjeta{esSellos ? ' y la meta de sellos' : ''}.
+        </p>
+      )}
 
       <FormularioBranding
         nombreComercio={c.nombre}

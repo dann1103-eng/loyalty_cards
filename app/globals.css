@@ -1197,7 +1197,16 @@ a {
   border-radius: 12px;
   cursor: pointer;
 }
-.sheet-fila:hover { background: var(--superficie-3); }
+/* El :not(:disabled) NO es decorativo: sin él una fila muerta se ilumina al pasar el mouse como si
+   respondiera. Va en el :hover y no en una regla `:disabled:hover` aparte a propósito — esa regla
+   le ganaría en especificidad a .sheet-fila-activa (0,3,0 contra 0,1,0) y le borraría el fondo a la
+   fila ACTIVA del switcher mientras el cambio está en vuelo (ahí todas las filas están disabled). */
+.sheet-fila:hover:not(:disabled) { background: var(--superficie-3); }
+/* Fila deshabilitada: hace falta explícitamente porque .sheet-fila fija `color` y `cursor: pointer`
+   — con `color` propio, el gris de :disabled del navegador no aplica, así que una fila muerta se
+   veía idéntica a una viva. Cubre a las dos usuarias de la clase: el switcher (filas en vuelo,
+   SelectorContexto) y el modal "Agregar local" ("Comercio nuevo" sin cuenta asociada). */
+.sheet-fila:disabled { opacity: 0.55; cursor: not-allowed; }
 .sheet-fila-sub { padding-left: 34px; font-size: 0.9rem; }
 .sheet-fila-activa { background: var(--superficie-3); outline: 1px solid var(--acento); }
 .sheet-agregar {

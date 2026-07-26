@@ -4,12 +4,20 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { listarSucursales } from '@/lib/comercio/sucursales';
 import { cupoDeCuenta } from '@/lib/comercios/cuentas';
 import FormularioSucursal from './FormularioSucursal';
+import ModalAgregarLocal from './ModalAgregarLocal';
 import BotonEstadoSucursal from './BotonEstadoSucursal';
 
 export const dynamic = 'force-dynamic';
 
-export default async function PaginaSucursales() {
-  const { comercioId } = await verifyComercioOwner();
+// `?agregar=1` abre el modal al cargar: es el destino del enlace "Agregar local…" del switcher
+// (SelectorContexto), que no puede abrir un modal que vive en OTRA página.
+export default async function PaginaSucursales({
+  searchParams,
+}: {
+  searchParams: Promise<{ agregar?: string }>;
+}) {
+  const { comercioId, nombre } = await verifyComercioOwner();
+  const { agregar } = await searchParams;
   const supabase = createServiceClient();
 
   // listarSucursales trae activas e inactivas: el dueño necesita ver las apagadas para reactivarlas.
@@ -36,7 +44,15 @@ export default async function PaginaSucursales() {
       </div>
 
       <div className="reveal d2">
-        {avisoCupo ? <p className="admin-vacio">{avisoCupo}</p> : <FormularioSucursal />}
+        {avisoCupo ? (
+          <p className="admin-vacio">{avisoCupo}</p>
+        ) : (
+          <ModalAgregarLocal
+            nombreComercio={nombre}
+            puedeCrearComercio={Boolean(comercio?.cuenta_id)}
+            abrirAlCargar={agregar === '1'}
+          />
+        )}
       </div>
 
       <div className="admin-lista reveal d3" style={{ marginTop: 22 }}>
