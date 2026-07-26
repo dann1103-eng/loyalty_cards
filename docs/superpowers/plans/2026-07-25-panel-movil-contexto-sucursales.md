@@ -585,7 +585,8 @@ describe('sucursal principal en el alta (0012)', () => {
     const datos = await datosValidos(`test-mover-principal-${Date.now()}`);
     const creado = await crearComercio(supabase, datos); // crea también su Principal
     if (!creado.ok) throw new Error('el setup falló');
-    await supabase.from('sucursales').insert({ comercio_id: creado.id, nombre: 'Sucursal Propia' });
+    const { error } = await supabase.from('sucursales').insert({ comercio_id: creado.id, nombre: 'Sucursal Propia' });
+    if (error) throw error;
 
     const res = await actualizarComercio(supabase, creado.id, { ...datos, cuenta_id: cuentaDestino.id });
     expect(res.ok).toBe(true);
@@ -616,7 +617,9 @@ describe('sucursal principal en el alta (0012)', () => {
           }),
         } as never;
       },
-    } as ReturnType<typeof createServiceClient>;
+      // `as unknown as` y no un cast directo: el objeto solo implementa `from`, así que TS lo
+      // rechaza con TS2352 ("no se superponen lo suficiente") contra el cliente completo.
+    } as unknown as ReturnType<typeof createServiceClient>;
 
     const res = await crearComercio(conSucursalesRotas, await datosValidos(`test-principal-rota-${Date.now()}`));
     expect(res.ok).toBe(true); // el comercio NO se pierde por la principal
@@ -629,7 +632,7 @@ describe('sucursal principal en el alta (0012)', () => {
 
 Notas de fixtures (verificadas contra el archivo vivo): `datosValidos(slug)` es `async` y devuelve un `DatosComercio` completo con su cuenta (límite 999) — **conservá ese objeto y hacele spread**, NO leas la fila con `select('*')`: el `Row` de comercios tiene `color_fondo/color_texto/color_label` como `string | null` y `DatosComercio` los exige `string`, así que el spread de la fila no compila en modo strict. `crearCuenta` se importa dinámicamente como en el test vecino, y su id va a `cuentasDePrueba`. Los slugs se registran solos dentro de `datosValidos`.
 
-- [ ] **Paso 2: Ver FALLAR** — `npm test -- lib/comercios/guardarComercio.test.ts`. Esperado: fallan los DOS tests de principal ("crearComercio crea el comercio Y su sucursal Principal" y el best-effort). **El test gemelo del move queda VERDE en esta fase roja y está bien:** sin principal no hay nada que excluir del conteo, así que su fase roja real es la mutación (b) del Paso 5. No salgas a "arreglar" código correcto por verlo pasar.
+- [ ] **Paso 2: Ver FALLAR** — `npm test -- lib/comercios/guardarComercio.test.ts`. Esperado: falla UNO ("crearComercio crea el comercio Y su sucursal Principal"). **Los otros dos quedan VERDES en esta fase roja y está bien** — no salgas a "arreglar" código correcto por verlos pasar: el gemelo del move porque sin principal no hay nada que excluir del conteo (su fase roja real es la mutación (b) del Paso 5), y el de best-effort porque sin la implementación `crearComercio` nunca toca `'sucursales'`, así que el cliente roto no se ejercita y el `[]` esperado se cumple vacuamente (su fase roja real es la mutación (e) del Paso 5).
 
 - [ ] **Paso 3: Implementar.** En `crearComercio`, entre el insert exitoso y el `return`:
 
@@ -647,9 +650,15 @@ Notas de fixtures (verificadas contra el archivo vivo): `datosValidos(slug)` es 
 
 Import arriba: `import { crearSucursalPrincipal } from '../comercio/sucursales';` (sin ciclo: `sucursales.ts` importa de `cuentas.ts`, no de `guardarComercio.ts`).
 
-- [ ] **Paso 4: Ver PASAR** — `npm test -- lib/comercios/guardarComercio.test.ts`. OJO: tests existentes de `crearComercio` ahora dejan una sucursal por comercio — si algún teardown borra comercios sin borrar antes sus sucursales, va a fallar por FK: agregá el delete de `sucursales` por `comercio_id` antes del delete de `comercios` en el teardown (patrón que `cuentas.test.ts` ya usa).
+- [ ] **Paso 4: Ver PASAR** — `npm test -- lib/comercios/guardarComercio.test.ts`. OJO: tests existentes de `crearComercio` ahora dejan una sucursal por comercio — si algún teardown borra comercios sin borrar antes sus sucursales, va a fallar por FK (el `afterEach` de este archivo YA lo hace en el orden correcto, así que no debería hacer falta tocarlo).
 
-- [ ] **Paso 5: MUTATION-TESTS.** (a) Comentá la llamada `await crearSucursalPrincipal(supabase, data.id);` (y su manejo) → FALLA "crearComercio crea el comercio Y su sucursal Principal" (data `[]` ≠ fila esperada). Restaurá. (b) En `actualizarComercio`, borrá el `.eq('es_principal', false)` del conteo de sucursales propias (agregado en la Tarea 2) → FALLA el test gemelo del move (unidades 3 > límite 2). Restaurá, verde.
+- [ ] **Paso 4b: REGRESIÓN que este cambio provoca — arreglarla acá.** `eliminarComercio` (mismo archivo, lo usa el panel de FM) va a quedar roto: `sucursales.comercio_id` es `references comercios(id)` SIN cascada (0008:37), así que con la Principal creada en el alta, ningún comercio nacido después de la 0012 se podría borrar nunca — y el 23503 se reportaría como "tiene datos asociados (tarjetas, reglas de puntos o recompensas)", que en ese caso es mentira. Lo destapa el test existente `eliminarComercio > elimina un comercio sin datos asociados`, que pasa a rojo.
+
+  **NO se resuelve con `on delete cascade`:** el comentario de `eliminarComercio` documenta que la ausencia de cascada hacia `comercios` es deliberada (borrar un comercio no debe arrastrar datos de un cliente), y además `usuarios_comercio.sucursal_id`, `transacciones_puntos.sucursal_id` y `canjes.sucursal_id` apuntan a `sucursales` (0008:45-49) y bloquearían igual.
+
+  **Arreglo:** `eliminarComercio` retira la Principal (`.delete().eq('comercio_id', id).eq('es_principal', true)`) ANTES del delete del comercio, y la REPONE con `crearSucursalPrincipal` si el delete no procede. Las sucursales del DUEÑO no se tocan: siguen bloqueando el borrado igual que las tarjetas. Reponerla con otro id es seguro porque, si un cajero/transacción/canje la referenciara, el delete de la principal habría dado 23503 y no se habría borrado nada. Si el retiro falla, distinguí `23503` (datos asociados) de cualquier otro error (`'No se pudo eliminar el comercio.'`) — no mientas sobre la causa. Actualizá el comentario de cabecera: la Principal pasa a ser la ÚNICA excepción a la regla "sin cascada", y el mensaje del 23503 debe nombrar también las sucursales.
+
+- [ ] **Paso 5: MUTATION-TESTS.** (a) Comentá la llamada `await crearSucursalPrincipal(supabase, data.id);` (y su manejo) → FALLA "crearComercio crea el comercio Y su sucursal Principal" (data `[]` ≠ fila esperada). (b) En `actualizarComercio`, borrá el `.eq('es_principal', false)` del conteo de sucursales propias (agregado en la Tarea 2) → FALLA el test gemelo del move — **es su ÚNICA red: se verificó que sin ese test la línea se puede borrar con las 17 pruebas del archivo en verde, y ningún otro archivo del repo ejercita `actualizarComercio`.** (c) Borrá el `.eq('es_principal', true)` del retiro en `eliminarComercio` → FALLA el test de "no se elimina un comercio con sucursal del dueño" (borraría también las suyas). (d) Comentá la reposición tras el delete fallido → FALLAN los tests de compensación (el comercio queda sin Principal por un borrado que ni siquiera procedió). (e) Hacé que `crearComercio` devuelva `ok:false` cuando falla la principal → FALLA el de best-effort. Restaurá después de cada una, verde final.
 
 - [ ] **Paso 6: Suite + typecheck + lint; Commit**
 
