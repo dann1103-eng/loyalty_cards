@@ -5,7 +5,11 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClienteServidor, createServiceClient } from '@/lib/supabase/server';
 import { membresiasDeUsuario } from '@/lib/comercio/membresiasDeUsuario';
-import { COOKIE_COMERCIO_ACTIVO, opcionesCookieComercio } from '@/lib/comercio/cookieComercio';
+import {
+  COOKIE_COMERCIO_ACTIVO,
+  COOKIE_SUCURSAL_ACTIVA,
+  opcionesCookieComercio,
+} from '@/lib/comercio/cookieComercio';
 
 export type EstadoLogin = { error: string } | undefined;
 
@@ -47,11 +51,18 @@ export async function iniciarSesionComercio(
   }
   if (owners.length === 1) {
     cookieStore.set(COOKIE_COMERCIO_ACTIVO, owners[0].comercioId, opcionesCookieComercio());
+    // Sesión nueva = contexto de sucursal en blanco ("todas"): la cookie que quedó del login
+    // anterior podría apuntar a una sucursal de OTRO comercio (o de otra cuenta en el mismo
+    // navegador). La revalidación igual la descartaría — esto la limpia antes.
+    cookieStore.delete(COOKIE_SUCURSAL_ACTIVA);
     redirect('/comercio/panel');
   }
   if (membresias.length > 0) {
     // Sin comercios propios pero sí membresía de cajero: su lugar es el escáner.
     cookieStore.set(COOKIE_COMERCIO_ACTIVO, membresias[0].comercioId, opcionesCookieComercio());
+    // Ídem para el cajero: su sucursal sale SIEMPRE de la membresía (resolverSucursalActiva ignora
+    // la cookie para cajeros), pero no se le deja basura del login anterior.
+    cookieStore.delete(COOKIE_SUCURSAL_ACTIVA);
     redirect('/comercio/escanear');
   }
   // Autenticó pero no tiene ninguna membresía: sin acceso al panel.

@@ -1066,6 +1066,152 @@ a {
   .admin-shell { padding-bottom: 0; }
 }
 
+/* El "Salir" del header de /comercio, solo-ícono en móvil: libera ancho para que la pastilla de
+   contexto pueda mostrar el nombre de la sucursal. Es un MODIFICADOR y NO un cambio a .admin-salir
+   a secas: el panel FM (/admin) reusa esa clase como estilo pastilla para sus tres enlaces de nav
+   (Comercios/Cuentas/Reportes) — ocultarles el texto los dejaría vacíos y sin navegación en móvil.
+   El texto y el ícono se renderizan SIEMPRE y el CSS elige cuál se ve; el nombre accesible lo
+   sostiene el aria-label del botón, no el texto visible.
+   44x44 mínimo (WCAG 2.5.8 nivel AAA / HIG de Apple): este botón CIERRA LA SESIÓN — un ícono suelto
+   con poco padding es más fácil de tocar por accidente que la palabra que reemplaza. */
+.admin-salir-compacto {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px;
+}
+.admin-salir-compacto .admin-salir-texto {
+  display: none;
+}
+@media (min-width: 760px) {
+  /* En desktop vuelve a ser exactamente el botón de texto de antes (padding base de .admin-salir). */
+  .admin-salir-compacto {
+    min-width: 0;
+    min-height: 0;
+    padding: 8px 16px;
+  }
+  .admin-salir-compacto .icono { display: none; }
+  .admin-salir-compacto .admin-salir-texto { display: inline; }
+}
+
+/* ---------- switcher de contexto (header) + bottom sheet ---------- */
+.contexto-pastilla {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--texto);
+  background: var(--superficie-3);
+  border: 1px solid var(--linea);
+  border-radius: var(--radius-pill);
+  padding: 8px 12px;
+  max-width: 200px;
+  cursor: pointer;
+}
+.contexto-etiqueta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* El ícono se va en MÓVIL: son 22px (16 del glifo + 6 del gap) que se lleva la etiqueta, que es
+   donde está la única información que la pastilla aporta — el comercio ya lo dice la marca del
+   header, a la izquierda y más grande.
+   LA CUENTA a 360px (header con padding 20px → 320px de contenido, flex con gap 12):
+     - .admin-marca NO tiene min-width:0 → su piso es su min-content: 34 (círculo) + 10 (gap) +
+       "Cafetería" (~82) = 126px. Su natural es ~190px ("Cafetería Piloto" en una línea).
+     - "Salir" solo-ícono (.admin-salir-compacto) = 44px. OJO: como texto medía ~67px, así que
+       libera 23px, NO 67 — el botón no desaparece, se encoge. Y de esos 23 a la pastilla le
+       llegan ~9: flex-shrink reparte PROPORCIONALMENTE entre marca y pastilla, no le vacía
+       primero la holgura a la marca.
+     - chrome de la pastilla: 26px (padding 24 + bordes 2), o 48px cuando además lleva el ícono.
+     - "Centro Santa Ana" a 0.8rem/600 ≈ 100px de texto.
+   CON ícono la pastilla resuelve en ~116px → ~68px de etiqueta (10 caracteres).
+   SIN ícono resuelve en ~104px → ~78px de etiqueta (12 caracteres).
+   O sea: en móvil NO sobra espacio. Si "restaurás" este ícono pensando que sí, le estás quitando
+   dos caracteres al nombre de la sucursal. En desktop el ícono se queda: ahí la pastilla llega a
+   su max-width de 200px y hay lugar de sobra.
+
+   LA TRAMPA (se cayó dos veces en ella al escribir esto): NO sirve sumar los MÍNIMOS y concluir
+   que entra. 126 + 126 + 44 + 12 = 308 ≤ 320 sugiere que "Centro Santa Ana" cabe completo, y no
+   cabe: flex-shrink reparte el déficit PROPORCIONALMENTE a los tamaños base, no le vacía primero
+   la holgura a la marca. La marca frena en ~159px (lejos de su piso de 126) mientras la pastilla
+   queda en ~104 → el nombre largo se corta igual ("Centro Santa…"). Para razonar esto hay que
+   correr el reparto, no comparar sumas de pisos.
+   La salida conocida: plantar la pastilla con min-width ~128px (acotado a ≥360px, si no desborda
+   en pantallas de 320) + un modificador acotado en .admin-marca (mismo patrón que
+   .admin-salir-compacto, sin tocar la clase que comparte con /admin) para que ella trunque con
+   ellipsis. Se DESCARTÓ a propósito: solo MUDA el recorte al nombre del comercio
+   ("Cafetería Pil…"). Los dos textos compiten por los mismos 320px y alguno se corta; la pregunta
+   no es cómo evitarlo sino cuál duele menos, y "Centro Santa…" ya distingue la sucursal de las
+   otras del comercio, que era el objetivo. Si se retoma, que la evidencia salga de un teléfono
+   real y no de otra estimación. */
+.contexto-pastilla .icono {
+  display: none;
+}
+@media (min-width: 760px) {
+  .contexto-pastilla .icono { display: inline-block; }
+}
+.sheet-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.55);
+  /* El velo es fijo y sin contenido scrolleable: sin esto, arrastrar sobre él mueve la página de
+     atrás (el gesto sube al documento). */
+  touch-action: none;
+}
+.sheet-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 91;
+  /* dvh y NO vh: en Safari iOS vh mide el viewport GRANDE (barra de URL escondida), así que con la
+     barra visible el panel se pasa del alto real y deja filas fuera de alcance. .admin-shell ya
+     usa dvh. overscroll-behavior: al llegar al tope del scroll, el gesto NO se encadena a la
+     página de atrás. */
+  max-height: 72dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--superficie-2);
+  border-top: 1px solid var(--linea);
+  border-radius: 20px 20px 0 0;
+  padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
+}
+.sheet-fila {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--texto);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.sheet-fila:hover { background: var(--superficie-3); }
+.sheet-fila-sub { padding-left: 34px; font-size: 0.9rem; }
+.sheet-fila-activa { background: var(--superficie-3); outline: 1px solid var(--acento); }
+.sheet-agregar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  margin-top: 4px;
+  border-top: 1px solid var(--linea);
+  color: var(--acento);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
 /* ---------- portal del cliente (/mi-tarjeta) ----------
    Adaptado del plan del portal (escrito para el sistema café) a los tokens del sistema v2:
    --line→--linea, --ink-soft→--texto-2, foam/cream→--superficie-2, --caramel→--acento,
