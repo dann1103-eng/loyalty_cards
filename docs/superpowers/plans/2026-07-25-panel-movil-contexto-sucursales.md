@@ -298,7 +298,13 @@ pasa a
 
 - [ ] **Paso 4: Correr y ver PASAR** — `npm test -- lib/comercios/cuentas.test.ts`. Si algún test EXISTENTE de límite falla: leelo — si su fixture asumía que TODA sucursal consume cupo, agregale `es_principal: false` explícito al insert de fixture (la intención del test no cambia) o ajustá el conteo esperado. No aflojes ninguna aserción de mensaje.
 
-- [ ] **Paso 5: MUTATION-TEST del candado.** En `contarUnidadesCuenta`, borrá la línea `.eq('es_principal', false)`. Corré `npm test -- lib/comercios/cuentas.test.ts`. Esperado: FALLAN "la principal NO consume cupo" (usadas 2≠1) y "mover un comercio excluye su principal" (rechaza el move que cabía). Restaurá, corré de nuevo en verde. Repetí para el `.eq('es_principal', false)` de `asignarComercioACuenta` (debe fallar el test del move). Dejá este comentario encima de la línea en `contarUnidadesCuenta` si no está: `// CONTROL: la principal es gratis; las adicionales consumen cupo`.
+- [ ] **Paso 5: MUTATION-TESTS de los DOS candados (son independientes — cada línea la atrapa un test distinto).**
+
+  (a) En `contarUnidadesCuenta`, borrá `.eq('es_principal', false)`. Corré `npm test -- lib/comercios/cuentas.test.ts`. Esperado: FALLAN los tres tests de cupo ("la principal NO consume cupo" → usadas 2≠1; "una sucursal ADICIONAL sí consume cupo" → usadas 3≠2; "cupoDeCuenta con limite null" → usadas 1≠... según fixture). **El test del move NO falla con esta mutación y está bien así:** sus cuentas destino no tienen comercios todavía, así que el conteo de sucursales ni se ejecuta (`ids.length === 0`). No "arregles" nada por verlo verde. Restaurá.
+
+  (b) En `asignarComercioACuenta`, borrá su `.eq('es_principal', false)`. Esperado: FALLA "mover un comercio excluye su principal del conteo" (con la principal contada, `unidadesAAgregar` es 3 y el move al destino de límite 2 se rechaza). Restaurá y corré todo en verde.
+
+  Dejá este comentario encima de la línea en `contarUnidadesCuenta` si no está: `// CONTROL: la principal es gratis; las adicionales consumen cupo`.
 
 - [ ] **Paso 6: Suite completa + typecheck + lint** — `npm test && npm run typecheck && npm run lint`. Esperado: verde (los tests de `guardarComercio.test.ts` y `sucursales.test.ts` existentes siguen pasando: sus fixtures insertan sucursales con `es_principal` default `false`).
 
@@ -503,7 +509,7 @@ export async function crearSucursalPrincipal(
 }
 ```
 
-- [ ] **Paso 4: Ver PASAR** — `npm test -- lib/comercio/sucursales.test.ts`. Tests EXISTENTES del archivo que asuman que la primera sucursal verifica cupo: ajustá su fixture creando una principal previa (la intención — "el tope aplica" — no cambia; cambia desde cuál sucursal). No aflojes aserciones de mensajes.
+- [ ] **Paso 4: Ver PASAR** — `npm test -- lib/comercio/sucursales.test.ts`. **Tests EXISTENTES que van a fallar y hay que ajustar** (su única sucursal ahora nace principal): `cambiarEstadoSucursal` → "desactiva con SOFT-DELETE: la fila SIGUE existiendo con activa=false" (`sucursales.test.ts:116`) y "reactiva una sucursal desactivada" (`:131`). Arreglo: en ambos, crear PRIMERO una sucursal ("Principal") y operar sobre una SEGUNDA ("Centro") — la intención de cada test (soft-delete real, reactivación) no cambia. **No aflojes el linchpin del soft-delete** (`expect(data).not.toBeNull()`): ese es el control que impide implementar el desactivar con `.delete()`. Lo mismo si algún test de cupo asumía que la primera sucursal lo verifica.
 
 - [ ] **Paso 5: MUTATION-TESTS.** (a) En `crearSucursal`, cambiá `const esPrimera = (count ?? 0) === 0;` por `const esPrimera = false;` → deben FALLAR "la PRIMERA sucursal…" (por error de límite) y "crearSucursalPrincipal…" NO (no usa esa función) — verificá que el fallo sea el error de límite, no otro. Restaurá. (b) En `cambiarEstadoSucursal`, borrá la línea `if (fila.es_principal) return ...` → FALLA "la principal no se puede desactivar" (recibe ok:true y activa=false). Restaurá. Corré en verde.
 
@@ -526,6 +532,22 @@ git commit -m "Sucursales 0012: primera nace principal (gratis, auto-reparacion)
 
 ```ts
 describe('sucursal principal en el alta (0012)', () => {
+  it('mover un comercio a otra cuenta no cuenta su principal (gemelo del test de asignarComercioACuenta)', async () => {
+    // actualizarComercio tiene SU PROPIO conteo de sucursales propias — el .eq('es_principal',
+    // false) de allá necesita su propia prueba, o esa copia puede regresar sin que nadie se entere.
+    const cuentaOrigen = await crearCuentaFixture(5);
+    const creado = await crearComercio(supabase, { ...datosValidosConCuenta(), cuenta_id: cuentaOrigen });
+    if (!creado.ok) throw new Error('fixture');
+    await supabase.from('sucursales').insert({ comercio_id: creado.id, nombre: 'Centro' }); // adicional
+
+    // Destino con cupo justo para 1 comercio + 1 sucursal adicional (la principal viaja gratis).
+    const destino = await crearCuentaFixture(2);
+    const { data: comercioActual } = await supabase
+      .from('comercios').select('*').eq('id', creado.id).single();
+    const res = await actualizarComercio(supabase, creado.id, { ...comercioActual!, cuenta_id: destino });
+    expect(res.ok).toBe(true);
+  });
+
   it('crearComercio crea el comercio Y su sucursal Principal activa', async () => {
     const res = await crearComercio(supabase, datosValidosConCuenta()); // ajustá al helper real del archivo
     expect(res.ok).toBe(true);
@@ -562,7 +584,7 @@ describe('sucursal principal en el alta (0012)', () => {
 });
 ```
 
-(Acordate de pushear los ids creados a los arreglos de teardown del archivo.)
+(Acordate de pushear los ids creados a los arreglos de teardown del archivo, incluidas las cuentas. `datosValidosConCuenta()` es el helper del archivo que arma un `DatosComercio` válido con su cuenta — usá el nombre real que encuentres ahí y ajustá la firma si toma parámetros; el spread `{ ...comercioActual!, cuenta_id: destino }` funciona porque `actualizarComercio` recibe el shape completo de la fila.)
 
 - [ ] **Paso 2: Ver FALLAR** — `npm test -- lib/comercios/guardarComercio.test.ts` (no existe la principal tras el alta).
 
@@ -584,7 +606,7 @@ Import arriba: `import { crearSucursalPrincipal } from '../comercio/sucursales';
 
 - [ ] **Paso 4: Ver PASAR** — `npm test -- lib/comercios/guardarComercio.test.ts`. OJO: tests existentes de `crearComercio` ahora dejan una sucursal por comercio — si algún teardown borra comercios sin borrar antes sus sucursales, va a fallar por FK: agregá el delete de `sucursales` por `comercio_id` antes del delete de `comercios` en el teardown (patrón que `cuentas.test.ts` ya usa).
 
-- [ ] **Paso 5: MUTATION-TEST.** Comentá la llamada `await crearSucursalPrincipal(supabase, data.id);` (y su manejo) → FALLA "crearComercio crea el comercio Y su sucursal Principal" (data `[]` ≠ fila esperada). Restaurá, verde.
+- [ ] **Paso 5: MUTATION-TESTS.** (a) Comentá la llamada `await crearSucursalPrincipal(supabase, data.id);` (y su manejo) → FALLA "crearComercio crea el comercio Y su sucursal Principal" (data `[]` ≠ fila esperada). Restaurá. (b) En `actualizarComercio`, borrá el `.eq('es_principal', false)` del conteo de sucursales propias (agregado en la Tarea 2) → FALLA el test gemelo del move (unidades 3 > límite 2). Restaurá, verde.
 
 - [ ] **Paso 6: Suite + typecheck + lint; Commit**
 
@@ -629,7 +651,7 @@ export default async function PaginaSucursales() {
   if (comercio?.cuenta_id) {
     const cupo = await cupoDeCuenta(supabase, comercio.cuenta_id);
     if (cupo.ok && cupo.limite !== null && cupo.usadas >= cupo.limite) {
-      avisoCupo = `Alcanzaste el límite de tu plan (${cupo.limite} negocio(s)/sucursal(es)). Hablá con FM para ampliarlo.`;
+      avisoCupo = `Alcanzaste el límite de tu plan (${cupo.limite} ${cupo.limite === 1 ? 'local' : 'locales'}). Hablá con FM para ampliarlo.`;
     }
   }
 
@@ -1206,9 +1228,9 @@ export async function cambiarContextoActivo(comercioId: string, sucursalId: stri
 }
 ```
 
-Imports nuevos del archivo: `cookies` de `next/headers`, `membresiasDeUsuario`, `obtenerSucursalActiva`, y `COOKIE_COMERCIO_ACTIVO, COOKIE_SUCURSAL_ACTIVA, opcionesCookieComercio` de `cookieComercio`.
+Imports del archivo tras el cambio: agregar `cookies` (`next/headers`), `createServiceClient` (hoy solo importa `createClienteServidor`), `membresiasDeUsuario`, `obtenerSucursalActiva`, y `COOKIE_COMERCIO_ACTIVO, COOKIE_SUCURSAL_ACTIVA, opcionesCookieComercio` de `cookieComercio`. **Quitar** el import de `fijarComercioActivo`: al borrar `cambiarComercioActivo` queda sin uso y el lint lo marca.
 
-- [ ] **Paso 2: Limpieza de cookie al fijar comercio.** En `fijarComercioActivo.ts`, tras el `cookieStore.set(...)`:
+- [ ] **Paso 2: Limpieza de cookie al fijar comercio.** En `fijarComercioActivo.ts`, actualizá primero su comentario de cabecera (línea ~11): menciona `cambiarComercioActivo (selector del header)` como caller, que acaba de desaparecer — su caller vivo es `elegirComercio` (`/comercio/elegir`), y el switcher usa `cambiarContextoActivo`. Después, tras el `cookieStore.set(...)`:
 
 ```ts
   // Cambiar de comercio resetea el contexto de sucursal a "todas" (la cookie vieja apuntaría a una
@@ -1487,7 +1509,7 @@ export default async function LayoutComercio({ children }: { children: React.Rea
 }
 ```
 
-- [ ] **Paso 6: Typecheck + lint + suite** — `npm run typecheck && npm run lint && npm test`. Typecheck debe atrapar cualquier referencia colgada a `SelectorComercio`/`cambiarComercioActivo` (no debe quedar ninguna: `grep -r "SelectorComercio\|cambiarComercioActivo"` sobre `app/` y `lib/` debe devolver vacío).
+- [ ] **Paso 6: Typecheck + lint + suite** — `npm run typecheck && npm run lint && npm test`. Typecheck debe atrapar cualquier referencia colgada a `SelectorComercio`/`cambiarComercioActivo`; verificá además que `grep -r "SelectorComercio\|cambiarComercioActivo" app/ lib/` no devuelva nada (si devuelve el comentario de `fijarComercioActivo.ts`, es que no hiciste el Paso 2).
 
 - [ ] **Paso 7: Commit**
 
@@ -2035,7 +2057,9 @@ export async function crearComercioPropio(
 
 - [ ] **Paso 4: Ver PASAR** — `npm test -- lib/comercios/crearComercioPropio.test.ts`.
 
-- [ ] **Paso 5: MUTATION-TESTS.** (a) En el paso 5 de la función, comentá los DOS deletes de la compensación → FALLA "si la membresía falla, COMPENSA" (queda la fila con slug `huerfano-imposible`). Restaurá. (b) En la validación del tipo, quitá `&& t.disponible` → FALLA "tipo de tarjeta no disponible" (cashback se crearía). Restaurá. Verde final.
+- [ ] **Paso 5: MUTATION-TESTS (tres candados).** (a) En el paso 5 de la función, comentá los DOS deletes de la compensación → FALLA "si la membresía falla, COMPENSA" (queda la fila con slug `huerfano-imposible`). Restaurá. (b) En la validación del tipo, quitá `&& t.disponible` → FALLA "tipo de tarjeta no disponible" (cashback se crearía). Restaurá. (c) **Cuenta derivada de la sesión** (fila de la tabla §5 del spec): en el paso 4, cambiá `cuenta_id: cuentaId` por `cuenta_id: (await supabase.from('cuentas_comercio').insert({ nombre: 'Ajena', limite_negocios: 9 }).select('id').single()).data!.id` (simula tomar la cuenta de otro lado en vez de la sesión) → FALLA la aserción `cuenta_id: cuentaId` del primer test. Restaurá y limpiá la cuenta huérfana que haya quedado (`delete from cuentas_comercio where nombre = 'Ajena'` vía un script descartable o el teardown). Verde final.
+
+  Nota de desviación deliberada respecto al spec §7: ahí se sugería provocar el fallo de membresía con un `auth_user_id` inexistente (FK real). No sirve acá: el paso 2 de la función busca la membresía owner ACTUAL por ese mismo `auth_user_id` y abortaría antes de llegar al insert. Por eso el test usa inyección puntual del insert de `usuarios_comercio` (el resto pega a la BD real y la compensación borra filas reales).
 
 - [ ] **Paso 6: Suite + typecheck + lint; Commit**
 
@@ -2055,7 +2079,15 @@ git commit -m "crearComercioPropio: alta self-serve con cuenta derivada de la se
 - Modify: `app/comercio/(protegido)/sucursales/page.tsx` (botón Agregar + `?agregar=1`)
 - Modify: `app/comercio/(protegido)/branding/page.tsx` (banner `?nuevo=1`)
 
-- [ ] **Paso 1: `actions.ts`.** El tipo pasa a `export type EstadoSucursal = { error: string } | { ok: true } | undefined;` y `accionCrearSucursal` devuelve `{ ok: true }` en el éxito (el modal cierra al verlo; renombrar/estado siguen devolviendo `undefined`). Se agrega al final:
+- [ ] **Paso 1: `actions.ts`.** `EstadoSucursal` NO se toca (lo comparten `accionRenombrarSucursal` y `accionCambiarEstado`, y ensancharlo rompería el `estado?.error` de `BotonEstadoSucursal.tsx:36`). El ALTA gana su propio tipo, porque el modal necesita distinguir el éxito para cerrarse:
+
+```ts
+// El alta tiene su propio estado (no el EstadoSucursal compartido): el modal se cierra al ver
+// {ok:true}, y un `undefined` de éxito sería indistinguible del estado inicial.
+export type EstadoCrearSucursal = { error: string } | { ok: true } | undefined;
+```
+
+`accionCrearSucursal` pasa a `Promise<EstadoCrearSucursal>` (firma y tipo del `_estadoPrevio`) y su `return undefined` final pasa a `return { ok: true };`. Se agrega al final del archivo:
 
 ```ts
 export type EstadoComercioPropio = { error: string } | undefined;
@@ -2090,7 +2122,7 @@ export async function accionCrearComercioPropio(
 
 Imports nuevos del archivo: `cookies` (`next/headers`), `redirect` (`next/navigation`), `crearComercioPropio`, y `COOKIE_COMERCIO_ACTIVO, COOKIE_SUCURSAL_ACTIVA, opcionesCookieComercio`.
 
-- [ ] **Paso 2: `FormularioSucursal.tsx` queda SOLO renombrar** (el alta vive en el modal; borrar `FormularioCrear` y el switch por prop — `sucursal` pasa a requerido). El render del error pasa a `{estado && 'error' in estado && (...)}` (el tipo ahora incluye `{ ok: true }`). Contenido completo:
+- [ ] **Paso 2: `FormularioSucursal.tsx` queda SOLO renombrar** (el alta vive en el modal; borrar `FormularioCrear` y el switch por prop — `sucursal` pasa a requerido). Sigue usando `EstadoSucursal`, así que el render del error no cambia. Contenido completo:
 
 ```tsx
 'use client';
@@ -2130,9 +2162,7 @@ export default function FormularioSucursal({
           {pendiente ? 'Guardando…' : 'Renombrar'}
         </button>
       </div>
-      {estado && 'error' in estado && (
-        <p className="alerta" role="alert" style={{ margin: 0 }}>{estado.error}</p>
-      )}
+      {estado?.error && <p className="alerta" role="alert" style={{ margin: 0 }}>{estado.error}</p>}
     </form>
   );
 }
@@ -2148,7 +2178,7 @@ import { useActionState } from 'react';
 import {
   accionCrearSucursal,
   accionCrearComercioPropio,
-  type EstadoSucursal,
+  type EstadoCrearSucursal,
   type EstadoComercioPropio,
 } from './actions';
 import { TIPOS_TARJETA } from '@/lib/comercios/guardarComercio';
@@ -2170,7 +2200,7 @@ export default function ModalAgregarLocal({
   const [abierto, setAbierto] = useState(abrirAlCargar);
   const [paso, setPaso] = useState<Paso>('elegir');
 
-  const [estadoSucursal, crearSucursal, pendienteSucursal] = useActionState<EstadoSucursal, FormData>(
+  const [estadoSucursal, crearSucursal, pendienteSucursal] = useActionState<EstadoCrearSucursal, FormData>(
     accionCrearSucursal,
     undefined,
   );
@@ -2377,7 +2407,7 @@ git commit -m "Modal '¿Que estas creando?': sucursal o comercio nuevo self-serv
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { sumarTendencias, fusionarTopClientes } from './agregados';
+import { sumarTendencias, fusionarTopClientes, resolverFiltrosReportes } from './agregados';
 
 // MUTATION-TESTING: el orden es el contrato (visitas desc, puntos como desempate — el MISMO
 // criterio que la SQL de reporte_top_clientes). Mutación a atrapar: invertir el sort.
@@ -2406,6 +2436,60 @@ describe('sumarTendencias', () => {
     const a = [{ dia: '2026-07-25', acreditaciones: 1, canjes: 1 }];
     sumarTendencias([a, a]);
     expect(a[0]).toEqual({ dia: '2026-07-25', acreditaciones: 1, canjes: 1 });
+  });
+});
+
+// MUTATION-TESTING: resolverFiltrosReportes es el candado de la fila "Filtros de reportes validados
+// contra membresías" (tabla §5 del spec). Vive acá, en una función pura, JUSTAMENTE para poder
+// mutarlo — validado inline en la página no habría forma de testearlo (el repo no testea páginas).
+describe('resolverFiltrosReportes', () => {
+  const comercios = [
+    { comercioId: 'c-mio', nombre: 'Mío' },
+    { comercioId: 'c-otro-mio', nombre: 'Otro mío' },
+  ];
+  const sucursales = [
+    { id: 's-1', nombre: 'Principal', activa: true, esPrincipal: true },
+    { id: 's-2', nombre: 'Centro', activa: true, esPrincipal: false },
+  ];
+
+  it('sin params: alcance = todos los comercios owner, sin sucursal', () => {
+    expect(resolverFiltrosReportes(comercios, sucursales, {})).toEqual({
+      comercio: null,
+      sucursal: null,
+    });
+  });
+
+  it('comercio propio: se acepta', () => {
+    expect(resolverFiltrosReportes(comercios, sucursales, { comercio: 'c-mio' })).toEqual({
+      comercio: comercios[0],
+      sucursal: null,
+    });
+  });
+
+  it('comercio AJENO (no está en sus membresías): cae a Todo', () => {
+    expect(resolverFiltrosReportes(comercios, sucursales, { comercio: 'c-ajeno' })).toEqual({
+      comercio: null,
+      sucursal: null,
+    });
+  });
+
+  it('sucursal ajena al comercio filtrado: cae a "todas" sin tumbar el filtro de comercio', () => {
+    expect(
+      resolverFiltrosReportes(comercios, sucursales, { comercio: 'c-mio', sucursal: 's-de-otro' }),
+    ).toEqual({ comercio: comercios[0], sucursal: null });
+  });
+
+  it('sucursal válida del comercio filtrado: se acepta', () => {
+    expect(
+      resolverFiltrosReportes(comercios, sucursales, { comercio: 'c-mio', sucursal: 's-2' }),
+    ).toEqual({ comercio: comercios[0], sucursal: sucursales[1] });
+  });
+
+  it('sucursal SIN comercio filtrado: se ignora (no hay a qué comercio pertenecer)', () => {
+    expect(resolverFiltrosReportes(comercios, sucursales, { sucursal: 's-1' })).toEqual({
+      comercio: null,
+      sucursal: null,
+    });
   });
 });
 
@@ -2441,6 +2525,7 @@ describe('fusionarTopClientes', () => {
 - [ ] **Paso 2: Ver FALLAR**, **Paso 3: Implementar** `lib/reportes/agregados.ts`:
 
 ```ts
+import type { SucursalListada } from '../comercio/sucursales';
 import type { FilaTendencia, FilaTopCliente } from './reportes';
 
 // Merges PUROS para la vista conglomerado de /comercio/reportes (plan 2026-07-25 §4.7): los RPC de
@@ -2466,6 +2551,27 @@ export function sumarTendencias(series: FilaTendencia[][]): FilaTendencia[] {
   return [...porDia.values()].sort((a, b) => a.dia.localeCompare(b.dia));
 }
 
+export interface ComercioOwner {
+  comercioId: string;
+  nombre: string;
+}
+
+// CONTROL DE SEGURIDAD (tabla §5 del spec): los filtros llegan por querystring — input del cliente.
+// El comercio DEBE estar entre las membresías owner de la sesión; la sucursal DEBE pertenecer al
+// comercio filtrado. Lo que no valida cae a "Todo"/"todas" — nunca llega un id ajeno a un RPC.
+// Puro a propósito: la página no puede testearse, esta función sí (ver MUTATION-TESTING en el
+// .test.ts). Una sucursal sin comercio filtrado se ignora: no hay contra qué verificar pertenencia.
+export function resolverFiltrosReportes(
+  comerciosOwner: ComercioOwner[],
+  sucursalesDelComercio: SucursalListada[],
+  params: { comercio?: string; sucursal?: string },
+): { comercio: ComercioOwner | null; sucursal: SucursalListada | null } {
+  const comercio = comerciosOwner.find((c) => c.comercioId === params.comercio) ?? null;
+  if (!comercio) return { comercio: null, sucursal: null };
+  const sucursal = sucursalesDelComercio.find((s) => s.id === params.sucursal) ?? null;
+  return { comercio, sucursal };
+}
+
 export type TopClienteConComercio = FilaTopCliente & { comercio_nombre: string };
 
 // Fusiona los tops por comercio en un top global: visitas desc, puntos como desempate (el MISMO
@@ -2485,7 +2591,7 @@ export function fusionarTopClientes(
 
 - [ ] **Paso 4: Ver PASAR** — `npm test -- lib/reportes/agregados.test.ts`.
 
-- [ ] **Paso 5: MUTATION-TEST.** Invertí el sort de `fusionarTopClientes` (`a.visitas - b.visitas`) → FALLA el test de orden. Restaurá. Quitá el desempate (`|| b.puntos_totales - a.puntos_totales`) → FALLA (Ana quedaría antes que Caro o el orden se vuelve inestable — verificá que la aserción lo atrape). Restaurá, verde.
+- [ ] **Paso 5: MUTATION-TESTS.** (a) Invertí el sort de `fusionarTopClientes` (`a.visitas - b.visitas`) → FALLA el test de orden. Restaurá. (b) Quitá el desempate (`|| b.puntos_totales - a.puntos_totales`) → FALLA (Ana quedaría antes que Caro — verificá que la aserción lo atrape). Restaurá. (c) **Candado de filtros:** en `resolverFiltrosReportes`, cambiá la primera línea por `const comercio = { comercioId: params.comercio!, nombre: '?' };` (confiar en el querystring) → FALLA "comercio AJENO cae a Todo". Restaurá. (d) Cambiá el find de sucursal por `const sucursal = sucursalesDelComercio[0] ?? null;` → FALLA "sucursal ajena al comercio filtrado". Restaurá, todo verde.
 
 - [ ] **Paso 6: Commit**
 
@@ -2541,7 +2647,7 @@ import {
   reporteTopClientes,
   type FilaReporteSucursal,
 } from '@/lib/reportes/reportes';
-import { sumarTendencias, fusionarTopClientes } from '@/lib/reportes/agregados';
+import { sumarTendencias, fusionarTopClientes, resolverFiltrosReportes } from '@/lib/reportes/agregados';
 
 export const dynamic = 'force-dynamic';
 
@@ -2566,12 +2672,15 @@ function Estadistica({ valor, etiqueta }: { valor: number; etiqueta: string }) {
   );
 }
 
-function CartaSucursal({ fila }: { fila: FilaReporteSucursal }) {
+// `esPrincipal` viene de afuera: reporte_sucursales (0010) no devuelve es_principal — se cruza con
+// el listado de sucursales que la página ya carga.
+function CartaSucursal({ fila, esPrincipal }: { fila: FilaReporteSucursal; esPrincipal: boolean }) {
   return (
     <div className="panel" style={{ marginTop: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h3 className="admin-fila-nombre" style={{ fontSize: '1.05rem' }}>
           {fila.sucursal_nombre ?? 'Sin sucursal'}
+          {esPrincipal && <span className="admin-fila-slug" style={{ marginLeft: 8 }}>Principal</span>}
         </h3>
         {fila.sucursal_activa === false && <span className="pastilla pastilla-inactivo">inactiva</span>}
         {fila.sucursal_id === null && <span className="admin-fila-slug">actividad sin asignar</span>}
@@ -2591,34 +2700,45 @@ export default async function PaginaReportes({
   searchParams: Promise<{ comercio?: string; sucursal?: string }>;
 }) {
   // Gate del dueño. La vista es el CONGLOMERADO de sus comercios owner (plan 2026-07-25 §4.7) e
-  // IGNORA el switcher del header. Los filtros vienen del querystring (input del cliente) y se
-  // validan ANTES de correr cualquier RPC: ?comercio contra la lista owner en memoria; ?sucursal
-  // por pertenencia al comercio filtrado (vía listarSucursales, que además arma los chips). Un id
-  // ajeno o inválido cae a "Todo" — nunca a la BD.
+  // IGNORA el switcher del header. Los filtros vienen del querystring (input del cliente): los
+  // valida resolverFiltrosReportes (puro, con mutation-tests) ANTES de correr cualquier RPC —
+  // ?comercio contra la lista owner, ?sucursal por pertenencia al comercio filtrado. Un id ajeno o
+  // inválido cae a "Todo"/"todas".
   const { comercios } = await verifyComercioOwner();
   const params = await searchParams;
   const supabase = createServiceClient();
 
-  const comercioFiltrado = comercios.find((c) => c.comercioId === params.comercio) ?? null;
-
-  let sucursalFiltrada: { id: string; nombre: string } | null = null;
-  let sucursalesDelComercio: { id: string; nombre: string }[] = [];
-  if (comercioFiltrado) {
-    // Activas e inactivas: el histórico de una sucursal apagada sigue siendo consultable.
-    sucursalesDelComercio = (await listarSucursales(supabase, comercioFiltrado.comercioId)) ?? [];
-    sucursalFiltrada = sucursalesDelComercio.find((s) => s.id === params.sucursal) ?? null;
-  }
+  // Sucursales del comercio del querystring: solo se cargan si ese id es de un comercio SUYO (así
+  // un id ajeno ni siquiera dispara la consulta). Activas e inactivas: el histórico de una sucursal
+  // apagada sigue siendo consultable.
+  const esComercioPropio = comercios.some((c) => c.comercioId === params.comercio);
+  const sucursalesDelComercio = esComercioPropio
+    ? (await listarSucursales(supabase, params.comercio!)) ?? []
+    : [];
+  const { comercio: comercioFiltrado, sucursal: sucursalFiltrada } = resolverFiltrosReportes(
+    comercios,
+    sucursalesDelComercio,
+    params,
+  );
 
   const alcance = comercioFiltrado ? [comercioFiltrado] : comercios;
   const datos = await Promise.all(
     alcance.map(async (c) => {
-      const [sucursales, tendencia, top] = await Promise.all([
+      // El listado va junto a los RPC porque reporte_sucursales (0010) no devuelve es_principal:
+      // el cruce por id es lo que permite etiquetar la Principal en cada carta.
+      const [sucursales, tendencia, top, listado] = await Promise.all([
         reporteSucursales(supabase, c.comercioId),
         reporteTendencia(supabase, c.comercioId, DIAS_TENDENCIA),
         reporteTopClientes(supabase, c.comercioId, TOP_LIMITE),
+        listarSucursales(supabase, c.comercioId),
       ]);
-      return { comercio: c, sucursales, tendencia, top };
+      return { comercio: c, sucursales, tendencia, top, listado: listado ?? [] };
     }),
+  );
+
+  // Ids de las sucursales principales del alcance visible (para la etiqueta de las cartas).
+  const idsPrincipales = new Set(
+    datos.flatMap((d) => d.listado.filter((s) => s.esPrincipal).map((s) => s.id)),
   );
 
   // Cabecera: con filtro de sucursal, SUS números; si no, la suma del alcance visible.
@@ -2724,7 +2844,11 @@ export default async function PaginaReportes({
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {filasVisibles.map((f) => (
-                <CartaSucursal key={f.sucursal_id ?? 'sin-sucursal'} fila={f} />
+                <CartaSucursal
+                  key={f.sucursal_id ?? 'sin-sucursal'}
+                  fila={f}
+                  esPrincipal={f.sucursal_id !== null && idsPrincipales.has(f.sucursal_id)}
+                />
               ))}
             </div>
           )}
@@ -2747,7 +2871,11 @@ export default async function PaginaReportes({
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {d.sucursales.map((f) => (
-                      <CartaSucursal key={f.sucursal_id ?? 'sin-sucursal'} fila={f} />
+                      <CartaSucursal
+                        key={f.sucursal_id ?? 'sin-sucursal'}
+                        fila={f}
+                        esPrincipal={f.sucursal_id !== null && idsPrincipales.has(f.sucursal_id)}
+                      />
                     ))}
                   </div>
                 )}
@@ -2857,7 +2985,14 @@ git commit -m "Guia de pruebas manuales: panel movil, sucursal principal, contex
 
 - Migración 0012 aplicada por el usuario y verificada con `scripts/verificar-0012.ts` (exit 0).
 - Suite completa verde (`npm test`), `npm run typecheck` y `npm run lint` limpios.
-- Todos los mutation-tests de los candados ejecutados y reportados (tabla §5 del spec).
+- Todos los mutation-tests de los candados ejecutados y reportados (tabla §5 del spec). Mapa
+  tarea→candado: cupo/principal → Tarea 2 Paso 5 (a,b) y Tarea 4 Paso 5 (b); principal no
+  desactivable + primera-gratis → Tarea 3 Paso 5; cookie de sucursal (cajero la ignora,
+  pertenencia, activa) → Tarea 8 Paso 5 (a,b,c); alta principal → Tarea 4 Paso 5 (a); cuenta
+  derivada de la sesión, tipo de tarjeta y compensación → Tarea 12 Paso 5 (a,b,c); filtros de
+  reportes validados → Tarea 14 Paso 5 (c,d); nav por rol → Tarea 6 Paso 7. El único control sin
+  mutación automatizable es el `enlacesPorRol` del render (cubierto por su test puro) y la
+  verificación visual de cada checkpoint, que va a la guía manual (Tarea 16).
 - Guía de pruebas manuales extendida; la verificación visual la hace el controlador con las
   herramientas de navegador o el usuario en producción (los checkpoints de cada fase).
 - El merge a `master` es fast-forward (patrón del proyecto) y lo decide el usuario.
