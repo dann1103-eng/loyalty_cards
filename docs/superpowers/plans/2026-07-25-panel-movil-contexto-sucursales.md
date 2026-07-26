@@ -742,15 +742,28 @@ git commit -m "UI Sucursales: principal destacada sin toggle, aviso de cupo del 
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { ENLACES_NAV, enlacesPorRol } from './navegacion';
+import { enlacesPorRol } from './navegacion';
 
 // MUTATION-TESTING: enlacesPorRol es el control de acceso VISUAL de la nav (la barrera real son los
-// gates de cada página). Mutación que estos tests deben atrapar: devolver todos los enlaces para
-// 'cajero' — el cajero vería secciones owner-only en su nav.
+// gates de cada página). Mutaciones que estos tests deben atrapar: (1) devolver todos los enlaces
+// para 'cajero' — el cajero vería secciones owner-only en su nav; (2) un typo en cualquier href de
+// ENLACES_NAV (p. ej. '/comercio/brandingg') — sería un 404 en el teléfono. Por (2) los hrefs
+// esperados se escriben LITERALES abajo: compararlos contra ENLACES_NAV sería una tautología que
+// pasa en verde con la constante rota.
 describe('enlacesPorRol', () => {
   it('owner ve las 9 secciones (incluida Reglas, nueva en la nav)', () => {
     const hrefs = enlacesPorRol('owner').map((e) => e.href);
-    expect(hrefs).toEqual(ENLACES_NAV.map((e) => e.href));
+    expect(hrefs).toEqual([
+      '/comercio/panel',
+      '/comercio/escanear',
+      '/comercio/branding',
+      '/comercio/recompensas',
+      '/comercio/reglas',
+      '/comercio/sucursales',
+      '/comercio/cajeros',
+      '/comercio/clientes',
+      '/comercio/reportes',
+    ]);
     expect(hrefs).toContain('/comercio/reglas');
     expect(hrefs).toHaveLength(9);
   });
@@ -884,8 +897,8 @@ export default function NavInferior({ rol }: { rol: string }) {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   padding-inline: 14px;
-  mask-image: linear-gradient(to right, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
 }
 .nav-carril::-webkit-scrollbar {
   display: none;
@@ -905,6 +918,9 @@ export default function NavInferior({ rol }: { rol: string }) {
   color: var(--texto-3);
   padding: 6px 14px;
   border-radius: var(--radius-pill);
+  /* El overflow del carril recorta el anillo de foco, que por defecto se dibuja FUERA del borde:
+     con offset negativo se dibuja hacia adentro y queda visible al navegar con Tab. */
+  outline-offset: -2px;
   transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
 }
 .nav-inferior a:active {
@@ -1675,11 +1691,21 @@ describe('generarSlugUnico (integración)', () => {
 
   afterEach(async () => {
     if (comerciosDePrueba.length) {
-      await supabase.from('sucursales').delete().in('comercio_id', comerciosDePrueba);
-      await supabase.from('comercios').delete().in('id', comerciosDePrueba);
+      // sucursales apunta a comercios sin cascade: van primero. Los errores se LOGUEAN en vez de
+      // descartarse — esta es la BD real donde el usuario hace QA, y una limpieza que falla en
+      // silencio deja basura que recién se nota cuando otra corrida choca contra ella.
+      const { error: eSucursales } = await supabase
+        .from('sucursales').delete().in('comercio_id', comerciosDePrueba);
+      if (eSucursales) console.error('[test] no se pudieron borrar las sucursales de prueba:', eSucursales);
+      const { error } = await supabase.from('comercios').delete().in('id', comerciosDePrueba);
+      if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
       comerciosDePrueba.length = 0;
     }
   });
+
+  // Además del reloj, aleatoriedad: dos corridas dentro del mismo milisegundo generarían el mismo
+  // base y la segunda chocaría contra el unique de slug (flake no determinista).
+  const sufijo = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   async function ocuparSlug(slug: string) {
     const { data, error } = await supabase
@@ -1689,18 +1715,29 @@ describe('generarSlugUnico (integración)', () => {
   }
 
   it('slug libre: devuelve el base', async () => {
-    const base = `libre-${Date.now()}`;
+    const base = `libre-${sufijo()}`;
     expect(await generarSlugUnico(supabase, base)).toEqual({ ok: true, slug: base });
   });
 
   it('base ocupado: desambigua con -2', async () => {
-    const base = `choca-${Date.now()}`;
+    const base = `choca-${sufijo()}`;
     await ocuparSlug(base);
     expect(await generarSlugUnico(supabase, base)).toEqual({ ok: true, slug: `${base}-2` });
   });
 
+  it('con 4 candidatos ocupados todavía alcanza el quinto', async () => {
+    // Fija el tope POR ABAJO, y es la ÚNICA prueba que lo hace: la de "los 5 ocupados" llena
+    // TODOS los candidatos, así que no distingue "probó 5" de "probó 2" —ambas terminan en el
+    // mismo error— y sigue verde con el tope recortado a 4. Acá el quinto es el único libre, así
+    // que recortar el tope se detecta.
+    const base = `tope-${sufijo()}`;
+    await ocuparSlug(base);
+    for (let i = 2; i <= 4; i++) await ocuparSlug(`${base}-${i}`);
+    expect(await generarSlugUnico(supabase, base)).toEqual({ ok: true, slug: `${base}-5` });
+  });
+
   it('los 5 candidatos ocupados: error claro, sin loop infinito', async () => {
-    const base = `lleno-${Date.now()}`;
+    const base = `lleno-${sufijo()}`;
     await ocuparSlug(base);
     for (let i = 2; i <= 5; i++) await ocuparSlug(`${base}-${i}`);
     expect(await generarSlugUnico(supabase, base)).toEqual({
@@ -1721,14 +1758,11 @@ import type { Database } from '../supabase/types';
 
 // Slug autogenerado para el alta self-serve (plan 2026-07-25 §4.6): el dueño no ve el campo (FM
 // puede editarlo después desde su panel). Debe cumplir el regex de validar(): ^[a-z0-9-]+$.
-// OJO transcripción: el rango del segundo replace es el bloque Unicode "Combining Diacritical
-// Marks" y DEBE escribirse con escapes: barra-u-0300 guion barra-u-036f (si al copiar quedaron
-// caracteres combinantes literales dentro de los corchetes, reescribilo con los escapes).
 export function slugificarNombre(nombre: string): string {
   const base = nombre
     .toLowerCase()
     .normalize('NFD') // separa letra y acento: "café" → "cafe" + diacrítico (la ñ → n + tilde)
-    .replace(/[̀-ͯ]/g, '') // borra los diacríticos combinantes que dejó NFD
+    .replace(/[\u0300-\u036f]/g, '') // borra los diacríticos combinantes que dejó NFD
     .replace(/[^a-z0-9]+/g, '-') // todo lo demás (espacios, símbolos) → un guion
     .replace(/^-+|-+$/g, ''); // sin guiones en los bordes
   return base || 'comercio'; // un nombre sin nada usable (p. ej. "!!!") no puede dar slug vacío
@@ -1739,6 +1773,12 @@ export function slugificarNombre(nombre: string): string {
 // frágil. Una colisión residual por carrera entre este select y el insert devuelve el error de
 // crearComercio tal cual (el usuario reintenta). Tope de 5: evita un loop infinito en un caso
 // ~imposible.
+//
+// PRECONDICIÓN: `supabase` DEBE ser createServiceClient(). comercios es deny-all bajo RLS desde la
+// 0001, así que con un createClienteServidor() cada select de acá devuelve data:null y error:null
+// —indistinguible de "el slug está libre"—: la función respondería SIEMPRE ok:true con el base y
+// toda la pre-verificación sería un no-op silencioso, con la colisión reventando recién en el
+// insert. Mismo peligro que ya documentan actualizarComercio y eliminarComercio.
 export async function generarSlugUnico(
   supabase: SupabaseClient<Database>,
   nombre: string,
@@ -1758,7 +1798,11 @@ export async function generarSlugUnico(
 }
 ```
 
-- [ ] **Paso 4: Ver PASAR** — `npm test -- lib/comercios/slugComercio.test.ts`. **Paso 5: Commit**
+- [ ] **Paso 4: Ver PASAR** — `npm test -- lib/comercios/slugComercio.test.ts`.
+
+- [ ] **Paso 5: MUTATION-TESTS.** (a) `return base || 'comercio';` → `return base;`: FALLA "un nombre sin caracteres usables cae al fallback". (b) tope `i <= 5` → `i <= 6`: FALLA "los 5 candidatos ocupados". (c) tope `i <= 5` → `i <= 4`: FALLA "con 4 candidatos ocupados todavía alcanza el quinto" — y OJO, con esta mutación "los 5 candidatos ocupados" sigue VERDE (llena todos los candidatos, así que no distingue "probó 5" de "probó 2"): ese es el motivo de existir del test del quinto. Restaurá después de cada una y dejá todo en verde.
+
+- [ ] **Paso 6: Commit**
 
 ```bash
 git add lib/comercios/slugComercio.ts lib/comercios/slugComercio.test.ts
