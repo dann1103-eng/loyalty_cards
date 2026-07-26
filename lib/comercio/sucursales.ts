@@ -14,6 +14,7 @@ export interface SucursalListada {
   id: string;
   nombre: string;
   activa: boolean;
+  esPrincipal: boolean;
 }
 
 export type ResultadoSucursal = { ok: true; id: string } | { ok: false; error: string };
@@ -27,24 +28,37 @@ export async function crearSucursal(
   const nombre = datos.nombre.trim();
   if (!nombre) return { ok: false, error: 'El nombre de la sucursal es obligatorio.' };
 
-  // El límite del plan cubre comercios Y sucursales juntos (migración 0011): antes de crear, hay
-  // que saber a qué cuenta pertenece este comercio y verificar su cupo ahí. Un comercio sin
-  // cuenta_id (legado/fixture de test) no tiene límite que verificar — degrada con gracia, mismo
-  // criterio que el resto del proyecto para cuenta_id nulo (spec Fase 6 §4.1).
-  const { data: comercio, error: eComercio } = await supabase
-    .from('comercios').select('cuenta_id').eq('id', comercioId).maybeSingle();
-  if (eComercio) {
-    console.error('[comercio] no se pudo leer el comercio para verificar el límite:', eComercio);
+  // ¿Primera sucursal del comercio? Nace PRINCIPAL y NO consume cupo (0012): representa el local
+  // del propio comercio. Es también la auto-reparación del caso "el alta del comercio no pudo
+  // crear su Principal" — la primera creada a mano toma ese lugar. Dos altas concurrentes de la
+  // "primera" chocan contra el índice parcial único (23505) → cae al error genérico, sin daño.
+  const { count, error: eConteo } = await supabase
+    .from('sucursales').select('id', { count: 'exact', head: true }).eq('comercio_id', comercioId);
+  if (eConteo) {
+    console.error('[comercio] no se pudo contar las sucursales del comercio:', eConteo);
     return { ok: false, error: 'No se pudo crear la sucursal.' };
   }
-  if (comercio?.cuenta_id) {
-    const limite = await verificarLimiteCuenta(supabase, comercio.cuenta_id);
-    if (!limite.ok) return { ok: false, error: limite.error };
+  const esPrimera = (count ?? 0) === 0;
+
+  if (!esPrimera) {
+    // Una sucursal ADICIONAL consume cupo del plan (migración 0011 + 0012): hay que saber a qué
+    // cuenta pertenece este comercio y verificar su cupo. Un comercio sin cuenta_id (legado/fixture)
+    // no tiene límite que verificar — degrada con gracia (spec Fase 6 §4.1).
+    const { data: comercio, error: eComercio } = await supabase
+      .from('comercios').select('cuenta_id').eq('id', comercioId).maybeSingle();
+    if (eComercio) {
+      console.error('[comercio] no se pudo leer el comercio para verificar el límite:', eComercio);
+      return { ok: false, error: 'No se pudo crear la sucursal.' };
+    }
+    if (comercio?.cuenta_id) {
+      const limite = await verificarLimiteCuenta(supabase, comercio.cuenta_id);
+      if (!limite.ok) return { ok: false, error: limite.error };
+    }
   }
 
   const { data, error } = await supabase
     .from('sucursales')
-    .insert({ comercio_id: comercioId, nombre }) // activa=true por default de la BD (0008)
+    .insert({ comercio_id: comercioId, nombre, es_principal: esPrimera }) // activa=true por default (0008)
     .select('id')
     .single();
 
@@ -93,6 +107,20 @@ export async function cambiarEstadoSucursal(
   comercioId: string,
   activa: boolean,
 ): Promise<ResultadoAccion> {
+  // CANDADO: la principal no se puede desactivar — sin ella el comercio vuelve al callejón "no hay
+  // sucursal activa para cajeros" que la 0012 elimina. Solo aplica al APAGAR (reactivarla es no-op
+  // legítimo). Ver MUTATION-TESTING en el .test.ts.
+  if (!activa) {
+    const { data: fila, error: eFila } = await supabase
+      .from('sucursales').select('es_principal').eq('id', id).eq('comercio_id', comercioId).maybeSingle();
+    if (eFila) {
+      console.error('[comercio] no se pudo leer la sucursal para el candado de principal:', eFila);
+      return { ok: false, error: 'No se pudo cambiar el estado de la sucursal.' };
+    }
+    if (!fila) return { ok: false, error: 'Esa sucursal ya no existe.' };
+    if (fila.es_principal) return { ok: false, error: 'La sucursal principal no se puede desactivar.' };
+  }
+
   const { error } = await supabase
     .from('sucursales')
     .update({ activa })
@@ -121,15 +149,16 @@ export async function listarSucursales(
 ): Promise<SucursalListada[] | null> {
   const { data, error } = await supabase
     .from('sucursales')
-    .select('id, nombre, activa')
+    .select('id, nombre, activa, es_principal')
     .eq('comercio_id', comercioId)
+    .order('es_principal', { ascending: false }) // la principal SIEMPRE primera (0012)
     .order('created_at');
 
   if (error) {
     console.error('[comercio] falló la consulta de sucursales:', error);
     return null;
   }
-  return data ?? [];
+  return (data ?? []).map((s) => ({ id: s.id, nombre: s.nombre, activa: s.activa, esPrincipal: s.es_principal }));
 }
 
 // Control de seguridad: el picker de sucursal del dueño y la atribución del escáner deben rechazar
@@ -153,4 +182,24 @@ export async function sucursalPerteneceAComercio(
     console.error('[comercio] falló la verificación de pertenencia de sucursal:', error);
   }
   return data !== null;
+}
+
+// La fila "Principal" que todo comercio recibe al nacer (0012). La llama crearComercio
+// (guardarComercio.ts) — el alta de FM y la self-serve pasan por ahí — para que ningún caller
+// pueda olvidarla. Si falla, el caller NO revierte el comercio: la primera sucursal creada a mano
+// toma el lugar (auto-reparación de crearSucursal).
+export async function crearSucursalPrincipal(
+  supabase: SupabaseClient<Database>,
+  comercioId: string,
+): Promise<ResultadoSucursal> {
+  const { data, error } = await supabase
+    .from('sucursales')
+    .insert({ comercio_id: comercioId, nombre: 'Principal', es_principal: true })
+    .select('id')
+    .single();
+  if (error) {
+    console.error('[comercio] falló el insert de la sucursal principal:', error);
+    return { ok: false, error: 'No se pudo crear la sucursal principal.' };
+  }
+  return { ok: true, id: data.id };
 }
