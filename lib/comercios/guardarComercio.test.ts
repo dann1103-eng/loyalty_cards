@@ -28,6 +28,9 @@ afterEach(async () => {
     const { data: comerciosDeSlugs } = await supabase.from('comercios').select('id').in('slug', slugsDePrueba);
     const idsDeSlugs = (comerciosDeSlugs ?? []).map((c) => c.id);
     if (idsDeSlugs.length) {
+      // Orden FK: usuarios_comercio apunta a comercios Y a sucursales, así que va PRIMERO —
+      // borrar la sucursal antes daría 23503 y dejaría basura en la BD real de QA.
+      await supabase.from('usuarios_comercio').delete().in('comercio_id', idsDeSlugs);
       await supabase.from('sucursales').delete().in('comercio_id', idsDeSlugs);
     }
     const { error } = await supabase.from('comercios').delete().in('slug', slugsDePrueba);
@@ -287,8 +290,72 @@ describe('actualizarComercio', () => {
   });
 });
 
+describe('sucursal principal en el alta (0012)', () => {
+  it('mover un comercio a otra cuenta NO cuenta su principal (gemelo del de asignarComercioACuenta)', async () => {
+    // actualizarComercio tiene SU PROPIO conteo de sucursales propias — el .eq('es_principal',
+    // false) de allá necesita su propia prueba, o esa copia puede regresar sin que nadie se entere.
+    // Espeja el test vecino "al cambiar de cuenta, cuenta las sucursales propias…" pero con un
+    // destino de límite 2 que SÍ debe aceptar el move: 1 comercio + 1 sucursal adicional (la
+    // principal viaja gratis con su comercio).
+    const cuentaDestino = await (await import('./cuentas')).crearCuenta(supabase, {
+      nombre: `Destino principal ${Date.now()}`, limiteNegocios: 2, plan: 'growth',
+      licenciaEstado: 'activo', licenciaMontoMensual: null, licenciaActivaDesde: null,
+    });
+    if (!cuentaDestino.ok) throw new Error('setup falló');
+    cuentasDePrueba.push(cuentaDestino.id);
+
+    const datos = await datosValidos(`test-mover-principal-${Date.now()}`);
+    const creado = await crearComercio(supabase, datos); // crea también su Principal
+    if (!creado.ok) throw new Error('el setup falló');
+    const { error } = await supabase.from('sucursales').insert({ comercio_id: creado.id, nombre: 'Sucursal Propia' });
+    if (error) throw error;
+
+    const res = await actualizarComercio(supabase, creado.id, { ...datos, cuenta_id: cuentaDestino.id });
+    expect(res.ok).toBe(true);
+  });
+
+  it('crearComercio crea el comercio Y su sucursal Principal activa', async () => {
+    const res = await crearComercio(supabase, await datosValidos(`test-alta-principal-${Date.now()}`));
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const { data } = await supabase
+      .from('sucursales').select('nombre, activa, es_principal').eq('comercio_id', res.id);
+    expect(data).toEqual([{ nombre: 'Principal', activa: true, es_principal: true }]);
+  });
+
+  it('si el insert de la principal falla, el comercio igual se crea (best-effort)', async () => {
+    // Inyección de fallo puntual: la integración real no puede hacer fallar SOLO ese insert.
+    // La cuenta del fixture es NUEVA (0 comercios al verificar el límite), así que el único
+    // acceso a 'sucursales' dentro de crearComercio es el insert de la principal.
+    const real = createServiceClient();
+    const conSucursalesRotas = {
+      from(tabla: string) {
+        if (tabla !== 'sucursales') return real.from(tabla as never);
+        return {
+          insert: () => ({
+            select: () => ({
+              single: async () => ({ data: null, error: { message: 'roto a propósito' } }),
+            }),
+          }),
+        } as never;
+      },
+      // `as unknown as` y no un cast directo: el objeto solo implementa `from`, así que TS lo
+      // rechaza con TS2352 ("no se superponen lo suficiente") contra el cliente completo.
+    } as unknown as ReturnType<typeof createServiceClient>;
+
+    const res = await crearComercio(conSucursalesRotas, await datosValidos(`test-principal-rota-${Date.now()}`));
+    expect(res.ok).toBe(true); // el comercio NO se pierde por la principal
+    if (!res.ok) return;
+    const { data } = await real.from('sucursales').select('id').eq('comercio_id', res.id);
+    expect(data).toEqual([]); // quedó sin principal: crearSucursal la auto-repara después
+  });
+});
+
 describe('eliminarComercio', () => {
   it('elimina un comercio sin datos asociados', async () => {
+    // Desde la 0012 este comercio NACE con su sucursal Principal, cuya FK hacia comercios tampoco
+    // tiene cascada (0008): sin el retiro de la principal que hace eliminarComercio, este caso —el
+    // botón "Eliminar" del panel FM sobre un comercio recién creado— daría 23503 para SIEMPRE.
     const slug = `test-eliminar-${Date.now()}`;
     const creado = await crearComercio(supabase, await datosValidos(slug));
     if (!creado.ok) throw new Error('el setup falló');
@@ -298,6 +365,87 @@ describe('eliminarComercio', () => {
 
     const { data } = await supabase.from('comercios').select('id').eq('id', creado.id).maybeSingle();
     expect(data).toBeNull();
+
+    // Y su Principal se fue con él: la sucursal referencia al comercio, así que dejarla sería una
+    // fila huérfana apuntando a un id que ya no existe.
+    const { data: huerfanas } = await supabase.from('sucursales').select('id').eq('comercio_id', creado.id);
+    expect(huerfanas).toEqual([]);
+  });
+
+  it('un borrado rechazado repone la principal VERBATIM, sin renombrarla', async () => {
+    // El retiro de la principal es quirúrgico (SOLO ella; la sucursal del dueño sigue bloqueando el
+    // borrado) y la reposición es IDÉNTICA. Esto último no es cosmético: la principal suele ser una
+    // fila del DUEÑO —el backfill de la 0012 ascendió la más antigua con su nombre, y en producción
+    // la de "Verde Raíz" se llama "Centro Santa Ana"—, así que reponer un genérico 'Principal' la
+    // renombraría en silencio desde un botón que ni siquiera borró nada.
+    const slug = `test-eliminar-con-sucursal-${Date.now()}`;
+    const creado = await crearComercio(supabase, await datosValidos(slug));
+    if (!creado.ok) throw new Error('el setup falló');
+
+    // La principal, renombrada por el dueño (renombrarSucursal no se lo impide) y con su fecha.
+    const { data: antes, error: eRenombrar } = await supabase
+      .from('sucursales').update({ nombre: 'Centro Santa Ana' })
+      .eq('comercio_id', creado.id).eq('es_principal', true)
+      .select('id, nombre, activa, created_at').single();
+    if (eRenombrar) throw eRenombrar;
+    const { error: eSucursal } = await supabase
+      .from('sucursales').insert({ comercio_id: creado.id, nombre: 'Sucursal del Dueño' });
+    if (eSucursal) throw eSucursal;
+
+    const res = await eliminarComercio(supabase, creado.id);
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/datos asociados/i);
+
+    const { data } = await supabase.from('comercios').select('id').eq('id', creado.id).maybeSingle();
+    expect(data).not.toBeNull();
+
+    // Byte por byte lo que había: mismo id (nada quedó colgando), mismo nombre y misma created_at.
+    const { data: despues } = await supabase
+      .from('sucursales').select('id, nombre, activa, created_at, es_principal')
+      .eq('comercio_id', creado.id).eq('es_principal', true).single();
+    expect(despues).toEqual({ ...antes, es_principal: true });
+
+    // Y la del dueño sigue ahí: el retiro no se la llevó.
+    const { data: todas } = await supabase
+      .from('sucursales').select('nombre').eq('comercio_id', creado.id).eq('es_principal', false);
+    expect(todas).toEqual([{ nombre: 'Sucursal del Dueño' }]);
+  });
+
+  it('rechaza eliminar si la principal tiene un cajero asignado, nombrando la causa real', async () => {
+    // Camino del 23503 EN EL RETIRO (no en el delete del comercio): usuarios_comercio.sucursal_id
+    // apunta a la principal, así que ni siquiera se puede retirar. Es justo el caso que la 0012 vino
+    // a habilitar —cajeros sobre la principal— y el mensaje tiene que nombrar la causa verdadera:
+    // decir "tarjetas" mandaría al admin a buscar algo que no existe.
+    const slug = `test-eliminar-con-cajero-${Date.now()}`;
+    const creado = await crearComercio(supabase, await datosValidos(slug));
+    if (!creado.ok) throw new Error('el setup falló');
+
+    const { data: principal, error: ePrincipal } = await supabase
+      .from('sucursales').select('id').eq('comercio_id', creado.id).eq('es_principal', true).single();
+    if (ePrincipal) throw ePrincipal;
+    const { error: eCajero } = await supabase.from('usuarios_comercio').insert({
+      comercio_id: creado.id,
+      email: `cajero-principal-${Date.now()}-${Math.random().toString(36).slice(2)}@test.fm`,
+      rol: 'cajero',
+      sucursal_id: principal.id,
+    });
+    if (eCajero) throw eCajero;
+
+    const res = await eliminarComercio(supabase, creado.id);
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toBe(
+        'No se puede eliminar: la sucursal principal tiene actividad asociada (cajeros, transacciones o canjes). Solo se pueden eliminar comercios sin actividad.',
+      );
+    }
+
+    // Nada se movió: el comercio y su principal siguen intactos.
+    const { data: comercio } = await supabase.from('comercios').select('id').eq('id', creado.id).maybeSingle();
+    expect(comercio).not.toBeNull();
+    const { data: sigue } = await supabase.from('sucursales').select('id').eq('id', principal.id).maybeSingle();
+    expect(sigue).not.toBeNull();
   });
 
   it('rechaza eliminar un comercio con tarjetas y NO lo borra', async () => {
@@ -336,5 +484,12 @@ describe('eliminarComercio', () => {
     // el borrado arrastró datos de un cliente real.
     const { data } = await supabase.from('comercios').select('id').eq('id', creado.id).maybeSingle();
     expect(data).not.toBeNull();
+
+    // Y con él, su Principal REPUESTA: eliminarComercio la retira antes de intentar el delete, así
+    // que un borrado rechazado que no la reponga dejaría al comercio sin principal —sin cupo mal
+    // contado pero sin sucursal donde poner cajeros— por un botón que ni siquiera borró nada.
+    const { data: principal } = await supabase
+      .from('sucursales').select('nombre, es_principal').eq('comercio_id', creado.id);
+    expect(principal).toEqual([{ nombre: 'Principal', es_principal: true }]);
   });
 });

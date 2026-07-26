@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { validarColorRgb } from './validarColorRgb';
 import { verificarLimiteCuenta } from './cuentas';
+import { crearSucursalPrincipal } from '../comercio/sucursales';
 
 // Fuente única de verdad del catálogo de tipos de tarjeta: la BD tiene
 // check (tipo_tarjeta in (...8 valores...)) en la migración 0005. El <select> de FM (Tarea 3) se
@@ -123,6 +124,14 @@ export async function crearComercio(
     return { ok: false, error: 'No se pudo crear el comercio.' };
   }
 
+  // Todo comercio nace con su sucursal "Principal" (0012). Best-effort: si este insert falla, el
+  // comercio igual queda creado (ok:true) — la primera sucursal creada a mano se vuelve principal
+  // (auto-reparación en crearSucursal); no se le niega el alta al admin por esto.
+  const principal = await crearSucursalPrincipal(supabase, data.id);
+  if (!principal.ok) {
+    console.error('[fm] el comercio quedó sin sucursal principal:', data.id);
+  }
+
   return { ok: true, id: data.id };
 }
 
@@ -203,10 +212,25 @@ export async function actualizarComercio(
 }
 
 // Ningún FK hacia comercios tiene ON DELETE CASCADE (migración 0001: usuarios_comercio,
-// tarjetas, reglas_puntos y recompensas apuntan aquí sin cascada) — a propósito, para que
-// borrar un comercio NUNCA arrastre en silencio datos reales de un cliente. Postgres es la
-// única fuente de verdad de esa regla: no la duplicamos contando filas en JS, que podría
-// desincronizarse si el esquema cambia. Solo traducimos el 23503 a un mensaje legible.
+// tarjetas, reglas_puntos y recompensas apuntan aquí sin cascada; migración 0008: sucursales
+// también) — a propósito, para que borrar un comercio NUNCA arrastre en silencio datos reales de
+// un cliente. Postgres es la única fuente de verdad de esa regla: no la duplicamos contando filas
+// en JS, que podría desincronizarse si el esquema cambia. Solo traducimos el 23503 a un mensaje
+// legible.
+//
+// LA ÚNICA EXCEPCIÓN es la sucursal PRINCIPAL (0012), que se retira antes del delete y se repone
+// verbatim si el delete no procede. Sin eso, ningún comercio con principal sería borrable jamás y
+// el 23503 mentiría diciendo "tiene datos asociados".
+//
+// Y NO se asume que la principal sea una fila "del sistema": muy a menudo es del DUEÑO. El backfill
+// de la 0012 ascendió a principal la sucursal más antigua que ya existía —con el nombre que él le
+// puso: en producción la principal de "Verde Raíz" se llama "Centro Santa Ana"—, la auto-reparación
+// de crearSucursal asciende la primera que el dueño cree a mano, y renombrarSucursal la deja
+// renombrar sin candado. Se retira igual, y eso es una DECISIÓN DE PRODUCTO, no un tecnicismo: un
+// comercio solo llega a borrarse si está vacío de actividad (sin tarjetas, reglas, recompensas,
+// cajeros ni transacciones), y una sucursal no significa nada sin el comercio al que pertenece. El
+// invariante que el proyecto protege es no arrastrar datos de CLIENTES; una sucursal es estructura
+// del comercio. Las sucursales ADICIONALES sí siguen bloqueando el borrado, como antes.
 //
 // PRECONDICIÓN: `supabase` DEBE ser createServiceClient(). Un id ya borrado da ok:true a
 // propósito (idempotente) — pero eso solo es seguro si `supabase` ignora RLS. Con un cliente
@@ -218,14 +242,75 @@ export async function eliminarComercio(
   supabase: SupabaseClient<Database>,
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  // Se lee la principal ENTERA antes de retirarla porque hay que poder reponerla IDÉNTICA si el
+  // borrado no procede: mismo id, mismo nombre, misma fecha. El nombre en particular es dato del
+  // DUEÑO —puede haberlo puesto él y puede haberla renombrado—, así que reponer un genérico
+  // "Principal" sería renombrarle la sucursal en silencio desde un botón que no borró nada. Sin
+  // fila (comercio legado o alta cuyo best-effort falló) no hay nada que retirar ni que reponer.
+  const { data: principal, error: eLeer } = await supabase
+    .from('sucursales')
+    .select('id, nombre, activa, created_at')
+    .eq('comercio_id', id)
+    .eq('es_principal', true)
+    .maybeSingle();
+  if (eLeer) {
+    // Falla CERRADO: sin saber qué reponer no se puede arriesgar el retiro.
+    console.error('[fm] no se pudo leer la sucursal principal antes de borrar el comercio:', eLeer);
+    return { ok: false, error: 'No se pudo eliminar el comercio.' };
+  }
+
+  if (principal) {
+    const { error: eRetirar } = await supabase
+      .from('sucursales').delete().eq('id', principal.id).eq('comercio_id', id);
+    if (eRetirar) {
+      console.error('[fm] no se pudo retirar la sucursal principal antes de borrar el comercio:', eRetirar);
+      // 23503 acá = algo REFERENCIA a la principal: un cajero asignado a ella (usuarios_comercio.
+      // sucursal_id), o una transacción o un canje atribuidos (0008). Eso es actividad real y el
+      // borrado debe rechazarse — pero nombrando la causa VERDADERA: hablar de tarjetas mandaría al
+      // admin a buscar algo que no existe. Cualquier otro error (red, RLS) no es actividad: mensaje
+      // genérico.
+      if (eRetirar.code === '23503') {
+        return {
+          ok: false,
+          error:
+            'No se puede eliminar: la sucursal principal tiene actividad asociada (cajeros, transacciones o canjes). Solo se pueden eliminar comercios sin actividad.',
+        };
+      }
+      return { ok: false, error: 'No se pudo eliminar el comercio.' };
+    }
+  }
+
+  // VENTANA SIN ATOMICIDAD: entre el retiro de arriba y este delete no hay transacción (supabase-js
+  // no las expone; haría falta un RPC como el de la 0009). Si el proceso muere justo acá, el
+  // comercio queda sin principal. Se auto-repara solo si NO le quedan sucursales (crearSucursal
+  // asciende la primera); con sucursales del dueño el conteo ya es > 0 y no dispara, y reintentar
+  // Eliminar tampoco la devuelve — la fila leída se perdió con el proceso. Arreglo manual entonces,
+  // o la cura de raíz: `on delete cascade` en sucursales.comercio_id, que borraría esta danza.
   const { error } = await supabase.from('comercios').delete().eq('id', id);
 
   if (error) {
+    // El comercio sigue vivo (un id inexistente NO da error: el delete es idempotente a propósito),
+    // así que hay que devolverle su principal TAL CUAL estaba. Mismo id: nada podía apuntarle (si
+    // algo lo hiciera, el retiro habría dado 23503 y no habríamos llegado hasta acá), así que el
+    // insert no choca con ningún FK ni con el índice parcial único.
+    if (principal) {
+      const { error: eReponer } = await supabase.from('sucursales').insert({
+        id: principal.id,
+        comercio_id: id,
+        nombre: principal.nombre,
+        activa: principal.activa,
+        created_at: principal.created_at,
+        es_principal: true,
+      });
+      if (eReponer) {
+        console.error('[fm] el comercio quedó sin su sucursal principal tras un borrado fallido:', id, eReponer);
+      }
+    }
     if (error.code === '23503') {
       return {
         ok: false,
         error:
-          'No se puede eliminar: tiene datos asociados (tarjetas, reglas de puntos o recompensas). Solo se pueden eliminar comercios sin actividad.',
+          'No se puede eliminar: tiene datos asociados (tarjetas, reglas de puntos, recompensas o sucursales). Solo se pueden eliminar comercios sin actividad.',
       };
     }
     console.error('[fm] falló el borrado de comercio:', error);
