@@ -30,8 +30,13 @@ export type ResultadoCajero = { ok: true; id: string } | { ok: false; error: str
 export type ResultadoAccion = { ok: true } | { ok: false; error: string };
 
 // Validación mínima local (la BD no valida ni el formato del correo ni el largo de la contraseña).
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PASSWORD_MIN = 8;
+// EMAIL_RE se exporta para que accesoDueno.ts use ESTE criterio y no otro: dos reglas de correo
+// divergentes en el mismo repo aceptarían dueños que el alta de cajeros rechaza, y al revés.
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// PASSWORD_MIN se exporta por la misma razón: la pantalla donde el DUEÑO define su clave
+// (app/comercio/clave/actions.ts) tiene que exigir el mismo largo que el alta de cajeros. Con dos
+// literales sueltos, subir el mínimo en un lado dejaría el otro flojo sin que nada lo marque.
+export const PASSWORD_MIN = 8;
 
 // Da de alta un cajero: valida, crea (o reutiliza) la cuenta de Auth y la fila usuarios_comercio
 // atada a la sucursal. El candado de seguridad —que la sucursal sea de ESTE comercio y esté

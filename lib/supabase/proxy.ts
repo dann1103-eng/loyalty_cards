@@ -39,17 +39,29 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const usuario = data?.claims;
 
+  // Rutas EXENTAS de la barrera de sesión (ya no son solo las de login — ver /comercio/activar).
+  //
   // Anclado a propósito: un startsWith suelto también eximiría a /admin/login-sso o
   // /admin/loginXYZ, heredando una exención que nadie pidió. Así solo se eximen /admin/login
   // y sus sub-rutas legítimas (p. ej. un futuro /admin/login/reset).
+  //
+  // /comercio/activar se exime —con el MISMO anclado, nada de startsWith('/comercio/activar') a
+  // secas, que también eximiría /comercio/activarXYZ— porque el dueño invitado NO tiene sesión
+  // cuando abre su link: entra ahí justamente para canjear el token por una. Sin esta exención su
+  // link cae en /comercio/login y el alta del dueño se rompe entera antes de empezar.
+  //
+  // /comercio/clave NO necesita exención y no debe tenerla: cuando el dueño llega a definir su
+  // contraseña la activación ya le creó la sesión, así que pasa la barrera por su cuenta. Eximirla
+  // abriría esa pantalla a cualquiera sin sesión.
   const ruta = request.nextUrl.pathname;
-  const esRutaLogin =
+  const esRutaExenta =
     ruta === '/admin/login' || ruta.startsWith('/admin/login/') ||
-    ruta === '/comercio/login' || ruta.startsWith('/comercio/login/');
+    ruta === '/comercio/login' || ruta.startsWith('/comercio/login/') ||
+    ruta === '/comercio/activar' || ruta.startsWith('/comercio/activar/');
 
   // Primera barrera (rápida). El gate real es verifyFmAdmin() en layout/página/acción.
   // /admin/login se excluye o se cicla infinitamente contra sí mismo.
-  if (!usuario && !esRutaLogin) {
+  if (!usuario && !esRutaExenta) {
     // El destino del redirect se DERIVA del prefijo, no es fijo: una visita sin sesión a
     // /comercio/panel debe caer en /comercio/login (la pantalla del dueño), no en /admin/login
     // (la de FM). El matcher solo enruta /admin/* y /comercio/*, así que `ruta` siempre empieza
