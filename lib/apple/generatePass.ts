@@ -117,6 +117,18 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
     });
   }
 
+  // El nombre del comercio, alineado a la DERECHA de la misma fila donde va el contador (pedido del
+  // usuario: "en el otro extremo de donde aparecen los puntos"). Sin label: el nombre se explica
+  // solo y un "COMERCIO" encima sería ruido. Va siempre en secondaryFields, así que en el caso de
+  // sellos-con-grilla comparte fila con el contador, y en los demás queda en la fila de abajo.
+  // organizationName ya lleva este dato pero Wallet no lo muestra en la tarjeta (lo usa en las
+  // notificaciones), y logoText solo aparece cuando el comercio NO subió logo.
+  pass.secondaryFields.push({
+    key: 'comercio',
+    value: datos.nombreComercio,
+    textAlignment: 'PKTextAlignmentRight',
+  });
+
   pass.setBarcodes(datos.qrToken);
 
   return pass.getAsBuffer();

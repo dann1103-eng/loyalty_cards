@@ -173,9 +173,15 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
                               width: meta > 6 ? 34 : 42,
                               height: meta > 6 ? 34 : 42,
                               animationDelay: `${i * 0.04}s`,
-                              ...(i < llenos
-                                ? { background: label, border: 'none', boxShadow: `0 0 10px ${hexDesdeRgb(label)}55` }
-                                : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.16)' }),
+                              // Mismas reglas que el pass real (lib/apple/stripPass.tsx): CON ícono
+                              // propio el sello ES el ícono, sin fondo ni borde; SIN ícono, el aro y
+                              // el punto. Y sin boxShadow: ese resplandor no existe en el pass, y
+                              // esta vista previa se vende como "réplica del pass real".
+                              ...(urls.selloIcono
+                                ? { background: 'none', border: 'none' }
+                                : i < llenos
+                                  ? { background: label, border: 'none' }
+                                  : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.16)' }),
                             }}
                           >
                             {urls.selloIcono ? (
@@ -184,7 +190,7 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
                                 src={urls.selloIcono}
                                 alt=""
                                 aria-hidden="true"
-                                style={{ width: '62%', height: '62%', objectFit: 'contain', opacity: i < llenos ? 1 : 0.32 }}
+                                style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: i < llenos ? 1 : 0.32 }}
                               />
                             ) : i < llenos ? (
                               <span style={{ width: '30%', height: '30%', borderRadius: 999, background: fondo }} />

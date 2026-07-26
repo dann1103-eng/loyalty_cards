@@ -131,15 +131,17 @@ function grillaSellos(datos: DatosStrip, escala: number, iconoDataUrl: string | 
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background:
-                  i < llenos
-                    ? datos.colorLabel
-                    : iconoDataUrl
-                      ? 'rgba(255, 255, 255, 0.06)'
-                      : 'rgba(255, 255, 255, 0.07)',
-                border: iconoDataUrl && i >= llenos
-                  ? `${escala}px solid rgba(255, 255, 255, 0.14)`
-                  : `${2 * escala}px solid ${i < llenos ? datos.colorLabel : 'rgba(255, 255, 255, 0.35)'}`,
+                // CON ícono propio: nada de fondo ni borde — el sello ES el ícono, sobre la franja.
+                // Antes el ícono iba DENTRO de un círculo relleno con colorLabel y a solo 62% de su
+                // diámetro: se veía diminuto y el color del círculo tapaba el diseño del comercio
+                // (reportado en producción el 2026-07-26, con la decisión de dejar el ícono suelto).
+                // SIN ícono: el aro y el punto de siempre, que son los que dan la forma del sello.
+                ...(iconoDataUrl
+                  ? {}
+                  : {
+                      background: i < llenos ? datos.colorLabel : 'rgba(255, 255, 255, 0.07)',
+                      border: `${2 * escala}px solid ${i < llenos ? datos.colorLabel : 'rgba(255, 255, 255, 0.35)'}`,
+                    }),
               },
               // Con ícono del comercio: a todo color en los llenos, APAGADO (translúcido) en los
               // vacíos — como tacharlo pendiente en una tarjeta física (referencia del usuario).
@@ -157,8 +159,11 @@ function grillaSellos(datos: DatosStrip, escala: number, iconoDataUrl: string | 
                           type: 'img',
                           props: {
                             src: iconoDataUrl,
-                            width: Math.round(diametro * 0.62),
-                            height: Math.round(diametro * 0.62),
+                            // El ícono ocupa TODO el sello (antes 0.62, encogido dentro del círculo
+                            // que ya no está). Sin recuadro alrededor, el gap entre sellos alcanza
+                            // para separarlos.
+                            width: diametro,
+                            height: diametro,
                           },
                         }],
                       },
