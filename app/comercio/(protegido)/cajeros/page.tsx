@@ -5,6 +5,7 @@ import { listarCajeros } from '@/lib/comercio/cajeros';
 import { listarSucursales } from '@/lib/comercio/sucursales';
 import FormularioCajero from './FormularioCajero';
 import BotonBajaCajero from './BotonBajaCajero';
+import AvisoComercioActivo from '../AvisoComercioActivo';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,8 @@ export default async function PaginaCajeros() {
         <h1 className="title" style={{ margin: 0 }}>Cajeros</h1>
         <Link className="admin-fila-slug" href="/comercio/panel">← Volver</Link>
       </div>
+
+      <AvisoComercioActivo />
 
       <div className="reveal d2">
         {errorSucursales ? (

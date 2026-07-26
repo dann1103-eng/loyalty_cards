@@ -1394,3 +1394,26 @@ a {
   background: var(--acento);
   border-color: var(--acento);
 }
+
+/* ---------- aviso de contexto (qué comercio se está configurando) ----------
+   Solo se renderiza con 2+ comercios propios (ver AvisoComercioActivo.tsx). Discreto a propósito:
+   es un recordatorio, no una alerta — pero con el acento del sistema para que el ojo lo agarre al
+   entrar a una pantalla de ajustes. */
+.aviso-contexto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 18px;
+  padding: 8px 12px;
+  border: 1px solid var(--linea);
+  border-left: 3px solid var(--acento);
+  border-radius: 10px;
+  background: var(--superficie-2);
+  color: var(--texto-2);
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+}
+.aviso-contexto strong {
+  color: var(--texto);
+  font-weight: 700;
+}

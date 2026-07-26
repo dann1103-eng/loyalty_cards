@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { TIPOS_REGLA } from '@/lib/comercio/reglas';
 import FormularioRegla from './FormularioRegla';
 import BotonEliminarRegla from './BotonEliminarRegla';
+import AvisoComercioActivo from '../AvisoComercioActivo';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +28,8 @@ export default async function PaginaReglas() {
         <h1 className="title" style={{ margin: 0 }}>Reglas del programa</h1>
         <Link className="admin-fila-slug" href="/comercio/panel">← Volver</Link>
       </div>
+
+      <AvisoComercioActivo />
 
       <div className="reveal d2">
         <FormularioRegla />

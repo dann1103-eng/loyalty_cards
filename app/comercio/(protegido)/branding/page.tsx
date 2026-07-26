@@ -3,6 +3,7 @@ import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import FormularioBranding from './FormularioBranding';
 import SubidaImagen from './SubidaImagen';
+import AvisoComercioActivo from '../AvisoComercioActivo';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,6 +55,11 @@ export default async function PaginaBranding({
         </div>
         <Link className="admin-fila-slug" href="/comercio/panel">← Volver</Link>
       </div>
+
+      {/* El aviso de contexto se omite cuando el dueño acaba de llegar de crear el comercio: el
+          banner de abajo ya le dice exactamente dónde está y por qué, y dos carteles seguidos
+          diciendo lo mismo es ruido. */}
+      {nuevo !== '1' && <AvisoComercioActivo />}
 
       {nuevo === '1' && (
         <p className="admin-vacio" role="status" style={{ marginBottom: 18 }}>

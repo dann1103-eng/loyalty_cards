@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { TIPOS_RECOMPENSA } from '@/lib/comercio/recompensas';
 import FormularioRecompensa from './FormularioRecompensa';
 import BotonDesactivarRecompensa from './BotonDesactivarRecompensa';
+import AvisoComercioActivo from '../AvisoComercioActivo';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +29,8 @@ export default async function PaginaRecompensas() {
         <h1 className="title" style={{ margin: 0 }}>Recompensas</h1>
         <Link className="admin-fila-slug" href="/comercio/panel">← Volver</Link>
       </div>
+
+      <AvisoComercioActivo />
 
       <div className="reveal d2">
         <FormularioRecompensa />

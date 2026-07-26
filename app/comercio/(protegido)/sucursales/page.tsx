@@ -6,6 +6,7 @@ import { cupoDeCuenta } from '@/lib/comercios/cuentas';
 import FormularioSucursal from './FormularioSucursal';
 import ModalAgregarLocal from './ModalAgregarLocal';
 import BotonEstadoSucursal from './BotonEstadoSucursal';
+import AvisoComercioActivo from '../AvisoComercioActivo';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,6 +43,8 @@ export default async function PaginaSucursales({
         <h1 className="title" style={{ margin: 0 }}>Sucursales</h1>
         <Link className="admin-fila-slug" href="/comercio/panel">← Volver</Link>
       </div>
+
+      <AvisoComercioActivo />
 
       <div className="reveal d2">
         {avisoCupo ? (
