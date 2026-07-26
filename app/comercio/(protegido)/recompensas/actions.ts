@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { crearRecompensa, desactivarRecompensa } from '@/lib/comercio/recompensas';
+import { notificarCambioComercio } from '@/lib/apple/notificarCambioComercio';
 
 export type EstadoRecompensa = { error: string } | undefined;
 
@@ -23,6 +24,11 @@ export async function accionCrearRecompensa(
   });
   if (!res.ok) return { error: res.error };
 
+  // El catálogo de recompensas se imprime en el reverso del pass: se avisa a los passes ya emitidos
+  // para que Wallet los re-descargue (sin esto, muestran el catálogo viejo hasta el próximo cambio
+  // de puntos — bug visto en el piloto al pasar a sellos).
+  await notificarCambioComercio(createServiceClient(), comercioId);
+
   revalidatePath('/comercio/recompensas');
   return undefined;
 }
@@ -37,6 +43,10 @@ export async function accionDesactivarRecompensa(
 
   const res = await desactivarRecompensa(createServiceClient(), id, comercioId);
   if (!res.ok) return { error: res.error };
+
+  // Mismo motivo que al crear: sin el push, el reverso de los passes ya emitidos sigue ofreciendo
+  // una recompensa que el dueño ya no canjea.
+  await notificarCambioComercio(createServiceClient(), comercioId);
 
   revalidatePath('/comercio/recompensas');
   return undefined;

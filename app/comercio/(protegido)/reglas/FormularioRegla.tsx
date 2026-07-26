@@ -18,7 +18,7 @@ export default function FormularioRegla() {
         </select>
       </div>
       <div className="field">
-        <label htmlFor="valor">Valor (puntos por visita, o puntos por unidad de monto)</label>
+        <label htmlFor="valor">Valor (puntos por visita, o puntos por cada $1 de compra)</label>
         <input id="valor" name="valor" type="number" min="0.01" step="0.01" required />
       </div>
       <button className="btn-primary" type="submit" disabled={pendiente}>
