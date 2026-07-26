@@ -60,10 +60,17 @@ con límite 2, sin ningún bloqueo).
   funcionando (class/object sync, save link, todo cableado), pero el usuario pidió dejar en stand-by
   el trámite de acceso de publicación de Google para priorizar lo de cuentas/sucursales. No se
   retomó.
-- **Texto configurable al reverso de la tarjeta** (estilo Devotio Rewards — reglas del programa,
-  links, que cada comercio lo edite): el usuario lo pidió explícitamente después de ver capturas de
-  un competidor. Encolado a propósito para DESPUÉS de cuentas/sucursales — ver memoria
-  `[[project-fm-loyalty-wallet]]`.
+- ~~**Texto configurable al reverso de la tarjeta**~~ → **HECHO el 2026-07-26.** Spec en
+  `specs/2026-07-26-reverso-tarjeta-configurable-design.md`, plan en
+  `plans/2026-07-26-reverso-tarjeta-configurable.md`, migración `0013`, pruebas manuales en la
+  Parte 4 de `docs/guia-pruebas-manuales-cuentas-sucursales.md`.
+  Tres capas: sección "Cómo funciona" armada por el sistema en cada generación desde `reglas_puntos`
+  y `recompensas` (nunca una copia congelada), términos y redes que carga el dueño, y el pie fijo de
+  Cardly SV. Lo que NO es obvio y conviene recordar: la parte "viva" **exige el push** —
+  `notificarCambioComercio` se llama ahora también al crear/eliminar regla y crear/desactivar
+  recompensa; sin eso el reverso queda congelado hasta que el cliente pase por caja.
+  Fuera de alcance deliberado: Google Wallet (`textModulesData`/`linksModuleData`), marca blanca por
+  plan, y más redes que las cuatro.
 
 ## Si algo no cuadra
 

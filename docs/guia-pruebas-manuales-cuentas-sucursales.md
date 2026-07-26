@@ -804,3 +804,132 @@ contraseña de tu cliente.**
 - **Si una fila de `usuarios_comercio` tuviera `auth_user_id` en NULL** (solo pasaría insertándola a
   mano en Studio), el dueño completaría todo el flujo y chocaría con "sin permiso" al final. Hoy no
   hay ninguna así; si aparece ese síntoma, es lo primero a mirar.
+
+---
+
+# Parte 4 — Reverso configurable de la tarjeta (2026-07-26)
+
+El pass no tenía reverso: quien tocaba la "i" de su tarjeta no encontraba nada. Ahora muestra, en
+este orden y omitiendo lo que esté vacío:
+
+1. **Cómo funciona** — la arma el sistema con tus reglas y tus recompensas activas.
+2. **Términos de uso** — lo que escribas vos.
+3. **Instagram / Facebook / WhatsApp / Sitio web** — enlaces tocables.
+4. **Nombre de empresa**.
+5. **Información del emisor** — Cardly SV, `soporte@cardly-sv.site` y `www.cardly-sv.site`.
+
+Todo se configura en **Editor de marca**, al final de la pantalla.
+
+---
+
+## 30. El reverso mínimo, sin configurar nada
+
+1. Elegí un comercio al que NO le hayas tocado el reverso.
+2. Abrí su tarjeta en el iPhone y tocá la **"i"** (esquina inferior derecha).
+
+✅ Esperado: se ve **Cómo funciona** (si ese comercio ya tiene reglas o recompensas cargadas),
+**Nombre de empresa** e **Información del emisor**. **No** hay secciones vacías, ni etiquetas sin
+valor, ni la palabra "null" por ningún lado.
+
+⚠️ Si el comercio no tiene ninguna regla ni ninguna recompensa activa, **Cómo funciona no aparece** —
+es lo correcto: un encabezado seguido de nada es peor que su ausencia.
+
+## 31. Que la sección automática diga la verdad
+
+1. Andá a **Reglas del programa** y mirá qué dice el reverso hoy.
+2. Andá a **Recompensas**, cambiá el costo en puntos de una recompensa (o creá una nueva).
+3. Esperá unos segundos y volvé a abrir el reverso en el teléfono.
+
+✅ Esperado: el reverso **se actualizó solo**, sin que hayas tocado la tarjeta ni pasado por caja.
+Esa es la razón de ser del diseño: la sección se arma de nuevo en cada actualización, así que nunca
+puede quedar prometiendo una recompensa que ya cambiaste.
+
+4. Verificá el detalle del singular: una recompensa que cuesta **1** tiene que decir "1 punto" (o
+   "1 sello"), no "1 puntos".
+
+⚠️ Si NO se actualiza, mirá primero el peso del pass y la dirección del servicio:
+
+```bash
+npx tsx --conditions=react-server scripts/verificar-wallet.ts https://www.cardly-sv.site
+```
+
+## 32. Reglas duplicadas
+
+1. En **Reglas del programa**, creá DOS reglas "Por visita" con valores distintos.
+2. Abrí el reverso.
+
+✅ Esperado: **una sola línea** de "por visita", la de la regla más reciente. Nunca dos líneas
+contradictorias en la tarjeta de un cliente.
+
+## 33. Los términos y el borrador
+
+1. En **Editor de marca**, bajá hasta **Reverso de la tarjeta**.
+2. Sin tocar los términos, cargá solo tu Instagram y apretá **Guardar reverso**.
+3. Volvé a entrar a la pantalla.
+
+✅ Esperado: el campo de términos sigue **vacío**. El borrador NO se guardó solo. Es a propósito: un
+texto legal que nadie leyó no debe quedar atribuido a tu comercio.
+
+4. Ahora tocá **Usar un borrador sugerido**.
+
+✅ Esperado: el textarea se llena con seis cláusulas. Si el comercio usa sellos dice "Los sellos…";
+si usa puntos, "Los puntos…". La última menciona el nombre de tu comercio.
+
+5. Editá algo, guardá, y abrí el reverso en el teléfono.
+
+✅ Esperado: aparece **Términos de uso** con tu texto, respetando los saltos de línea.
+
+6. Volvé a tocar **Usar un borrador sugerido** con texto ya escrito.
+
+✅ Esperado: pregunta antes de reemplazar.
+
+## 34. El interruptor de "Cómo funciona"
+
+1. Desmarcá **Mostrar la sección "Cómo funciona"** y guardá.
+2. **Volvé a entrar a la pantalla** y mirá el checkbox.
+
+✅ Esperado: sigue **desmarcado**. (Este paso existe por un bug real de React que hacía que el
+checkbox se viera marcado de nuevo tras guardar y que el siguiente Guardar volviera a encender la
+sección sin que el dueño lo pidiera.)
+
+3. Abrí el reverso en el teléfono.
+
+✅ Esperado: **Cómo funciona** ya no está; el resto sigue igual.
+
+4. Volvé a marcarlo y guardá.
+
+## 35. Los enlaces de redes
+
+1. Cargá tu Instagram como `https://instagram.com/tunegocio` y guardá.
+2. Abrí el reverso y **tocá** "Instagram".
+
+✅ Esperado: se ve como enlace azul y abre tu perfil.
+
+3. Probá a guardar `instagram.com/tunegocio` **sin** `https://`.
+
+✅ Esperado: lo rechaza con un mensaje que nombra la red. Es correcto y no es capricho: esa dirección
+va dentro del enlace del pass.
+
+4. Desde el teléfono, escribí una URL con la primera letra en mayúscula.
+
+✅ Esperado: el campo NO capitaliza solo. (`Https://` fallaría la validación.)
+
+5. Borrá el contenido de un campo de red y guardá.
+
+✅ Esperado: esa sección desaparece del reverso, no queda una fila vacía.
+
+## 36. El pie de Cardly
+
+Al final del reverso, siempre y en todos los comercios:
+
+```
+Cardly SV
+soporte@cardly-sv.site
+www.cardly-sv.site
+```
+
+✅ Esperado: el correo y el sitio se ven tocables (iOS los detecta solo). Si no lo fueran, el texto
+igual se lee y se copia — es aceptable, no un fallo que bloquee.
+
+⚠️ El sitio va **con `www`**. Sin él, el dominio raíz redirige, y esa redirección fue la que rompió
+la actualización de las tarjetas el 2026-07-26.
