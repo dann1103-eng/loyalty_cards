@@ -1,0 +1,876 @@
+/* Estilos de la página pública (app/page.tsx).
+   Va como módulo CSS y no en globals.css a propósito: nada de acá debe filtrarse al panel del
+   comercio ni al portal del cliente, que son otro producto y los toca otra gente. Los colores,
+   radios y sombras SÍ salen de las variables globales, para que la página no se despegue del
+   sistema visual cuando este cambie. */
+
+.pagina {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.envoltura {
+  width: 100%;
+  max-width: 1080px;
+  margin-inline: auto;
+  padding-inline: var(--sp-4);
+}
+
+/* ---------- cabecera ---------- */
+
+.cabecera {
+  position: sticky;
+  top: 0;
+  /* Por encima del abanico: sus tarjetas llegan a z-index 17. */
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--linea);
+  background: rgba(19, 19, 19, 0.82);
+  background: color-mix(in srgb, var(--fondo) 82%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.marca {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+
+.marcaPunto {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(150deg, var(--acento) 0%, var(--acento-fuerte) 100%);
+  color: var(--sobre-acento);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.navCabecera {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.enlaceCabecera {
+  padding: 8px 10px;
+  border-radius: var(--radius-pill);
+  color: var(--texto-2);
+  font-size: 14px;
+}
+.enlaceCabecera:hover {
+  color: var(--texto);
+}
+
+/* Debajo de 600 px la cabecera se queda solo con la marca y el botón: tres enlaces más no caben
+   sin apretarse, y los secundarios están repetidos en el pie. */
+@media (max-width: 599px) {
+  .enlaceCabecera {
+    display: none;
+  }
+}
+
+.botonCabecera {
+  padding: 9px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--acento);
+  color: var(--sobre-acento);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------- hero ---------- */
+
+.hero {
+  padding-block: clamp(40px, 9vw, 88px) clamp(24px, 5vw, 40px);
+  text-align: center;
+}
+
+.kicker {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--linea-fuerte);
+  background: rgba(255, 196, 149, 0.08);
+  color: var(--acento);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.heroTitulo {
+  margin-top: var(--sp-4);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(34px, 8vw, 62px);
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.heroTitulo em {
+  font-style: normal;
+  background: linear-gradient(100deg, var(--acento) 0%, var(--acento-fuerte) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.heroTexto {
+  margin: var(--sp-5) auto 0;
+  max-width: 40rem;
+  color: var(--texto-2);
+  font-size: clamp(16px, 3.4vw, 19px);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.heroAcciones {
+  margin-top: var(--sp-6);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-3);
+}
+
+.botonPrimario {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: 48px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(150deg, var(--acento) 0%, var(--acento-fuerte) 100%);
+  color: var(--sobre-acento);
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-1);
+}
+.botonPrimario:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.botonSecundario {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 22px;
+  border: 1px solid var(--linea-fuerte);
+  border-radius: var(--radius-pill);
+  color: var(--texto);
+  font-size: 16px;
+}
+.botonSecundario:hover {
+  border-color: var(--acento);
+  color: var(--acento);
+}
+
+/* ---------- secciones ---------- */
+
+.seccion {
+  padding-block: clamp(48px, 10vw, 96px);
+  /* La cabecera es pegajosa: sin esto, saltar a #demo deja el título tapado debajo de ella. */
+  scroll-margin-top: 78px;
+}
+
+.lista {
+  margin-top: var(--sp-4);
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  color: var(--texto-2);
+  font-size: 15px;
+  line-height: 1.55;
+}
+.lista li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.lista li::before {
+  content: '✓';
+  flex: none;
+  color: var(--menta);
+  font-size: 13px;
+}
+
+.tituloSeccion {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(26px, 5.5vw, 38px);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.textoSeccion {
+  margin-top: var(--sp-3);
+  max-width: 38rem;
+  color: var(--texto-2);
+  font-size: clamp(15px, 3.2vw, 17px);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.centrado {
+  text-align: center;
+}
+.centrado .textoSeccion {
+  margin-inline: auto;
+}
+
+/* ---------- carrusel ---------- */
+
+.carrusel {
+  /* --u = el 1 % del ancho de una tarjeta. Todo lo de adentro del teléfono se mide con esta
+     unidad, así el modelo entero escala igual en un teléfono que en un monitor sin una sola
+     consulta de medios. */
+  --ancho-tarjeta: clamp(150px, 42vw, 232px);
+  --alto-tarjeta: calc(var(--ancho-tarjeta) * 1.88);
+  --u: calc(var(--ancho-tarjeta) / 100);
+  margin-top: clamp(24px, 5vw, 44px);
+}
+
+.escenario {
+  position: relative;
+  width: 100%;
+  height: calc(var(--alto-tarjeta) + 160px);
+  /* Las tarjetas de las puntas se van más allá del ancho de la página; el degradado las desvanece
+     contra el borde en vez de cortarlas en seco, que es lo que da la sensación de que el abanico
+     sigue fuera de la pantalla. */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 6%, #000 94%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 6%, #000 94%, transparent 100%);
+}
+
+.tarjeta {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  width: var(--ancho-tarjeta);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  /* El giro y la reducción pivotan en el borde de ABAJO: así las tarjetas se abren como una mano
+     de naipes en vez de girar cada una sobre su propio centro. */
+  transform-origin: 50% 100%;
+  transition:
+    transform 520ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 380ms ease;
+}
+
+/* El <span> que envuelve el dibujo: en línea por defecto, y así el teléfono no toma el ancho del
+   botón. */
+.lienzo {
+  display: block;
+}
+
+.tarjeta:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 8px;
+  border-radius: 26px;
+}
+
+.controles {
+  margin-top: var(--sp-5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+}
+
+.flecha {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--linea-fuerte);
+  border-radius: var(--radius-pill);
+  background: var(--superficie-1);
+  color: var(--texto);
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease;
+}
+.flecha svg {
+  width: 22px;
+  height: 22px;
+}
+.flecha:hover {
+  border-color: var(--acento);
+  color: var(--acento);
+}
+/* Sigue enfocable y anunciada: se deshabilita con aria-disabled, no con el atributo `disabled`,
+   para que el foco del teclado no se caiga al llegar a la punta del carrusel. */
+.flecha[aria-disabled='true'] {
+  opacity: 0.35;
+  cursor: default;
+}
+.flecha[aria-disabled='true']:hover {
+  border-color: var(--linea-fuerte);
+  color: var(--texto);
+}
+
+.puntos {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.punto {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  position: relative;
+}
+/* El botón mide 22 px (lo mínimo cómodo para un dedo) pero el punto que se ve es de 8 px. */
+.punto::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--texto-3);
+  transition: background 200ms ease, inset 200ms ease;
+}
+.puntoActivo::after {
+  inset: 6px;
+  background: var(--acento);
+}
+
+/* ---------- el teléfono y la tarjeta de mentira ---------- */
+
+.telefono {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 100 / 188;
+  padding: calc(var(--u) * 3);
+  border-radius: calc(var(--u) * 11);
+  background: linear-gradient(155deg, #55555b 0%, #232327 40%, #0f0f12 100%);
+  box-shadow:
+    0 26px 60px -18px rgba(0, 0, 0, 0.75),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.isla {
+  position: absolute;
+  top: calc(var(--u) * 5.5);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(var(--u) * 26);
+  height: calc(var(--u) * 3.4);
+  border-radius: var(--radius-pill);
+  background: #08080a;
+  z-index: 2;
+}
+
+.pantalla {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--u) * 12) calc(var(--u) * 4) calc(var(--u) * 4);
+  border-radius: calc(var(--u) * 8);
+  background: #08080a;
+  overflow: hidden;
+  text-align: left;
+}
+
+.espacio {
+  flex: 1;
+  min-height: calc(var(--u) * 4);
+}
+
+.barraInicio {
+  flex: none;
+  align-self: center;
+  width: calc(var(--u) * 30);
+  height: calc(var(--u) * 1.6);
+  border-radius: var(--radius-pill);
+  background: rgba(245, 245, 240, 0.45);
+}
+
+.pase {
+  /* Nunca se encoge. Si el contenido no cupiera, el reparto por defecto de flex apretaría el pase
+     —lo único que importa acá— en vez del hueco negro de abajo; con `flex: none` lo que sobra se
+     recorta contra el `overflow: hidden` de la pantalla y la tarjeta conserva sus proporciones. */
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 5);
+  padding: calc(var(--u) * 5);
+  border-radius: calc(var(--u) * 6);
+  box-shadow: 0 calc(var(--u) * 3) calc(var(--u) * 8) rgba(0, 0, 0, 0.4);
+}
+
+.pase > * {
+  flex: none;
+}
+
+.paseCabecera {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 3);
+}
+
+.paseLogo {
+  flex: none;
+  width: calc(var(--u) * 14);
+  height: calc(var(--u) * 14);
+  border-radius: var(--radius-pill);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(var(--u) * 8);
+  line-height: 1;
+}
+
+.paseNombre {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: calc(var(--u) * 6.4);
+  line-height: 1.15;
+  /* Un nombre largo se corta con puntos suspensivos en vez de empujar la etiqueta fuera de la
+     tarjeta. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paseTipo {
+  flex: none;
+  font-size: calc(var(--u) * 4);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* La franja lleva la misma proporción que la del pass de verdad (375 × 123). */
+.franja {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 375 / 123;
+  border-radius: calc(var(--u) * 3);
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.22);
+  display: grid;
+  place-items: center;
+}
+
+.resplandor,
+.resplandorChico {
+  position: absolute;
+  border-radius: var(--radius-pill);
+  pointer-events: none;
+}
+.resplandor {
+  right: calc(var(--u) * -12);
+  top: calc(var(--u) * -14);
+  width: calc(var(--u) * 46);
+  height: calc(var(--u) * 46);
+  opacity: 0.18;
+}
+.resplandorChico {
+  right: calc(var(--u) * 10);
+  bottom: calc(var(--u) * -18);
+  width: calc(var(--u) * 28);
+  height: calc(var(--u) * 28);
+  opacity: 0.11;
+}
+
+.numeroPuntos {
+  position: relative;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: calc(var(--u) * 17);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.etiquetaPuntos {
+  position: absolute;
+  bottom: calc(var(--u) * 3);
+  right: calc(var(--u) * 5);
+  font-size: calc(var(--u) * 3.6);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.grilla {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 1.8);
+}
+
+.filaSellos {
+  display: flex;
+  justify-content: center;
+  gap: calc(var(--u) * 1.8);
+}
+
+.sello {
+  width: calc(var(--u) * 8);
+  height: calc(var(--u) * 8);
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  border: calc(var(--u) * 0.7) solid currentColor;
+}
+/* La versión de estrella es un <svg>: ni aro ni relleno de fondo, el trazo lo pone el path. */
+svg.sello {
+  display: block;
+  border: 0;
+  border-radius: 0;
+}
+
+.selloPunto {
+  width: 34%;
+  height: 34%;
+  border-radius: var(--radius-pill);
+}
+
+.paseNota {
+  font-size: calc(var(--u) * 4.2);
+  line-height: 1.3;
+  opacity: 0.78;
+}
+
+.paseCampos {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: calc(var(--u) * 4);
+}
+
+.paseCampo {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 1);
+}
+.paseCampoDerecha {
+  text-align: right;
+}
+.paseCampo small {
+  font-size: calc(var(--u) * 3.4);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.paseCampo b {
+  font-size: calc(var(--u) * 4.8);
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paseCodigo {
+  align-self: center;
+  width: calc(var(--u) * 28);
+  padding: calc(var(--u) * 2);
+  border-radius: calc(var(--u) * 2.5);
+  background: #ffffff;
+  color: #101014;
+}
+
+.qr {
+  display: block;
+  width: 100%;
+  height: auto;
+  fill: currentColor;
+}
+
+/* ---------- cómo funciona ---------- */
+
+.pasos {
+  margin-top: clamp(28px, 6vw, 52px);
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: 1fr;
+}
+@media (min-width: 720px) {
+  .pasos {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.paso {
+  padding: var(--sp-5);
+  border: 1px solid var(--linea);
+  border-radius: var(--radius);
+  background: var(--superficie-1);
+}
+
+.pasoNumero {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 196, 149, 0.14);
+  color: var(--acento);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.paso h3 {
+  margin-top: var(--sp-4);
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.paso p {
+  margin-top: var(--sp-2);
+  color: var(--texto-2);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* ---------- qué gana el comercio ---------- */
+
+.beneficios {
+  margin-top: clamp(28px, 6vw, 52px);
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: 1fr;
+}
+@media (min-width: 720px) {
+  .beneficios {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.beneficio {
+  padding: var(--sp-5);
+  border: 1px solid var(--linea);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--superficie-1) 0%, var(--superficie-0) 100%);
+}
+
+.beneficio h3 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.beneficio p {
+  margin-top: var(--sp-2);
+  color: var(--texto-2);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* ---------- formulario de demo ---------- */
+
+.demo {
+  display: grid;
+  gap: clamp(28px, 5vw, 48px);
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+@media (min-width: 860px) {
+  .demo {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.formulario,
+.exito {
+  position: relative;
+  padding: var(--sp-5);
+  border: 1px solid var(--linea);
+  border-radius: var(--radius);
+  background: var(--superficie-1);
+  box-shadow: var(--shadow-2);
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--sp-4);
+}
+
+.campo label {
+  color: var(--texto-2);
+  font-size: 14px;
+}
+
+.campo input,
+.campo textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--linea-fuerte);
+  border-radius: var(--radius-field);
+  background: var(--superficie-2);
+  color: var(--texto);
+  font-family: var(--font-body);
+  font-size: 16px; /* 16 px o iOS hace zoom al enfocar el campo */
+  line-height: 1.4;
+}
+.campo textarea {
+  resize: vertical;
+  min-height: 84px;
+}
+.campo input:focus-visible,
+.campo textarea:focus-visible {
+  outline: none;
+  border-color: var(--acento);
+  box-shadow: var(--ring);
+}
+
+.pareja {
+  display: grid;
+  gap: 0 var(--sp-4);
+  grid-template-columns: 1fr;
+}
+@media (min-width: 520px) {
+  .pareja {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.ayuda {
+  margin: 0 0 var(--sp-4);
+  color: var(--texto-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+/* La nota que cierra el formulario va DESPUÉS del botón, y ahí el margen de arriba es el que
+   separa (no el de abajo). Sin esta regla se le montaba encima al botón. */
+.ayuda:last-child {
+  margin: var(--sp-3) 0 0;
+}
+
+.alerta {
+  margin-top: var(--sp-3);
+  padding: 10px 12px;
+  border: 1px solid var(--error-borde);
+  border-radius: var(--radius-field);
+  background: var(--error-fondo);
+  color: var(--error);
+  font-size: 14px;
+}
+
+/* Campo TRAMPA: fuera de la pantalla, sin tamaño y sin eventos. No se usa `display: none` ni
+   `hidden` a propósito — hay bots que se saltan justo esos. */
+.trampa {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.exito {
+  text-align: center;
+}
+.exitoMarca {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  margin: 0 auto var(--sp-4);
+  border-radius: var(--radius-pill);
+  background: rgba(139, 214, 180, 0.14);
+  color: var(--menta);
+  font-size: 22px;
+}
+.exito h3 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+}
+.exito p {
+  margin-top: var(--sp-3);
+  color: var(--texto-2);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.exito a {
+  color: var(--acento);
+  text-decoration: underline;
+}
+
+/* ---------- pie ---------- */
+
+.pie {
+  margin-top: auto;
+  padding-block: var(--sp-6);
+  border-top: 1px solid var(--linea);
+  color: var(--texto-3);
+  font-size: 14px;
+}
+
+.pieFilas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.pieEnlaces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.pieEnlaces a:hover {
+  color: var(--texto);
+}
+
+/* ---------- utilidades ---------- */
+
+.soloLectores {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Quien pidió menos movimiento no recibe ninguno: el abanico sigue funcionando, solo que las
+   tarjetas aparecen ya colocadas en vez de deslizarse. */
+@media (prefers-reduced-motion: reduce) {
+  .tarjeta,
+  .flecha,
+  .punto::after,
+  .campo input,
+  .campo textarea {
+    transition: none;
+  }
+}

@@ -20,9 +20,14 @@ const CARPETAS_VISIBLES = [
   'app/comercio',
   'app/registro',
   'app/mi-tarjeta',
+  // La página pública y su formulario de demo: el primer texto que lee un comercio que todavía no
+  // es cliente. Va la carpeta entera y no archivo por archivo para que una pantalla nueva quede
+  // cubierta sin que nadie tenga que acordarse de anotarla acá.
+  'app/_inicio',
   'lib/comercio',
   'lib/comercios',
   'lib/portal',
+  'lib/prospectos',
 ];
 const ARCHIVOS_SUELTOS = ['app/page.tsx'];
 
