@@ -2,6 +2,7 @@ import { PKPass } from 'passkit-generator';
 import path from 'node:path';
 import { requireEnv } from '@/lib/env';
 import { componerStrips, descargarImagen } from './stripPass';
+import { redimensionarLogo } from './imagenesPass';
 import type { CampoReverso } from './construirReverso';
 
 function cargarCertificados() {
@@ -95,10 +96,15 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
   }
 
   if (logo) {
-    // Mismo buffer en los tres tamaños: Wallet lo escala (el área del logo es chica).
-    pass.addBuffer('logo.png', logo.buf);
-    pass.addBuffer('logo@2x.png', logo.buf);
-    pass.addBuffer('logo@3x.png', logo.buf);
+    // Cada densidad a SU ancho (160/320/480 px). Antes iba el mismo buffer de 480 px en las tres,
+    // "porque Wallet lo escala": eran 331 KB × 3 = 993 KB, el 56% de un pass de 1763 KB, para un
+    // área de ~50 px de alto. Y el iPhone se baja el pass ENTERO cada vez que se acredita un punto,
+    // así que ese peso se pagaba en CADA compra — el dueño reportó que la tarjeta tardaba en verse
+    // actualizada (producción, 2026-07-26).
+    const [logo1x, logo2x, logo3x] = await redimensionarLogo(logo.buf);
+    pass.addBuffer('logo.png', logo1x);
+    pass.addBuffer('logo@2x.png', logo2x);
+    pass.addBuffer('logo@3x.png', logo3x);
   }
 
   const esSellos = datos.tipoTarjeta === 'sellos' && datos.selloMeta != null && datos.selloMeta > 0;

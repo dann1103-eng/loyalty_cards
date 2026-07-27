@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/og';
 import { stopsDifuminado } from './difuminadoFranja';
+import { comprimirPng } from './imagenesPass';
 
 // Composición de la FRANJA (strip) del pass con next/og — el "pipeline de composición de
 // imágenes" que la Fase 3 no tenía: llegó gratis con los íconos del portal (PWA). Tres casos:
@@ -274,7 +275,11 @@ async function renderizar(
     ? grillaSellos(datos, escala, iconoDataUrl, heroDataUrl)
     : bandaMarca(datos, escala, heroDataUrl);
   const img = new ImageResponse(jsx as React.ReactElement, { width: 375 * escala, height: 123 * escala });
-  return Buffer.from(await img.arrayBuffer());
+  // next/og escupe PNG de 24 bits sin cuantizar: con una foto de fondo, las tres franjas sumaban
+  // 661 KB medidos (49 + 176 + 435). Cuantizar a paleta las deja en 145 KB sin que se note — se
+  // comparó cada franja ampliada al triple contra la original antes de elegir la calidad (ver
+  // comprimirPng). Va acá y no en componerStrips para que ninguna franja nueva se saltee el paso.
+  return comprimirPng(Buffer.from(await img.arrayBuffer()));
 }
 
 // Baja una imagen del comercio (best-effort: null si falla — una imagen caída nunca debe romper

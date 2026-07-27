@@ -47,11 +47,21 @@ export async function redimensionarLogo(buf: Buffer): Promise<[Buffer, Buffer, B
 
 // Cuantización a paleta: lo único que corta el peso de un PNG con contenido fotográfico. Apple solo
 // acepta PNG en el pass, y PNG guarda una foto pésimo — las franjas eran 569 KB de los 1763.
-// `quality: 80` es el punto donde libvips deja de agregar colores a la paleta; se midió el bandeo en
-// una franja real con degradado antes de fijarlo (ver el plan del 2026-07-26).
+//
+// `quality` acá NO significa "cuánto degradar": en sharp es "usá la MENOR cantidad de colores que
+// alcance esta calidad", y 100 (su valor por defecto) sigue siendo una paleta de 256. El plan
+// proponía 80 y se midió antes de fijarlo, mirando las franjas ampliadas al triple:
+//   - con foto y difuminado, a 80 el tramado se ve como grano sucio sobre el degradado;
+//   - la banda de marca SIN foto (fondo liso + resplandor) tiene 114 colores, casi todos del
+//     suavizado del borde del resplandor: a 80 y a 90 se queda con TRES y ese borde sale escalonado.
+// A 100 la banda sin foto sale idéntica a la original (sus 114 colores entran enteros) y baja igual
+// de 14.6 KB a 4.8; con foto, las tres franjas pasan de 661 KB a 145 (a 90 serían 130). Esos 15 KB
+// son el seguro más barato de esta rama: media tarjeta fea no vale 15 KB.
+// Cuidado con apagar el tramado (`dither`, en 1 por defecto) creyendo que ahorra: sin él el
+// degradado sale con bandas francas y feas, y solo bajaba de 83 KB a 50.
 export async function comprimirPng(buf: Buffer): Promise<Buffer> {
   try {
-    const comprimido = await sharp(buf).png({ palette: true, quality: 80, effort: 8 }).toBuffer();
+    const comprimido = await sharp(buf).png({ palette: true, quality: 100, effort: 8 }).toBuffer();
     // Con imágenes ya optimizadas o de pocos colores la tabla de paleta pesa más que lo que ahorra:
     // medido, un PNG mínimo de 90 bytes sale en 103. Sin este freno "optimizar" engordaría el pass.
     if (comprimido.length >= buf.length) return buf;
