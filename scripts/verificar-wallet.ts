@@ -19,8 +19,9 @@ config({ path: '.env.local' });
 
 import JSZip from 'jszip';
 import { createServiceClient } from '../lib/supabase/server';
-
-const PESO_PASS_SOSPECHOSO_KB = 700;
+// El techo de peso NO se escribe acá: es el mismo que asierta lib/apple/pesoPass.test.ts. Cuando
+// cada archivo tenía su propio número, nada impedía que uno se moviera y el otro no.
+import { PRESUPUESTO_PASS_KB } from '../lib/apple/imagenesPass';
 
 function kb(bytes: number) {
   return `${(bytes / 1024).toFixed(0)} KB`;
@@ -100,9 +101,9 @@ async function main() {
     const bytes = (await zip.file(nombre)!.async('nodebuffer')).length;
     console.log(`  ${nombre.padEnd(16)} ${kb(bytes).padStart(8)}`);
   }
-  if (buffer.length / 1024 > PESO_PASS_SOSPECHOSO_KB) {
+  if (buffer.length / 1024 > PRESUPUESTO_PASS_KB) {
     console.error(
-      `\nAVISO: el pass pesa ${kb(buffer.length)}, más de ${PESO_PASS_SOSPECHOSO_KB} KB. El teléfono lo baja\n` +
+      `\nAVISO: el pass pesa ${kb(buffer.length)}, más de ${PRESUPUESTO_PASS_KB} KB. El teléfono lo baja\n` +
       '       entero cada vez que se acredita un punto, así que la tarjeta va a tardar en verse\n' +
       '       actualizada. Suele ser el logo o el ícono del sello guardados demasiado grandes\n' +
       '       (mirá LADOS_MAXIMOS en lib/comercio/redimensionarImagen.ts) — volvé a subirlos.',

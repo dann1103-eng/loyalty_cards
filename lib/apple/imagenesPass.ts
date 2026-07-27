@@ -17,6 +17,30 @@ import sharp from 'sharp';
 // doble en @2x y el triple en @3x. No son un tamaño "de imagen": son el tamaño al que se VE.
 export const ANCHOS_LOGO = [160, 320, 480] as const;
 
+// EL TECHO DE PESO DEL PASS. Un solo número, en un solo lugar, porque lo miran dos guardias que
+// tienen que estar de acuerdo: lib/apple/pesoPass.test.ts (arma el peor caso y falla antes de
+// desplegar) y scripts/verificar-wallet.ts (mide el pass REAL en producción). Separados eran dos
+// números que significaban lo mismo y podían divergir sin que nadie se enterara.
+//
+// Es un TECHO, no una meta. Los números medidos el 2026-07-26:
+//   - pass real del piloto ANTES del logo por densidad: 1763 KB (el dueño reportó que la tarjeta
+//     tardaba en verse actualizada — el iPhone se baja el pass ENTERO en cada punto acreditado);
+//   - pass real DESPUÉS: ~515 KB;
+//   - peor caso sintético de pesoPass.test.ts: 1458 KB.
+//
+// Ese peor caso es lo que fija el número, y es MUCHO más pesado que cualquier pass real: son
+// imágenes de ruido puro en los topes de subida (480×480 el logo, 1400×1400 la foto), o sea el
+// máximo matemático que puede pesar un PNG de ese tamaño. Un logo cuadrado a todo color le entrega
+// a Wallet 480×480 px para dibujar un área de 160×50 pt — el triple de píxeles de los que llega a
+// pintar — y ahí se va casi todo. Bajar este techo hacia los 700 KB que tenía el script pide acotar
+// el logo también por ALTO (el área de Apple es 160×50 pt, no cuadrada), que es otra tarea.
+//
+// 1600 KB no es un número cómodo: deja apenas 10% de margen sobre el peor caso y sigue matando las
+// dos regresiones que importan, MEDIDAS revirtiendo cada arreglo (2026-07-26):
+//   - el mismo buffer en las tres densidades del logo → 2463 KB;
+//   - las franjas de next/og sin pasar por comprimirPng → 2346 KB.
+export const PRESUPUESTO_PASS_KB = 1600;
+
 // `withoutEnlargement` es lo que impide que un logo chico se estire: agrandarlo no le agrega
 // detalle (no hay de dónde sacarlo) y sí le agrega peso — medido, un PNG de 100 px de 30 KB sale
 // en 440 KB al forzarlo a 480. Sin guarda de peso acá (la que sí tiene comprimirPng): reducir la
