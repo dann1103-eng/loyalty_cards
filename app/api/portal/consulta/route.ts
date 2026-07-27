@@ -4,8 +4,8 @@ import { obtenerIp } from '@/lib/portal/obtenerIp';
 import { verificarYRegistrarIntento } from '@/lib/portal/limiteIntentos';
 import { buscarTarjetasPorTelefono } from '@/lib/portal/buscarTarjetas';
 
-// Route Handler (no Server Action) por consistencia con el endpoint hermano
-// /api/tarjetas/[id]/puntos, no por una limitación técnica. Público con límite de intentos.
+// Route Handler (no Server Action) por consistencia con el resto de /api, no por una limitación
+// técnica. Público con límite de intentos.
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
