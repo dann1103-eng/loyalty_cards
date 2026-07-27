@@ -12,6 +12,9 @@
 //   - supabase/migrations/0009_rpc_atomico.sql (usuarios_comercio.activo; funciones acreditar_puntos_atomico/canjear_recompensa_atomico en Functions)
 //   - supabase/migrations/0010_reportes.sql (funciones de reportes en Functions; índices; no cambia columnas)
 //   - supabase/migrations/0011_plan_cuenta.sql (licencia_estado/plan/monto_mensual/activa_desde: de comercios a cuentas_comercio; limite_negocios pasa a nullable)
+//   - supabase/migrations/0012_sucursal_principal.sql (sucursales.es_principal + índice único parcial)
+//   - supabase/migrations/0013_reverso_tarjeta.sql (columnas del reverso del pass en comercios)
+//   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
 //
 // Hasta que `supabase gen types` esté cableado (requiere auth del CLI), este archivo se
 // mantiene a mano: si llega una migración nueva, hay que actualizarlo en el mismo commit.
@@ -474,6 +477,45 @@ export type Database = {
         Update: {
           id?: string;
           ip?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      // Migración 0014: los datos que deja un comercio interesado en la página pública. `correo` y
+      // `telefono` son nullable en la BD, pero la validación de la app exige AL MENOS UNO: un
+      // prospecto sin forma de contactarlo no sirve para nada.
+      prospectos: {
+        Row: {
+          id: string;
+          nombre: string;
+          negocio: string;
+          correo: string | null;
+          telefono: string | null;
+          mensaje: string | null;
+          origen: string | null;
+          atendido: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          nombre: string;
+          negocio: string;
+          correo?: string | null;
+          telefono?: string | null;
+          mensaje?: string | null;
+          origen?: string | null;
+          atendido?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          nombre?: string;
+          negocio?: string;
+          correo?: string | null;
+          telefono?: string | null;
+          mensaje?: string | null;
+          origen?: string | null;
+          atendido?: boolean;
           created_at?: string;
         };
         Relationships: [];

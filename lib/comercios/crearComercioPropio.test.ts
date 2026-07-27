@@ -199,7 +199,12 @@ describe('crearComercioPropio', () => {
       { nombre: `Sin Cuenta ${sufijoUnico()}`, tipoTarjeta: 'puntos' },
     );
     registrarSiCreo(res);
-    expect(res).toEqual({ ok: false, error: 'Tu comercio no está asociado a una cuenta. Contactá a FM.' });
+    // El mensaje nombra al canal de soporte y NO a "FM": el dueño de un comercio no sabe quién es
+    // FM. Ver lib/marca.test.ts, que impide que el nombre viejo reaparezca en lo que ve el usuario.
+    expect(res).toEqual({
+      ok: false,
+      error: 'Tu comercio no está asociado a una cuenta. Escribinos a soporte@cardly-sv.site.',
+    });
   });
 
   it('tipo de tarjeta no disponible (cashback): rechazado', async () => {
