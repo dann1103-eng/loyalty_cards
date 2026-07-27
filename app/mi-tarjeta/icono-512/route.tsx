@@ -1,5 +1,5 @@
-import { renderIconoFm } from '@/lib/portal/iconoFm';
+import { renderIconoCardly } from '@/lib/portal/iconoCardly';
 
 export function GET() {
-  return renderIconoFm(512);
+  return renderIconoCardly(512);
 }

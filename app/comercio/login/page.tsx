@@ -6,7 +6,7 @@ const MENSAJES: Record<string, string> = {
   // uso), venció (24 h) o llegó cortado. El cliente no puede resolverlo solo — el único camino es
   // que FM le genere otro desde la ficha del comercio.
   'link-vencido':
-    'Ese link de acceso ya no sirve: se usa una sola vez y vence a las 24 horas. Pedile a FM un link nuevo.',
+    'Ese link de acceso ya no sirve: se usa una sola vez y vence a las 24 horas. Pedí uno nuevo a soporte@cardly-sv.site.',
 };
 
 export default async function PaginaLoginComercio({
@@ -33,7 +33,7 @@ export default async function PaginaLoginComercio({
         <div style={{ width: '100%', textAlign: 'left' }}>
           <FormularioLoginComercio mensajeInicial={mensaje} />
         </div>
-        <p className="nota reveal d4">Sistema seguro · FM Communications</p>
+        <p className="nota reveal d4">Sistema seguro · Cardly SV</p>
       </div>
     </main>
   );

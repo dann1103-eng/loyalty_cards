@@ -35,7 +35,7 @@ export async function activarAcceso(
   const tipo = String(formData.get('tipo') ?? '');
 
   if (!tokenHash || !esTipoAceptado(tipo)) {
-    return { error: 'Ese link de acceso no es válido. Pedile a FM un link nuevo.' };
+    return { error: 'Ese link de acceso no es válido. Pedí uno nuevo a soporte@cardly-sv.site.' };
   }
 
   const supabase = await createClienteServidor();
@@ -53,7 +53,7 @@ export async function activarAcceso(
       redirect('/comercio/clave');
     }
     return {
-      error: 'Ese link de acceso ya no sirve: se usa una sola vez y vence a las 24 horas. Pedile a FM un link nuevo.',
+      error: 'Ese link de acceso ya no sirve: se usa una sola vez y vence a las 24 horas. Pedí uno nuevo a soporte@cardly-sv.site.',
     };
   }
 

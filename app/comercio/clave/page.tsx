@@ -41,7 +41,7 @@ export default async function PaginaDefinirClave() {
           </div>
           <h1 className="title" style={{ marginTop: 14, fontSize: '1.6rem' }}>Definí tu contraseña</h1>
           <p className="lede" style={{ marginTop: 6, color: 'var(--texto-2)' }}>
-            Es la clave con la que vas a entrar a tu panel de Cardly SV. La elegís vos: ni FM la
+            Es la clave con la que vas a entrar a tu panel de Cardly SV. La elegís vos: ni nosotros la
             ve ni queda guardada en ningún lado.
           </p>
           {correo && (

@@ -2,7 +2,7 @@ export default function Home() {
   return (
     <main className="shell">
       <div className="stack">
-        <p className="kicker reveal d1">FM Communications</p>
+        <p className="kicker reveal d1">Cardly SV</p>
         <h1 className="home-mark reveal d2">
           Cardly <em>SV</em>
         </h1>

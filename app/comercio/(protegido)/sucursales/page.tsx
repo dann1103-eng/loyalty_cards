@@ -33,7 +33,7 @@ export default async function PaginaSucursales({
   if (comercio?.cuenta_id) {
     const cupo = await cupoDeCuenta(supabase, comercio.cuenta_id);
     if (cupo.ok && cupo.limite !== null && cupo.usadas >= cupo.limite) {
-      avisoCupo = `Alcanzaste el límite de tu plan (${cupo.limite} ${cupo.limite === 1 ? 'local' : 'locales'}). Hablá con FM para ampliarlo.`;
+      avisoCupo = `Alcanzaste el límite de tu plan (${cupo.limite} ${cupo.limite === 1 ? 'local' : 'locales'}). Escribinos a soporte@cardly-sv.site para ampliarlo.`;
     }
   }
 

@@ -35,7 +35,7 @@ export default async function PaginaActivar({
           <p className="lede" style={{ marginTop: 6, color: 'var(--texto-2)' }}>
             {linkCompleto
               ? 'Tocá el botón para entrar y definir tu contraseña. Este link se usa una sola vez.'
-              : 'Este link está incompleto o mal copiado. Pedile a FM que te mande uno nuevo.'}
+              : 'Este link está incompleto o mal copiado. Pedí uno nuevo a soporte@cardly-sv.site.'}
           </p>
         </div>
 
@@ -47,7 +47,7 @@ export default async function PaginaActivar({
           </p>
         )}
 
-        <p className="nota reveal d4">Sistema seguro · FM Communications</p>
+        <p className="nota reveal d4">Sistema seguro · Cardly SV</p>
       </div>
     </main>
   );

@@ -169,7 +169,7 @@ export default function ModalAgregarLocal({
                   <span className="admin-fila-slug">
                     {puedeCrearComercio
                       ? 'Otra marca, con su propia tarjeta e identidad.'
-                      : 'Tu comercio no está asociado a una cuenta — contactá a FM.'}
+                      : 'Tu comercio no está asociado a una cuenta — escribinos a soporte@cardly-sv.site.'}
                   </span>
                 </span>
               </button>

@@ -1,6 +1,6 @@
-import { renderIconoFm } from '@/lib/portal/iconoFm';
+import { renderIconoCardly } from '@/lib/portal/iconoCardly';
 
 // Sin datos de request => Next lo optimiza estáticamente (se genera en build y se cachea).
 export function GET() {
-  return renderIconoFm(192);
+  return renderIconoCardly(192);
 }

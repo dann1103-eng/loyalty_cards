@@ -44,7 +44,7 @@ export async function crearComercioPropio(
     return { ok: false, error: 'No se pudo crear el comercio.' };
   }
   const cuentaId = comercioActivo?.cuenta_id;
-  if (!cuentaId) return { ok: false, error: 'Tu comercio no está asociado a una cuenta. Contactá a FM.' };
+  if (!cuentaId) return { ok: false, error: 'Tu comercio no está asociado a una cuenta. Escribinos a soporte@cardly-sv.site.' };
 
   // 2) Email para la membresía nueva: el de la membresía owner ACTUAL (fuente estable — los claims
   //    podrían no traer email).
