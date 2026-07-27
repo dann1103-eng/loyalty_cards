@@ -54,6 +54,38 @@ con límite 2, sin ningún bloqueo).
   también menciona un **límite de clientes** (500/2500/sin límite) y un **setup inicial $149
   único** — ninguno de los dos está modelado todavía; son features aparte si se piden.
 
+## Peso del pass — HECHO el 2026-07-26
+
+Plan en `plans/2026-07-26-peso-del-pass-y-robustez.md`. El dueño reportó que sus tarjetas tardaban en
+actualizarse; el pass pesaba 1763 KB y el iPhone se lo baja ENTERO en cada acreditación.
+
+**Peor caso medido: 1458 KB → 516 KB.** Dos causas, las dos por guardar píxeles que nadie ve:
+
+1. El MISMO buffer de logo iba en las tres densidades (`logo.png`, `@2x`, `@3x`).
+2. `redimensionarLogo` acotaba solo el ANCHO. El área del logo de Apple es de 160×50 **puntos**, así
+   que un logo cuadrado entregaba 480×480 px para pintar 50 pt de alto: tres veces los píxeles
+   dibujados. Acotando también el alto (`fit: 'inside'`, altos 50/100/150) los tres logos pasaron de
+   1024 KB a **81 KB**.
+
+Las franjas se cuantizan a paleta con `sharp`. **Calidad 100, no 80**: a 80 y a 90, la banda de marca
+SIN foto —la que ve todo comercio que no subió imagen— se quedaba con TRES colores y el borde del
+resplandor salía escalonado. A 100 sale con cero píxeles alterados y aun así baja de 14.6 a 4.8 KB.
+
+### Lo que NO es obvio y hay que recordar
+
+**La prueba de peso NO protege el logo por densidad.** Comprobado, no supuesto: con el logo bien
+acotado los tres pesan 81 KB juntos, así que repetir el más grande suma solo 79 KB (595 vs 516) y
+ningún presupuesto sensato separa esos números. El arreglo hizo la regresión *demasiado barata para
+que una alarma de peso la vea*. Ese candado vive ahora en `generatePass.test.ts` y es de **forma**:
+los tres `logo*.png` deben ser distintos entre sí y medir 50/100/150 de alto.
+
+`PRESUPUESTO_PASS_KB` vive en `lib/apple/imagenesPass.ts` y lo importa `scripts/verificar-wallet.ts`:
+dos números que significan lo mismo en dos archivos divergen.
+
+También se borró `app/api/tarjetas/[tarjetaId]/puntos/`: código muerto del walking skeleton que
+acreditaba puntos SIN atribución de sucursal ni cajero y sin `syncObjetoTarjeta`, a diferencia del
+flujo real (`/comercio/escanear`).
+
 ## Pendiente / en pausa (no retomar salvo pedido explícito)
 
 - **Google Wallet — solicitud de acceso de publicación**: el walking-skeleton está completo y
