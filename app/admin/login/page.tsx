@@ -1,4 +1,5 @@
 import FormularioLogin from './FormularioLogin';
+import SelectorTema from '@/app/_ui/SelectorTema';
 
 const MENSAJES: Record<string, string> = {
   'sin-permiso': 'Esa cuenta no tiene acceso al panel de FM.',
@@ -18,6 +19,14 @@ export default async function PaginaLogin({
 
   return (
     <main className="shell">
+      {/* El tema es una preferencia GLOBAL del dispositivo: quien la eligió desde el panel de
+          comercio llega acá con ese tema puesto. Sin este control, alguien que quedó en un tema que
+          no le sirve —alto contraste de noche, por ejemplo— tendría que entrar al sistema para
+          poder arreglar la pantalla desde la que está tratando de entrar.
+          Va en la esquina y no en el flujo: es una preferencia, no un paso del login. */}
+      <div style={{ position: 'absolute', top: 14, right: 14, zIndex: 1 }}>
+        <SelectorTema />
+      </div>
       <div className="stack" style={{ alignItems: 'center', textAlign: 'center' }}>
         <div className="icono-circulo reveal d1" style={{ width: 48, height: 48, background: 'var(--acento-fuerte)', color: 'var(--sobre-acento)', borderRadius: 14 }}>
           <span className="icono icono-lleno" style={{ fontSize: 26 }} aria-hidden="true">shield_person</span>
