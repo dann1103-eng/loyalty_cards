@@ -34,12 +34,16 @@ async function imagenDeRuido(lado: number): Promise<string> {
   return `data:image/png;base64,${png.toString('base64')}`;
 }
 
-// MUTATION-TESTING (corrido y medido el 2026-07-26, no estimado): revertir cualquiera de los dos
-// arreglos de peso pone esta prueba en rojo, contra los 1458 KB que mide con el código sano.
-//   - meter el MISMO buffer en las tres densidades del logo en generatePass.ts (el bug original,
-//     el 56% del peso del pass: 993 KB de 1763) → 2463 KB;
-//   - devolver la salida de next/og sin pasarla por comprimirPng en stripPass.tsx → 2346 KB.
-// Las dos fallan por el peso, que es la razón correcta, y el desglose del mensaje señala cuál fue.
+// MUTATION-TESTING (corrido y medido el 2026-07-26, no estimado), contra los 516 KB que mide esta
+// prueba con el código sano:
+//   - devolver la salida de next/og sin pasarla por comprimirPng en stripPass.tsx → 1405 KB. Muere
+//     acá, y por lejos: las franjas son lo más pesado que quedó en el pass.
+//   - meter el MISMO buffer en las tres densidades del logo en generatePass.ts, que es el bug
+//     original → 595 KB, o sea que SOBREVIVE a esta prueba. No es un descuido: desde que el logo se
+//     acota también por alto, las tres densidades juntas pesan 81 KB, repetir la más grande suma
+//     apenas 79 KB, y ningún techo razonable separa eso de un pass sano. A ese bug lo atrapa por
+//     FORMA y no por peso la prueba "las TRES densidades del logo llegan al pass distintas y en la
+//     caja que les toca" de generatePass.test.ts. Si alguien la borra, el bug se queda sin guardia.
 describe('presupuesto de peso del .pkpass', () => {
   it('un pass con el logo y la foto más pesados que la app acepta entra en el presupuesto', async () => {
     // Tarjeta de SELLOS con foto de fondo: el camino más caro de los que existen. La franja se

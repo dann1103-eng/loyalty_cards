@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
+import sharp from 'sharp';
+import { randomBytes } from 'node:crypto';
 import { generarPassApple } from './generatePass';
+import { ALTOS_LOGO } from './imagenesPass';
 
 // PNG de 1×1 para probar la franja subida por el comercio sin depender de la red: fetch() de Node
 // soporta data: URLs, así el test compara los bytes exactos que "subió" el comercio.
@@ -242,5 +245,47 @@ describe('generarPassApple', () => {
     const strip1 = Buffer.from(await (await JSZip.loadAsync(sinDifuminar)).file('strip.png')!.async('nodebuffer'));
     const strip2 = Buffer.from(await (await JSZip.loadAsync(difuminado)).file('strip.png')!.async('nodebuffer'));
     expect(strip1.equals(strip2)).toBe(false);
+  });
+
+  it('las TRES densidades del logo llegan al pass distintas y en la caja que les toca', async () => {
+    // MUTATION-TESTING: el bug original (el 56% del peso de un pass de 1763 KB) era meter el MISMO
+    // buffer en logo.png, @2x y @3x. ESTA es la prueba que lo atrapa, y tiene que vivir acá y no en
+    // el presupuesto de peso: desde que el logo se acota también por ALTO, repetir el buffer de @3x
+    // engorda el peor caso apenas 79 KB (595 contra 516, medido el 2026-07-26), así que ningún techo
+    // de peso razonable lo detecta — con el bug puesto, pesoPass.test.ts sigue verde. Lo que delata
+    // el bug es la FORMA del pass, no su peso.
+    const logoCuadrado = await sharp(randomBytes(480 * 480 * 3), {
+      raw: { width: 480, height: 480, channels: 3 },
+    })
+      .png()
+      .toBuffer();
+
+    const buffer = await generarPassApple({
+      ...datosBase(),
+      serialNumber: 'test-serial-logo-densidades',
+      qrToken: 'log333',
+      puntos: 1,
+      tipoTarjeta: 'puntos',
+      selloMeta: null,
+      stripUrl: null,
+      logoUrl: `data:image/png;base64,${logoCuadrado.toString('base64')}`,
+    });
+
+    const zip = await JSZip.loadAsync(buffer);
+    const densidades = await Promise.all(
+      ['logo.png', 'logo@2x.png', 'logo@3x.png'].map(async (nombre) =>
+        Buffer.from(await zip.file(nombre)!.async('nodebuffer')),
+      ),
+    );
+
+    // Un logo CUADRADO lo manda el alto del área de Apple (50/100/150), no el ancho: es la forma que
+    // más píxeles invisibles arrastraba y la que deja ver que cada densidad se calculó por separado.
+    for (const [i, densidad] of densidades.entries()) {
+      expect((await sharp(densidad).metadata()).height).toBe(ALTOS_LOGO[i]);
+    }
+
+    // Y que sean tres imágenes DISTINTAS: con el bug las tres eran el mismo buffer, byte a byte.
+    expect(densidades[0].equals(densidades[1])).toBe(false);
+    expect(densidades[1].equals(densidades[2])).toBe(false);
   });
 });

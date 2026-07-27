@@ -13,9 +13,16 @@ import sharp from 'sharp';
 // SIEMPRE best-effort: cualquier fallo devuelve el buffer original. Ninguna optimización de peso
 // puede ser la razón por la que un cliente se quede sin tarjeta.
 
-// Los tres anchos salen del área que Wallet dibuja para el logo (160×50 pt): 160 px en @1x, el
-// doble en @2x y el triple en @3x. No son un tamaño "de imagen": son el tamaño al que se VE.
+// El área que Wallet dibuja para el logo es de 160×50 pt. De ahí salen los dos topes, densidad por
+// densidad: 160×50 en @1x, el doble en @2x y el triple en @3x. No son un tamaño "de imagen": son el
+// tamaño al que se VE.
+//
+// Los DOS topes importan, no solo el ancho. Acotando únicamente el ancho, un logo cuadrado de
+// 480×480 se guardaba entero: 480 px de alto para pintar 50 pt, o sea el TRIPLE de píxeles de los
+// que Wallet llega a dibujar. Medido el 2026-07-26 sobre el peor caso de pesoPass.test.ts, esas
+// filas que nunca se ven eran 943 KB (el logo pasó de 1024 KB a 81).
 export const ANCHOS_LOGO = [160, 320, 480] as const;
+export const ALTOS_LOGO = [50, 100, 150] as const;
 
 // EL TECHO DE PESO DEL PASS. Un solo número, en un solo lugar, porque lo miran dos guardias que
 // tienen que estar de acuerdo: lib/apple/pesoPass.test.ts (arma el peor caso y falla antes de
@@ -25,47 +32,50 @@ export const ANCHOS_LOGO = [160, 320, 480] as const;
 // Es un TECHO, no una meta. Los números medidos el 2026-07-26:
 //   - pass real del piloto ANTES del logo por densidad: 1763 KB (el dueño reportó que la tarjeta
 //     tardaba en verse actualizada — el iPhone se baja el pass ENTERO en cada punto acreditado);
-//   - pass real DESPUÉS: ~515 KB;
-//   - peor caso sintético de pesoPass.test.ts: 1458 KB.
+//   - peor caso sintético de pesoPass.test.ts: 516 KB.
 //
-// Ese peor caso es lo que fija el número, y es MUCHO más pesado que cualquier pass real: son
-// imágenes de ruido puro en los topes de subida (480×480 el logo, 1400×1400 la foto), o sea el
-// máximo matemático que puede pesar un PNG de ese tamaño. Un logo cuadrado a todo color le entrega
-// a Wallet 480×480 px para dibujar un área de 160×50 pt — el triple de píxeles de los que llega a
-// pintar — y ahí se va casi todo. Bajar este techo hacia los 700 KB que tenía el script pide acotar
-// el logo también por ALTO (el área de Apple es 160×50 pt, no cuadrada), que es otra tarea.
+// Ese peor caso es lo que fija el número, y ya es más pesado que cualquier pass real: son imágenes
+// de ruido puro en los topes de subida (480×480 el logo, 1400×1400 la foto), o sea el máximo
+// matemático que puede pesar un PNG de ese tamaño. 600 KB le deja 16% de margen.
 //
-// 1600 KB no es un número cómodo: deja apenas 10% de margen sobre el peor caso y sigue matando las
-// dos regresiones que importan, MEDIDAS revirtiendo cada arreglo (2026-07-26):
-//   - el mismo buffer en las tres densidades del logo → 2463 KB;
-//   - las franjas de next/og sin pasar por comprimirPng → 2346 KB.
-export const PRESUPUESTO_PASS_KB = 1600;
+// Antes de acotar el logo por ALTO este mismo peor caso medía 1458 KB y el techo tuvo que estar en
+// 1600, un número que casi no avisaba nada en producción. El tope de alto se llevó 943 KB de un
+// saque y es lo que permite que el techo vuelva a ser exigente: 600 KB avisa ANTES que los 700 que
+// tenía el script cuando esto empezó.
+export const PRESUPUESTO_PASS_KB = 600;
 
-// `withoutEnlargement` es lo que impide que un logo chico se estire: agrandarlo no le agrega
-// detalle (no hay de dónde sacarlo) y sí le agrega peso — medido, un PNG de 100 px de 30 KB sale
-// en 440 KB al forzarlo a 480. Sin guarda de peso acá (la que sí tiene comprimirPng): reducir la
-// resolución siempre achica, y una guarda enmascararía justamente la pérdida de withoutEnlargement.
-async function redimensionarA(buf: Buffer, ancho: number): Promise<Buffer> {
+// `fit: 'inside'` mete el logo DENTRO de la caja de Apple sin deformarlo: escala por el lado que
+// sobra (el ancho en un logo apaisado, el alto en uno cuadrado o vertical) y conserva la proporción.
+// Es la misma caja que aplica Wallet al dibujarlo, así que lo que se recorta acá es exactamente lo
+// que el teléfono nunca iba a pintar. Ojo con cambiarlo por 'fill' o por un solo lado: el logo
+// saldría ESTIRADO, que ya pasó en producción con el ícono de sellos (2026-07-26).
+//
+// `withoutEnlargement` impide que un logo chico se estire: agrandarlo no le agrega detalle (no hay
+// de dónde sacarlo) y sí le agrega peso — medido, un PNG de 100 px de 30 KB sale en 440 KB al
+// forzarlo a 480. Sin guarda de peso acá (la que sí tiene comprimirPng): reducir la resolución
+// siempre achica, y una guarda enmascararía justamente la pérdida de withoutEnlargement.
+async function redimensionarA(buf: Buffer, ancho: number, alto: number): Promise<Buffer> {
   try {
     return await sharp(buf)
-      .resize({ width: ancho, withoutEnlargement: true })
+      .resize({ width: ancho, height: alto, fit: 'inside', withoutEnlargement: true })
       .png({ compressionLevel: 9 })
       .toBuffer();
   } catch (error) {
-    console.warn(`[apple] no se pudo redimensionar el logo a ${ancho} px; va el original:`, error);
+    console.warn(`[apple] no se pudo redimensionar el logo a ${ancho}×${alto} px; va el original:`, error);
     return buf;
   }
 }
 
-// Las tres densidades del logo, cada una a su ancho real. Antes iba el MISMO buffer de 480 px en
-// las tres: 331 KB × 3 = 993 KB, el 56% de un pass de 1763 KB, sobre un área de ~50 px de alto.
+// Las tres densidades del logo, cada una en la caja que le toca. Antes iba el MISMO buffer de
+// 480 px en las tres: 331 KB × 3 = 993 KB, el 56% de un pass de 1763 KB, sobre un área de 50 pt
+// de alto.
 export async function redimensionarLogo(buf: Buffer): Promise<[Buffer, Buffer, Buffer]> {
   // Una densidad que falle no se lleva a las otras dos (cada redimensionarA cae al original por su
   // cuenta), y las tres se codifican en paralelo porque son independientes.
   return Promise.all([
-    redimensionarA(buf, ANCHOS_LOGO[0]),
-    redimensionarA(buf, ANCHOS_LOGO[1]),
-    redimensionarA(buf, ANCHOS_LOGO[2]),
+    redimensionarA(buf, ANCHOS_LOGO[0], ALTOS_LOGO[0]),
+    redimensionarA(buf, ANCHOS_LOGO[1], ALTOS_LOGO[1]),
+    redimensionarA(buf, ANCHOS_LOGO[2], ALTOS_LOGO[2]),
   ]);
 }
 
