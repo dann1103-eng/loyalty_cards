@@ -129,6 +129,13 @@ export default function CarruselTarjetas() {
               type="button"
               className={estilos.tarjeta}
               style={estiloDeTarjeta(desplazamiento, estaElevada, empuje)}
+              // Lo único que hace este atributo es dejar que la hoja de estilos le dé a la tarjeta
+              // señalada una duración de transición distinta de la de sus vecinas (el desfase que
+              // hace que el abanico se acomode en vez de moverse en bloque). Sale del MISMO estado
+              // que el resto del efecto, así que sigue funcionando igual con el foco del teclado.
+              // `undefined` y no `false`: React omite el atributo, en vez de escribir data-elevada="false",
+              // que en CSS matchea igual que "true".
+              data-elevada={estaElevada || undefined}
               // Fuera del abanico visible no existe para nadie: ni para el mouse, ni para el
               // tabulador, ni para un lector de pantalla.
               tabIndex={fuera ? -1 : 0}

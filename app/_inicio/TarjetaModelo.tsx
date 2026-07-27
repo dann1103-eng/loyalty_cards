@@ -185,8 +185,12 @@ export function TarjetaModelo({ modelo, semilla }: { modelo: ModeloTarjeta; semi
           </div>
         </div>
 
-        {/* Debajo del pase el teléfono queda en negro, como en la billetera de verdad. La barrita
-            del final es el indicador de inicio: dice "esto es un teléfono" sin una sola palabra. */}
+        {/* Debajo del pase queda pantalla vacía. La barrita del final es el indicador de inicio:
+            dice "esto es un teléfono" sin una sola palabra.
+            El aparato va en CLARO (ver .telefono en el módulo de estilos). La billetera de verdad
+            es negra incluso con el sistema en claro, así que esto no es un calco: es que sobre el
+            campo de brasa un teléfono negro se hundía en el fondo y se perdía la mitad de arriba.
+            Lo que sí es fiel es la tarjeta, que conserva los colores del comercio. */}
         <span className={estilos.espacio} />
         <span className={estilos.barraInicio} />
       </div>

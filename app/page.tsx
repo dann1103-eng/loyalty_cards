@@ -152,16 +152,25 @@ export default function Inicio() {
           <p className={estilos.textoSeccion}>
             Un programa de lealtad sirve cuando el cliente lo lleva encima.
           </p>
-          {/* Antes eran seis cajas idénticas en grilla. Ahora es una lista de definiciones con
-              filas regladas: seis afirmaciones se escanean de un vistazo, seis cards no. */}
-          <dl className={estilos.razones}>
-            {RAZONES.map((razon) => (
-              <div key={razon.titulo} className={estilos.razon}>
-                <dt>{razon.titulo}</dt>
-                <dd>{razon.texto}</dd>
-              </div>
-            ))}
-          </dl>
+          {/* Tira deslizable, no grilla de cards ni segundo abanico: el porqué está en .tira, en
+              el módulo de estilos. El contenedor que se desliza es un <div> aparte y no el <dl>
+              para que el rol de lista y la relación término/definición sigan intactos: un
+              role="group" encima del <dl> le pisaría el rol y desarmaría los pares.
+              El tabIndex es lo que lo vuelve recorrible con las flechas del teclado: Chrome y
+              Safari no hacen enfocable un contenedor con scroll si no tiene nada enfocable adentro,
+              y acá adentro no hay más que texto. Un elemento enfocable necesita nombre, de ahí el
+              aria-label; NO lleva aria-roledescription="carrusel" a propósito, porque eso anuncia
+              controles de carrusel que esta tira no tiene. */}
+          <div className={estilos.tira} tabIndex={0} role="group" aria-label="Beneficios">
+            <dl className={estilos.tiraFila}>
+              {RAZONES.map((razon) => (
+                <div key={razon.titulo} className={estilos.razon}>
+                  <dt>{razon.titulo}</dt>
+                  <dd>{razon.texto}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
         </section>
 
         <section id="demo" className={`${estilos.seccion} ${estilos.envoltura}`}>

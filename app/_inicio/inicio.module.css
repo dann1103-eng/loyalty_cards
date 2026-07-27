@@ -12,7 +12,11 @@
 
 .envoltura {
   width: 100%;
-  max-width: 1080px;
+  /* 1200 y no 1080: el abanico pedía ancho y la cabecera, el hero y las secciones tienen que
+     empezar todos en la misma vertical. Ensanchar solo el hero dejaba la marca de la cabecera y el
+     título de "Cómo funciona" a cien píxeles uno del otro, y eso se lee como un error, no como una
+     variación. El texto no se estira con la envoltura: lo acotan max-width en ch, no la columna. */
+  max-width: 1200px;
   margin-inline: auto;
   padding-inline: var(--sp-4);
 }
@@ -159,10 +163,11 @@
 }
 @media (min-width: 900px) {
   .heroRejilla {
-    /* La columna del abanico apenas más ancha: es la que tiene que respirar. minmax(0, …) en las
-       dos pistas para que ninguna se plante en el min-content de su contenido. */
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
-    gap: clamp(32px, 4vw, 64px);
+    /* La columna del abanico se lleva más de la mitad: es la que tiene que respirar, y el texto ya
+       está acotado en 36ch de todos modos. minmax(0, …) en las dos pistas para que ninguna se
+       plante en el min-content de su contenido. */
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    gap: clamp(28px, 3.5vw, 56px);
   }
 }
 
@@ -216,7 +221,7 @@
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  transition: transform 180ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 180ms ease;
+  transition: transform 200ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 .botonBrasa:hover {
   transform: translateY(-2px);
@@ -242,7 +247,13 @@
 }
 @media (min-width: 900px) {
   .heroVitrina {
-    margin-inline: 0;
+    /* En escritorio se sale de la envoltura por la derecha para acercarse al borde de la pantalla:
+       el abanico es lo único de la página que gana con el ancho completo. El tirón es exactamente
+       el canal que queda entre la envoltura y el borde, con techo de 120 px (en un monitor
+       ultraancho ese canal mide cientos de píxeles y no hay razón para cruzarlos todos), y a 1200
+       o menos da cero, así que no hay desborde que compensar. `body` recorta el eje horizontal de
+       todas formas, y el degradado del escenario ya difumina la punta. */
+    margin-inline: 0 calc(-1 * clamp(0px, (100vw - 1200px) / 2, 120px));
   }
 }
 
@@ -331,24 +342,29 @@
   /* --u = el 1 % del ancho de una tarjeta. Todo lo de adentro del teléfono se mide con esta
      unidad, así el modelo entero escala igual en un teléfono que en un monitor sin una sola
      consulta de medios. */
-  --ancho-tarjeta: clamp(150px, 44vw, 208px);
+  --ancho-tarjeta: clamp(150px, 46vw, 220px);
   --alto-tarjeta: calc(var(--ancho-tarjeta) * 1.88);
   --u: calc(var(--ancho-tarjeta) / 100);
   /* Dónde empieza el abanico dentro del escenario y cuánto aire lleva debajo. Antes eran 56 px y
      160 px fijos, cuando el carrusel era una sección aparte a lo ancho de la página; adentro del
      hero de un teléfono ese alto empujaba el botón fuera de la pantalla.
-     LAS DOS COTAS, porque el degradado del escenario recorta todo lo que se salga de su caja:
-     --tope no puede bajar de 40 px (la tarjeta señalada sube 26 px y su anillo de foco, 8 px más),
-     y el aire no puede bajar de 76 px (la tarjeta más lejana baja 3 × 16 px y su esquina de abajo
-     cae otros ~28 px al girar 21°). */
+     LAS DOS COTAS, porque el degradado del escenario recorta TODO lo que se salga de su caja
+     (contenido, sombras y anillos de foco incluidos):
+     - --tope no baja de 40 px: la tarjeta señalada sube 26 y su anillo de foco pide 8 más. Son
+       píxeles fijos, así que esta cota no se mueve aunque crezcan las tarjetas.
+     - el aire SÍ depende del ancho de la tarjeta, y por eso se calcula en vez de escribirse: la
+       más lejana baja 3 × 16 px, su esquina de abajo cae otros (ancho/2 × 0.79 × sen 21°) ≈
+       ancho × 0.142 al girar, y su sombra alcanza 44 px más. El 0.17 deja margen sobre ese 0.142.
+       Escrito a mano, este número se queda viejo la próxima vez que alguien agrande las
+       tarjetas, que es justo lo que acaba de pasar. */
   --tope-tarjeta: clamp(40px, 6vw, 56px);
-  --aire-escenario: calc(var(--tope-tarjeta) + 88px);
+  --aire-escenario: calc(var(--tope-tarjeta) + 56px + var(--ancho-tarjeta) * 0.17);
 }
 /* En dos columnas la tarjeta se mide contra el ancho de SU columna, no contra la pantalla: con
-   42vw el abanico entraba en el hero del teléfono y desbordaba la columna en un monitor. */
+   46vw el abanico entra en el hero del teléfono y desborda la columna en un monitor. */
 @media (min-width: 900px) {
   .carrusel {
-    --ancho-tarjeta: clamp(160px, 15.5vw, 200px);
+    --ancho-tarjeta: clamp(170px, 17vw, 240px);
   }
 }
 
@@ -375,9 +391,26 @@
   /* El giro y la reducción pivotan en el borde de ABAJO: así las tarjetas se abren como una mano
      de naipes en vez de girar cada una sobre su propio centro. */
   transform-origin: 50% 100%;
+  /* Solo transform y opacity: nada de layout, que es lo que produce tirones que ninguna curva
+     arregla (el `top` de arriba es fijo, no se anima).
+     LA CURVA es una salida quíntica (easeOutQuint). La que había, cubic-bezier(0.22, 0.61, …),
+     tiene el segundo número en 0.61 en vez de 1: no es una salida exponencial sino una casi
+     lineal disfrazada, y con 520 ms encima el ojo leía el arranque como un tirón y el final como
+     un arrastre. Con y1 = 1 la velocidad máxima está en el primer instante y decae sin cortes: se
+     lee como que la tarjeta SE ACOMODA. Sin rebote: un naipe de plástico no rebota. */
   transition:
-    transform 520ms cubic-bezier(0.22, 0.61, 0.36, 1),
-    opacity 380ms ease;
+    transform 600ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 420ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* La tarjeta señalada responde más rápido que sus vecinas (440 contra 600 ms). El desfase es el
+   punto: la que está bajo el cursor obedece al gesto y las de al lado se corren después, como si
+   le hicieran lugar. Con la misma duración para las siete, el conjunto se mueve en bloque, que es
+   lo que se sentía mecánico.
+   Y como el atributo desaparece al salir, la VUELTA al reposo se hace con los 600 ms de la regla
+   de arriba: la ida es más viva que la vuelta, sin escribir una sola regla más. */
+.tarjeta[data-elevada] {
+  transition-duration: 440ms, 420ms;
 }
 
 /* El <span> que envuelve el dibujo: en línea por defecto, y así el teléfono no toma el ancho del
@@ -452,17 +485,21 @@
   cursor: pointer;
   position: relative;
 }
-/* El botón mide 22 px (lo mínimo cómodo para un dedo) pero el punto que se ve es de 8 px. */
+/* El botón mide 22 px (lo mínimo cómodo para un dedo) pero el punto que se ve es de 10 px, al 80%
+   mientras está inactivo. Crece con `scale` y NO con `inset`: inset es geometría de layout, y
+   animarla era el único tirón que quedaba en la página fuera del abanico. */
 .punto::after {
   content: '';
   position: absolute;
-  inset: 7px;
+  inset: 6px;
   border-radius: var(--radius-pill);
   background: var(--borde-campo);
-  transition: background 200ms ease, inset 200ms ease;
+  transform: scale(0.8);
+  transition: background 240ms cubic-bezier(0.25, 1, 0.5, 1),
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .puntoActivo::after {
-  inset: 6px;
+  transform: scale(1);
   background: var(--realce);
 }
 .punto:focus-visible {
@@ -471,7 +508,14 @@
   border-radius: var(--radius-pill);
 }
 
-/* ---------- el teléfono y la tarjeta de mentira ---------- */
+/* ---------- el teléfono y la tarjeta de mentira ----------
+   EL APARATO VA EN CLARO, la tarjeta de adentro NO. Con el cuerpo casi negro y la pantalla negra,
+   el teléfono se hundía en el campo de brasa (1.6:1 contra el fondo: menos contraste que el que
+   pide una imagen con información) y la mitad de arriba —el marco, la isla— directamente no se
+   veía. En claro el aparato se recorta a 3.9:1 en su borde más oscuro y a 8.2:1 en el más claro, la
+   isla pasa a 17.8:1 contra la pantalla, y la tarjeta de cada comercio (fondos oscuros y
+   saturados: 13.3:1 la del café) queda enmarcada en vez de fundirse con el negro.
+   Los grises van TINTADOS al matiz cálido de la marca, nunca neutros puros. */
 
 .telefono {
   position: relative;
@@ -479,12 +523,23 @@
   aspect-ratio: 100 / 188;
   padding: calc(var(--u) * 3);
   border-radius: calc(var(--u) * 11);
-  background: linear-gradient(155deg, #55555b 0%, #232327 40%, #0f0f12 100%);
+  background: linear-gradient(
+    155deg,
+    oklch(94% 0.005 85) 0%,
+    oklch(84% 0.008 80) 42%,
+    oklch(72% 0.012 75) 100%
+  );
+  /* La sombra se achicó de 68 px de alcance a 44: un aparato claro sobre naranja necesita apoyo,
+     no un charco negro, y así entra entera en el aire del escenario (ver --aire-escenario) en vez
+     de que el degradado le corte una línea horizontal. El filo interno pasó de blanco a oscuro:
+     sobre un cuerpo claro, un reflejo blanco no dibuja ningún borde. */
   box-shadow:
-    0 26px 60px -18px rgba(0, 0, 0, 0.75),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+    0 20px 42px -18px rgba(28, 16, 6, 0.55),
+    inset 0 0 0 1px rgba(38, 24, 12, 0.18);
 }
 
+/* Negra a propósito: es el recorte de la cámara, una parte física del aparato, no cromo de
+   interfaz. Es justo lo que se vuelve legible al aclarar la pantalla. */
 .isla {
   position: absolute;
   top: calc(var(--u) * 5.5);
@@ -493,7 +548,7 @@
   width: calc(var(--u) * 26);
   height: calc(var(--u) * 3.4);
   border-radius: var(--radius-pill);
-  background: #08080a;
+  background: #0d0d0f;
   z-index: 2;
 }
 
@@ -504,7 +559,7 @@
   flex-direction: column;
   padding: calc(var(--u) * 12) calc(var(--u) * 4) calc(var(--u) * 4);
   border-radius: calc(var(--u) * 8);
-  background: #08080a;
+  background: oklch(97% 0.004 85);
   overflow: hidden;
   text-align: left;
 }
@@ -520,20 +575,23 @@
   width: calc(var(--u) * 30);
   height: calc(var(--u) * 1.6);
   border-radius: var(--radius-pill);
-  background: rgba(245, 245, 240, 0.45);
+  /* Oscura ahora que la pantalla es clara: es el indicador de inicio, y su gracia es que se vea. */
+  background: rgba(24, 18, 12, 0.32);
 }
 
 .pase {
   /* Nunca se encoge. Si el contenido no cupiera, el reparto por defecto de flex apretaría el pase
-     —lo único que importa acá— en vez del hueco negro de abajo; con `flex: none` lo que sobra se
-     recorta contra el `overflow: hidden` de la pantalla y la tarjeta conserva sus proporciones. */
+     (lo único que importa acá) en vez del hueco de abajo; con `flex: none` lo que sobra se recorta
+     contra el `overflow: hidden` de la pantalla y la tarjeta conserva sus proporciones. */
   flex: none;
   display: flex;
   flex-direction: column;
   gap: calc(var(--u) * 5);
   padding: calc(var(--u) * 5);
   border-radius: calc(var(--u) * 6);
-  box-shadow: 0 calc(var(--u) * 3) calc(var(--u) * 8) rgba(0, 0, 0, 0.4);
+  /* Más suave y cálida desde que la pantalla es clara: el 40% de negro que tenía servía para
+     despegar la tarjeta de un fondo negro; sobre blanco ensuciaba el borde. */
+  box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 6) rgba(28, 20, 12, 0.22);
 }
 
 .pase > * {
@@ -780,28 +838,60 @@ svg.sello {
    Seis filas regladas se escanean de arriba abajo en un segundo; seis cards obligan a leerlas
    todas para descubrir que dicen cosas distintas. */
 
-.razones {
+/* Es una TIRA que se desliza, no un segundo abanico. La diferencia es deliberada: si la página
+   repitiera el mecanismo del hero, el de arriba dejaría de significar "así se ve tu tarjeta" y
+   pasaría a leerse como un recurso de la plantilla. Acá no hay arco, ni giro, ni tarjetas
+   apiladas: una fila recta de columnas regladas, el mismo sistema tipográfico de "Cómo funciona".
+
+   Y no esconde nada detrás de un gesto. Cada columna mide 74vw con techo de 340 px, así que en un
+   monitor entran tres y asoma la cuarta, y en un teléfono entra una y asoma la siguiente: se ve
+   que hay más sin tener que descubrirlo deslizando. Los seis beneficios son justo lo que alguien
+   barre con la vista antes de decidir; obligarlo a seis gestos para leerlos sería peor que la
+   lista que había.
+
+   El desplazamiento es NATIVO: ni una línea de JavaScript, así que funciona igual con el script
+   apagado. Al contenedor se le pone tabindex para que también se recorra con las flechas del
+   teclado (Chrome y Safari no hacen enfocable un scroller que no tiene adentro nada enfocable). */
+.tira {
   margin-top: clamp(26px, 4vw, 44px);
-  border-bottom: 1px solid var(--linea);
+  /* Nace y muere en los bordes de la pantalla; el padding le devuelve al primer beneficio la
+     alineación con el título de la sección. */
+  margin-inline: calc(var(--sp-4) * -1);
+  padding-inline: var(--sp-4);
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline-start: var(--sp-4);
+  /* Al llegar a la punta el gesto NO se encadena: sin esto, seguir deslizando dispara el "atrás"
+     del navegador en un trackpad. */
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--linea-fuerte) transparent;
+}
+.tira:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 4px;
+}
+
+.tiraFila {
+  display: flex;
+  gap: clamp(20px, 3vw, 40px);
+  /* Sin esto el flex se encoge al ancho del contenedor en vez de desbordarlo, y no hay qué
+     deslizar. */
+  width: max-content;
+  /* Aire para que la barra de desplazamiento no se le monte al texto. */
+  padding-bottom: 18px;
 }
 
 .razon {
-  display: grid;
-  gap: 6px;
-  padding-block: clamp(18px, 2.4vw, 24px);
+  flex: 0 0 clamp(250px, 74vw, 340px);
+  scroll-snap-align: start;
+  padding-top: 18px;
   border-top: 1px solid var(--linea);
-}
-@media (min-width: 760px) {
-  .razon {
-    grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
-    gap: 0 clamp(24px, 4vw, 60px);
-    align-items: baseline;
-  }
 }
 
 .razon dt {
   font-family: var(--font-display);
-  font-size: 19px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 1.25;
   letter-spacing: -0.015em;
@@ -809,8 +899,7 @@ svg.sello {
 }
 
 .razon dd {
-  margin: 0;
-  max-width: 66ch;
+  margin-top: 8px;
   color: var(--texto-2);
   font-size: 15px;
   line-height: 1.65;
@@ -999,6 +1088,9 @@ svg.sello {
    tarjetas aparecen ya colocadas en vez de deslizarse. */
 @media (prefers-reduced-motion: reduce) {
   .tarjeta,
+  /* Explícito aunque la regla de arriba ya lo cubriría por el shorthand: la duración propia de la
+     tarjeta señalada tiene más especificidad, y dejarlo al azar de la cascada es pedirlo. */
+  .tarjeta[data-elevada],
   .flecha,
   .punto::after,
   .botonBrasa,

@@ -128,12 +128,24 @@ peligro) · `.pastilla*` · `.metric-*` (métricas del panel) · `.nav-inferior`
 `.escaner-*` · `.filtro-chip` · `.subida-imagen`/`.subida-preview` · `.reveal` (entrada escalonada).
 
 ## Movimiento
-- Nunca se animan propiedades de layout. Transform y opacidad.
-- Curvas ease-out, sin rebote: `cubic-bezier(0.2, 0.7, 0.2, 1)` para entradas,
-  `cubic-bezier(0.22, 0.61, 0.36, 1)` para desplazamientos largos. Quedan tres usos con overshoot
-  heredados de Stitch (`sello-pop`, el hover de `.admin-fila` y el de `.metric-carta`, todos
-  `cubic-bezier(0.34, 1.56, 0.64, 1)`): son celebraciones cortas dentro del panel, no el patrón a
-  copiar. Para movimiento nuevo, ease-out sin rebote.
+- Nunca se animan propiedades de layout. Transform y opacidad, y nada más. Un `inset`, un `width` o
+  un `margin` animados producen tirones que ninguna curva arregla (pasó con los puntos del carrusel
+  de `/`, que crecían con `inset`; ahora crecen con `scale`).
+- Curvas ease-out **exponenciales**, sin rebote. Las tres de la casa:
+  `cubic-bezier(0.22, 1, 0.36, 1)` (quíntica, para desplazamientos que tienen que "acomodarse"),
+  `cubic-bezier(0.25, 1, 0.5, 1)` (cuártica, para opacidad y cambios de color) y
+  `cubic-bezier(0.2, 0.7, 0.2, 1)` (la de `.reveal`, entradas).
+  **El segundo número tiene que ser 1.** Una curva como `cubic-bezier(0.22, 0.61, 0.36, 1)` parece
+  ease-out y no lo es: con y1 = 0.61 el arranque es casi lineal, y a 500 ms el ojo lo lee como un
+  tirón seguido de un arrastre. Con y1 = 1 la velocidad es máxima en el primer instante y decae sin
+  cortes: eso es lo que se percibe como "suave".
+- **Duraciones desparejas a propósito.** El elemento que responde al gesto va más rápido que los que
+  se acomodan alrededor (en el abanico de `/`: 440 ms la tarjeta señalada, 600 ms sus vecinas), y la
+  vuelta al reposo es más lenta que la ida. Con una sola duración para todos, el conjunto se mueve
+  en bloque y se siente mecánico.
+- Quedan tres usos con overshoot heredados de Stitch (`sello-pop`, el hover de `.admin-fila` y el
+  de `.metric-carta`, todos `cubic-bezier(0.34, 1.56, 0.64, 1)`): son celebraciones cortas dentro
+  del panel, no el patrón a copiar.
 - `.reveal` escalona la entrada (`d1`…`d6`) y `@media (prefers-reduced-motion: reduce)` la apaga
   junto con las demás transiciones.
 
@@ -172,12 +184,27 @@ Restricciones que no se negocian:
   `/` siga saliendo estática.
 - El abanico de tarjetas (`CarruselTarjetas.tsx`) funciona con dedo, teclado y mouse, y anuncia la
   tarjeta activa a un lector de pantalla. Vive DENTRO del hero, a la derecha del texto, y abajo de
-  900px se apila debajo tocando los dos bordes de la pantalla. Se le cambia el encuadre y el tamaño
-  con `--ancho-tarjeta`, `--tope-tarjeta` y `--aire-escenario`; no se reescribe.
-  Las dos cotas del escenario están calculadas y anotadas en el CSS: el degradado que difumina las
-  puntas recorta TODO lo que se salga de su caja, incluidos el anillo de foco (arriba) y la esquina
-  de la tarjeta más lejana al girar (abajo).
+  900px se apila debajo tocando los dos bordes de la pantalla. En escritorio la vitrina además se
+  sale de la envoltura por la derecha (con techo de 120px) para acercarse al borde de la pantalla.
+  Se le cambia el encuadre y el tamaño con `--ancho-tarjeta`, `--tope-tarjeta` y `--aire-escenario`;
+  no se reescribe.
+  Las cotas del escenario están calculadas y anotadas en el CSS, porque el degradado que difumina
+  las puntas recorta TODO lo que se salga de su caja (contenido, sombras y anillos de foco). `--tope`
+  no baja de 40px, que son píxeles fijos; **`--aire` se calcula a partir del ancho de la tarjeta**
+  (`+ 56px + ancho × 0.17`) y no se escribe a mano: lo que sobresale al girar crece con la tarjeta,
+  así que un número fijo se queda viejo la primera vez que alguien la agranda.
+- **El teléfono del abanico va en claro; la tarjeta de adentro, no.** El aparato es cromo (cuerpo,
+  marco, isla, indicador de inicio) y en claro se recorta contra la brasa a 3.9:1 en su borde más
+  oscuro; en negro se hundía a 1.6:1 y la mitad de arriba desaparecía. Los colores de la tarjeta son
+  del comercio de muestra y son el punto de la ilustración: no se tocan.
 - **Sin fondos ni cards genéricos**, pedido explícito del dueño. La página no tiene ni una caja: los
-  pasos son una lista ordenada con una regla arriba y el ordinal en mono; las seis razones son una
-  lista de definiciones reglada a dos columnas. Lo único con contenedor propio es el formulario de
-  demo, porque agrupar campos sí es una función y no una decoración.
+  pasos son una lista ordenada con una regla arriba y el ordinal en mono. Lo único con contenedor
+  propio es el formulario de demo, porque agrupar campos sí es una función y no una decoración.
+- **"Qué gana tu negocio" es una tira que se desliza** (`.tira`), no un segundo abanico: si la
+  página repitiera el mecanismo del hero, el de arriba dejaría de significar "así se ve tu tarjeta".
+  Es una fila recta de columnas regladas con `scroll-snap` **nativo**: cero JavaScript, y por eso
+  sigue andando con el script apagado. Cada columna mide 74vw con techo de 340px, así que en un
+  monitor entran tres y asoma la cuarta: el contenido no queda escondido detrás de un gesto. El
+  contenedor que se desliza es un `<div tabindex="0" role="group">` aparte y **no** el `<dl>`, para
+  no pisarle el rol de lista ni desarmar los pares término/definición; el tabindex hace falta porque
+  Chrome y Safari no hacen enfocable un scroller sin nada enfocable adentro.
