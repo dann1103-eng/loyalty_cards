@@ -34,18 +34,26 @@ export interface TarjetaParaObjeto {
   puntosActuales: number;
   tipoTarjeta: string;
   selloMeta: number | null;
+  // URL pública de la grilla de sellos COMPUESTA PARA ESTA TARJETA (ver lib/google/heroUrl.ts).
+  // Ya no es solo texto: heroImage existe también a nivel de LoyaltyObject (no solo de clase,
+  // corrección al diseño original — ver memoria del proyecto), así que cada cliente puede ver su
+  // propio progreso visual, igual que en Apple. Solo se usa para sellos (ver construirObjeto);
+  // en puntos queda sin heroImage propio y se ve el de la clase (foto de fondo del comercio).
+  heroImageUrl?: string | null;
 }
 
-// Sellos como texto ("7 de 10 sellos"): loyaltyPoints.balance no tiene un modo "grilla visual"
-// — es la misma limitación de plataforma que Apple tuvo antes del pipeline de imágenes, salvo
-// que para Google no existe forma de componer una imagen distinta por cliente en el punto de
-// guardado sin una ruta pública que la sirva (fuera de alcance de este walking skeleton; ver
-// docs/superpowers/specs/2026-07-20-google-wallet-walking-skeleton-design.md).
+// El texto ("7 de 10 sellos") queda SIEMPRE como loyaltyPoints, incluso con grilla visual: es lo
+// que se lee en la vista de lista de Wallet (donde no cabe la imagen) y el respaldo si la
+// composición de la grilla falla.
 function loyaltyPointsDe(t: TarjetaParaObjeto): walletobjects_v1.Schema$LoyaltyPoints {
   if (t.tipoTarjeta === 'sellos' && t.selloMeta != null && t.selloMeta > 0) {
     return { label: 'Sellos', balance: { string: `${t.puntosActuales} de ${t.selloMeta} sellos` } };
   }
   return { label: 'Puntos', balance: { int: t.puntosActuales } };
+}
+
+function esSellosConMeta(t: TarjetaParaObjeto): boolean {
+  return t.tipoTarjeta === 'sellos' && t.selloMeta != null && t.selloMeta > 0;
 }
 
 export function construirObjeto(
@@ -59,5 +67,8 @@ export function construirObjeto(
     state: 'ACTIVE',
     barcode: { type: 'QR_CODE', value: tarjeta.qrToken },
     loyaltyPoints: loyaltyPointsDe(tarjeta),
+    ...(esSellosConMeta(tarjeta) && tarjeta.heroImageUrl
+      ? { heroImage: { sourceUri: { uri: tarjeta.heroImageUrl } } }
+      : {}),
   };
 }

@@ -58,4 +58,27 @@ describe('construirObjeto', () => {
     });
     expect(obj.loyaltyPoints).toEqual({ label: 'Puntos', balance: { int: 5 } });
   });
+
+  it('sellos con meta y con heroImageUrl: incluye heroImage a nivel de objeto (grilla por cliente)', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      qrToken: 'tok-4', puntosActuales: 3, tipoTarjeta: 'sellos', selloMeta: 8,
+      heroImageUrl: 'https://ejemplo.com/api/tarjetas/xyz/hero.png',
+    });
+    expect(obj.heroImage).toEqual({ sourceUri: { uri: 'https://ejemplo.com/api/tarjetas/xyz/hero.png' } });
+  });
+
+  it('sellos sin heroImageUrl (ej. NEXT_PUBLIC_BASE_URL ausente): omite heroImage, no manda uri vacía', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      qrToken: 'tok-5', puntosActuales: 3, tipoTarjeta: 'sellos', selloMeta: 8, heroImageUrl: null,
+    });
+    expect(obj.heroImage).toBeUndefined();
+  });
+
+  it('puntos (no sellos): NUNCA incluye heroImage propio aunque venga heroImageUrl — se ve el de la clase', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      qrToken: 'tok-6', puntosActuales: 40, tipoTarjeta: 'puntos', selloMeta: null,
+      heroImageUrl: 'https://ejemplo.com/api/tarjetas/xyz/hero.png',
+    });
+    expect(obj.heroImage).toBeUndefined();
+  });
 });

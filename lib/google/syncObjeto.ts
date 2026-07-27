@@ -3,6 +3,7 @@ import type { Database } from '../supabase/types';
 import { walletClient, issuerId } from './walletClient';
 import { idObjetoGoogle } from './ids';
 import { construirObjeto } from './construirRecursos';
+import { urlHeroTarjeta } from './heroUrl';
 
 export type ResultadoSyncObjeto = { ok: true; objectId: string } | { ok: false; error: string };
 
@@ -34,6 +35,7 @@ export async function syncObjetoTarjeta(
       puntosActuales: tarjeta.puntos_actuales,
       tipoTarjeta: tarjeta.comercios.tipo_tarjeta,
       selloMeta: tarjeta.comercios.sello_meta,
+      heroImageUrl: urlHeroTarjeta(tarjetaId),
     });
     const client = walletClient();
 

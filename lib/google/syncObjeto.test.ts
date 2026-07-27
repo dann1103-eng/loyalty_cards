@@ -98,6 +98,20 @@ describe('syncObjetoTarjeta', () => {
     expect(llamada.requestBody.loyaltyPoints).toEqual({ label: 'Sellos', balance: { string: '3 de 8 sellos' } });
   });
 
+  it('tarjeta de sellos: incluye heroImage apuntando a /api/tarjetas/<id>/hero.png (grilla por cliente)', async () => {
+    const t = await crearTarjeta({ googleClassId: 'issuer-test.comercio_x', tipoTarjeta: 'sellos', selloMeta: 8, puntos: 3 });
+    await syncObjetoTarjeta(supabase, t.tarjetaId);
+    const llamada = insertMock.mock.calls[0][0];
+    expect(llamada.requestBody.heroImage.sourceUri.uri).toContain(`/api/tarjetas/${t.tarjetaId}/hero.png`);
+  });
+
+  it('tarjeta de puntos: NUNCA incluye heroImage propio (se ve el de la clase)', async () => {
+    const t = await crearTarjeta({ googleClassId: 'issuer-test.comercio_x', tipoTarjeta: 'puntos', puntos: 40 });
+    await syncObjetoTarjeta(supabase, t.tarjetaId);
+    const llamada = insertMock.mock.calls[0][0];
+    expect(llamada.requestBody.heroImage).toBeUndefined();
+  });
+
   it('una tarjeta de OTRO comercio no puede colar su google_class_id (scoping via el join real)', async () => {
     // No hay forma de "confundir" comercios acá porque la lectura sale de tarjetas(comercios(...))
     // por FK real — este test documenta esa garantía en vez de solo confiar en la implementación.

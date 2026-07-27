@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { createServiceClient } from '../supabase/server';
@@ -11,13 +11,29 @@ const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
   privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
 });
 
+const insertClaseMock = vi.fn();
+const patchClaseMock = vi.fn();
+const insertObjetoMock = vi.fn();
+const patchObjetoMock = vi.fn();
+
 vi.mock('./walletClient', () => ({
   issuerId: () => 'issuer-test',
   credencialesServicio: () => ({ client_email: 'cuenta-prueba@test.iam.gserviceaccount.com', private_key: privateKey }),
+  walletClient: () => ({
+    loyaltyclass: { insert: insertClaseMock, patch: patchClaseMock },
+    loyaltyobject: { insert: insertObjetoMock, patch: patchObjetoMock },
+  }),
 }));
 
 const supabase = createServiceClient();
 let ids: { comercioId: string; clienteId: string; tarjetaId: string } | null = null;
+
+beforeEach(() => {
+  insertClaseMock.mockReset().mockResolvedValue({});
+  patchClaseMock.mockReset().mockResolvedValue({});
+  insertObjetoMock.mockReset().mockResolvedValue({});
+  patchObjetoMock.mockReset().mockResolvedValue({});
+});
 
 async function crearTarjeta(opts: { googleClassId?: string | null; logoUrl?: string | null; puntos?: number }) {
   const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -70,17 +86,43 @@ describe('generarLinkGuardar', () => {
     expect(payload.loyaltyObjects[0].classId).toBe('issuer-test.comercio_x');
   });
 
-  it('devuelve null si el comercio no tiene Google Wallet habilitado (sin google_class_id)', async () => {
-    const t = await crearTarjeta({ googleClassId: null });
-    expect(await generarLinkGuardar(supabase, t.tarjetaId)).toBeNull();
-  });
-
-  it('devuelve null si el comercio no tiene logo (Google lo exige)', async () => {
+  it('devuelve null si el comercio no tiene logo (Google lo exige, ni intenta autorreparar)', async () => {
     const t = await crearTarjeta({ logoUrl: null });
     expect(await generarLinkGuardar(supabase, t.tarjetaId)).toBeNull();
+    expect(insertClaseMock).not.toHaveBeenCalled();
   });
 
   it('devuelve null para una tarjeta inexistente', async () => {
     expect(await generarLinkGuardar(supabase, '00000000-0000-0000-0000-000000000000')).toBeNull();
+  });
+
+  describe('autorreparación (google_class_id/google_object_id faltantes)', () => {
+    it('si falta google_class_id pero hay logo, sincroniza la clase sobre la marcha y sí devuelve un link', async () => {
+      const t = await crearTarjeta({ googleClassId: null });
+      const url = await generarLinkGuardar(supabase, t.tarjetaId);
+      expect(url).toMatch(/^https:\/\/pay\.google\.com\/gp\/v\/save\//);
+      expect(insertClaseMock).toHaveBeenCalledOnce();
+
+      const { data: comercio } = await supabase.from('comercios').select('google_class_id').eq('id', t.comercioId).single();
+      expect(comercio?.google_class_id).toBe('issuer-test.comercio_' + t.comercioId);
+    });
+
+    it('si la autorreparación de la clase falla en Google, devuelve null (no revienta)', async () => {
+      insertClaseMock.mockRejectedValueOnce(new Error('Google caído'));
+      const t = await crearTarjeta({ googleClassId: null });
+      expect(await generarLinkGuardar(supabase, t.tarjetaId)).toBeNull();
+
+      const { data: comercio } = await supabase.from('comercios').select('google_class_id').eq('id', t.comercioId).single();
+      expect(comercio?.google_class_id).toBeNull();
+    });
+
+    it('siempre sincroniza el objeto (aunque la clase ya existiera) para que tarjetas.google_object_id quede consistente', async () => {
+      const t = await crearTarjeta({});
+      await generarLinkGuardar(supabase, t.tarjetaId);
+      expect(insertObjetoMock).toHaveBeenCalledOnce();
+
+      const { data: tarjeta } = await supabase.from('tarjetas').select('google_object_id').eq('id', t.tarjetaId).single();
+      expect(tarjeta?.google_object_id).toBe('issuer-test.tarjeta_' + t.tarjetaId);
+    });
   });
 });
