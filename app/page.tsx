@@ -9,6 +9,11 @@ import { MARCA } from '@/lib/marca';
 // el cliente final nunca llega acá, llega por el código de su propio comercio. Por eso no hay
 // contadores ("8 comercios ya usan…"): son números de piloto y restan. Lo que convence es ver el
 // producto en movimiento.
+//
+// El abanico de tarjetas vive DENTRO del hero, a la par del texto, no en una sección aparte más
+// abajo: la primera pantalla tiene que mostrar el producto, no prometerlo. Eso se llevó puesto al
+// botón "Mirá cómo se ve" (no se manda a ver lo que ya se está viendo) y a la pastilla de kicker
+// que repetía la categoría que el título ya dice.
 
 export const metadata: Metadata = {
   title: `${MARCA.nombre} — Tarjetas de lealtad digitales para tu negocio`,
@@ -20,12 +25,12 @@ const PASOS = [
   {
     titulo: 'Armás tu tarjeta',
     texto:
-      'Elegís los colores de tu marca, subís tu logo y decidís si premiás con sellos o con puntos. Se hace en minutos y no necesitás diseñador.',
+      'Elegís tus colores, subís tu logo y decidís si premiás con sellos o con puntos. En minutos y sin diseñador.',
   },
   {
     titulo: 'Tu cliente la guarda',
     texto:
-      'Escanea el código que ponés en el mostrador, deja su nombre y su teléfono, y la tarjeta le queda en la billetera del teléfono. No instala nada.',
+      'Escanea el código que ponés en el mostrador, deja su nombre y su teléfono, y la tarjeta le queda en el teléfono. No instala nada.',
   },
   {
     titulo: 'Sumás en cada visita',
@@ -34,130 +39,129 @@ const PASOS = [
   },
 ];
 
-const BENEFICIOS = [
+const RAZONES = [
   {
     titulo: 'Vuelven más seguido',
     texto:
-      'La tarjeta vive junto a la tarjeta de crédito y el pase de abordar. No se queda en una gaveta ni se pierde entre los recibos.',
+      'La tarjeta queda junto a la tarjeta de crédito y el pase de abordar, no en una gaveta ni entre los recibos.',
   },
   {
     titulo: 'Se actualiza sola',
     texto:
-      'Cuando el cliente suma puntos o cambiás una promoción, la tarjeta se refresca en su teléfono sin que él tenga que hacer nada.',
+      'Acreditás puntos o cambiás una promoción y la tarjeta se refresca en el teléfono del cliente, sin que él haga nada.',
   },
   {
     titulo: 'Dejás de adivinar',
     texto:
-      'Un panel con visitas, clientes nuevos y premios canjeados, por sucursal y por período. Vas a saber qué promoción sirvió.',
+      'Visitas, clientes nuevos y premios canjeados, por sucursal y por período: vas a saber qué promoción sirvió.',
   },
   {
     titulo: 'Varias sucursales, un solo programa',
     texto:
-      'Cada sucursal con su propio cajero y su propio corte, todas bajo la misma tarjeta y el mismo saldo del cliente.',
+      'Cada local con su cajero y su propio corte, todos bajo la misma tarjeta y el mismo saldo del cliente.',
   },
   {
     titulo: 'Cero fricción para el cliente',
     texto:
-      'Nada que descargar, nada que recordar, ninguna contraseña. La billetera ya viene instalada en su teléfono.',
+      'Nada que descargar, nada que recordar, ninguna contraseña. La billetera ya viene en su teléfono.',
   },
   {
     titulo: 'El diseño es tuyo',
     texto:
-      'Tus colores y tu logo en la pantalla del cliente cada vez que abre la billetera. No es nuestra marca la que se luce.',
+      'Tus colores y tu logo en su pantalla cada vez que abre la billetera. No es nuestra marca la que se luce.',
   },
 ];
 
 export default function Inicio() {
   return (
     <div className={estilos.pagina}>
+      {/* La cabecera comparte el campo de brasa con el hero: arriba del todo se leen como una sola
+          superficie (la barra desaparece), y al bajar queda una franja de marca sobre el fondo del
+          tema. Por eso no lleva borde ni vidrio esmerilado: el color ya es la separación. */}
       <header className={estilos.cabecera}>
-        <span className={estilos.marca}>
-          <span className={estilos.marcaPunto} aria-hidden="true">
-            C
+        <div className={`${estilos.envoltura} ${estilos.cabeceraFila}`}>
+          <span className={estilos.marca}>
+            <span className={estilos.marcaPunto} aria-hidden="true">
+              C
+            </span>
+            {MARCA.nombre}
           </span>
-          {MARCA.nombre}
-        </span>
-        <nav className={estilos.navCabecera}>
-          <Link className={estilos.enlaceCabecera} href="/mi-tarjeta">
-            Buscá tu tarjeta
-          </Link>
-          <Link className={estilos.enlaceCabecera} href="/comercio/login">
-            Ingresar
-          </Link>
-          <a className={estilos.botonCabecera} href="#demo">
-            Agendá tu demo
-          </a>
-        </nav>
+          <nav className={estilos.navCabecera}>
+            <Link className={estilos.enlaceCabecera} href="/mi-tarjeta">
+              Buscá tu tarjeta
+            </Link>
+            <Link className={estilos.enlaceCabecera} href="/comercio/login">
+              Ingresar
+            </Link>
+            <a className={estilos.botonCabecera} href="#demo">
+              Agendá tu demo
+            </a>
+          </nav>
+        </div>
       </header>
 
       <main>
-        <section className={`${estilos.hero} ${estilos.envoltura}`}>
-          <p className={estilos.kicker}>Tarjetas de lealtad digitales · El Salvador</p>
-          <h1 className={estilos.heroTitulo}>
-            Tu tarjeta de lealtad, <em>en el teléfono</em> de tus clientes
-          </h1>
-          <p className={estilos.heroTexto}>
-            Tus clientes suman sellos o puntos en cada visita y llevan la tarjeta de tu negocio en
-            Apple Wallet o Google Wallet. Sin app que instalar, sin plásticos que se pierden, sin
-            imprimir nada.
-          </p>
-          <div className={estilos.heroAcciones}>
-            <a className={estilos.botonPrimario} href="#demo">
-              Agendá tu demo
-            </a>
-            <a className={estilos.botonSecundario} href="#tarjetas">
-              Mirá cómo se ve
-            </a>
-          </div>
-        </section>
+        <section className={estilos.hero}>
+          <div className={`${estilos.envoltura} ${estilos.heroRejilla}`}>
+            <div className={estilos.heroTexto}>
+              <h1 className={estilos.heroTitulo}>
+                Tu tarjeta de lealtad, <em>en el teléfono</em> de tus clientes
+              </h1>
+              <p className={estilos.heroLinea}>
+                Suman sellos o puntos en cada visita, sin instalar nada y sin cargar plásticos.
+              </p>
+              <a className={estilos.botonBrasa} href="#demo">
+                Agendá tu demo
+              </a>
+              <p className={estilos.heroNota}>
+                Te la mostramos con tus colores y tu logo, sin compromiso.
+              </p>
+            </div>
 
-        {/* El carrusel va a lo ancho de la pantalla, fuera de la envoltura: el abanico tiene que
-            desbordar los costados, no acomodarse dentro de una columna. */}
-        <section id="tarjetas" className={estilos.seccion}>
-          <div className={`${estilos.envoltura} ${estilos.centrado}`}>
-            <h2 className={estilos.tituloSeccion}>Así se le ve a tu cliente</h2>
-            <p className={estilos.textoSeccion}>
-              Vos elegís los colores, el logo y si premiás con sellos o con puntos. Estos son
-              diseños de muestra que armamos nosotros: negocios de ejemplo, no clientes reales.
-            </p>
+            {/* En pantalla angosta el abanico se sale de la envoltura y toca los dos bordes: es la
+                única pieza de la página que gana con el ancho completo. */}
+            <div className={estilos.heroVitrina}>
+              <CarruselTarjetas />
+              <p className={estilos.pieVitrina}>
+                Ejemplos que armamos nosotros, no clientes reales.
+              </p>
+            </div>
           </div>
-          <CarruselTarjetas />
         </section>
 
         <section id="como-funciona" className={`${estilos.seccion} ${estilos.envoltura}`}>
-          <div className={estilos.centrado}>
-            <h2 className={estilos.tituloSeccion}>Cómo funciona</h2>
-            <p className={estilos.textoSeccion}>Tres pasos, y el más largo lo hacés una sola vez.</p>
-          </div>
-          <div className={estilos.pasos}>
+          <h2 className={estilos.tituloSeccion}>Cómo funciona</h2>
+          <p className={estilos.textoSeccion}>Tres pasos, y el más largo lo hacés una sola vez.</p>
+          {/* Lista ordenada de verdad: son pasos en secuencia, no tres features en una grilla.
+              role="list" explícito porque Safari le quita la semántica de lista a cualquier lista
+              con list-style: none, y el ordinal visible va con aria-hidden (leer "cero uno" no
+              ayuda a nadie): sin el rol, quien no ve la pantalla pierde que son tres pasos. */}
+          <ol className={estilos.pasos} role="list">
             {PASOS.map((paso, indice) => (
-              <article key={paso.titulo} className={estilos.paso}>
-                <span className={estilos.pasoNumero} aria-hidden="true">
-                  {indice + 1}
-                </span>
+              <li key={paso.titulo} className={estilos.paso}>
+                <span className={estilos.pasoNumero} aria-hidden="true">{`0${indice + 1}`}</span>
                 <h3>{paso.titulo}</h3>
                 <p>{paso.texto}</p>
-              </article>
+              </li>
             ))}
-          </div>
+          </ol>
         </section>
 
         <section className={`${estilos.seccion} ${estilos.envoltura}`}>
-          <div className={estilos.centrado}>
-            <h2 className={estilos.tituloSeccion}>Qué gana tu negocio</h2>
-            <p className={estilos.textoSeccion}>
-              Un programa de lealtad sirve cuando el cliente lo lleva encima. Ahí es justo donde
-              vive esta tarjeta.
-            </p>
-          </div>
-          <div className={estilos.beneficios}>
-            {BENEFICIOS.map((beneficio) => (
-              <article key={beneficio.titulo} className={estilos.beneficio}>
-                <h3>{beneficio.titulo}</h3>
-                <p>{beneficio.texto}</p>
-              </article>
+          <h2 className={estilos.tituloSeccion}>Qué gana tu negocio</h2>
+          <p className={estilos.textoSeccion}>
+            Un programa de lealtad sirve cuando el cliente lo lleva encima.
+          </p>
+          {/* Antes eran seis cajas idénticas en grilla. Ahora es una lista de definiciones con
+              filas regladas: seis afirmaciones se escanean de un vistazo, seis cards no. */}
+          <dl className={estilos.razones}>
+            {RAZONES.map((razon) => (
+              <div key={razon.titulo} className={estilos.razon}>
+                <dt>{razon.titulo}</dt>
+                <dd>{razon.texto}</dd>
+              </div>
             ))}
-          </div>
+          </dl>
         </section>
 
         <section id="demo" className={`${estilos.seccion} ${estilos.envoltura}`}>
@@ -166,9 +170,9 @@ export default function Inicio() {
               <h2 className={estilos.tituloSeccion}>Agendá tu demo</h2>
               <p className={estilos.textoSeccion}>
                 Contanos de tu negocio y te escribimos para mostrarte cómo se vería tu tarjeta
-                funcionando de verdad. Sin compromiso.
+                funcionando de verdad.
               </p>
-              <ul className={estilos.lista}>
+              <ul className={estilos.lista} role="list">
                 <li>Te respondemos en menos de un día hábil.</li>
                 <li>Te enseñamos tu tarjeta con tus colores y tu logo.</li>
                 <li>Vemos juntos si te conviene premiar con sellos o con puntos.</li>
@@ -185,7 +189,7 @@ export default function Inicio() {
 
       <footer className={estilos.pie}>
         <div className={`${estilos.envoltura} ${estilos.pieFilas}`}>
-          <span>{MARCA.nombre} — Tarjetas de lealtad digitales en El Salvador</span>
+          <span>{MARCA.nombre}, tarjetas de lealtad digitales en El Salvador</span>
           <nav className={estilos.pieEnlaces}>
             <a href={`mailto:${MARCA.correoSoporte}`}>{MARCA.correoSoporte}</a>
             <Link href="/mi-tarjeta">Buscá tu tarjeta</Link>

@@ -17,6 +17,44 @@
   padding-inline: var(--sp-4);
 }
 
+/* ---------- el campo de brasa (cabecera + hero) ----------
+   ESTOS COLORES NO SIGUEN AL TEMA, Y ES A PROPÓSITO. Misma excepción que .cardface en globals.css:
+   no son cromo de panel, son la TINTA DE MARCA de un afiche. La página pública es la única
+   superficie "brand" del producto y su primera pantalla es un campo de color plano y saturado; si
+   ese campo se aclarara porque el visitante dejó el panel en tema claro, la marca cambiaría de
+   color según una preferencia que él fijó en otra pantalla, para otra tarea.
+   Van como variables locales (no como literales sueltos) por dos razones: todo lo que se pinta
+   encima hereda el par de contraste correcto sin repetirlo, y el tema de ALTO CONTRASTE se
+   resuelve redefiniendo estas cinco y nada más (bloque al final de esta sección). Ese tema sí se
+   respeta: existe para atender bajo el sol, y quien lo prendió no quiere un afiche, quiere leer.
+   Contrastes calculados contra --campo: --sobre-campo 8.7:1, --sobre-campo-2 6.3:1, --realce
+   5.8:1, --borde-campo 3.4:1 (WCAG 1.4.11 pide 3:1 para el contorno de un control; a 66% de
+   luminosidad quedaba en 3.0 justo, sin margen para el redondeo del respaldo en sRGB). */
+
+.cabecera,
+.hero {
+  /* En oklch, no en hex: el matiz es el mismo del acento del sistema, y ahí la brasa se elige por
+     luminosidad y croma en vez de a ojo. El respaldo en sRGB para un navegador viejo lo emite solo
+     el compilador de CSS (queda un hex plano y, dentro de un @supports, la versión en lab). */
+  --campo: oklch(40% 0.115 42);
+  --sobre-campo: oklch(96% 0.012 85);
+  --sobre-campo-2: oklch(86% 0.035 70);
+  --realce: oklch(84% 0.13 72);
+  --borde-campo: oklch(68% 0.1 50);
+
+  background: var(--campo);
+  color: var(--sobre-campo);
+}
+
+:global(:root[data-tema="alto-contraste"]) .cabecera,
+:global(:root[data-tema="alto-contraste"]) .hero {
+  --campo: #000000;
+  --sobre-campo: #ffffff;
+  --sobre-campo-2: #ededed;
+  --realce: #ffb01f;
+  --borde-campo: rgba(255, 255, 255, 0.82);
+}
+
 /* ---------- cabecera ---------- */
 
 .cabecera {
@@ -24,15 +62,17 @@
   top: 0;
   /* Por encima del abanico: sus tarjetas llegan a z-index 17. */
   z-index: 50;
+  padding-block: var(--sp-3);
+  /* Sin borde ni vidrio esmerilado: contra el hero es la MISMA superficie (un borde ahí dibujaría
+     una costura que no existe) y contra las secciones de abajo la separación la hace el salto de
+     color, que es mucho más fuerte que una línea. */
+}
+
+.cabeceraFila {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
-  border-bottom: 1px solid var(--linea);
-  background: rgba(19, 19, 19, 0.82);
-  background: color-mix(in srgb, var(--fondo) 82%, transparent);
-  backdrop-filter: blur(14px);
 }
 
 .marca {
@@ -51,8 +91,8 @@
   border-radius: 8px;
   display: grid;
   place-items: center;
-  background: linear-gradient(150deg, var(--acento) 0%, var(--acento-fuerte) 100%);
-  color: var(--sobre-acento);
+  background: var(--realce);
+  color: var(--campo);
   font-size: 15px;
   font-weight: 700;
 }
@@ -66,11 +106,11 @@
 .enlaceCabecera {
   padding: 8px 10px;
   border-radius: var(--radius-pill);
-  color: var(--texto-2);
+  color: var(--sobre-campo-2);
   font-size: 14px;
 }
 .enlaceCabecera:hover {
-  color: var(--texto);
+  color: var(--sobre-campo);
 }
 
 /* Debajo de 600 px la cabecera se queda solo con la marca y el botón: tres enlaces más no caben
@@ -81,69 +121,140 @@
   }
 }
 
+/* Delineado y no sólido: el único botón lleno del campo es el del hero. Dos píldoras rellenas a
+   quince centímetros una de otra compiten y ninguna gana. */
 .botonCabecera {
-  padding: 9px 14px;
+  padding: 9px 15px;
+  border: 1px solid var(--borde-campo);
   border-radius: var(--radius-pill);
-  background: var(--acento);
-  color: var(--sobre-acento);
+  color: var(--sobre-campo);
   font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.botonCabecera:hover {
+  border-color: var(--sobre-campo);
 }
 
-/* ---------- hero ---------- */
+.enlaceCabecera:focus-visible,
+.botonCabecera:focus-visible {
+  outline: 2px solid var(--realce);
+  outline-offset: 3px;
+}
+
+/* ---------- hero ----------
+   Texto a la izquierda y el abanico a la derecha, en la MISMA pantalla: la primera vista tiene que
+   mostrar el producto, no describirlo. Abajo de 900 px no hay dos columnas que valgan, así que se
+   apila (texto, después tarjetas) y el abanico se va a los dos bordes. */
 
 .hero {
-  padding-block: clamp(40px, 9vw, 88px) clamp(24px, 5vw, 40px);
-  text-align: center;
+  padding-block: clamp(28px, 5.5vw, 76px) clamp(28px, 4.5vw, 60px);
 }
 
-.kicker {
-  display: inline-block;
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--linea-fuerte);
-  background: rgba(255, 196, 149, 0.08);
-  color: var(--acento);
-  font-size: 13px;
-  letter-spacing: 0.04em;
+.heroRejilla {
+  display: grid;
+  gap: clamp(26px, 4vw, 48px);
+  align-items: center;
+}
+@media (min-width: 900px) {
+  .heroRejilla {
+    /* La columna del abanico apenas más ancha: es la que tiene que respirar. minmax(0, …) en las
+       dos pistas para que ninguna se plante en el min-content de su contenido. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    gap: clamp(32px, 4vw, 64px);
+  }
+}
+
+.heroTexto {
+  /* Permite que la columna se encoja por debajo del min-content de una palabra larga en vez de
+     estirar la rejilla y empujar el abanico fuera de la pantalla. */
+  min-width: 0;
 }
 
 .heroTitulo {
-  margin-top: var(--sp-4);
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: clamp(34px, 8vw, 62px);
-  line-height: 1.04;
+  font-size: clamp(34px, 5.4vw, 64px);
+  /* Un poco más de aire que en tema claro: el tipo claro sobre fondo oscuro se lee más liviano. */
+  line-height: 1.08;
   letter-spacing: -0.03em;
   text-wrap: balance;
 }
 
+/* Color sólido, nunca degradado sobre el texto: el énfasis se gana con el matiz y con el peso. */
 .heroTitulo em {
   font-style: normal;
-  background: linear-gradient(100deg, var(--acento) 0%, var(--acento-fuerte) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--realce);
 }
 
-.heroTexto {
-  margin: var(--sp-5) auto 0;
-  max-width: 40rem;
-  color: var(--texto-2);
-  font-size: clamp(16px, 3.4vw, 19px);
-  line-height: 1.6;
+.heroLinea {
+  margin-top: 18px;
+  /* Medida corta a propósito: es una bajada de afiche, no cuerpo de texto (el cuerpo largo de la
+     página, en .razon dd, sí va a 66ch). */
+  max-width: 36ch;
+  color: var(--sobre-campo-2);
+  font-size: clamp(17px, 2.2vw, 21px);
+  line-height: 1.5;
   text-wrap: pretty;
 }
 
-.heroAcciones {
-  margin-top: var(--sp-6);
-  display: flex;
-  flex-wrap: wrap;
+/* Ritmo a propósito desparejo: el aire antes del botón es el doble que el de la bajada, y la nota
+   queda pegada abajo. Un margen igual en los cuatro huecos aplana la lectura. En pantalla angosta
+   ese aire se encoge, porque cada píxel de acá empuja las tarjetas por debajo del pliegue. */
+.botonBrasa {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  gap: var(--sp-3);
+  min-height: 52px;
+  margin-top: clamp(26px, 3.5vw, 36px);
+  padding: 0 28px;
+  border-radius: var(--radius-pill);
+  background: var(--sobre-campo);
+  color: var(--campo);
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  transition: transform 180ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 180ms ease;
+}
+.botonBrasa:hover {
+  transform: translateY(-2px);
+}
+.botonBrasa:active {
+  transform: translateY(0) scale(0.98);
+}
+.botonBrasa:focus-visible {
+  outline: 2px solid var(--realce);
+  outline-offset: 4px;
 }
 
+.heroNota {
+  margin-top: 14px;
+  color: var(--sobre-campo-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.heroVitrina {
+  /* Se come el padding de la envoltura para tocar los dos bordes de la pantalla. */
+  margin-inline: calc(var(--sp-4) * -1);
+}
+@media (min-width: 900px) {
+  .heroVitrina {
+    margin-inline: 0;
+  }
+}
+
+.pieVitrina {
+  margin-top: 14px;
+  text-align: center;
+  color: var(--sobre-campo-2);
+  font-size: 13px;
+}
+
+/* Botón del formulario de demo (ya abajo del campo de brasa, sobre el fondo del tema). Plano y de
+   un solo color: el degradado que tenía era el reflejo de plantilla, no una decisión. */
 .botonPrimario {
   display: inline-flex;
   align-items: center;
@@ -153,33 +264,16 @@
   padding: 0 24px;
   border: 0;
   border-radius: var(--radius-pill);
-  background: linear-gradient(150deg, var(--acento) 0%, var(--acento-fuerte) 100%);
+  background: var(--acento-fuerte);
   color: var(--sobre-acento);
-  font-family: var(--font-body);
+  font-family: var(--font-display);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  box-shadow: var(--shadow-1);
 }
 .botonPrimario:disabled {
   opacity: 0.6;
   cursor: default;
-}
-
-.botonSecundario {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 48px;
-  padding: 0 22px;
-  border: 1px solid var(--linea-fuerte);
-  border-radius: var(--radius-pill);
-  color: var(--texto);
-  font-size: 16px;
-}
-.botonSecundario:hover {
-  border-color: var(--acento);
-  color: var(--acento);
 }
 
 /* ---------- secciones ---------- */
@@ -211,29 +305,24 @@
   font-size: 13px;
 }
 
+/* Todo alineado a la izquierda, incluidos los encabezados de sección: la pila centrada con su
+   subtítulo centrado debajo es la forma de la plantilla. */
 .tituloSeccion {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: clamp(26px, 5.5vw, 38px);
+  font-size: clamp(28px, 5.2vw, 40px);
   line-height: 1.15;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
   text-wrap: balance;
 }
 
 .textoSeccion {
-  margin-top: var(--sp-3);
-  max-width: 38rem;
+  margin-top: 10px;
+  max-width: 46ch;
   color: var(--texto-2);
-  font-size: clamp(15px, 3.2vw, 17px);
+  font-size: clamp(16px, 3vw, 18px);
   line-height: 1.6;
   text-wrap: pretty;
-}
-
-.centrado {
-  text-align: center;
-}
-.centrado .textoSeccion {
-  margin-inline: auto;
 }
 
 /* ---------- carrusel ---------- */
@@ -242,16 +331,31 @@
   /* --u = el 1 % del ancho de una tarjeta. Todo lo de adentro del teléfono se mide con esta
      unidad, así el modelo entero escala igual en un teléfono que en un monitor sin una sola
      consulta de medios. */
-  --ancho-tarjeta: clamp(150px, 42vw, 232px);
+  --ancho-tarjeta: clamp(150px, 44vw, 208px);
   --alto-tarjeta: calc(var(--ancho-tarjeta) * 1.88);
   --u: calc(var(--ancho-tarjeta) / 100);
-  margin-top: clamp(24px, 5vw, 44px);
+  /* Dónde empieza el abanico dentro del escenario y cuánto aire lleva debajo. Antes eran 56 px y
+     160 px fijos, cuando el carrusel era una sección aparte a lo ancho de la página; adentro del
+     hero de un teléfono ese alto empujaba el botón fuera de la pantalla.
+     LAS DOS COTAS, porque el degradado del escenario recorta todo lo que se salga de su caja:
+     --tope no puede bajar de 40 px (la tarjeta señalada sube 26 px y su anillo de foco, 8 px más),
+     y el aire no puede bajar de 76 px (la tarjeta más lejana baja 3 × 16 px y su esquina de abajo
+     cae otros ~28 px al girar 21°). */
+  --tope-tarjeta: clamp(40px, 6vw, 56px);
+  --aire-escenario: calc(var(--tope-tarjeta) + 88px);
+}
+/* En dos columnas la tarjeta se mide contra el ancho de SU columna, no contra la pantalla: con
+   42vw el abanico entraba en el hero del teléfono y desbordaba la columna en un monitor. */
+@media (min-width: 900px) {
+  .carrusel {
+    --ancho-tarjeta: clamp(160px, 15.5vw, 200px);
+  }
 }
 
 .escenario {
   position: relative;
   width: 100%;
-  height: calc(var(--alto-tarjeta) + 160px);
+  height: calc(var(--alto-tarjeta) + var(--aire-escenario));
   /* Las tarjetas de las puntas se van más allá del ancho de la página; el degradado las desvanece
      contra el borde en vez de cortarlas en seco, que es lo que da la sensación de que el abanico
      sigue fuera de la pantalla. */
@@ -261,7 +365,7 @@
 
 .tarjeta {
   position: absolute;
-  top: 56px;
+  top: var(--tope-tarjeta);
   left: 50%;
   width: var(--ancho-tarjeta);
   padding: 0;
@@ -283,28 +387,30 @@
 }
 
 .tarjeta:focus-visible {
-  outline: 2px solid var(--acento);
+  outline: 2px solid var(--realce);
   outline-offset: 8px;
   border-radius: 26px;
 }
 
 .controles {
-  margin-top: var(--sp-5);
+  margin-top: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--sp-4);
 }
 
+/* Los controles viven sobre el campo de brasa: sin fondo propio (un círculo de superficie oscura
+   ahí sería una mancha) y con el par de contraste del campo. */
 .flecha {
   width: 46px;
   height: 46px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--linea-fuerte);
+  border: 1px solid var(--borde-campo);
   border-radius: var(--radius-pill);
-  background: var(--superficie-1);
-  color: var(--texto);
+  background: transparent;
+  color: var(--sobre-campo);
   cursor: pointer;
   transition: border-color 160ms ease, color 160ms ease;
 }
@@ -313,8 +419,12 @@
   height: 22px;
 }
 .flecha:hover {
-  border-color: var(--acento);
-  color: var(--acento);
+  border-color: var(--realce);
+  color: var(--realce);
+}
+.flecha:focus-visible {
+  outline: 2px solid var(--realce);
+  outline-offset: 3px;
 }
 /* Sigue enfocable y anunciada: se deshabilita con aria-disabled, no con el atributo `disabled`,
    para que el foco del teclado no se caiga al llegar a la punta del carrusel. */
@@ -323,8 +433,8 @@
   cursor: default;
 }
 .flecha[aria-disabled='true']:hover {
-  border-color: var(--linea-fuerte);
-  color: var(--texto);
+  border-color: var(--borde-campo);
+  color: var(--sobre-campo);
 }
 
 .puntos {
@@ -348,12 +458,17 @@
   position: absolute;
   inset: 7px;
   border-radius: var(--radius-pill);
-  background: var(--texto-3);
+  background: var(--borde-campo);
   transition: background 200ms ease, inset 200ms ease;
 }
 .puntoActivo::after {
   inset: 6px;
-  background: var(--acento);
+  background: var(--realce);
+}
+.punto:focus-visible {
+  outline: 2px solid var(--realce);
+  outline-offset: 1px;
+  border-radius: var(--radius-pill);
 }
 
 /* ---------- el teléfono y la tarjeta de mentira ---------- */
@@ -605,86 +720,101 @@ svg.sello {
   fill: currentColor;
 }
 
-/* ---------- cómo funciona ---------- */
+/* ---------- cómo funciona ----------
+   Ni cajas ni círculos con un número adentro: tres columnas separadas por una regla arriba, con el
+   ordinal en mono y en el acento. El paso se lee como una secuencia, que es lo que es. */
 
 .pasos {
-  margin-top: clamp(28px, 6vw, 52px);
+  margin-top: clamp(30px, 5vw, 56px);
   display: grid;
-  gap: var(--sp-4);
+  gap: 0;
   grid-template-columns: 1fr;
+  list-style: none;
 }
 @media (min-width: 720px) {
   .pasos {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: clamp(20px, 3.5vw, 44px);
   }
 }
 
 .paso {
-  padding: var(--sp-5);
-  border: 1px solid var(--linea);
-  border-radius: var(--radius);
-  background: var(--superficie-1);
+  padding-block: 20px;
+  border-top: 1px solid var(--linea);
 }
-
-.pasoNumero {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-pill);
-  background: rgba(255, 196, 149, 0.14);
-  color: var(--acento);
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: 15px;
-}
-
-.paso h3 {
-  margin-top: var(--sp-4);
-  font-family: var(--font-display);
-  font-size: 19px;
-  font-weight: 600;
-}
-
-.paso p {
-  margin-top: var(--sp-2);
-  color: var(--texto-2);
-  font-size: 15px;
-  line-height: 1.6;
-}
-
-/* ---------- qué gana el comercio ---------- */
-
-.beneficios {
-  margin-top: clamp(28px, 6vw, 52px);
-  display: grid;
-  gap: var(--sp-4);
-  grid-template-columns: 1fr;
-}
+/* En una sola columna las reglas separan filas; en tres, la de arriba es la única que hace falta
+   y todas empiezan a la misma altura. */
 @media (min-width: 720px) {
-  .beneficios {
-    grid-template-columns: repeat(2, 1fr);
+  .paso {
+    padding-block: 22px 0;
   }
 }
 
-.beneficio {
-  padding: var(--sp-5);
-  border: 1px solid var(--linea);
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, var(--superficie-1) 0%, var(--superficie-0) 100%);
+.pasoNumero {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  color: var(--acento);
 }
 
-.beneficio h3 {
+.paso h3 {
+  margin-top: 12px;
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
+  letter-spacing: -0.015em;
 }
 
-.beneficio p {
-  margin-top: var(--sp-2);
+.paso p {
+  margin-top: 8px;
+  max-width: 46ch;
   color: var(--texto-2);
   font-size: 15px;
-  line-height: 1.6;
+  line-height: 1.65;
+}
+
+/* ---------- qué gana el comercio ----------
+   Antes: seis cajas iguales con título y párrafo, la plantilla exacta que el dueño no quiere.
+   Ahora: una lista de definiciones reglada, afirmación a la izquierda y explicación a la derecha.
+   Seis filas regladas se escanean de arriba abajo en un segundo; seis cards obligan a leerlas
+   todas para descubrir que dicen cosas distintas. */
+
+.razones {
+  margin-top: clamp(26px, 4vw, 44px);
+  border-bottom: 1px solid var(--linea);
+}
+
+.razon {
+  display: grid;
+  gap: 6px;
+  padding-block: clamp(18px, 2.4vw, 24px);
+  border-top: 1px solid var(--linea);
+}
+@media (min-width: 760px) {
+  .razon {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
+    gap: 0 clamp(24px, 4vw, 60px);
+    align-items: baseline;
+  }
+}
+
+.razon dt {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.razon dd {
+  margin: 0;
+  max-width: 66ch;
+  color: var(--texto-2);
+  font-size: 15px;
+  line-height: 1.65;
+  text-wrap: pretty;
 }
 
 /* ---------- formulario de demo ---------- */
@@ -802,7 +932,9 @@ svg.sello {
   height: 46px;
   margin: 0 auto var(--sp-4);
   border-radius: var(--radius-pill);
-  background: rgba(139, 214, 180, 0.14);
+  /* Token y no un rgba del menta oscuro: ese literal, sobre el panel del tema claro, era una
+     mancha pálida detrás de un tilde oscuro. */
+  background: var(--menta-suave);
   color: var(--menta);
   font-size: 22px;
 }
@@ -869,8 +1001,14 @@ svg.sello {
   .tarjeta,
   .flecha,
   .punto::after,
+  .botonBrasa,
+  .botonCabecera,
   .campo input,
   .campo textarea {
     transition: none;
+  }
+  /* El botón tampoco se despega al pasar el mouse: el desplazamiento es justo lo que molesta. */
+  .botonBrasa:hover {
+    transform: none;
   }
 }

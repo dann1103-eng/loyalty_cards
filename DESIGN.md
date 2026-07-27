@@ -143,12 +143,41 @@ propósito: nada de ahí debe filtrarse a los paneles, que son otro producto. Lo
 sombras y espaciados **sí** salen de las variables globales, para que la página no se despegue del
 sistema cuando este cambie.
 
-Es la única superficie **brand** del producto, y por eso es la única que puede pasarse de
-"Restrained": ahí el color carga la identidad en vez de solo señalar dónde tocar. Restricciones que
-no se negocian:
+Es la única superficie **brand** del producto, y por eso es la única que se pasa de "Restrained".
+
+### Estrategia de color de `/`: **Committed**, un campo de brasa
+La primera pantalla (cabecera + hero) es un campo plano y saturado, `--campo: oklch(40% 0.115 42)`,
+un naranja quemado del mismo matiz que el acento del sistema. Cubre el 100% del primer pliegue y
+para en seco donde empieza el contenido: de ahí para abajo manda el tema. La cabecera pegajosa
+lleva el mismo campo, así que arriba del todo se lee como una sola superficie y al bajar queda una
+franja de marca.
+
+Escena que lo decide: *el dueño de una pupusería cierra a las nueve de la noche, se sienta en el
+mostrador ya apagado y busca "tarjetas de lealtad" en el teléfono, con el brillo bajo.* De ahí sale
+que no puede ser una página blanca que encandile, y que el color tiene que hacer el trabajo que en
+un local haría un rótulo pintado a mano: decir de quién es esto antes de que nadie lea una palabra.
+
+Cinco variables locales, declaradas en `.cabecera, .hero` de `inicio.module.css`:
+`--campo`, `--sobre-campo`, `--sobre-campo-2`, `--realce`, `--borde-campo`. Todo lo que se pinta
+encima (marca, enlaces, botones, flechas y puntos del carrusel) usa ese par de contraste y **no**
+los tokens del tema: un afiche que se aclara porque el visitante dejó el panel en claro no es un
+afiche. Es la misma excepción de `.cardface`, por la misma razón.
+
+**La excepción de la excepción es alto contraste**, y se respeta: un bloque
+`:global(:root[data-tema="alto-contraste"])` redefine esas cinco variables (negro, blanco, ámbar) y
+nada más. Quien prendió ese tema está bajo el sol y quiere leer, no mirar un afiche.
+
+Restricciones que no se negocian:
 - **Se sirve prerenderizada estática y funciona sin JavaScript.** Verificar con `npx next build` que
   `/` siga saliendo estática.
 - El abanico de tarjetas (`CarruselTarjetas.tsx`) funciona con dedo, teclado y mouse, y anuncia la
-  tarjeta activa a un lector de pantalla. Se le puede cambiar el encuadre y el tamaño; no se
-  reescribe.
-- Sin fondos ni cards genéricos: fue pedido explícito del dueño.
+  tarjeta activa a un lector de pantalla. Vive DENTRO del hero, a la derecha del texto, y abajo de
+  900px se apila debajo tocando los dos bordes de la pantalla. Se le cambia el encuadre y el tamaño
+  con `--ancho-tarjeta`, `--tope-tarjeta` y `--aire-escenario`; no se reescribe.
+  Las dos cotas del escenario están calculadas y anotadas en el CSS: el degradado que difumina las
+  puntas recorta TODO lo que se salga de su caja, incluidos el anillo de foco (arriba) y la esquina
+  de la tarjeta más lejana al girar (abajo).
+- **Sin fondos ni cards genéricos**, pedido explícito del dueño. La página no tiene ni una caja: los
+  pasos son una lista ordenada con una regla arriba y el ordinal en mono; las seis razones son una
+  lista de definiciones reglada a dos columnas. Lo único con contenedor propio es el formulario de
+  demo, porque agrupar campos sí es una función y no una decoración.
