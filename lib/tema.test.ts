@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { CLAVE_TEMA, SCRIPT_TEMA, TEMAS, TEMA_POR_DEFECTO, esTema, normalizarTema } from './tema';
 
@@ -57,5 +59,79 @@ describe('tema', () => {
     expect(correr('alto-contraste')).toBe('alto-contraste');
     expect(correr('inventado')).toBeUndefined(); // sin atributo → :root, que es el tema oscuro
     expect(correr(null)).toBeUndefined();
+  });
+});
+
+// El otro contrato entre dos mundos: TEMAS (TypeScript) contra los bloques de globals.css. Nada en
+// el compilador los ata. Agregar 'sepia' a TEMAS y olvidar el CSS compila, pasa el lint y se ve como
+// un botón más en el selector que no hace absolutamente nada; y agregar una variable a :root sin
+// darle valor en los otros dos temas deja esa pantalla con el color del tema oscuro incrustado.
+// Las dos cosas se descubrirían mirando el panel en tres temas, que es justo lo que nadie rehace.
+describe('temas contra app/globals.css', () => {
+  const css = readFileSync(fileURLToPath(new URL('../app/globals.css', import.meta.url)), 'utf8');
+
+  // Declaraciones de un bloque, hasta su primer '}' (los bloques de tema no anidan nada).
+  const tokensDe = (selector: string): Set<string> => {
+    const desde = css.indexOf(`${selector} {`);
+    expect(desde, `no existe el bloque ${selector} en globals.css`).toBeGreaterThan(-1);
+    const hasta = css.indexOf('}', desde);
+    return new Set(
+      [...css.slice(desde, hasta).matchAll(/^\s{2}(--[a-z0-9-]+)\s*:/gm)].map((m) => m[1]),
+    );
+  };
+
+  // Tokens que a propósito NO cambian con el tema. Si agregás uno acá, que sea porque es una
+  // constante (marca, forma, espaciado) — no para silenciar la prueba de abajo.
+  const CONSTANTES = new Set([
+    '--blanco', // constante de marca: el hueso de la tarjeta de billetera
+    '--radius',
+    '--radius-field',
+    '--radius-pill',
+    '--sp-1',
+    '--sp-2',
+    '--sp-3',
+    '--sp-4',
+    '--sp-5',
+    '--sp-6',
+    '--sp-7',
+    '--shadow-card', // alias: es var(--shadow-2), que sí se redefine por tema
+  ]);
+
+  it('cada tema que no es el default tiene su bloque :root[data-tema=…]', () => {
+    for (const t of TEMAS) {
+      if (t === TEMA_POR_DEFECTO) continue; // el default ES :root, no lleva bloque propio
+      expect(css, `falta el bloque de CSS del tema "${t}"`).toContain(`:root[data-tema="${t}"] {`);
+    }
+  });
+
+  it('cada tema redefine TODOS los tokens variables de :root', () => {
+    const raiz = tokensDe(':root');
+    // Referencia dura: si :root adelgaza porque alguien borró tokens, esto avisa en vez de dar por
+    // buenos dos temas que ya no cubren nada.
+    expect(raiz.size).toBeGreaterThan(40);
+    const variables = [...raiz].filter((v) => !CONSTANTES.has(v));
+
+    for (const t of TEMAS) {
+      if (t === TEMA_POR_DEFECTO) continue;
+      const delTema = tokensDe(`:root[data-tema="${t}"]`);
+      const faltantes = variables.filter((v) => !delTema.has(v));
+      expect(faltantes, `el tema "${t}" no redefine estos tokens`).toEqual([]);
+      // Y al revés: un token que solo existe en un tema no lo hereda nadie.
+      const huerfanos = [...delTema].filter((v) => !raiz.has(v));
+      expect(huerfanos, `el tema "${t}" declara tokens que :root no define`).toEqual([]);
+    }
+  });
+
+  it('color-scheme se declara en cada tema (form controls y scrollbars nativos)', () => {
+    // Sin esto el navegador pinta los <select>, los scrollbars y el autofill con el esquema del
+    // tema anterior: campos oscuros dentro de un panel claro.
+    for (const t of TEMAS) {
+      if (t === TEMA_POR_DEFECTO) continue;
+      const bloque = css.slice(
+        css.indexOf(`:root[data-tema="${t}"] {`),
+        css.indexOf('}', css.indexOf(`:root[data-tema="${t}"] {`)),
+      );
+      expect(bloque, `el tema "${t}" no declara color-scheme`).toMatch(/color-scheme:\s*(light|dark)/);
+    }
   });
 });

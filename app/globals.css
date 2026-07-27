@@ -83,6 +83,7 @@
   --shadow-card: var(--shadow-2); /* alias de compatibilidad */
   --ring: 0 0 0 4px rgba(255, 196, 149, 0.22);
   --sombra-acento: 0 0 24px rgba(255, 157, 66, 0.25);
+  --sombra-menta: 0 10px 22px -10px rgba(139, 214, 180, 0.6);
 
   /* ---------- superficies translúcidas (vidrio) ----------
      Eran literales dentro de cada regla; con tres temas tenían que salir del token, porque un
@@ -131,8 +132,13 @@
   --superficie-0: #e7e2d9;
   --superficie-1: #ffffff;
   --superficie-2: #ffffff;
-  --superficie-3: #eae5dc;
-  --superficie-4: #ded7cb;
+  /* Los escalones se calibraron para IGUALAR el contraste que ya tenían en oscuro, no a ojo:
+     superficie-2/fondo da 1.13 en los dos temas, superficie-3/fondo 1.27 (oscuro: 1.29) y
+     superficie-4/superficie-3 1.17 (oscuro: 1.17). Con el #eae5dc que tenía antes, las pastillas
+     y los chips quedaban en 1.11 — planos contra la página justo en el tema donde el ojo tiene
+     menos margen. Si tocás uno, recalculá el escalón, no elijas el hex que "se ve parecido". */
+  --superficie-3: #ded7ca;
+  --superficie-4: #d0c7b6;
 
   --texto: #1c1917;
   --texto-2: rgba(28, 25, 23, 0.72);
@@ -160,6 +166,7 @@
   --shadow-3: 0 26px 60px -18px rgba(28, 25, 23, 0.32);
   --ring: 0 0 0 4px rgba(168, 72, 10, 0.18);
   --sombra-acento: 0 0 24px rgba(194, 65, 12, 0.22);
+  --sombra-menta: 0 10px 22px -10px rgba(13, 110, 74, 0.45);
 
   --vidrio-top: rgba(244, 241, 236, 0.82);
   --vidrio-nav: rgba(255, 255, 255, 0.92);
@@ -230,6 +237,7 @@
   --shadow-3: none;
   --ring: 0 0 0 4px rgba(255, 176, 31, 0.6);
   --sombra-acento: none;
+  --sombra-menta: none;
 
   /* Sin translucidez: el vidrio esmerilado es lo primero que se pierde con reflejo en pantalla. */
   --vidrio-top: #000000;
@@ -565,7 +573,12 @@ a {
    del cliente: sus colores los elige el comercio y llegan por style inline. Si estas superficies
    siguieran al tema, el editor de marca mentiría — con el panel en claro, un logo blanco sobre un
    fondo que se volvió blanco desaparece, y el dueño publicaría una tarjeta que en el teléfono del
-   cliente se ve distinta a la que aprobó. --blanco sí se usa acá, pero es constante de marca. */
+   cliente se ve distinta a la que aprobó. --blanco sí se usa acá, pero es constante de marca.
+   LA ÚNICA PIEZA QUE SÍ SIGUE AL TEMA es el `border`, y no es una excepción a la excepción: ese
+   borde no pinta la tarjeta, pinta la SEPARACIÓN entre la tarjeta y la página de atrás. Con el
+   blanco-al-10% de antes, /admin en tema claro perdía el contorno del preview de un comercio nuevo
+   — que arranca con fondo rgb(255,255,255) por defecto (ver FormularioComercio.tsx), o sea tarjeta
+   blanca, borde blanco y panel claro: no se veía dónde terminaba la tarjeta. */
 .cardface {
   position: relative;
   border-radius: 22px;
@@ -573,7 +586,7 @@ a {
   color: var(--blanco);
   overflow: hidden;
   background: #131315;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--linea-fuerte);
   box-shadow: var(--shadow-3);
   isolation: isolate;
 }
@@ -693,7 +706,10 @@ a {
   display: grid;
   place-items: center;
   font-size: 1.4rem;
-  box-shadow: 0 10px 22px -10px rgba(139, 214, 180, 0.6);
+  /* El resplandor tiene que ser del MISMO verde que el círculo: era el menta claro literal, y en
+     tema claro --menta pasa a verde oscuro — quedaba un halo pálido debajo de un círculo oscuro,
+     como si fueran dos elementos distintos. */
+  box-shadow: var(--sombra-menta);
 }
 
 /* tile de QR: SIEMPRE blanco con zona de silencio (el QR necesita contraste). No sigue al tema:
@@ -1086,6 +1102,12 @@ a {
 .subida-imagen:focus-within,
 .subida-imagen:hover {
   border-color: var(--acento-borde);
+  /* Este naranja SE QUEDA literal, y se revisó a propósito al agregar los temas. No es que "falte
+     migrarlo": a 5% de alpha y 12px de difuminado no es visible en NINGUNO de los tres — en oscuro
+     apenas entibia el borde interno, en claro se pierde sobre blanco y en alto contraste sobre
+     negro. Lo que de verdad comunica el hover/focus es el border-color de arriba, que sí es del
+     tema. Tokenizarlo sería inventar una variable para un efecto que nadie ve; borrarlo sería
+     tocar el tema oscuro (el único donde algo aporta) sin poder mirarlo. */
   box-shadow: inset 0 0 12px rgba(255, 157, 66, 0.05);
 }
 .subida-imagen .field {

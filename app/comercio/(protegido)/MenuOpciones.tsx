@@ -5,14 +5,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { enlacesMenuPorRol } from '@/lib/comercio/navegacion';
-import {
-  ETIQUETAS_TEMA,
-  TEMAS,
-  aplicarTema,
-  leerTema,
-  leerTemaServidor,
-  suscribirTema,
-} from '@/lib/tema';
+import ListaTemas from '@/app/_ui/ListaTemas';
 import { cerrarSesionComercio } from '../actions';
 
 // "¿Ya estamos en el navegador?" sin setState en un effect (esa regla es ERROR en este repo).
@@ -36,16 +29,12 @@ export default function MenuOpciones({ rol }: { rol: string }) {
   const enCliente = useEstaEnCliente();
   const ruta = usePathname();
   const enlaces = enlacesMenuPorRol(rol);
-  // El tema real es el atributo data-tema del <html> (lo fijó el script del <head> antes del primer
-  // pintado). useSyncExternalStore lo lee sin setState-en-effect y sin desajuste de hidratación: en
-  // el servidor devuelve el tema por defecto, que es con el que se sirvió el HTML.
-  const tema = useSyncExternalStore(suscribirTema, leerTema, leerTemaServidor);
 
   // Escape cierra el menú. El listener va en `document` y NO un onKeyDown en el panel: al abrir, el
   // foco se queda en el botón de hamburguesa (FUERA del panel), así que un handler local nunca
   // recibiría la tecla. Sin esto, un usuario de solo-teclado no tiene salida: el fondo es un div,
-  // no activable con teclado. (Mismo pendiente que SelectorContexto: migrar los dos sheets al
-  // <dialog> nativo, que trae Escape, trampa de foco e inert gratis.)
+  // no activable con teclado. (Mismo pendiente que SelectorContexto y SelectorTema: migrar las tres
+  // hojas al <dialog> nativo, que trae Escape, trampa de foco e inert gratis.)
   useEffect(() => {
     if (!abierto) return;
     const alTeclado = (e: KeyboardEvent) => {
@@ -131,30 +120,7 @@ export default function MenuOpciones({ rol }: { rol: string }) {
             {/* El selector de tema lo ve TODO rol, incluido el cajero (que no ve ninguna sección
                 acá): alto contraste existe justamente para el que atiende con el sol de frente. */}
             <p className="titulo-seccion menu-rotulo">Apariencia</p>
-            <div className="menu-temas">
-              {TEMAS.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  className={`sheet-fila menu-tema${t === tema ? ' sheet-fila-activa' : ''}`}
-                  aria-pressed={t === tema}
-                  // A propósito NO cierra el menú: el sheet se repinta con el tema recién elegido y
-                  // el dueño puede probar los tres seguidos sin volver a abrirlo tres veces.
-                  onClick={() => aplicarTema(t)}
-                >
-                  <span className="icono" aria-hidden="true">{ETIQUETAS_TEMA[t].icono}</span>
-                  <span>
-                    <span style={{ display: 'block', fontWeight: 600 }}>
-                      {ETIQUETAS_TEMA[t].nombre}
-                    </span>
-                    <span className="admin-fila-slug">{ETIQUETAS_TEMA[t].ayuda}</span>
-                  </span>
-                  {t === tema && (
-                    <span className="icono icono-lleno menu-tick" aria-hidden="true">check</span>
-                  )}
-                </button>
-              ))}
-            </div>
+            <ListaTemas />
 
             <form action={cerrarSesionComercio} className="menu-salir">
               <button className="sheet-fila" type="submit">
