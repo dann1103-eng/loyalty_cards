@@ -3,7 +3,7 @@ import type { Database } from '../supabase/types';
 import { walletClient, issuerId } from './walletClient';
 import { idObjetoGoogle } from './ids';
 import { construirObjeto } from './construirRecursos';
-import { urlHeroTarjeta } from './heroUrl';
+import { urlHeroTarjeta, versionHero } from './heroUrl';
 
 export type ResultadoSyncObjeto = { ok: true; objectId: string } | { ok: false; error: string };
 
@@ -16,7 +16,7 @@ export async function syncObjetoTarjeta(
 ): Promise<ResultadoSyncObjeto> {
   const { data: tarjeta, error } = await supabase
     .from('tarjetas')
-    .select('qr_token, puntos_actuales, google_object_id, comercios(google_class_id, tipo_tarjeta, sello_meta)')
+    .select('qr_token, puntos_actuales, google_object_id, comercios(google_class_id, tipo_tarjeta, sello_meta, color_fondo, color_label, sello_icono_url, hero_url, strip_url, difuminado_franja)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
@@ -35,7 +35,19 @@ export async function syncObjetoTarjeta(
       puntosActuales: tarjeta.puntos_actuales,
       tipoTarjeta: tarjeta.comercios.tipo_tarjeta,
       selloMeta: tarjeta.comercios.sello_meta,
-      heroImageUrl: urlHeroTarjeta(tarjetaId),
+      heroImageUrl: urlHeroTarjeta(
+        tarjetaId,
+        versionHero({
+          puntos: tarjeta.puntos_actuales,
+          selloMeta: tarjeta.comercios.sello_meta,
+          colorFondo: tarjeta.comercios.color_fondo,
+          colorLabel: tarjeta.comercios.color_label,
+          selloIconoUrl: tarjeta.comercios.sello_icono_url,
+          heroUrl: tarjeta.comercios.hero_url,
+          stripUrl: tarjeta.comercios.strip_url,
+          difuminadoFranja: tarjeta.comercios.difuminado_franja,
+        }),
+      ),
     });
     const client = walletClient();
 

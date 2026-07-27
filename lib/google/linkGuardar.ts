@@ -6,7 +6,7 @@ import { idObjetoGoogle } from './ids';
 import { construirClase, construirObjeto } from './construirRecursos';
 import { syncClaseComercio } from './syncClase';
 import { syncObjetoTarjeta } from './syncObjeto';
-import { urlHeroTarjeta } from './heroUrl';
+import { urlHeroTarjeta, versionHero } from './heroUrl';
 
 // Payload con la clase y el objeto EMBEBIDOS (no solo su id): mismo patrón exacto de
 // google-wallet/rest-samples/nodejs/demo-loyalty.js, verificado 2026-07-20. La documentación
@@ -19,7 +19,7 @@ export async function generarLinkGuardar(
 ): Promise<string | null> {
   const { data: tarjeta, error } = await supabase
     .from('tarjetas')
-    .select('comercio_id, qr_token, puntos_actuales, comercios(nombre, color_fondo, logo_url, hero_url, google_class_id, tipo_tarjeta, sello_meta)')
+    .select('comercio_id, qr_token, puntos_actuales, comercios(nombre, color_fondo, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, google_class_id, tipo_tarjeta, sello_meta)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
@@ -55,7 +55,19 @@ export async function generarLinkGuardar(
     puntosActuales: tarjeta.puntos_actuales,
     tipoTarjeta: tarjeta.comercios.tipo_tarjeta,
     selloMeta: tarjeta.comercios.sello_meta,
-    heroImageUrl: urlHeroTarjeta(tarjetaId),
+    heroImageUrl: urlHeroTarjeta(
+      tarjetaId,
+      versionHero({
+        puntos: tarjeta.puntos_actuales,
+        selloMeta: tarjeta.comercios.sello_meta,
+        colorFondo: tarjeta.comercios.color_fondo,
+        colorLabel: tarjeta.comercios.color_label,
+        selloIconoUrl: tarjeta.comercios.sello_icono_url,
+        heroUrl: tarjeta.comercios.hero_url,
+        stripUrl: tarjeta.comercios.strip_url,
+        difuminadoFranja: tarjeta.comercios.difuminado_franja,
+      }),
+    ),
   });
 
   const { client_email, private_key } = credencialesServicio();

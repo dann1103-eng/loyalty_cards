@@ -7,6 +7,7 @@ import { guardarBranding } from '@/lib/comercio/guardarBranding';
 import { guardarReverso } from '@/lib/comercio/guardarReverso';
 import { notificarCambioComercio } from '@/lib/apple/notificarCambioComercio';
 import { syncClaseComercio } from '@/lib/google/syncClase';
+import { syncObjetosComercio } from '@/lib/google/syncComercio';
 import {
   validarImagenSubida,
   extensionDeMime,
@@ -42,9 +43,12 @@ export async function accionGuardarBranding(
   // que Wallet los re-descargue (sin esto, muestran el diseño viejo hasta el próximo cambio de
   // puntos — bug visto en el piloto al pasar a sellos).
   await notificarCambioComercio(createServiceClient(), comercioId);
-  // Google Wallet: una sola llamada actualiza la clase para TODOS los clientes de este comercio
-  // (a diferencia de Apple, que necesita un push por tarjeta). Best-effort, igual que arriba.
+  // Google Wallet: la clase lleva logo/nombre/colores de cabecera (una sola llamada para todos
+  // los clientes); la GRILLA de sellos, en cambio, se compone por tarjeta y Google la cachea por
+  // URL, así que los objetos hay que re-sincronizarlos uno por uno o los passes ya guardados se
+  // quedan con la grilla vieja. Best-effort las dos.
   await syncClaseComercio(createServiceClient(), comercioId);
+  await syncObjetosComercio(createServiceClient(), comercioId);
 
   revalidatePath('/comercio/branding');
   return { ok: true };
@@ -141,11 +145,16 @@ export async function accionSubirImagen(
     return { error: 'La imagen se subió pero no se pudo guardar su dirección.' };
   }
 
-  // Solo logo/hero alimentan la LoyaltyClass de Google (strip y sello_icono son exclusivos del
-  // pipeline visual de Apple). El logo es además el gatillo típico que recién HABILITA Google
-  // Wallet para un comercio que antes no lo tenía (programLogo es obligatorio ahí).
+  // logo/hero alimentan la LoyaltyClass (cabecera del pass). El logo es además el gatillo que
+  // recién HABILITA Google Wallet para un comercio que antes no lo tenía (programLogo es
+  // obligatorio ahí).
   if (campo === 'logo' || campo === 'hero') {
     await syncClaseComercio(supabase, comercioId);
+  }
+  // hero/sello_icono/strip entran en la GRILLA compuesta por tarjeta: hay que re-sincronizar los
+  // objetos o los passes ya guardados siguen mostrando la imagen cacheada por Google.
+  if (campo === 'hero' || campo === 'sello_icono' || campo === 'strip') {
+    await syncObjetosComercio(supabase, comercioId);
   }
 
   revalidatePath('/comercio/branding');
@@ -189,6 +198,9 @@ export async function accionQuitarImagen(
   await notificarCambioComercio(supabase, comercioId);
   if (campo === 'logo' || campo === 'hero') {
     await syncClaseComercio(supabase, comercioId);
+  }
+  if (campo === 'hero' || campo === 'sello_icono' || campo === 'strip') {
+    await syncObjetosComercio(supabase, comercioId);
   }
 
   revalidatePath('/comercio/branding');
