@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { verifyComercioAcceso } from '@/lib/comercio/verifyComercioAcceso';
 import { createServiceClient } from '@/lib/supabase/server';
-import { cerrarSesionComercio } from '../actions';
+import MenuOpciones from './MenuOpciones';
 import NavInferior from './NavInferior';
 import SelectorContexto, { type ComercioConSucursales } from './SelectorContexto';
 
@@ -66,17 +66,11 @@ export default async function LayoutComercio({ children }: { children: React.Rea
               sucursalActiva={sucursalActiva}
             />
           )}
-          <form action={cerrarSesionComercio}>
-            {/* Solo-ícono en móvil (ver .admin-salir-compacto): el ancho que libera se lo lleva la
-                pastilla de contexto, que ahí es la que tiene algo que decir. El aria-label es
-                OBLIGATORIO — sin él, con el texto oculto por CSS el botón queda sin nombre
-                accesible. Mismo <button type="submit"> dentro del mismo <form>: cambia la
-                presentación, no el mecanismo. */}
-            <button className="admin-salir admin-salir-compacto" type="submit" aria-label="Cerrar sesión">
-              <span className="icono" aria-hidden="true">logout</span>
-              <span className="admin-salir-texto">Salir</span>
-            </button>
-          </form>
+          {/* Menú de más opciones: secciones fuera de la barra de 5 + tema + cerrar sesión. Ocupa
+              el lugar que tenía el botón "Salir" en vez de sumarse a él — el header a 360px no
+              tenía 56px libres que darle (la cuenta está en MenuOpciones.tsx y en el comentario de
+              .contexto-pastilla). */}
+          <MenuOpciones rol={rol} />
         </div>
       </header>
       {children}

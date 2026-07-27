@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Outfit, Hanken_Grotesk, Geist_Mono } from "next/font/google";
+import { SCRIPT_TEMA, TEMA_POR_DEFECTO } from "@/lib/tema";
 import "./globals.css";
 
 // Sistema Stitch (docs/design/C1-C7): Outfit para display/marca, Hanken Grotesk para cuerpo,
@@ -34,8 +35,26 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={`${outfit.variable} ${hanken.variable} ${geistMono.variable}`}>
+    <html
+      lang="es"
+      className={`${outfit.variable} ${hanken.variable} ${geistMono.variable}`}
+      // El servidor no puede saber qué tema eligió este dispositivo (vive en localStorage), así que
+      // sirve SIEMPRE el por defecto y el script de abajo lo corrige antes del primer pintado. Sin
+      // suppressHydrationWarning React vería que el atributo del DOM no coincide con el que él
+      // renderizó, lo trataría como error de hidratación y volvería a montar desde el boundary más
+      // cercano — perdiendo la corrección del script y devolviendo el destello que vino a evitar.
+      data-tema={TEMA_POR_DEFECTO}
+      suppressHydrationWarning
+    >
       <head>
+        {/* ANTI-DESTELLO DE TEMA. Corre SÍNCRONO mientras el navegador parsea el <head>, o sea
+            antes del primer pintado y mucho antes de que React hidrate. Con useEffect el usuario
+            vería el panel oscuro y después el salto a claro en cada carga; useLayoutEffect tampoco
+            alcanza (corre después de hidratar, y en una conexión lenta el navegador ya pintó el
+            HTML del servidor). Patrón documentado en
+            node_modules/next/dist/docs/01-app/02-guides/preventing-flash-before-hydration.md.
+            OJO si algún día se agrega una CSP estricta: un script en línea necesita nonce. */}
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA }} />
         {/* Íconos Material Symbols (mismos que el diseño de Stitch). Va en el layout RAÍZ (App
             Router: aplica a todo el árbol; la regla no-page-custom-font apunta a pages/, no aplica).
             display=block a propósito: con swap se vería el nombre crudo del ícono ("storefront")

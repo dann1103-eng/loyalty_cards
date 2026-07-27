@@ -8,6 +8,16 @@
    - Bordes en blanco-alpha (nunca marrón #544337 / #a28d7d).
    Tipografía: Outfit (display) + Hanken Grotesk (cuerpo) +
    Geist Mono (números/códigos), inyectadas por next/font.
+
+   TRES TEMAS (2026-07-26): oscuro (el de siempre, y el default),
+   claro y alto contraste. Se implementan REDEFINIENDO estas
+   mismas variables en :root[data-tema=…] — ninguna pantalla
+   sabe qué tema está activo. Regla de oro para código nuevo:
+   si escribís un color literal fuera de este bloque, en dos de
+   los tres temas va a estar mal. Las únicas excepciones son las
+   que representan algo del mundo real y NO del panel (la
+   tarjeta de la billetera, el QR, el botón de Apple Wallet, la
+   guía sobre el video de la cámara); están marcadas una por una.
    ============================================================ */
 
 :root {
@@ -19,7 +29,11 @@
   --superficie-3: #2a2a2a;
   --superficie-4: #353534;
 
-  /* ---------- EL blanco único + jerarquía por opacidad ---------- */
+  /* ---------- EL blanco único + jerarquía por opacidad ----------
+     OJO: --blanco es una CONSTANTE DE MARCA (el hueso #F5F5F0), no un token de tema. Los otros
+     temas NO la redefinen: sus dos usos que quedan (.cardface y .cardface-logo) son la tarjeta de
+     la billetera, que se ve igual esté el panel claro u oscuro. El color de texto del panel es
+     --texto, que sí cambia. */
   --blanco: #f5f5f0;
   --texto: var(--blanco);
   --texto-2: rgba(245, 245, 240, 0.72);
@@ -68,6 +82,172 @@
   --shadow-3: 0 26px 60px -18px rgba(0, 0, 0, 0.72);
   --shadow-card: var(--shadow-2); /* alias de compatibilidad */
   --ring: 0 0 0 4px rgba(255, 196, 149, 0.22);
+  --sombra-acento: 0 0 24px rgba(255, 157, 66, 0.25);
+
+  /* ---------- superficies translúcidas (vidrio) ----------
+     Eran literales dentro de cada regla; con tres temas tenían que salir del token, porque un
+     rgba de gris oscuro sobre un panel claro se ve como una mancha. */
+  --vidrio-top: rgba(19, 19, 19, 0.8); /* header pegajoso */
+  --vidrio-nav: rgba(28, 27, 27, 0.92); /* barra inferior */
+  --vidrio-panel: rgba(32, 31, 31, 0.6); /* tarjetas .panel */
+  --velo: rgba(0, 0, 0, 0.55); /* fondo detrás de los bottom sheets */
+
+  /* ---------- tintes suaves (fondos de chip / ícono-círculo / hover) ----------
+     Un alpha del color de texto NO sobrevive el cambio de tema: blanco al 5% sobre un fondo claro
+     es invisible. Cada tema declara su propia versión. */
+  --hover-suave: rgba(245, 245, 240, 0.05);
+  --neutro-suave: rgba(245, 245, 240, 0.08);
+  --acento-suave: rgba(255, 196, 149, 0.12);
+  --acento-borde: rgba(255, 196, 149, 0.4);
+  --menta-suave: rgba(139, 214, 180, 0.13);
+  --error-suave: rgba(255, 180, 171, 0.12);
+
+  /* ---------- botón primario ----------
+     .btn-primary era "píldora hueso con texto oscuro" escrito como --blanco sobre --superficie-0.
+     Con tema claro eso queda hueso sobre casi-blanco: ilegible. Ahora es un par explícito que cada
+     tema invierte. */
+  --btn-primario-fondo: var(--blanco);
+  --btn-primario-texto: var(--superficie-0);
+
+  /* ---------- atmósfera del <body> (glows de fondo) ---------- */
+  --atmosfera:
+    radial-gradient(110% 70% at 8% -10%, rgba(255, 157, 66, 0.09) 0%, transparent 55%),
+    radial-gradient(90% 60% at 100% 110%, rgba(139, 214, 180, 0.05) 0%, transparent 55%);
+}
+
+/* ============================================================
+   TEMA CLARO
+   Los nombres siguen siendo los del tema oscuro (--superficie-3
+   = "un escalón por encima de la superficie base"), no una
+   descripción del color: acá ese escalón es más OSCURO que el
+   fondo, porque en claro los chips se hunden en vez de subir.
+   Los acentos se OSCURECEN: el naranja pálido #ffc495 nació
+   para leerse sobre negro y sobre blanco da ~1.6:1.
+   ============================================================ */
+:root[data-tema="claro"] {
+  color-scheme: light;
+
+  --fondo: #f4f1ec;
+  --superficie-0: #e7e2d9;
+  --superficie-1: #ffffff;
+  --superficie-2: #ffffff;
+  --superficie-3: #eae5dc;
+  --superficie-4: #ded7cb;
+
+  --texto: #1c1917;
+  --texto-2: rgba(28, 25, 23, 0.72);
+  /* 0.62 y no 0.48 como en oscuro: el mismo alpha sobre fondo claro da 3.4:1 (el oscuro da 4.5) y
+     --texto-3 pinta las etiquetas inactivas de la barra a 0.62rem. Con 0.62 quedan en 4.7:1 —
+     paridad con el tema oscuro, no una mejora sacada de la nada. */
+  --texto-3: rgba(28, 25, 23, 0.62);
+
+  --linea: rgba(28, 25, 23, 0.12);
+  --linea-fuerte: rgba(28, 25, 23, 0.24);
+
+  --acento: #a8480a;
+  --acento-fuerte: #c2410c;
+  --sobre-acento: #fff6ee;
+
+  --menta: #0d6e4a;
+  --sobre-menta: #eefff7;
+
+  --error: #a4231c;
+  --error-fondo: rgba(164, 35, 28, 0.08);
+  --error-borde: rgba(164, 35, 28, 0.32);
+
+  --shadow-1: 0 6px 18px -10px rgba(28, 25, 23, 0.24);
+  --shadow-2: 0 18px 44px -20px rgba(28, 25, 23, 0.3);
+  --shadow-3: 0 26px 60px -18px rgba(28, 25, 23, 0.32);
+  --ring: 0 0 0 4px rgba(168, 72, 10, 0.18);
+  --sombra-acento: 0 0 24px rgba(194, 65, 12, 0.22);
+
+  --vidrio-top: rgba(244, 241, 236, 0.82);
+  --vidrio-nav: rgba(255, 255, 255, 0.92);
+  --vidrio-panel: rgba(255, 255, 255, 0.72);
+  --velo: rgba(28, 25, 23, 0.45);
+
+  --hover-suave: rgba(28, 25, 23, 0.05);
+  --neutro-suave: rgba(28, 25, 23, 0.07);
+  --acento-suave: rgba(168, 72, 10, 0.12);
+  --acento-borde: rgba(168, 72, 10, 0.4);
+  --menta-suave: rgba(13, 110, 74, 0.12);
+  --error-suave: rgba(164, 35, 28, 0.1);
+
+  --btn-primario-fondo: #1c1917;
+  --btn-primario-texto: #faf8f5;
+
+  --atmosfera:
+    radial-gradient(110% 70% at 8% -10%, rgba(255, 157, 66, 0.16) 0%, transparent 55%),
+    radial-gradient(90% 60% at 100% 110%, rgba(13, 110, 74, 0.08) 0%, transparent 55%);
+}
+
+/* ============================================================
+   TEMA ALTO CONTRASTE
+   No es decorativo: es el modo para atender bajo el sol (local
+   con vidriera, puesto al aire libre), donde el gris sobre gris
+   del tema oscuro directamente desaparece. Por eso:
+   - negro PURO de fondo (un #131313 ya refleja y lava);
+   - la jerarquía por opacidad casi se elimina — --texto-2 y
+     --texto-3 se acercan al blanco en vez de desvanecerse;
+   - los bordes suben a alpha alto: son la única separación que
+     queda cuando el brillo del sol come las diferencias sutiles;
+   - los acentos se SATURAN (ámbar/verde puros sobre negro);
+   - se apagan sombras y glows: bajo el sol no aportan
+     profundidad, solo ensucian el borde.
+   ============================================================ */
+:root[data-tema="alto-contraste"] {
+  color-scheme: dark;
+
+  --fondo: #000000;
+  --superficie-0: #000000;
+  --superficie-1: #000000;
+  --superficie-2: #0b0b0b;
+  --superficie-3: #1c1c1c;
+  --superficie-4: #2e2e2e;
+
+  --texto: #ffffff;
+  --texto-2: #ededed;
+  --texto-3: #d4d4d4;
+
+  --linea: rgba(255, 255, 255, 0.55);
+  --linea-fuerte: rgba(255, 255, 255, 0.82);
+
+  --acento: #ffb01f;
+  --acento-fuerte: #ff9500;
+  --sobre-acento: #000000;
+
+  --menta: #00e58c;
+  --sobre-menta: #000000;
+
+  --error: #ff8a7a;
+  --error-fondo: rgba(255, 138, 122, 0.18);
+  --error-borde: rgba(255, 138, 122, 0.75);
+
+  /* `none` y no un rgba transparente: una sombra invisible sigue costando pintura por scroll en el
+     teléfono barato del mostrador, que es justo donde se usa este tema. */
+  --shadow-1: none;
+  --shadow-2: none;
+  --shadow-3: none;
+  --ring: 0 0 0 4px rgba(255, 176, 31, 0.6);
+  --sombra-acento: none;
+
+  /* Sin translucidez: el vidrio esmerilado es lo primero que se pierde con reflejo en pantalla. */
+  --vidrio-top: #000000;
+  --vidrio-nav: #000000;
+  --vidrio-panel: #000000;
+  --velo: rgba(0, 0, 0, 0.85);
+
+  --hover-suave: rgba(255, 255, 255, 0.18);
+  --neutro-suave: rgba(255, 255, 255, 0.18);
+  --acento-suave: rgba(255, 176, 31, 0.22);
+  --acento-borde: rgba(255, 176, 31, 0.85);
+  --menta-suave: rgba(0, 229, 140, 0.22);
+  --error-suave: rgba(255, 138, 122, 0.22);
+
+  --btn-primario-fondo: #ffffff;
+  --btn-primario-texto: #000000;
+
+  --atmosfera: none;
 }
 
 * {
@@ -78,6 +258,8 @@
 
 html {
   height: 100%;
+  /* Default del tema oscuro. Los bloques :root[data-tema=…] de arriba lo pisan por especificidad
+     (0,2,0 contra 0,0,1), así que el orden en el archivo no importa acá. */
   color-scheme: dark;
 }
 
@@ -95,10 +277,8 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: transparent;
-  /* atmósfera: glow naranja arriba-izquierda + viñeta profunda */
-  background-image:
-    radial-gradient(110% 70% at 8% -10%, rgba(255, 157, 66, 0.09) 0%, transparent 55%),
-    radial-gradient(90% 60% at 100% 110%, rgba(139, 214, 180, 0.05) 0%, transparent 55%);
+  /* atmósfera: glow naranja arriba-izquierda + viñeta profunda (por tema; `none` en alto contraste) */
+  background-image: var(--atmosfera);
   background-attachment: fixed;
 }
 
@@ -132,9 +312,9 @@ a {
   display: grid;
   place-items: center;
 }
-.icono-circulo.acento { background: rgba(255, 196, 149, 0.12); color: var(--acento); }
-.icono-circulo.menta { background: rgba(139, 214, 180, 0.12); color: var(--menta); }
-.icono-circulo.neutro { background: rgba(245, 245, 240, 0.08); color: var(--texto-2); }
+.icono-circulo.acento { background: var(--acento-suave); color: var(--acento); }
+.icono-circulo.menta { background: var(--menta-suave); color: var(--menta); }
+.icono-circulo.neutro { background: var(--neutro-suave); color: var(--texto-2); }
 
 /* ---------- layout base (auth / registro) ---------- */
 .shell {
@@ -210,7 +390,7 @@ a {
 /* ---------- panel de vidrio (glass card) ---------- */
 .panel {
   margin-top: 26px;
-  background: rgba(32, 31, 31, 0.6);
+  background: var(--vidrio-panel);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--linea);
@@ -266,14 +446,14 @@ a {
 }
 
 /* ---------- botones ---------- */
-/* Primario estilo C1: píldora "bone white" con texto oscuro. */
+/* Primario estilo C1: píldora "bone white" con texto oscuro (invertida en tema claro). */
 .btn-primary {
   width: 100%;
   font-family: var(--font-display);
   font-size: 1rem;
   font-weight: 700;
-  color: var(--superficie-0);
-  background: var(--blanco);
+  color: var(--btn-primario-texto);
+  background: var(--btn-primario-fondo);
   border: none;
   border-radius: var(--radius-pill);
   padding: 14px 18px;
@@ -316,7 +496,7 @@ a {
 }
 .btn-acento:hover:not(:disabled) {
   filter: brightness(1.06);
-  box-shadow: 0 0 24px rgba(255, 157, 66, 0.25);
+  box-shadow: var(--sombra-acento);
 }
 .btn-acento:active:not(:disabled) {
   transform: scale(0.97);
@@ -345,7 +525,7 @@ a {
 }
 .btn-borde:hover:not(:disabled) {
   border-color: var(--texto-3);
-  background: rgba(245, 245, 240, 0.05);
+  background: var(--hover-suave);
 }
 .btn-borde:active:not(:disabled) {
   transform: scale(0.97);
@@ -379,7 +559,13 @@ a {
   line-height: 1.5;
 }
 
-/* ---------- tarjeta wallet (vista previa, estilo C3) ---------- */
+/* ---------- tarjeta wallet (vista previa, estilo C3) ----------
+   EXCEPCIÓN DELIBERADA A LOS TEMAS: de acá para abajo (.cardface*, .sello*) los literales se
+   quedan. Esto no es cromo del panel, es la RÉPLICA de la tarjeta como se va a ver en la billetera
+   del cliente: sus colores los elige el comercio y llegan por style inline. Si estas superficies
+   siguieran al tema, el editor de marca mentiría — con el panel en claro, un logo blanco sobre un
+   fondo que se volvió blanco desaparece, y el dueño publicaría una tarjeta que en el teléfono del
+   cliente se ve distinta a la que aprobó. --blanco sí se usa acá, pero es constante de marca. */
 .cardface {
   position: relative;
   border-radius: 22px;
@@ -510,7 +696,9 @@ a {
   box-shadow: 0 10px 22px -10px rgba(139, 214, 180, 0.6);
 }
 
-/* tile de QR: SIEMPRE blanco con zona de silencio (el QR necesita contraste) */
+/* tile de QR: SIEMPRE blanco con zona de silencio (el QR necesita contraste). No sigue al tema:
+   un lector de QR necesita módulos oscuros sobre claro, y en alto contraste sería lo PRIMERO que
+   habría que dejar en paz. */
 .qr-tile {
   background: #fff;
   border-radius: 16px;
@@ -641,7 +829,10 @@ a {
   justify-content: space-between;
   padding: 14px 20px;
   border-bottom: 1px solid var(--linea);
-  background: rgba(19, 19, 19, 0.8);
+  background: var(--vidrio-top);
+  /* OJO: este backdrop-filter convierte al header en el containing block de sus descendientes
+     position:fixed. Cualquier hoja/menú que nazca acá adentro TIENE que salir por createPortal a
+     document.body (ver SelectorContexto.tsx y MenuOpciones.tsx) o se dibuja pegado al header. */
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
 }
@@ -744,11 +935,11 @@ a {
 }
 .pastilla-activo {
   color: var(--menta);
-  background: rgba(139, 214, 180, 0.14);
+  background: var(--menta-suave);
 }
 .pastilla-inactivo {
   color: var(--error);
-  background: rgba(255, 180, 171, 0.12);
+  background: var(--error-suave);
 }
 .admin-vacio {
   padding: 44px 20px;
@@ -894,7 +1085,7 @@ a {
 }
 .subida-imagen:focus-within,
 .subida-imagen:hover {
-  border-color: rgba(255, 196, 149, 0.4);
+  border-color: var(--acento-borde);
   box-shadow: inset 0 0 12px rgba(255, 157, 66, 0.05);
 }
 .subida-imagen .field {
@@ -906,15 +1097,25 @@ a {
   max-width: 100%;
   min-width: 0;
 }
+/* Miniatura de la imagen subida. El fondo NO sigue al tema: es un lienzo neutro conocido para
+   juzgar un PNG con transparencia. Damero y no blanco liso — los logos de billetera suelen ser
+   blancos sobre transparente y sobre #fff desaparecían (ya pasaba en oscuro; en tema claro además
+   se confundiría con el panel). El borde sí es del tema, para que la miniatura se recorte contra
+   el panel en los tres. */
 .subida-preview {
   max-width: 100%;
   max-height: 72px;
   width: auto;
   border-radius: 10px;
-  border: 1px solid var(--linea);
+  border: 1px solid var(--linea-fuerte);
   margin-bottom: 8px;
   object-fit: contain;
-  background: #fff;
+  background-color: #fff;
+  background-image:
+    linear-gradient(45deg, #cfcfcf 25%, transparent 25%, transparent 75%, #cfcfcf 75%),
+    linear-gradient(45deg, #cfcfcf 25%, transparent 25%, transparent 75%, #cfcfcf 75%);
+  background-size: 14px 14px;
+  background-position: 0 0, 7px 7px;
 }
 .field input[type="file"] {
   font-family: var(--font-body);
@@ -1001,10 +1202,12 @@ a {
   .branding-editor { order: 1; }
 }
 
-/* ---------- nav inferior móvil (C2/C3) ---------- */
-/* Barra fija + carril deslizable adentro. El mask va en el CARRIL (no en la barra) para desvanecer
-   los íconos en los bordes sin comerse el fondo/blur de la barra. flex: 1 0 auto en los enlaces:
-   pocos ítems (cajero) se reparten el ancho; muchos (owner) desbordan y se deslizan. */
+/* ---------- nav inferior móvil (C2/C3) ----------
+   GRILLA FIJA, no carrusel. Antes era un carril deslizable con las 9 secciones: no entraban en un
+   teléfono, había que arrastrar para llegar a las últimas cuatro y prácticamente nadie descubría
+   que se podía. Ahora son 5 destinos (3 para el cajero) en una grilla que nunca desborda; lo demás
+   está en el menú de más opciones del header. El número de columnas lo pasa el componente en
+   --columnas: con repeat(5,…) fijo, al cajero se le amontonarían 3 íconos a la izquierda. */
 .nav-inferior {
   position: fixed;
   bottom: 0;
@@ -1012,88 +1215,162 @@ a {
   width: 100%;
   z-index: 50;
   padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
-  background: rgba(28, 27, 27, 0.92);
+  background: var(--vidrio-nav);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border-top: 1px solid var(--linea);
   border-radius: 20px 20px 0 0;
 }
-.nav-carril {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 2px;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  padding-inline: 14px;
-  mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
-}
-.nav-carril::-webkit-scrollbar {
-  display: none;
+.nav-fila {
+  display: grid;
+  grid-template-columns: repeat(var(--columnas, 5), minmax(0, 1fr));
+  /* end y no center: el destino destacado es más alto que los demás y así el EXCEDENTE sale hacia
+     arriba (el botón flota sobre la barra) en vez de repartirse y desalinear las etiquetas. */
+  align-items: end;
+  column-gap: 4px;
+  padding-inline: 8px;
 }
 .nav-inferior a {
-  flex: 1 0 auto;
-  scroll-snap-align: center;
-  white-space: nowrap;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   font-family: var(--font-body);
   font-size: 0.62rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--texto-3);
-  padding: 6px 14px;
+  padding: 6px 4px;
   border-radius: var(--radius-pill);
-  /* El overflow del carril recorta el anillo de foco, que por defecto se dibuja FUERA del borde:
-     con offset negativo se dibuja hacia adentro y queda visible al navegar con Tab. */
-  outline-offset: -2px;
   transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+}
+/* La etiqueta se recorta antes que desbordar la columna: en una pantalla de 320px cada celda queda
+   en ~57px y "Escanear" está al filo. El recorte va acá y NO en el <a>: un overflow:hidden en el
+   enlace también recortaría el resplandor del botón destacado, que se sale de su caja a propósito.
+   Y va en un <span> y no en el nodo de texto suelto porque text-overflow no aplica a un ítem flex
+   anónimo — sin el span se vería cortado a la mitad de una letra, sin puntos suspensivos. */
+.nav-etiqueta {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .nav-inferior a:active {
   transform: scale(0.94);
 }
-.nav-inferior a.activo {
+/* El :not(.nav-destacado) es necesario: la píldora de fondo sobre el destino destacado taparía su
+   círculo y lo dejaría igual de "plano" que los otros cuatro justo cuando está en uso. */
+.nav-inferior a.activo:not(.nav-destacado) {
   color: var(--sobre-acento);
   background: var(--acento);
+}
+/* Destino destacado (Escanear): el cajero lo toca decenas de veces por día, así que es más grande,
+   va al centro y lleva el acento SIEMPRE, esté activo o no. El círculo mide 46px contra los 22 del
+   ícono normal: esos 24px de más suben por encima del borde de la barra (align-items:end) y es lo
+   que lo hace inconfundible sin robarle alto a la barra. */
+.nav-destacado {
+  color: var(--acento);
+}
+.nav-destacado .icono {
+  width: 46px;
+  height: 46px;
+  font-size: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--acento-fuerte);
+  color: var(--sobre-acento);
+  box-shadow: var(--sombra-acento);
+}
+/* Un solo valor en el box-shadow, no una lista con var(--sombra-acento) adentro: en alto contraste
+   esa variable vale `none` y `0 0 0 3px x, none` es una declaración inválida — se caería la sombra
+   entera y el estado activo desaparecería justo en el tema que más lo necesita. */
+.nav-destacado.activo .icono {
+  box-shadow: 0 0 0 3px var(--acento-suave);
 }
 @media (min-width: 760px) {
   .nav-inferior { display: none; }
   .admin-shell { padding-bottom: 0; }
 }
 
-/* El "Salir" del header de /comercio, solo-ícono en móvil: libera ancho para que la pastilla de
-   contexto pueda mostrar el nombre de la sucursal. Es un MODIFICADOR y NO un cambio a .admin-salir
-   a secas: el panel FM (/admin) reusa esa clase como estilo pastilla para sus tres enlaces de nav
-   (Comercios/Cuentas/Reportes) — ocultarles el texto los dejaría vacíos y sin navegación en móvil.
-   El texto y el ícono se renderizan SIEMPRE y el CSS elige cuál se ve; el nombre accesible lo
-   sostiene el aria-label del botón, no el texto visible.
-   44x44 mínimo (WCAG 2.5.8 nivel AAA / HIG de Apple): este botón CIERRA LA SESIÓN — un ícono suelto
-   con poco padding es más fácil de tocar por accidente que la palabra que reemplaza. */
-.admin-salir-compacto {
+/* ---------- menú de más opciones (header de /comercio) ----------
+   Ocupa el lugar exacto que tenía el botón "Salir" (que se mudó adentro del menú), así que el
+   presupuesto de ancho del header no cambió — la cuenta a 360px está en .contexto-pastilla, más
+   abajo, y no había 56px libres para sumar un botón en vez de reemplazarlo.
+   44x44 mínimo (WCAG 2.5.8 AAA / HIG de Apple). El nombre accesible lo da el aria-label del botón:
+   el glifo va con aria-hidden, así que sin él quedaría anónimo para un lector de pantalla. */
+.menu-boton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 44px;
   min-height: 44px;
   padding: 10px;
+  color: var(--texto-2);
+  background: var(--superficie-3);
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
 }
-.admin-salir-compacto .admin-salir-texto {
-  display: none;
+.menu-boton:hover {
+  color: var(--texto);
+  background: var(--superficie-4);
 }
-@media (min-width: 760px) {
-  /* En desktop vuelve a ser exactamente el botón de texto de antes (padding base de .admin-salir). */
-  .admin-salir-compacto {
-    min-width: 0;
-    min-height: 0;
-    padding: 8px 16px;
-  }
-  .admin-salir-compacto .icono { display: none; }
-  .admin-salir-compacto .admin-salir-texto { display: inline; }
+.menu-boton:active {
+  transform: scale(0.95);
+}
+/* Reportes dentro del menú: fila propia y con peso (círculo de acento + subtítulo + chevron),
+   arriba de todo. Es la sección más consultada de las que salieron de la barra; como una fila más
+   de la lista se perdería, que es exactamente lo que este rediseño vino a arreglar. */
+.menu-destacado {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  margin-bottom: 4px;
+  border: 1px solid var(--linea);
+  border-radius: var(--radius);
+  background: var(--superficie-1);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.menu-destacado:hover {
+  background: var(--superficie-3);
+  border-color: var(--linea-fuerte);
+}
+.menu-destacado-activo {
+  border-color: var(--acento);
+}
+/* El bloque de texto (2º hijo) se come el ancho sobrante para que el chevron del destacado y el
+   tick del tema elegido queden pegados al borde derecho, alineados entre sí. */
+.menu-destacado > span:nth-child(2),
+.menu-tema > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.menu-destacado .icono-chevron {
+  color: var(--texto-3);
+}
+/* Rótulos de grupo dentro del sheet ("Configuración", "Apariencia"). */
+.menu-rotulo {
+  margin: 16px 0 6px;
+}
+.menu-temas {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.menu-tick {
+  color: var(--acento);
+}
+.menu-salir {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--linea);
+}
+.menu-salir .sheet-fila {
+  color: var(--texto-2);
 }
 
 /* ---------- switcher de contexto (header) + bottom sheet ---------- */
@@ -1123,10 +1400,11 @@ a {
    LA CUENTA a 360px (header con padding 20px → 320px de contenido, flex con gap 12):
      - .admin-marca NO tiene min-width:0 → su piso es su min-content: 34 (círculo) + 10 (gap) +
        "Cafetería" (~82) = 126px. Su natural es ~190px ("Cafetería Piloto" en una línea).
-     - "Salir" solo-ícono (.admin-salir-compacto) = 44px. OJO: como texto medía ~67px, así que
-       libera 23px, NO 67 — el botón no desaparece, se encoge. Y de esos 23 a la pastilla le
-       llegan ~9: flex-shrink reparte PROPORCIONALMENTE entre marca y pastilla, no le vacía
-       primero la holgura a la marca.
+     - el botón de la derecha = 44px. Desde 2026-07-26 es .menu-boton (el menú de más opciones);
+       antes era "Salir" solo-ícono, mismos 44px — la cuenta no cambió porque el menú REEMPLAZÓ a
+       Salir en vez de sumarse (Salir se mudó adentro del sheet). Si algún día se suma un tercer
+       botón acá, son ~56px (44 + gap) que salen de la marca y de la pastilla, y esta cuenta hay
+       que rehacerla entera.
      - chrome de la pastilla: 26px (padding 24 + bordes 2), o 48px cuando además lleva el ícono.
      - "Centro Santa Ana" a 0.8rem/600 ≈ 100px de texto.
    CON ícono la pastilla resuelve en ~116px → ~68px de etiqueta (10 caracteres).
@@ -1142,8 +1420,8 @@ a {
    queda en ~104 → el nombre largo se corta igual ("Centro Santa…"). Para razonar esto hay que
    correr el reparto, no comparar sumas de pisos.
    La salida conocida: plantar la pastilla con min-width ~128px (acotado a ≥360px, si no desborda
-   en pantallas de 320) + un modificador acotado en .admin-marca (mismo patrón que
-   .admin-salir-compacto, sin tocar la clase que comparte con /admin) para que ella trunque con
+   en pantallas de 320) + un modificador acotado en .admin-marca (una clase propia del header de
+   /comercio, sin tocar .admin-marca a secas, que comparte con /admin) para que ella trunque con
    ellipsis. Se DESCARTÓ a propósito: solo MUDA el recorte al nombre del comercio
    ("Cafetería Pil…"). Los dos textos compiten por los mismos 320px y alguno se corta; la pregunta
    no es cómo evitarlo sino cuál duele menos, y "Centro Santa…" ya distingue la sucursal de las
@@ -1159,7 +1437,7 @@ a {
   position: fixed;
   inset: 0;
   z-index: 90;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--velo);
   /* El velo es fijo y sin contenido scrolleable: sin esto, arrastrar sobre él mueve la página de
      atrás (el gesto sube al documento). */
   touch-action: none;
@@ -1359,6 +1637,9 @@ a {
   object-fit: cover;
   background: var(--superficie-0);
 }
+/* La guía se dibuja SOBRE el video de la cámara, no sobre el panel: los literales no siguen al tema
+   a propósito — el naranja y el velo negro se calibraron contra imagen real, y en tema claro un
+   marco claro se perdería sobre el mostrador. */
 .escaner-guia {
   position: absolute;
   top: 50%;

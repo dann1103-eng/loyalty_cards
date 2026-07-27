@@ -122,6 +122,12 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
           parecía a lo que llegaba al Wallet (observación del usuario). */}
       <div className="branding-preview reveal d1">
         <p className="titulo-seccion" style={{ marginBottom: 12 }}>Vista previa en vivo</p>
+        {/* La tarjeta conserva SU PROPIO fondo (el color que eligió el comercio) en los tres temas
+            del panel — es una réplica de lo que va a llegar a la billetera, no una pantalla más del
+            panel. Lo ÚNICO que sigue al tema es el borde: es la línea que separa la tarjeta del
+            panel, y con el blanco-al-8% de antes un fondo claro se derretía contra el tema claro y
+            el dueño no veía dónde terminaba su tarjeta. Todo lo de adentro (velo, difuminado,
+            sellos vacíos) sigue midiéndose contra el color del comercio, no contra el panel. */}
         <div
           style={{
             background: fondo,
@@ -129,7 +135,7 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
             borderRadius: 14,
             overflow: 'hidden',
             boxShadow: 'var(--shadow-3)',
-            border: '1px solid rgba(255,255,255,0.08)',
+            border: '1px solid var(--linea-fuerte)',
           }}
         >
           {/* Cabecera: logo (o el nombre como logoText, igual que el pass real sin logo). */}
