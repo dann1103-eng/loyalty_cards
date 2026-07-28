@@ -21,6 +21,39 @@ export type FilaReporteSucursal = Database['public']['Functions']['reporte_sucur
 export type FilaTopCliente = Database['public']['Functions']['reporte_top_clientes']['Returns'][number];
 export type FilaTendencia = Database['public']['Functions']['reporte_tendencia']['Returns'][number];
 export type FilaFmComercio = Database['public']['Functions']['reporte_fm_comercios']['Returns'][number];
+export type FilaReporteCajero = Database['public']['Functions']['reporte_cajeros']['Returns'][number];
+
+// Por cajero, dentro de un rango de fechas: acreditaciones, puntos otorgados, monto vendido,
+// FORZADAS, ajustes y canjes. Es el reporte que realmente delata la anomalía — el resto de los
+// reportes agregan por sucursal o por cliente, y ahí un cajero que regala sellos queda diluido.
+//
+// EXCEPCIÓN DELIBERADA al fail-soft de este archivo: devuelve `null` ante un error, no `[]`.
+// El criterio de arriba ("una pantalla de reportes rota no debe tumbar el panel") vale para
+// reportes descriptivos, donde un vacío es cosmético. Acá NO: en una pantalla de auditoría
+// antifraude, una tabla vacía le dice al dueño "ningún cajero hizo nada raro", que es la conclusión
+// exactamente opuesta a la verdad si lo que pasó fue que falló la consulta. La pantalla tiene que
+// poder distinguir los dos casos, y por eso el propio comentario de arriba anticipaba "si algún día
+// importa distinguirlos, se agregaría un canal de error explícito en el retorno". Este es ese día.
+//
+// `desde`/`hasta` son fechas AAAA-MM-DD INCLUSIVAS, interpretadas en la zona horaria del comercio
+// por la propia función SQL. `null` en cualquiera = sin ese borde.
+export async function reporteCajeros(
+  supabase: SupabaseClient<Database>,
+  comercioId: string,
+  desde: string | null,
+  hasta: string | null,
+): Promise<FilaReporteCajero[] | null> {
+  const { data, error } = await supabase.rpc('reporte_cajeros', {
+    p_comercio_id: comercioId,
+    p_desde: desde,
+    p_hasta: hasta,
+  });
+  if (error) {
+    console.error('[reportes] falló reporte_cajeros:', error);
+    return null;
+  }
+  return data ?? [];
+}
 
 // Por sucursal del comercio: acreditaciones, puntos otorgados, canjes y clientes únicos. Incluye el
 // bucket de actividad SIN sucursal (fila con sucursal_id null, p. ej. demos previos a la atribución).

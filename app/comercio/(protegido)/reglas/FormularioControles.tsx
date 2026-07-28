@@ -1,15 +1,28 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState } from 'react';
 import { accionGuardarControles, type EstadoControles } from './actions';
 import { ZONAS_HORARIAS } from '@/lib/comercio/zonasHorarias';
 import type { ControlesAcreditacion } from '@/lib/comercio/controlesAcreditacion';
 
-// Campos CONTROLADOS con useState, no defaultValue: en esta versión de Next un Server Action
-// resetea los campos no controlados al terminar, y este es un formulario de EDICIÓN — el dueño
-// vería sus límites desaparecer del formulario después de guardarlos.
-
-const aTexto = (valor: number | null) => (valor === null ? '' : String(valor));
+// CAMPOS NO CONTROLADOS + `key` derivada de los valores guardados. Es a propósito y va en contra de
+// la convención del resto de los formularios del proyecto (useState controlado), así que vale la
+// explicación — la encontró el QA del dueño el 2026-07-28:
+//
+// Al terminar un Server Action, esta versión de Next resetea el formulario. Un reset devuelve cada
+// campo a su `defaultValue`/`defaultChecked`. Con campos CONTROLADOS eso desincroniza la casilla:
+// el reset la desmarca en el DOM sin avisarle a React, y como React solo reescribe `checked` cuando
+// el valor cambia entre renders —y en su estado seguía en true—, nunca la vuelve a marcar. El dato
+// quedaba guardado bien en la base; solo se dibujaba mal. (Los campos numéricos no se veían porque
+// React sí re-afirma `value` en cada render.)
+//
+// Con campos NO controlados el reset hace justo lo que queremos: los devuelve a los valores
+// guardados. Y la `key` cubre el otro caso: cuando el guardado CAMBIA los valores, el formulario se
+// remonta y vuelve a leer los defaults nuevos (un `defaultValue` que cambia no actualiza el DOM por
+// sí solo). Entre los dos, las dos situaciones quedan cubiertas.
+//
+// Este es un formulario de EDICIÓN, a diferencia de FormularioRegla, que es de ALTA — ahí el reset
+// es lo deseado y por eso aquel no necesita nada de esto.
 
 export default function FormularioControles({
   controles,
@@ -23,17 +36,23 @@ export default function FormularioControles({
     undefined,
   );
 
-  const [tope, setTope] = useState(aTexto(controles.topeAcreditacionesDia));
-  const [espera, setEspera] = useState(aTexto(controles.esperaMinimaMinutos));
-  const [techo, setTecho] = useState(aTexto(controles.techoPuntosAcreditacion));
-  const [topePuntos, setTopePuntos] = useState(aTexto(controles.topePuntosDia));
-  const [pedirMonto, setPedirMonto] = useState(controles.pedirMontoCompra);
-  const [zona, setZona] = useState(controles.zonaHoraria);
+  const aTexto = (valor: number | null) => (valor === null ? '' : String(valor));
+
+  // Cambia solo cuando cambia algo YA GUARDADO, nunca mientras el dueño escribe: si dependiera de
+  // lo que teclea, el formulario se remontaría en cada tecla y le borraría lo que va escribiendo.
+  const clave = [
+    controles.topeAcreditacionesDia,
+    controles.esperaMinimaMinutos,
+    controles.techoPuntosAcreditacion,
+    controles.topePuntosDia,
+    controles.pedirMontoCompra,
+    controles.zonaHoraria,
+  ].join('|');
 
   const unidad = esDePuntos ? 'acreditaciones' : 'sellos';
 
   return (
-    <form className="panel" style={{ marginTop: 0 }} action={ejecutar}>
+    <form key={clave} className="panel" style={{ marginTop: 0 }} action={ejecutar}>
       <h2 className="subtitle" style={{ marginTop: 0 }}>Control de {unidad}</h2>
       <p className="admin-fila-slug" style={{ marginTop: -6, marginBottom: 18 }}>
         Dejá un campo vacío para no poner ese límite. Si alcanza un límite, el cajero queda
@@ -50,8 +69,7 @@ export default function FormularioControles({
           step="1"
           inputMode="numeric"
           placeholder="Sin límite"
-          value={tope}
-          onChange={(e) => setTope(e.target.value)}
+          defaultValue={aTexto(controles.topeAcreditacionesDia)}
         />
       </div>
 
@@ -65,8 +83,7 @@ export default function FormularioControles({
           step="1"
           inputMode="numeric"
           placeholder="Sin espera"
-          value={espera}
-          onChange={(e) => setEspera(e.target.value)}
+          defaultValue={aTexto(controles.esperaMinimaMinutos)}
         />
         {/* Es la perilla que de verdad ataja "le puso 5 seguidos": un tope diario de 2 no impide
             ponerlos en diez segundos. */}
@@ -88,8 +105,7 @@ export default function FormularioControles({
               step="1"
               inputMode="numeric"
               placeholder="Sin techo"
-              value={techo}
-              onChange={(e) => setTecho(e.target.value)}
+              defaultValue={aTexto(controles.techoPuntosAcreditacion)}
             />
           </div>
 
@@ -103,8 +119,7 @@ export default function FormularioControles({
               step="1"
               inputMode="numeric"
               placeholder="Sin límite"
-              value={topePuntos}
-              onChange={(e) => setTopePuntos(e.target.value)}
+              defaultValue={aTexto(controles.topePuntosDia)}
             />
           </div>
         </>
@@ -112,12 +127,7 @@ export default function FormularioControles({
 
       <div className="field">
         <label htmlFor="zona_horaria">Zona horaria del negocio</label>
-        <select
-          id="zona_horaria"
-          name="zona_horaria"
-          value={zona}
-          onChange={(e) => setZona(e.target.value)}
-        >
+        <select id="zona_horaria" name="zona_horaria" defaultValue={controles.zonaHoraria}>
           {ZONAS_HORARIAS.map((z) => (
             <option key={z.valor} value={z.valor}>{z.etiqueta}</option>
           ))}
@@ -133,8 +143,7 @@ export default function FormularioControles({
             id="pedir_monto_compra"
             name="pedir_monto_compra"
             type="checkbox"
-            checked={pedirMonto}
-            onChange={(e) => setPedirMonto(e.target.checked)}
+            defaultChecked={controles.pedirMontoCompra}
           />
           Pedir el monto de la compra al acreditar
         </label>

@@ -149,6 +149,13 @@ export default async function PaginaReportes({
             ? 'Todos tus comercios en un solo lugar. Filtrá por comercio o sucursal.'
             : 'Cómo se mueve tu programa de lealtad por sucursal.'}
         </p>
+        {/* Actividad por cajero (Tanda 1). Es la vista que delata al que se sale de la curva: acá
+            los números están agregados por sucursal y ahí un cajero queda diluido entre sus
+            compañeros. Se lee siempre del comercio ACTIVO (el del switcher del header). */}
+        <Link className="btn-borde" style={{ marginTop: 12 }} href="/comercio/reportes/cajeros">
+          <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">badge</span>
+          Ver actividad por cajero
+        </Link>
       </section>
 
       {/* Filtros (GET, sin JS): fila de comercios; con uno elegido, fila de sus sucursales. */}

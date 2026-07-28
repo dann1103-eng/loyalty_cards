@@ -150,6 +150,51 @@ responder directo. Si algún día se quiere canonicalizar por SEO, va con `<link
   Fuera de alcance deliberado: Google Wallet (`textModulesData`/`linksModuleData`), marca blanca por
   plan, y más redes que las cuatro.
 
+## Tanda 1 — Antifraude y control de sellos (HECHO el 2026-07-28, en producción)
+
+Spec en `specs/2026-07-28-antifraude-control-sellos-design.md`, migración `0015`. Nace del primer
+feedback real de los comercios: sospecha de que un cajero regala sellos. **480 pruebas verdes.**
+
+Lo que hay ahora: historial de movimientos por cliente (`/comercio/clientes/[tarjetaId]`), quitar
+sellos con motivo obligatorio (dueño **y** cajero, desde el escáner), cuatro perillas de control por
+comercio, autorización del dueño cuando un límite bloquea al cajero, reporte de actividad por cajero
+(`/comercio/reportes/cajeros`), y movimientos recientes en el portal del cliente.
+
+Lo que NO es obvio y conviene recordar:
+
+- **El límite se aplica DENTRO del RPC con `for no key update` explícito, y tiene que seguir así.**
+  En READ COMMITTED un `count(*)` no toma lock y no hay predicate locking, así que dos escaneos
+  simultáneos del mismo cliente se colarían. Meter el conteo en el `WHERE` del `UPDATE` tampoco
+  sirve: la re-evaluación EPQ solo sustituye la fila bloqueada. **Invariante a sostener a mano:**
+  cualquier camino futuro que inserte en `transacciones_puntos` debe tomar ese lock primero.
+- **La prueba de carrera usa 100 en paralelo por 3 rondas y eso no es exceso.** La primera versión
+  usaba 8 y pasaba TAMBIÉN con el lock removido — o sea que no probaba nada. Se midió: con 8 la
+  contención aparece 2 de cada 3 veces; con 100, siempre. Si alguien baja esos números, la prueba
+  vuelve a ser decoración.
+- **`acreditar_puntos_atomico` quedó como wrapper delegante de `acreditar_atomico`.** No se puede
+  agregar un parámetro con `CREATE OR REPLACE` (crea un overload ambiguo, 42725), y mantener la
+  firma fue lo que permitió aplicar la migración antes del deploy sin romper el código vivo. Se
+  puede borrar en una migración futura — el código nuevo ya no la usa.
+- **El ajuste SOLO puede restar, y es una decisión de seguridad.** Si pudiera sumar, un cajero
+  bloqueado por el tope tendría puerta trasera; la corrección hacia arriba pasa por el camino
+  forzado, que es del dueño y deja la fila marcada. **Las forzadas sí cuentan para el tope.**
+- **`puntos_otorgados` en los reportes ahora es BRUTO, no neto**, a propósito: así el fraude no se
+  autoborra del reporte. Las cuatro funciones de `0010` filtran `tipo = 'acreditacion'` — eran
+  cuatro y no tres, `reporte_fm_comercios` también contaba filas crudas.
+- **`comercios.zona_horaria` tiene CHECK de lista cerrada y su espejo es `lib/comercio/zonasHorarias.ts`.**
+  Se mueven JUNTOS. Un nombre de zona inválido hace que `at time zone` lance 22023 **dentro** del RPC
+  de acreditar: un typo en configuración dejaría al comercio sin poder sellar.
+- **`FormularioControles.tsx` usa campos NO controlados a propósito**, al revés que el resto del
+  proyecto. Es de EDICIÓN, no de alta: con campos controlados el reset posterior al Server Action
+  desmarcaba la casilla de "pedir monto" en el DOM sin avisarle a React (bug encontrado en el QA del
+  dueño; el dato se guardaba bien, solo se dibujaba mal). Ver el comentario del archivo.
+
+Hoja de ruta acordada para lo que sigue: **Tanda 2** selector de país en el registro + imagen por
+premio (`recompensas.foto_url` existe desde `0001` y nunca se cableó) + exportar clientes a CSV;
+**Tanda 3** geopush y campañas; **Tanda 4** autogestión de plan y los 6 tipos de tarjeta que dicen
+"Próximamente". Stripe queda fuera: **no acepta negocios de El Salvador**, haría falta una entidad
+en EE.UU. o UK.
+
 ## Si algo no cuadra
 
 El flujo de migraciones a mano + verificación con script descartable, y el patrón de merge

@@ -52,6 +52,40 @@ function DetalleTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
         </div>
       )}
 
+      {/* Movimientos recientes (Tanda 1). Es transparencia y, de paso, el mejor detector de sellos
+          fantasma que tenemos: si aparece uno que el cliente no recibió, o desaparece uno que sí, lo
+          nota él antes que nadie. La proyección que llega acá NO trae cajero, motivo, marca de
+          forzada ni monto — ver lib/portal/historialCliente.ts. */}
+      {tarjeta.movimientos.length > 0 && (
+        <div className="portal-recompensas">
+          <p className="portal-subtitulo">Movimientos recientes</p>
+          {tarjeta.movimientos.map((m) => (
+            <div className="portal-recompensa" key={m.id}>
+              <div>
+                <div className="portal-recompensa-nombre">
+                  {m.clase === 'canje'
+                    ? `Canje${m.recompensaNombre ? `: ${m.recompensaNombre}` : ''}`
+                    : m.clase === 'ajuste'
+                      ? 'Corrección'
+                      : 'Acreditación'}
+                </div>
+                <div className="portal-recompensa-desc">
+                  {new Date(m.ocurrioEn).toLocaleString('es-SV', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  })}
+                  {m.sucursalNombre ? ` · ${m.sucursalNombre}` : ''}
+                </div>
+              </div>
+              <div className="portal-recompensa-estado">
+                <span className="portal-costo">{m.delta > 0 ? `+${m.delta}` : m.delta}</span>
+                <span className="portal-falta">quedaron {m.saldoResultante}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Reusa el endpoint de descarga existente (mismo patrón que RegistroCliente). */}
       <a className="wallet-btn" href={`/api/tarjetas/${tarjeta.tarjetaId}/pass.pkpass`}>
         Descargar mi pass de nuevo

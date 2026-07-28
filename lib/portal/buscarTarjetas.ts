@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { normalizarTelefono } from '../clientes/normalizarTelefono';
+import { historialParaCliente, type MovimientoPortal } from './historialCliente';
 
 export interface RecompensaPortal {
   nombre: string;
@@ -19,6 +20,9 @@ export interface TarjetaPortal {
   selloMeta: number | null;
   saldoTexto: string;
   recompensas: RecompensaPortal[];
+  // Movimientos recientes con proyección reducida (Tanda 1). Ver lib/portal/historialCliente.ts:
+  // NO lleva cajero, motivo, marca de forzada ni monto — eso es interno del comercio.
+  movimientos: MovimientoPortal[];
 }
 
 export interface ResultadoConsulta {
@@ -108,6 +112,18 @@ export async function buscarTarjetasPorTelefono(
     }
   }
 
+  // Los movimientos van por tarjeta (la función SQL toma una sola), así que es una consulta por
+  // tarjeta. Se lanzan en paralelo porque un cliente rara vez tiene más de dos o tres, y
+  // secuencialmente sumarían latencia visible en una pantalla que se abre desde el teléfono.
+  const movimientosPorTarjeta = new Map<string, MovimientoPortal[]>(
+    await Promise.all(
+      filas.map(async (t): Promise<[string, MovimientoPortal[]]> => [
+        t.id,
+        await historialParaCliente(supabase, t.comercios!.id, t.id),
+      ]),
+    ),
+  );
+
   const resultado: TarjetaPortal[] = filas.map((t) => {
     const c = t.comercios!;
     return {
@@ -121,6 +137,7 @@ export async function buscarTarjetasPorTelefono(
       selloMeta: c.sello_meta,
       saldoTexto: formatearSaldo(c.tipo_tarjeta, t.puntos_actuales, c.sello_meta),
       recompensas: recompensasPorComercio.get(c.id) ?? [],
+      movimientos: movimientosPorTarjeta.get(t.id) ?? [],
     };
   });
 
