@@ -15,6 +15,7 @@
 //   - supabase/migrations/0012_sucursal_principal.sql (sucursales.es_principal + índice único parcial)
 //   - supabase/migrations/0013_reverso_tarjeta.sql (columnas del reverso del pass en comercios)
 //   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
+//   - supabase/migrations/0018_tipos_de_tarjeta.sql (config por tipo en comercios; vigencia_hasta/usado_en/acumulado_centavos en tarjetas; tabla niveles_descuento)
 //   - supabase/migrations/0017_plan_y_cobros.sql (tablas solicitudes_plan y cobros)
 //   - supabase/migrations/0016_geopush_sucursales.sql (latitud/longitud/mensaje_cercania/geopush_activo en sucursales)
 //   - supabase/migrations/0015_antifraude_control_sellos.sql (tipo/motivo/forzado en transacciones_puntos; perillas de control, pedir_monto_compra y zona_horaria en comercios; funciones acreditar_atomico/acreditar_forzado_atomico/ajustar_puntos_atomico/historial_tarjeta/reporte_cajeros en Functions)
@@ -68,6 +69,13 @@ export type Database = {
           // lista cerrada: los valores válidos son los de ZONAS_HORARIAS en lib/comercio/zonasHorarias.ts,
           // y las dos listas se mueven JUNTAS o la UI ofrece un valor que la BD rechaza con 23514.
           zona_horaria: string;
+          // Configuración de los tipos de tarjeta (migración 0018). Cada una solo aplica a su tipo;
+          // null = sin configurar. Se dejan en comercios y no en una tabla aparte porque son un
+          // puñado de escalares por comercio, no una relación.
+          cashback_porcentaje: number | null;
+          multipass_visitas: number | null;
+          membresia_dias: number | null;
+          cupon_vigencia_dias: number | null;
         };
         Insert: {
           id?: string;
@@ -98,6 +106,10 @@ export type Database = {
           tope_puntos_dia?: number | null;
           pedir_monto_compra?: boolean;
           zona_horaria?: string;
+          cashback_porcentaje?: number | null;
+          multipass_visitas?: number | null;
+          membresia_dias?: number | null;
+          cupon_vigencia_dias?: number | null;
         };
         Update: {
           id?: string;
@@ -128,6 +140,10 @@ export type Database = {
           tope_puntos_dia?: number | null;
           pedir_monto_compra?: boolean;
           zona_horaria?: string;
+          cashback_porcentaje?: number | null;
+          multipass_visitas?: number | null;
+          membresia_dias?: number | null;
+          cupon_vigencia_dias?: number | null;
         };
         // FK de la 0008 (`cuenta_id ... references cuentas_comercio(id)`). Necesaria para el join
         // embebido `cuentas_comercio(...)` desde comercios (panel FM, reportes).
@@ -218,12 +234,23 @@ export type Database = {
           id: string;
           cliente_id: string;
           comercio_id: string;
+          // CONTADOR UNIVERSAL (migración 0018): su significado depende de comercios.tipo_tarjeta.
+          // En sellos son sellos; en multipass, visitas restantes; en cashback y gift_card,
+          // CENTAVOS. Nunca imprimirlo crudo — pasar siempre por describirSaldo (lib/tarjetas/tipos.ts).
           puntos_actuales: number;
           qr_token: string;
           apple_serial_number: string | null;
           apple_auth_token: string | null;
           google_object_id: string | null;
           created_at: string;
+          // Membresía y cupón (0018). Fecha y no timestamp: "vence el 30" es el 30 completo en el
+          // local, no un instante que se corre con la zona horaria.
+          vigencia_hasta: string | null;
+          // Cupón: cuándo se usó. null = disponible. Se guarda el instante y no un booleano porque
+          // "cuándo lo usó" es el dato que mide la campaña.
+          usado_en: string | null;
+          // Descuento por nivel: gasto histórico en centavos. NUNCA baja.
+          acumulado_centavos: number;
         };
         Insert: {
           id?: string;
@@ -235,6 +262,9 @@ export type Database = {
           apple_auth_token?: string | null;
           google_object_id?: string | null;
           created_at?: string;
+          vigencia_hasta?: string | null;
+          usado_en?: string | null;
+          acumulado_centavos?: number;
         };
         Update: {
           id?: string;
@@ -246,6 +276,9 @@ export type Database = {
           apple_auth_token?: string | null;
           google_object_id?: string | null;
           created_at?: string;
+          vigencia_hasta?: string | null;
+          usado_en?: string | null;
+          acumulado_centavos?: number;
         };
         // FKs inline en la migración 0001 (`references comercios(id)` / `references clientes(id)`)
         // — Postgres las nombra `tarjetas_comercio_id_fkey` / `tarjetas_cliente_id_fkey`. Necesarias
@@ -644,6 +677,39 @@ export type Database = {
             columns: ['cuenta_id'];
             isOneToOne: false;
             referencedRelation: 'cuentas_comercio';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      niveles_descuento: {
+        Row: {
+          id: string;
+          comercio_id: string;
+          // Umbral de gasto acumulado a partir del cual aplica este porcentaje.
+          desde_centavos: number;
+          porcentaje: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          comercio_id: string;
+          desde_centavos: number;
+          porcentaje: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          comercio_id?: string;
+          desde_centavos?: number;
+          porcentaje?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'niveles_descuento_comercio_id_fkey';
+            columns: ['comercio_id'];
+            isOneToOne: false;
+            referencedRelation: 'comercios';
             referencedColumns: ['id'];
           },
         ];
