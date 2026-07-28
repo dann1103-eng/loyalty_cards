@@ -6,7 +6,9 @@ import { cupoDeCuenta } from '@/lib/comercios/cuentas';
 import FormularioCuenta from '../FormularioCuenta';
 import FormularioVincular from '../FormularioVincular';
 import BotonEliminarCuenta from '../BotonEliminarCuenta';
-import { accionActualizarCuenta, accionEliminarCuenta, accionVincularComercio } from '../actions';
+import { accionActualizarCuenta, accionEliminarCuenta, accionVincularComercio, accionRegistrarCobro } from '../actions';
+import { listarCobros } from '@/lib/comercios/cobros';
+import FormularioCobro from './FormularioCobro';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,6 +76,10 @@ export default async function PaginaEditarCuenta({
   const accion = accionActualizarCuenta.bind(null, id);
   const eliminar = accionEliminarCuenta.bind(null, id);
   const vincular = accionVincularComercio.bind(null, id);
+  const registrarCobroDeCuenta = accionRegistrarCobro.bind(null, id);
+  // `null` ante error, no `[]`: en una pantalla de cobros, una lista vacía significa "no le hemos
+  // cobrado nada" — decirlo por un fallo de consulta llevaría a cobrar dos veces o a no cobrar.
+  const cobros = await listarCobros(supabase, id);
 
   return (
     <main className="admin-main">
@@ -132,6 +138,43 @@ export default async function PaginaEditarCuenta({
             vincular más.
           </p>
         )}
+      </section>
+
+      <section className="panel reveal d4" style={{ marginTop: 22 }}>
+        <h2 className="subtitle" style={{ marginTop: 0 }}>Cobros</h2>
+        <p className="admin-fila-slug" style={{ marginTop: -6 }}>
+          Registro de seguimiento. El dueño los ve en su panel con un comprobante que aclara que
+          NO tiene validez fiscal.
+        </p>
+
+        {cobros === null ? (
+          <p className="admin-error" role="alert">No se pudieron cargar los cobros. Recargá la página.</p>
+        ) : cobros.length === 0 ? (
+          <p className="admin-vacio">Todavía no hay cobros registrados en esta cuenta.</p>
+        ) : (
+          <div className="admin-lista">
+            {cobros.map((c) => (
+              <div key={c.id} className="admin-fila">
+                <div>
+                  <div className="admin-fila-nombre dato-mono">${c.monto.toFixed(2)}</div>
+                  <div className="admin-fila-slug">
+                    #{c.numero} · {c.periodoDesde} — {c.periodoHasta}
+                    {c.pagadoEn && ` · pagado ${c.pagadoEn}`}
+                  </div>
+                </div>
+                <span className={`pastilla ${c.estado === 'pagado' ? 'pastilla-activo' : 'pastilla-inactivo'}`}>
+                  {c.estado === 'pagado' ? 'Pagado' : c.estado === 'anulado' ? 'Anulado' : 'Pendiente'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <FormularioCobro
+          accion={registrarCobroDeCuenta}
+          cobros={cobros ?? []}
+          montoSugerido={cuenta.licencia_monto_mensual}
+        />
       </section>
 
       {/* Solo se puede borrar una cuenta SIN negocios: con negocios, el FK (23503) lo impediría de

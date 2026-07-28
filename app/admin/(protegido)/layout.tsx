@@ -39,6 +39,11 @@ export default async function LayoutProtegido({ children }: { children: React.Re
             <Link className="admin-salir" style={{ textDecoration: 'none' }} href="/admin/reportes">
               Reportes
             </Link>
+            {/* Bandeja de solicitudes de cambio de plan (0017). Si no está en la nav, las
+                solicitudes de los dueños quedan esperando sin que nadie las vea. */}
+            <Link className="admin-salir" style={{ textDecoration: 'none' }} href="/admin/solicitudes">
+              Solicitudes
+            </Link>
           </nav>
           {/* El tema se guarda en el <html>, o sea que es GLOBAL: quien elija claro o alto
               contraste desde el panel de comercio también deja así esta pantalla. Sin este botón,

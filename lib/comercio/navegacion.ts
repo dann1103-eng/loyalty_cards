@@ -33,6 +33,9 @@ export const ENLACES_MENU: readonly EnlaceNav[] = [
   { href: '/comercio/reglas', icono: 'rule', etiqueta: 'Reglas' },
   { href: '/comercio/sucursales', icono: 'store', etiqueta: 'Sucursales' },
   { href: '/comercio/cajeros', icono: 'badge', etiqueta: 'Cajeros' },
+  // Mi plan va al MENÚ, no a la barra: la barra lleva exactamente 5 destinos y el centro sale de la
+  // posición 3 de 5 (ver arriba). El menú no tiene esa restricción — es una lista vertical.
+  { href: '/comercio/plan', icono: 'workspace_premium', etiqueta: 'Mi plan' },
 ];
 
 // Qué secciones ve el CAJERO (plan 2026-07-25 §4.8): Resumen, Escanear y Clientes. Las demás lo

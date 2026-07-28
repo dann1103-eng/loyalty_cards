@@ -44,13 +44,15 @@ describe('enlacesBarraPorRol', () => {
 });
 
 describe('enlacesMenuPorRol', () => {
-  it('owner ve las 4 secciones restantes con Reportes PRIMERO', () => {
+  it('owner ve las 5 secciones restantes con Reportes PRIMERO', () => {
     const hrefs = enlacesMenuPorRol('owner').map((e) => e.href);
     expect(hrefs).toEqual([
       '/comercio/reportes',
       '/comercio/reglas',
       '/comercio/sucursales',
       '/comercio/cajeros',
+      // Mi plan (0017). Va al final a propósito: es configuración ocasional, no operación diaria.
+      '/comercio/plan',
     ]);
     // Aserción aparte y explícita: Reportes es la sección más consultada de las que quedaron fuera
     // de la barra; enterrarla al final del menú la vuelve invisible.
@@ -69,8 +71,9 @@ describe('enlacesMenuPorRol', () => {
     const barra = enlacesBarraPorRol('owner').map((e) => e.href);
     const menu = enlacesMenuPorRol('owner').map((e) => e.href);
     expect(barra.filter((h) => menu.includes(h))).toEqual([]);
-    // Las 9 secciones del panel siguen alcanzables entre las dos superficies: si alguien mueve una
+    // Las 10 secciones del panel siguen alcanzables entre las dos superficies: si alguien mueve una
     // sección de la barra al menú (o al revés) esto sigue verde, pero si la BORRA de ambas, no.
-    expect(new Set([...barra, ...menu]).size).toBe(9);
+    // (Eran 9 hasta que la 0017 sumó "Mi plan".)
+    expect(new Set([...barra, ...menu]).size).toBe(10);
   });
 });

@@ -15,6 +15,7 @@
 //   - supabase/migrations/0012_sucursal_principal.sql (sucursales.es_principal + índice único parcial)
 //   - supabase/migrations/0013_reverso_tarjeta.sql (columnas del reverso del pass en comercios)
 //   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
+//   - supabase/migrations/0017_plan_y_cobros.sql (tablas solicitudes_plan y cobros)
 //   - supabase/migrations/0016_geopush_sucursales.sql (latitud/longitud/mensaje_cercania/geopush_activo en sucursales)
 //   - supabase/migrations/0015_antifraude_control_sellos.sql (tipo/motivo/forzado en transacciones_puntos; perillas de control, pedir_monto_compra y zona_horaria en comercios; funciones acreditar_atomico/acreditar_forzado_atomico/ajustar_puntos_atomico/historial_tarjeta/reporte_cajeros en Functions)
 //
@@ -600,6 +601,104 @@ export type Database = {
         Relationships: [];
       };
       // Migración 0008: sucursales de un comercio (comparten su tarjeta/branding/QR).
+      solicitudes_plan: {
+        Row: {
+          id: string;
+          cuenta_id: string;
+          // El plan que la cuenta tenía AL SOLICITAR. Sin él, leer una solicitud vieja no dice de
+          // dónde venía (el plan actual pudo cambiar desde entonces).
+          plan_actual: string;
+          plan_solicitado: string;
+          motivo: string | null;
+          estado: string;
+          comentario_fm: string | null;
+          // La BD garantiza que esté presente si y solo si el estado NO es 'pendiente'.
+          resuelta_en: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          cuenta_id: string;
+          plan_actual: string;
+          plan_solicitado: string;
+          motivo?: string | null;
+          estado?: string;
+          comentario_fm?: string | null;
+          resuelta_en?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          cuenta_id?: string;
+          plan_actual?: string;
+          plan_solicitado?: string;
+          motivo?: string | null;
+          estado?: string;
+          comentario_fm?: string | null;
+          resuelta_en?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'solicitudes_plan_cuenta_id_fkey';
+            columns: ['cuenta_id'];
+            isOneToOne: false;
+            referencedRelation: 'cuentas_comercio';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      cobros: {
+        Row: {
+          id: string;
+          // Correlativo global generado por la BD (identity). Puede tener HUECOS: una secuencia de
+          // Postgres no retrocede cuando un insert falla. No es una serie fiscal, así que da igual.
+          numero: number;
+          cuenta_id: string;
+          periodo_desde: string;
+          periodo_hasta: string;
+          monto: number;
+          estado: string;
+          metodo: string | null;
+          nota: string | null;
+          // La BD garantiza que esté presente si y solo si el estado es 'pagado'.
+          pagado_en: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          cuenta_id: string;
+          periodo_desde: string;
+          periodo_hasta: string;
+          monto: number;
+          estado?: string;
+          metodo?: string | null;
+          nota?: string | null;
+          pagado_en?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          cuenta_id?: string;
+          periodo_desde?: string;
+          periodo_hasta?: string;
+          monto?: number;
+          estado?: string;
+          metodo?: string | null;
+          nota?: string | null;
+          pagado_en?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'cobros_cuenta_id_fkey';
+            columns: ['cuenta_id'];
+            isOneToOne: false;
+            referencedRelation: 'cuentas_comercio';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       sucursales: {
         Row: {
           id: string;

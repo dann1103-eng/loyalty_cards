@@ -11,6 +11,7 @@ import {
   asignarComercioACuenta,
 } from '@/lib/comercios/cuentas';
 import type { DatosCuenta } from '@/lib/comercios/cuentas';
+import { registrarCobro } from '@/lib/comercios/cobros';
 
 export type EstadoFormulario = { error: string } | undefined;
 
@@ -95,4 +96,35 @@ export async function accionVincularComercio(
   revalidatePath(`/admin/cuentas/${cuentaId}`);
   revalidatePath('/admin/cuentas');
   redirect(`/admin/cuentas/${cuentaId}`);
+}
+
+export type EstadoCobro = { error: string } | { ok: true } | undefined;
+
+// Registra un cobro de la cuenta. Seguimiento, NO facturación fiscal: el comprobante que ve el
+// dueño lo dice en el propio documento (sin personería jurídica no hay DTE).
+export async function accionRegistrarCobro(
+  cuentaId: string,
+  _estadoPrevio: EstadoCobro,
+  formData: FormData,
+): Promise<EstadoCobro> {
+  await verifyFmAdmin();
+
+  const estadoCobro = String(formData.get('estado_cobro') ?? 'pendiente');
+  const pagadoEn = String(formData.get('pagado_en') ?? '').trim();
+
+  const res = await registrarCobro(createServiceClient(), cuentaId, {
+    periodoDesde: String(formData.get('periodo_desde') ?? ''),
+    periodoHasta: String(formData.get('periodo_hasta') ?? ''),
+    monto: Number(String(formData.get('monto') ?? '').trim()),
+    estado: estadoCobro,
+    metodo: String(formData.get('metodo') ?? '') || null,
+    nota: String(formData.get('nota') ?? '') || null,
+    // Solo viaja si el cobro está pagado: mandarla con otro estado lo rechaza la validación (y el
+    // CHECK de la BD), que es lo correcto — una fecha de pago en un cobro pendiente es un dato falso.
+    pagadoEn: estadoCobro === 'pagado' ? pagadoEn || null : null,
+  });
+  if (!res.ok) return { error: res.error };
+
+  revalidatePath(`/admin/cuentas/${cuentaId}`);
+  return { ok: true };
 }
