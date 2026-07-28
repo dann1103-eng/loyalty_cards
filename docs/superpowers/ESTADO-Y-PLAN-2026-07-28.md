@@ -3,17 +3,16 @@
 > **Propósito:** documento de retomada. Si empezás una sesión nueva, leé esto primero: dice qué
 > está hecho, qué falta, y las decisiones cerradas que no hay que reabrir. Los planes
 > (`docs/superpowers/plans/*.md`) son la fuente de verdad del *cómo* de cada tarea ya construida.
-> Reemplaza a `ESTADO-Y-PLAN-FASE-3.md` (obsoleto — cubría un estado de 2026-07-17/20, mucho antes
-> de todo lo de acá abajo).
->
-> Última actualización: **2026-07-25**.
+> Última actualización: **2026-07-28**. (Absorbió y reemplazó a `ESTADO-Y-PLAN-FASE-3.md`, borrado
+> por obsoleto — su contenido de 2026-07-17/20 quedó cubierto por lo de acá abajo. Está en la
+> historia de git si hiciera falta.)
 
 ## AL DÍA: todo en producción
 
-`master` desplegado en `loyalty-cards-rose.vercel.app`, 222 pruebas verdes, typecheck y lint
-limpios. Dos proyectos grandes se completaron y mergearon en esta sesión, encima de todo lo que ya
-documentaba `ESTADO-Y-PLAN-FASE-3.md` (rediseño Stitch, panel comercio, Apple Wallet, portal
-cliente, panel FM):
+`master` desplegado en **`www.cardly-sv.site`** (el dominio propio; `loyalty-cards-rose.vercel.app`
+sigue sirviendo pero ya no es el canónico), 415 pruebas verdes, typecheck limpio. Rediseño Stitch,
+panel comercio, Apple Wallet, portal cliente, panel FM, cuentas/sucursales/cajeros/BI, y — desde el
+2026-07-28 — **Google Wallet en producción abierta**:
 
 ### 1. Cuentas multi-negocio + sucursales + cajeros + BI (10 fases, migraciones 0008-0010)
 - **`cuentas_comercio`**: el cliente que paga (agrupa 1+ `comercios` distintos — marcas/tipos de
@@ -86,12 +85,59 @@ También se borró `app/api/tarjetas/[tarjetaId]/puntos/`: código muerto del wa
 acreditaba puntos SIN atribución de sucursal ni cajero y sin `syncObjetoTarjeta`, a diferencia del
 flujo real (`/comercio/escanear`).
 
-## Pendiente / en pausa (no retomar salvo pedido explícito)
+## Google Wallet — COMPLETO Y EN PRODUCCIÓN ABIERTA (2026-07-28)
 
-- **Google Wallet — solicitud de acceso de publicación**: el walking-skeleton está completo y
-  funcionando (class/object sync, save link, todo cableado), pero el usuario pidió dejar en stand-by
-  el trámite de acceso de publicación de Google para priorizar lo de cuentas/sucursales. No se
-  retomó.
+Ya no es modo Demo: **cualquier cliente puede agregar su tarjeta**, igual que en Apple. Verificado
+por tres vías (consola sin el cartel "modo Demo", clases "Activa", y `programName` sin el prefijo
+`[SOLO PARA PRUEBAS]`).
+
+**Módulo `lib/google/`** (espejo de `lib/apple/`): `walletClient` (auth por cuenta de servicio),
+`ids`/`colorHex`/`construirRecursos` (puros), `syncClase` (LoyaltyClass = branding del comercio),
+`syncObjeto` (LoyaltyObject = saldo + grilla de UNA tarjeta), `syncComercio` (re-sincroniza todos
+los objetos de un comercio), `linkGuardar` (JWT RS256 → botón "Agregar a Google Wallet"),
+`heroUrl` (URL + versión de la grilla). Ruta nueva `app/api/tarjetas/[id]/hero.png`.
+
+**Lo que NO es obvio y hay que recordar:**
+
+1. **Google CACHEA cada imagen por URL.** Si la URL no cambia, el pass muestra la imagen vieja para
+   siempre aunque el objeto se patchee. Por eso `heroUrl.ts` cuelga un `?v=<hash>` que resume TODO
+   lo que la grilla dibuja. Bug real: el contador decía "3 de 8" sobre ocho sellos vacíos.
+   Cualquier imagen futura que dependa de datos cambiantes necesita el mismo tratamiento.
+2. **Asimetría clase/objeto:** logo y colores de cabecera viven en la CLASE (una llamada actualiza a
+   todos los clientes); la GRILLA de sellos vive en el `heroImage` de CADA OBJETO. Un cambio de
+   branding necesita las dos (`syncClaseComercio` + `syncObjetosComercio`).
+3. **`heroImage` SÍ existe a nivel de objeto** (el spec original decía que era solo de clase —
+   falso, verificado contra el `.d.ts` de `googleapis`). Eso es lo que hace posible la grilla por
+   cliente.
+4. **`programLogo` es obligatorio en la API**: un comercio sin logo simplemente no tiene Google
+   Wallet habilitado (Apple sí cae a `logoText`).
+5. **Las clases NO se pueden borrar** (la API solo tiene get/insert/list/patch/update). Nunca crear
+   clases de QA contra el emisor real con nombres tipo "QA ..." — quedan visibles para siempre y las
+   ve el revisor de Google. Solo se pueden renombrar.
+6. **Autorreparación:** `linkGuardar` reintenta el sync si falta la clase/objeto. Google, a
+   diferencia de Apple, crea el recurso UNA vez vía REST; si esa llamada falla (cold start lento),
+   quedaba roto para siempre. Bug real en producción.
+
+**Trámite con Google (por si hace falta con otro emisor):** el formulario de "Request publishing
+access" de la consola promete 2-3 días hábiles, pero lo que realmente destrabó fue **responder el
+hilo de soporte** (`google-wallet-passes-support@google.com`) pidiéndolo explícitamente — aprobado a
+mano en ~2 horas. **Los correos de Google NO son fuente de verdad del estado del emisor; la consola
+sí** (hubo tres correos parecidos y solo el tercero era el de publicación).
+
+## Apple — arreglo de dominio (2026-07-28)
+
+El apex `cardly-sv.site` tenía un **308 redirect** a `www`, y **Apple Wallet no sigue redirecciones
+en llamadas autenticadas**: las trata como fallo de auth (401 en `/api/apple/v1/devices/...`), así
+que esos passes nunca se registraban para push y sus dueños no recibían actualizaciones de saldo, en
+silencio. Arreglado en Vercel poniendo el apex a servir directo (Domains → Edit → "Connect to an
+environment") en vez de redirigir.
+
+**Regla permanente: NUNCA poner un redirect entre `cardly-sv.site` y `www.cardly-sv.site` (en
+ninguna dirección).** El `webServiceURL` queda grabado DENTRO de cada `.pkpass` al emitirlo y no se
+puede cambiar a distancia; hay passes vivos con cada uno de los dos hosts, así que ambos tienen que
+responder directo. Si algún día se quiere canonicalizar por SEO, va con `<link rel="canonical">`.
+
+## Pendiente / en pausa (no retomar salvo pedido explícito)
 - ~~**Texto configurable al reverso de la tarjeta**~~ → **HECHO el 2026-07-26.** Spec en
   `specs/2026-07-26-reverso-tarjeta-configurable-design.md`, plan en
   `plans/2026-07-26-reverso-tarjeta-configurable.md`, migración `0013`, pruebas manuales en la

@@ -2,7 +2,7 @@
 
 # FM Lealtad — acuerdos de trabajo del proyecto
 
-**Estado y plan para continuar:** leé `docs/superpowers/ESTADO-Y-PLAN-2026-07-25.md` al empezar —
+**Estado y plan para continuar:** leé `docs/superpowers/ESTADO-Y-PLAN-2026-07-28.md` al empezar —
 dice qué está hecho, qué falta y en qué orden. Los planes viven en `docs/superpowers/plans/`.
 
 El usuario (Daniel, socio de FM Communications, El Salvador) programa esto él mismo con Claude Code y
@@ -53,6 +53,27 @@ El usuario (Daniel, socio de FM Communications, El Salvador) programa esto él m
   FUERA de cualquier try/catch, o desactivás el gate.
 - **No inicies dev server** en subagentes (deja el puerto 3000 secuestrado). Verificación visual: el
   controlador con las herramientas de navegador, o el usuario.
+
+## Wallets (Apple + Google)
+- **El dominio de producción es `www.cardly-sv.site`.** NUNCA pongas un redirect entre el apex
+  `cardly-sv.site` y `www` (en ninguna dirección): Apple Wallet no sigue redirecciones en llamadas
+  autenticadas y las lee como fallo de auth, y el `webServiceURL` queda grabado DENTRO de cada
+  `.pkpass` al emitirlo — hay passes vivos con cada host. Los dos tienen que servir directo.
+- **Google cachea cada imagen por URL.** Toda imagen que dependa de datos cambiantes necesita
+  cache-busting o el pass muestra la versión vieja para siempre (ver `lib/google/heroUrl.ts`:
+  `?v=<hash de todo lo que se dibuja>`). Aplica a cualquier `heroImage`/`programLogo` nuevo.
+- **Asimetría clase/objeto en Google:** logo y colores de cabecera → `LoyaltyClass` (una llamada
+  para todos los clientes); grilla de sellos → `heroImage` de CADA `LoyaltyObject`. Un cambio de
+  branding necesita `syncClaseComercio` **y** `syncObjetosComercio`.
+- **Las clases de Google no se pueden borrar** (la API no tiene `delete`). No crees clases de QA
+  contra el emisor real con nombres tipo "QA ..." — quedan visibles para siempre y las ve el
+  revisor de Google.
+- **El estado del emisor se verifica en la CONSOLA, no en los correos de Google.** Hubo tres
+  correos casi idénticos y solo uno era la aprobación de publicación; afirmar "ya está aprobado"
+  leyendo un correo llevó a una conclusión falsa que la prueba real del usuario desmintió. Verificá
+  también un artefacto real (`programName` sin prefijo `[SOLO PARA PRUEBAS]`).
+- **Scripts sueltos que importen `lib/supabase/server.ts` necesitan `--conditions=react-server`**
+  (`npx tsx --conditions=react-server archivo.ts`), si no revientan con el guard de `server-only`.
 
 ## Seguridad y git
 - `SUPABASE_SERVICE_ROLE_KEY` nunca al bundle del navegador (`import 'server-only'`, sin `NEXT_PUBLIC_`).
