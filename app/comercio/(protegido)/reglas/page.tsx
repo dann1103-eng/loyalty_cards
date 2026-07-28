@@ -3,8 +3,10 @@ import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { TIPOS_REGLA } from '@/lib/comercio/reglas';
 import FormularioRegla from './FormularioRegla';
+import FormularioControles from './FormularioControles';
 import BotonEliminarRegla from './BotonEliminarRegla';
 import AvisoComercioActivo from '../AvisoComercioActivo';
+import { leerControles } from '@/lib/comercio/controlesAcreditacion';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +19,16 @@ export default async function PaginaReglas() {
     .select('id, tipo, valor')
     .eq('comercio_id', comercioId)
     .order('activa_desde', { ascending: false });
+
+  // Los controles antifraude (Tanda 1) viven acá y no en Marca porque son política de acreditación,
+  // no imagen — y así no hace falta un sexto destino en la barra, que descentraría el botón de
+  // Escanear (ver lib/comercio/navegacion.ts).
+  const controles = await leerControles(supabase, comercioId);
+  const { data: comercio } = await supabase
+    .from('comercios')
+    .select('tipo_tarjeta')
+    .eq('id', comercioId)
+    .maybeSingle();
 
   if (error) console.error('[comercio] falló la consulta de reglas:', error);
 
@@ -33,6 +45,19 @@ export default async function PaginaReglas() {
 
       <div className="reveal d2">
         <FormularioRegla />
+      </div>
+
+      <div className="reveal d2" style={{ marginTop: 22 }}>
+        {controles ? (
+          <FormularioControles
+            controles={controles}
+            esDePuntos={(comercio?.tipo_tarjeta ?? 'puntos') === 'puntos'}
+          />
+        ) : (
+          <p className="admin-error" role="alert">
+            No se pudo cargar el control de sellos. Recarga la página.
+          </p>
+        )}
       </div>
 
       <div className="admin-lista reveal d3" style={{ marginTop: 22 }}>

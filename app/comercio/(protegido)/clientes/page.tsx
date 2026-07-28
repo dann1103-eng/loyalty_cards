@@ -24,7 +24,7 @@ export default async function PaginaClientes({
   // Gate COMPARTIDO (plan 2026-07-25 §4.8): el cajero usa el directorio para la asignación manual
   // de puntos — el botón "Acreditar / Canjear" entra al escáner, cuyas acciones ya re-verifican con
   // gate compartido y atribución server-side. Esta página es de solo lectura (sin Server Actions).
-  const { comercioId } = await verifyComercioAcceso();
+  const { comercioId, rol } = await verifyComercioAcceso();
   const { q } = await searchParams;
   const busqueda = (q ?? '').trim();
 
@@ -134,6 +134,14 @@ export default async function PaginaClientes({
                     <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">add_circle</span>
                     Acreditar / Canjear
                   </Link>
+                  {/* Solo al dueño: la ficha tiene gate de owner, así que mostrarle el enlace al
+                      cajero sería enseñarle una puerta cerrada (misma política que RUTAS_CAJERO). */}
+                  {rol === 'owner' && (
+                    <Link className="btn-borde" href={`/comercio/clientes/${t.id}`}>
+                      <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">history</span>
+                      Ver historial
+                    </Link>
+                  )}
                   <a
                     className="btn-borde"
                     href={t.qrDataUrl}

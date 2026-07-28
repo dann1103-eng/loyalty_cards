@@ -71,6 +71,10 @@ export default async function PaginaEscanear({
           tokenInicial={token}
           sucursales={activas.map((s) => ({ id: s.id, nombre: s.nombre }))}
           sucursalInicialId={sesion.sucursalActiva?.id}
+          // Solo esta rama (la del owner) puede autorizar por encima de un límite. La del cajero,
+          // arriba, no pasa la prop y queda en false: es el primero de los dos candados, y el
+          // segundo es que el RPC del camino normal no puede escribir forzado=true.
+          puedeForzar
         />
       )}
     </main>

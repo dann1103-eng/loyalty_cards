@@ -15,6 +15,7 @@
 //   - supabase/migrations/0012_sucursal_principal.sql (sucursales.es_principal + índice único parcial)
 //   - supabase/migrations/0013_reverso_tarjeta.sql (columnas del reverso del pass en comercios)
 //   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
+//   - supabase/migrations/0015_antifraude_control_sellos.sql (tipo/motivo/forzado en transacciones_puntos; perillas de control, pedir_monto_compra y zona_horaria en comercios; funciones acreditar_atomico/acreditar_forzado_atomico/ajustar_puntos_atomico/historial_tarjeta/reporte_cajeros en Functions)
 //
 // Hasta que `supabase gen types` esté cableado (requiere auth del CLI), este archivo se
 // mantiene a mano: si llega una migración nueva, hay que actualizarlo en el mismo commit.
@@ -53,6 +54,18 @@ export type Database = {
           red_whatsapp: string | null;
           sitio_web: string | null;
           mostrar_como_funciona: boolean;
+          // Control de acreditación (migración 0015). Las cuatro perillas son `null` = sin límite,
+          // que es como nacen TODOS los comercios: el escáner no cambia de comportamiento hasta que
+          // el dueño configure algo. Las dos de puntos solo tienen sentido con tipo_tarjeta='puntos'.
+          tope_acreditaciones_dia: number | null;
+          espera_minima_minutos: number | null;
+          techo_puntos_acreditacion: number | null;
+          tope_puntos_dia: number | null;
+          pedir_monto_compra: boolean;
+          // Define el corte del día del tope diario y de reporte_tendencia. La BD tiene un CHECK de
+          // lista cerrada: los valores válidos son los de ZONAS_HORARIAS en lib/comercio/zonasHorarias.ts,
+          // y las dos listas se mueven JUNTAS o la UI ofrece un valor que la BD rechaza con 23514.
+          zona_horaria: string;
         };
         Insert: {
           id?: string;
@@ -77,6 +90,12 @@ export type Database = {
           red_whatsapp?: string | null;
           sitio_web?: string | null;
           mostrar_como_funciona?: boolean;
+          tope_acreditaciones_dia?: number | null;
+          espera_minima_minutos?: number | null;
+          techo_puntos_acreditacion?: number | null;
+          tope_puntos_dia?: number | null;
+          pedir_monto_compra?: boolean;
+          zona_horaria?: string;
         };
         Update: {
           id?: string;
@@ -101,6 +120,12 @@ export type Database = {
           red_whatsapp?: string | null;
           sitio_web?: string | null;
           mostrar_como_funciona?: boolean;
+          tope_acreditaciones_dia?: number | null;
+          espera_minima_minutos?: number | null;
+          techo_puntos_acreditacion?: number | null;
+          tope_puntos_dia?: number | null;
+          pedir_monto_compra?: boolean;
+          zona_horaria?: string;
         };
         // FK de la 0008 (`cuenta_id ... references cuentas_comercio(id)`). Necesaria para el join
         // embebido `cuentas_comercio(...)` desde comercios (panel FM, reportes).
@@ -310,9 +335,20 @@ export type Database = {
           tarjeta_id: string;
           cajero_usuario_id: string | null;
           puntos_delta: number;
+          // Existe desde la 0001 pero recién la 0015 la escribe, y solo si el comercio activó
+          // pedir_monto_compra. En las filas anteriores a esa fecha es siempre null.
           monto_compra: number | null;
           sucursal_id: string | null;
           created_at: string;
+          // Clasificación del ledger (migración 0015). 'acreditacion' | 'ajuste'. Todo el histórico
+          // anterior queda en 'acreditacion' por el default, y las cuatro funciones de reporte
+          // filtran por ese valor para que una corrección no cuente como visita.
+          tipo: string;
+          // Obligatorio cuando tipo='ajuste' o forzado=true (CHECK en la BD + validación en TS).
+          motivo: string | null;
+          // true = el dueño autorizó esta acreditación saltándose un límite. El camino del cajero
+          // (acreditar_atomico) es físicamente incapaz de escribir true acá.
+          forzado: boolean;
         };
         Insert: {
           id?: string;
@@ -322,6 +358,9 @@ export type Database = {
           monto_compra?: number | null;
           sucursal_id?: string | null;
           created_at?: string;
+          tipo?: string;
+          motivo?: string | null;
+          forzado?: boolean;
         };
         Update: {
           id?: string;
@@ -331,6 +370,9 @@ export type Database = {
           monto_compra?: number | null;
           sucursal_id?: string | null;
           created_at?: string;
+          tipo?: string;
+          motivo?: string | null;
+          forzado?: boolean;
         };
         // FKs inline de la 0001 (tarjeta_id) y 0008 (sucursal_id). Necesarias para que futuros joins
         // embebidos (reportes) tipen sin SelectQueryError.
@@ -688,6 +730,103 @@ export type Database = {
           acreditaciones: number;
           canjes: number;
           saldo_circulante: number;
+        }[];
+      };
+      // Migración 0015: antifraude y control de sellos. Mismo criterio que las anteriores —
+      // `returns table(...)` ⇒ `Returns` es `[]` y los wrappers leen `data?.[0]` (o la lista entera,
+      // en el caso de historial_tarjeta y reporte_cajeros).
+      //
+      // acreditar_atomico REEMPLAZA en la práctica a acreditar_puntos_atomico, que queda arriba
+      // como wrapper de compatibilidad de 5 argumentos hasta que el deploy nuevo esté en producción.
+      // El código nuevo llama SIEMPRE a acreditar_atomico.
+      acreditar_atomico: {
+        Args: {
+          p_comercio_id: string;
+          p_tarjeta_id: string;
+          p_delta: number;
+          p_sucursal_id: string | null;
+          p_cajero_usuario_id: string | null;
+          p_monto_compra: number | null;
+        };
+        Returns: {
+          estado: string;
+          saldo: number;
+        }[];
+      };
+      acreditar_forzado_atomico: {
+        Args: {
+          p_comercio_id: string;
+          p_tarjeta_id: string;
+          p_delta: number;
+          p_sucursal_id: string | null;
+          p_cajero_usuario_id: string | null;
+          p_monto_compra: number | null;
+          p_motivo: string;
+        };
+        Returns: {
+          estado: string;
+          saldo: number;
+        }[];
+      };
+      ajustar_puntos_atomico: {
+        Args: {
+          p_comercio_id: string;
+          p_tarjeta_id: string;
+          p_delta: number;
+          p_sucursal_id: string | null;
+          p_cajero_usuario_id: string | null;
+          p_motivo: string;
+        };
+        Returns: {
+          estado: string;
+          saldo: number;
+        }[];
+      };
+      // Historial de UNA tarjeta: union de transacciones_puntos y canjes con el saldo corrido.
+      // `clase` es 'acreditacion' | 'ajuste' | 'canje'. Los nombres de las columnas de salida NO
+      // coinciden con los de las tablas a propósito (ocurrio_en, motivo_texto, fue_forzado, monto):
+      // en `language sql`, una columna homónima le gana a la variable OUT en silencio.
+      historial_tarjeta: {
+        Args: {
+          p_comercio_id: string;
+          p_tarjeta_id: string;
+          p_limite: number | null;
+          p_desde: string | null;
+        };
+        Returns: {
+          movimiento_id: string;
+          ocurrio_en: string;
+          clase: string;
+          delta: number;
+          saldo_resultante: number;
+          sucursal_nombre: string | null;
+          cajero_email: string | null;
+          motivo_texto: string | null;
+          fue_forzado: boolean;
+          monto: number | null;
+          recompensa_nombre: string | null;
+        }[];
+      };
+      // p_desde/p_hasta son `date` (llegan como 'AAAA-MM-DD') e INCLUSIVOS, interpretados en la
+      // zona horaria del comercio. null en cualquiera = sin ese borde.
+      reporte_cajeros: {
+        Args: {
+          p_comercio_id: string;
+          p_desde: string | null;
+          p_hasta: string | null;
+        };
+        Returns: {
+          cajero_usuario_id: string | null;
+          cajero_email: string | null;
+          cajero_activo: boolean | null;
+          acreditaciones: number;
+          puntos_otorgados: number;
+          monto_total: number;
+          forzadas: number;
+          ajustes: number;
+          puntos_ajustados: number;
+          canjes: number;
+          clientes_unicos: number;
         }[];
       };
     };

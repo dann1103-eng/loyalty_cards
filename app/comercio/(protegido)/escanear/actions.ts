@@ -2,8 +2,9 @@
 
 import { verifyComercioAcceso } from '@/lib/comercio/verifyComercioAcceso';
 import { createServiceClient } from '@/lib/supabase/server';
-import { buscarTarjetaPorToken, acreditarPuntos } from '@/lib/comercio/acreditar';
+import { buscarTarjetaPorToken, acreditarPuntos, acreditarForzado } from '@/lib/comercio/acreditar';
 import { canjearRecompensa } from '@/lib/comercio/canje';
+import { quitarPuntos } from '@/lib/comercio/ajuste';
 import { resolverSucursalDeAccion } from '@/lib/comercio/atribucionEscaner';
 import { sucursalPerteneceAComercio } from '@/lib/comercio/sucursales';
 import { formatearSaldo } from '@/lib/portal/buscarTarjetas';
@@ -25,6 +26,8 @@ export interface ResultadoEscaneo {
   saldoTexto?: string;
   esSellos?: boolean;
   recompensas?: RecompensaEscaner[];
+  // Si el comercio activó pedir_monto_compra, el escáner muestra el campo de monto (Tanda 1).
+  pedirMontoCompra?: boolean;
 }
 
 // Resuelve un QR escaneado (o pegado desde /comercio/clientes) a la tarjeta del comercio de la
@@ -40,7 +43,7 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
 
   const { data: comercio } = await supabase
     .from('comercios')
-    .select('tipo_tarjeta, sello_meta')
+    .select('tipo_tarjeta, sello_meta, pedir_monto_compra')
     .eq('id', comercioId)
     .maybeSingle();
 
@@ -61,12 +64,15 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
     saldoTexto: formatearSaldo(tipo, tarjeta.puntosActuales, comercio?.sello_meta ?? null),
     esSellos: tipo === 'sellos',
     recompensas: (recompensas ?? []).map((r) => ({ id: r.id, nombre: r.nombre, costoPuntos: r.costo_puntos })),
+    pedirMontoCompra: comercio?.pedir_monto_compra ?? false,
   };
 }
 
 export type RespuestaOperacion =
   | { ok: true; puntosActuales: number; saldoTexto: string; mensaje: string }
-  | { ok: false; error: string };
+  // `bloqueoLimite` viaja hasta el cliente para que el escáner distinga "una perilla antifraude
+  // frenó esto" (⇒ ofrecerle al dueño el panel de autorización) de "algo salió mal" (⇒ error rojo).
+  | { ok: false; error: string; bloqueoLimite?: boolean };
 
 async function saldoTextoDe(comercioId: string, puntos: number): Promise<string> {
   const supabase = createServiceClient();
@@ -108,6 +114,7 @@ export async function accionAcreditar(
   tarjetaId: string,
   delta: number,
   sucursalIdCliente: string | null,
+  montoCompra: number | null = null,
 ): Promise<RespuestaOperacion> {
   const sesion = await verifyComercioAcceso();
   const supabase = createServiceClient();
@@ -118,8 +125,9 @@ export async function accionAcreditar(
   const res = await acreditarPuntos(supabase, sesion.comercioId, tarjetaId, delta, {
     sucursalId: atribucion.valor,
     cajeroUsuarioId: sesion.usuarioComercioId,
+    montoCompra,
   });
-  if (!res.ok) return { ok: false, error: res.error };
+  if (!res.ok) return { ok: false, error: res.error, bloqueoLimite: res.bloqueoLimite };
 
   // El pass del cliente se refresca solo (mismo push que usa el cambio de branding).
   await notificarCambioTarjeta(supabase, tarjetaId);
@@ -130,6 +138,85 @@ export async function accionAcreditar(
     puntosActuales: res.puntosActuales,
     saldoTexto: await saldoTextoDe(sesion.comercioId, res.puntosActuales),
     mensaje: delta === 1 ? 'Sello agregado.' : `${delta} puntos agregados.`,
+  };
+}
+
+// Acredita SALTÁNDOSE las perillas antifraude. Solo el dueño.
+//
+// El gate es verifyComercioAcceso() + chequeo explícito de rol, y NO verifyComercioOwner(): ese
+// redirige a un cajero a /comercio/escanear (verifyComercioOwner.ts:24), o sea a la página en la
+// que ya está — perdería el resultado del escaneo y navegaría a la misma pantalla sin ninguna
+// explicación. Acá le devolvemos un mensaje que puede leer.
+//
+// Este es el primero de dos candados independientes: el segundo es que el RPC del camino normal
+// (acreditar_atomico) es físicamente incapaz de escribir forzado=true.
+export async function accionAcreditarForzado(
+  tarjetaId: string,
+  delta: number,
+  motivo: string,
+  sucursalIdCliente: string | null,
+  montoCompra: number | null = null,
+): Promise<RespuestaOperacion> {
+  const sesion = await verifyComercioAcceso();
+  if (sesion.rol !== 'owner') {
+    return { ok: false, error: 'Solo el dueño puede autorizar una acreditación por encima del límite.' };
+  }
+  const supabase = createServiceClient();
+
+  const atribucion = await resolverSucursalAtribuida(supabase, sesion, sucursalIdCliente);
+  if (atribucion.ok === false) return { ok: false, error: atribucion.error };
+
+  const res = await acreditarForzado(supabase, sesion.comercioId, tarjetaId, delta, motivo, {
+    sucursalId: atribucion.valor,
+    cajeroUsuarioId: sesion.usuarioComercioId,
+    montoCompra,
+  });
+  if (!res.ok) return { ok: false, error: res.error };
+
+  await notificarCambioTarjeta(supabase, tarjetaId);
+  await syncObjetoTarjeta(supabase, tarjetaId);
+
+  return {
+    ok: true,
+    puntosActuales: res.puntosActuales,
+    saldoTexto: await saldoTextoDe(sesion.comercioId, res.puntosActuales),
+    mensaje: 'Autorizado y acreditado. Queda registrado en el historial del cliente.',
+  };
+}
+
+// Quita sellos/puntos con motivo obligatorio. Gate COMPARTIDO (owner O cajero): el cajero que se
+// equivocó tiene que poder corregirlo en el momento, sin esperar al dueño. Queda auditado con su
+// nombre, su hora y su motivo, y suma a su columna de "ajustes" en el reporte por cajero.
+//
+// quitarPuntos SOLO resta (ver lib/comercio/ajuste.ts): si desde acá se pudiera sumar, un cajero
+// bloqueado por el tope tendría una puerta trasera y el sistema de límites no valdría nada.
+export async function accionQuitar(
+  tarjetaId: string,
+  cantidad: number,
+  motivo: string,
+  sucursalIdCliente: string | null,
+): Promise<RespuestaOperacion> {
+  const sesion = await verifyComercioAcceso();
+  const supabase = createServiceClient();
+
+  const atribucion = await resolverSucursalAtribuida(supabase, sesion, sucursalIdCliente);
+  if (atribucion.ok === false) return { ok: false, error: atribucion.error };
+
+  const res = await quitarPuntos(supabase, sesion.comercioId, tarjetaId, cantidad, motivo, {
+    sucursalId: atribucion.valor,
+    cajeroUsuarioId: sesion.usuarioComercioId,
+  });
+  if (!res.ok) return { ok: false, error: res.error };
+
+  // El saldo cambió: sin esto el pass del cliente sigue mostrando el número viejo.
+  await notificarCambioTarjeta(supabase, tarjetaId);
+  await syncObjetoTarjeta(supabase, tarjetaId);
+
+  return {
+    ok: true,
+    puntosActuales: res.puntosActuales,
+    saldoTexto: await saldoTextoDe(sesion.comercioId, res.puntosActuales),
+    mensaje: cantidad === 1 ? 'Se quitó 1. Queda registrado.' : `Se quitaron ${cantidad}. Queda registrado.`,
   };
 }
 

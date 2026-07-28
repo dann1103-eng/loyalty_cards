@@ -5,9 +5,12 @@ import jsQR from 'jsqr';
 import {
   accionBuscarPorToken,
   accionAcreditar,
+  accionAcreditarForzado,
+  accionQuitar,
   accionCanjear,
   type ResultadoEscaneo,
 } from './actions';
+import { LARGO_MAXIMO_MOTIVO } from '@/lib/comercio/motivo';
 
 type Modo = 'camara' | 'sin-camara' | 'buscando' | 'resultado';
 
@@ -16,16 +19,23 @@ type Modo = 'camara' | 'sin-camara' | 'buscando' | 'resultado';
 // (resolverSucursalDeAccion): para el cajero el valor que mande este cliente se ignora.
 export type SucursalOpcion = { id: string; nombre: string };
 
+// Lo que quedó bloqueado por una perilla antifraude y espera autorización del dueño. Se guarda el
+// `delta` con el que se INTENTÓ acreditar, no se recalcula desde el input al autorizar: entre el
+// bloqueo y la autorización el cajero pudo tocar el campo, y se estaría autorizando otra cosa.
+type Bloqueo = { mensaje: string; delta: number; monto: number | null };
+
 export default function Escaner({
   tokenInicial,
   sucursalFija,
   sucursales,
   sucursalInicialId,
+  puedeForzar = false,
 }: {
   tokenInicial?: string;
   sucursalFija?: SucursalOpcion;
   sucursales?: SucursalOpcion[];
   sucursalInicialId?: string;
+  puedeForzar?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -42,6 +52,13 @@ export default function Escaner({
   // Solo aplica al owner (con picker). Arranca en la sucursal activa del contexto si hay una
   // (plan 2026-07-25 §4.5) — editable por operación; '' = "Sin especificar" → null.
   const [sucursalIdSeleccionada, setSucursalIdSeleccionada] = useState(sucursalInicialId ?? '');
+  // Antifraude (Tanda 1): monto de la compra, acreditación bloqueada por una perilla, y corrección.
+  const [montoCompra, setMontoCompra] = useState('');
+  const [bloqueo, setBloqueo] = useState<Bloqueo | null>(null);
+  const [motivoForzado, setMotivoForzado] = useState('');
+  const [mostrarCorregir, setMostrarCorregir] = useState(false);
+  const [cantidadQuitar, setCantidadQuitar] = useState('1');
+  const [motivoQuitar, setMotivoQuitar] = useState('');
   const [pendiente, iniciarTransicion] = useTransition();
 
   // Valor que se manda a las acciones como "sucursal del cliente". Para el cajero es su sucursal fija
@@ -134,19 +151,69 @@ export default function Escaner({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al montar
   }, []);
 
+  // Monto tecleado por el cajero, o null si el comercio no lo pide (o lo dejó vacío).
+  const montoNumerico = () => {
+    if (!resultado?.pedirMontoCompra) return null;
+    const n = Number(montoCompra.trim());
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
+  const aplicarExito = (res: { puntosActuales: number; saldoTexto: string; mensaje: string }) => {
+    setSaldoTexto(res.saldoTexto);
+    setResultado((r) => (r ? { ...r, puntosActuales: res.puntosActuales } : r));
+    setMensaje(res.mensaje);
+    setBloqueo(null);
+    setMotivoForzado('');
+    setMostrarCorregir(false);
+    setMotivoQuitar('');
+    setMontoCompra('');
+  };
+
   const acreditar = (delta: number) => {
     if (!resultado?.tarjetaId) return;
+    const monto = montoNumerico();
     setMensaje(null);
     setError(null);
+    setBloqueo(null);
     iniciarTransicion(async () => {
-      const res = await accionAcreditar(resultado.tarjetaId!, delta, sucursalIdCliente);
+      const res = await accionAcreditar(resultado.tarjetaId!, delta, sucursalIdCliente, monto);
       if (res.ok) {
-        setSaldoTexto(res.saldoTexto);
-        setResultado((r) => (r ? { ...r, puntosActuales: res.puntosActuales } : r));
-        setMensaje(res.mensaje);
+        aplicarExito(res);
+      } else if (res.bloqueoLimite) {
+        // No es un fallo: es una perilla del dueño haciendo su trabajo. Se guarda el intento para
+        // que él pueda autorizarlo sin que el cajero tenga que volver a teclear nada.
+        setBloqueo({ mensaje: res.error, delta, monto });
       } else {
         setError(res.error);
       }
+    });
+  };
+
+  const autorizar = () => {
+    if (!resultado?.tarjetaId || !bloqueo) return;
+    setError(null);
+    iniciarTransicion(async () => {
+      const res = await accionAcreditarForzado(
+        resultado.tarjetaId!,
+        bloqueo.delta,
+        motivoForzado,
+        sucursalIdCliente,
+        bloqueo.monto,
+      );
+      if (res.ok) aplicarExito(res);
+      else setError(res.error);
+    });
+  };
+
+  const quitar = () => {
+    if (!resultado?.tarjetaId) return;
+    const cantidad = Math.max(1, Math.floor(Number(cantidadQuitar) || 1));
+    setMensaje(null);
+    setError(null);
+    iniciarTransicion(async () => {
+      const res = await accionQuitar(resultado.tarjetaId!, cantidad, motivoQuitar, sucursalIdCliente);
+      if (res.ok) aplicarExito(res);
+      else setError(res.error);
     });
   };
 
@@ -171,6 +238,13 @@ export default function Escaner({
     setResultado(null);
     setMensaje(null);
     setError(null);
+    // Un bloqueo pendiente NO puede sobrevivir al cambio de cliente: autorizarlo después de
+    // escanear a otra persona acreditaría al cliente equivocado.
+    setBloqueo(null);
+    setMotivoForzado('');
+    setMostrarCorregir(false);
+    setMotivoQuitar('');
+    setMontoCompra('');
     setModo('camara');
   };
 
@@ -271,6 +345,24 @@ export default function Escaner({
           </div>
         )}
 
+        {/* Monto de la compra: solo si el dueño lo activó. Es lo que después deja comparar cuánto
+            se vendió contra cuántos sellos se dieron, por cajero. */}
+        {resultado.pedirMontoCompra && (
+          <div className="field" style={{ marginTop: 14, textAlign: 'left' }}>
+            <label htmlFor="monto-compra">Monto de la compra (opcional)</label>
+            <input
+              id="monto-compra"
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={montoCompra}
+              onChange={(e) => setMontoCompra(e.target.value)}
+            />
+          </div>
+        )}
+
         {resultado.esSellos ? (
           <button className="btn-acento" style={{ marginTop: 16 }} onClick={() => acreditar(1)} disabled={pendiente}>
             <span className="icono" aria-hidden="true">add_circle</span>
@@ -309,6 +401,109 @@ export default function Escaner({
 
         {mensaje && <p className="nota" style={{ color: 'var(--menta)' }}>{mensaje} El pass del cliente se actualiza solo.</p>}
         {error && <p className="alerta" role="alert">{error}</p>}
+      </section>
+
+      {/* Bloqueo por una perilla antifraude. No se muestra como error rojo: no falló nada, es una
+          regla del dueño. Al cajero se le dice a quién pedirle; al dueño se le da el formulario. */}
+      {bloqueo && (
+        <section className="panel" style={{ marginTop: 18, borderColor: 'var(--acento)' }}>
+          <p className="alerta" role="alert" style={{ marginTop: 0 }}>{bloqueo.mensaje}</p>
+          {puedeForzar ? (
+            <>
+              <div className="field" style={{ marginTop: 12 }}>
+                <label htmlFor="motivo-forzado">
+                  Motivo de la autorización (queda en el historial del cliente)
+                </label>
+                <textarea
+                  id="motivo-forzado"
+                  rows={2}
+                  maxLength={LARGO_MAXIMO_MOTIVO}
+                  placeholder="Ej.: compró en la mañana y volvió en la tarde"
+                  value={motivoForzado}
+                  onChange={(e) => setMotivoForzado(e.target.value)}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  className="btn-acento"
+                  style={{ flex: 1 }}
+                  onClick={autorizar}
+                  disabled={pendiente || !motivoForzado.trim()}
+                >
+                  {pendiente ? 'Autorizando…' : `Autorizar y acreditar ${bloqueo.delta}`}
+                </button>
+                <button className="btn-borde" onClick={() => setBloqueo(null)} disabled={pendiente}>
+                  Cancelar
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="nota" style={{ marginBottom: 0 }}>
+              Pedile al dueño que lo autorice desde su cuenta.
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* Corrección: disponible para el cajero TAMBIÉN, para que pueda arreglar su propio error en
+          el momento. Queda auditado con su nombre, su hora y su motivo. Solo resta: sumar de más
+          sería una puerta trasera al tope diario. */}
+      <section style={{ marginTop: 18 }}>
+        {!mostrarCorregir ? (
+          <button className="btn-borde" style={{ width: '100%' }} onClick={() => setMostrarCorregir(true)}>
+            <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">undo</span>
+            Corregir: quitar {resultado.esSellos ? 'sellos' : 'puntos'}
+          </button>
+        ) : (
+          <div className="panel" style={{ marginTop: 0 }}>
+            <p className="titulo-seccion" style={{ marginTop: 0 }}>
+              Quitar {resultado.esSellos ? 'sellos' : 'puntos'}
+            </p>
+            <div className="field">
+              <label htmlFor="cantidad-quitar">Cuántos quitar</label>
+              <input
+                id="cantidad-quitar"
+                type="number"
+                min="1"
+                step="1"
+                inputMode="numeric"
+                value={cantidadQuitar}
+                onChange={(e) => setCantidadQuitar(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="motivo-quitar">Motivo (obligatorio)</label>
+              <textarea
+                id="motivo-quitar"
+                rows={2}
+                maxLength={LARGO_MAXIMO_MOTIVO}
+                placeholder="Ej.: puse 4 sellos y era 1"
+                value={motivoQuitar}
+                onChange={(e) => setMotivoQuitar(e.target.value)}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                className="btn-acento"
+                style={{ flex: 1 }}
+                onClick={quitar}
+                disabled={pendiente || !motivoQuitar.trim()}
+              >
+                {pendiente ? 'Quitando…' : 'Quitar'}
+              </button>
+              <button
+                className="btn-borde"
+                onClick={() => {
+                  setMostrarCorregir(false);
+                  setMotivoQuitar('');
+                }}
+                disabled={pendiente}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Recompensas canjeables */}
