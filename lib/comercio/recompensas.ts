@@ -17,6 +17,7 @@ export interface DatosRecompensa {
 }
 
 export type ResultadoRecompensa = { ok: true; id: string } | { ok: false; error: string };
+export type ResultadoAccion = { ok: true } | { ok: false; error: string };
 
 export async function crearRecompensa(
   supabase: SupabaseClient<Database>,
@@ -74,6 +75,32 @@ export async function desactivarRecompensa(
     }
     console.error('[comercio] falló la desactivación de recompensa:', error);
     return { ok: false, error: 'No se pudo desactivar la recompensa.' };
+  }
+  return { ok: true };
+}
+
+// Foto del premio. `recompensas.foto_url` existe desde la migración 0001 y el spec del MVP la
+// contemplaba ("CRUD del owner ... con subida de foto a Supabase Storage"), pero nunca se cableó:
+// la columna estuvo muerta hasta acá. No hace falta migración, solo conectarla.
+//
+// Se guarda la URL ya armada por el Server Action (que es quien habla con Storage), no el archivo:
+// esta capa no hace I/O de binarios, igual que guardarBranding.
+export async function guardarFotoRecompensa(
+  supabase: SupabaseClient<Database>,
+  comercioId: string,
+  recompensaId: string,
+  fotoUrl: string | null,
+): Promise<ResultadoAccion> {
+  // Scope por comercio_id: conocer el id de una recompensa ajena no debe permitir cambiarle la foto.
+  const { error } = await supabase
+    .from('recompensas')
+    .update({ foto_url: fotoUrl })
+    .eq('id', recompensaId)
+    .eq('comercio_id', comercioId);
+
+  if (error) {
+    console.error('[comercio] falló el guardado de la foto de la recompensa:', error);
+    return { ok: false, error: 'No se pudo guardar la foto.' };
   }
   return { ok: true };
 }

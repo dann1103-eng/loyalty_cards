@@ -15,6 +15,9 @@ export interface RecompensaEscaner {
   id: string;
   nombre: string;
   costoPuntos: number;
+  // Foto del premio: ayuda al cajero a identificar qué entregar sin leer el nombre, que en un
+  // mostrador con cola es la diferencia entre dos segundos y diez.
+  fotoUrl: string | null;
 }
 
 export interface ResultadoEscaneo {
@@ -49,7 +52,7 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
 
   const { data: recompensas } = await supabase
     .from('recompensas')
-    .select('id, nombre, costo_puntos')
+    .select('id, nombre, costo_puntos, foto_url')
     .eq('comercio_id', comercioId)
     .eq('activa', true)
     .order('costo_puntos');
@@ -63,7 +66,12 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
     puntosActuales: tarjeta.puntosActuales,
     saldoTexto: formatearSaldo(tipo, tarjeta.puntosActuales, comercio?.sello_meta ?? null),
     esSellos: tipo === 'sellos',
-    recompensas: (recompensas ?? []).map((r) => ({ id: r.id, nombre: r.nombre, costoPuntos: r.costo_puntos })),
+    recompensas: (recompensas ?? []).map((r) => ({
+      id: r.id,
+      nombre: r.nombre,
+      costoPuntos: r.costo_puntos,
+      fotoUrl: r.foto_url,
+    })),
     pedirMontoCompra: comercio?.pedir_monto_compra ?? false,
   };
 }

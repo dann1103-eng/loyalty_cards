@@ -515,11 +515,34 @@ export default function Escaner({
               const alcanza = puntos >= r.costoPuntos;
               return (
                 <div key={r.id} className="admin-fila">
-                  <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                    {/* La foto del premio le deja al cajero identificar qué entregar sin leer el
+                        nombre. Se usa <img> y no next/image a propósito: la URL viene del bucket de
+                        Supabase y next/image exigiría declarar el dominio en next.config, sin
+                        ninguna ganancia acá (son miniaturas de 48 px). */}
+                    {r.fotoUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element -- URL pública del bucket
+                      <img
+                        src={r.fotoUrl}
+                        alt=""
+                        width={48}
+                        height={48}
+                        style={{
+                          width: 48,
+                          height: 48,
+                          objectFit: 'cover',
+                          borderRadius: 10,
+                          flexShrink: 0,
+                          border: '1px solid var(--linea)',
+                        }}
+                      />
+                    )}
+                    <div style={{ minWidth: 0 }}>
                     <div className="admin-fila-nombre">{r.nombre}</div>
                     <div className="admin-fila-slug">
                       <span className="dato-mono">{r.costoPuntos}</span> {resultado.esSellos ? 'sellos' : 'puntos'}
                       {!alcanza && ` · le faltan ${r.costoPuntos - puntos}`}
+                    </div>
                     </div>
                   </div>
                   <button

@@ -34,9 +34,24 @@ function DetalleTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
             const falta = r.costoPuntos - tarjeta.puntosActuales;
             return (
               <div className="portal-recompensa" key={`${r.nombre}-${i}`}>
-                <div>
-                  <div className="portal-recompensa-nombre">{r.nombre}</div>
-                  {r.descripcion && <div className="portal-recompensa-desc">{r.descripcion}</div>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  {/* La foto del premio: el cliente ve QUÉ se está ganando, no solo cómo se llama.
+                      <img> y no next/image porque la URL viene del bucket de Supabase y next/image
+                      exigiría declarar el dominio, sin ganancia en una miniatura de 48 px. */}
+                  {r.fotoUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element -- URL pública del bucket
+                    <img
+                      src={r.fotoUrl}
+                      alt=""
+                      width={48}
+                      height={48}
+                      style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }}
+                    />
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <div className="portal-recompensa-nombre">{r.nombre}</div>
+                    {r.descripcion && <div className="portal-recompensa-desc">{r.descripcion}</div>}
+                  </div>
                 </div>
                 <div className="portal-recompensa-estado">
                   {falta <= 0 ? (

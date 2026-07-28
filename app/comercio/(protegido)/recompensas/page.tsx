@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { TIPOS_RECOMPENSA } from '@/lib/comercio/recompensas';
 import FormularioRecompensa from './FormularioRecompensa';
 import BotonDesactivarRecompensa from './BotonDesactivarRecompensa';
+import FotoRecompensa from './FotoRecompensa';
 import AvisoComercioActivo from '../AvisoComercioActivo';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +15,7 @@ export default async function PaginaRecompensas() {
   const supabase = createServiceClient();
   const { data: recompensas, error } = await supabase
     .from('recompensas')
-    .select('id, nombre, descripcion, costo_puntos, tipo')
+    .select('id, nombre, descripcion, costo_puntos, tipo, foto_url')
     .eq('comercio_id', comercioId)
     .eq('activa', true) // las desactivadas siguen en la BD (soft-delete), pero no se listan
     .order('costo_puntos');
@@ -43,20 +44,30 @@ export default async function PaginaRecompensas() {
           <p className="admin-vacio">Todavía no hay recompensas. Agrega la primera.</p>
         ) : (
           recompensas.map((r) => (
-            <div key={r.id} className="admin-fila">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <span className="icono-circulo acento" aria-hidden="true">
-                  <span className="icono">redeem</span>
-                </span>
-                <div>
-                  <div className="admin-fila-nombre">{r.nombre}</div>
-                  <div className="admin-fila-slug">
-                    <span className="dato-mono">{r.costo_puntos}</span> puntos · {etiquetaTipo(r.tipo)}
-                    {r.descripcion ? ` · ${r.descripcion}` : ''}
+            <div
+              key={r.id}
+              className="admin-fila"
+              style={{ flexDirection: 'column', alignItems: 'stretch', gap: 12 }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+                  <span className="icono-circulo acento" aria-hidden="true">
+                    <span className="icono">redeem</span>
+                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="admin-fila-nombre">{r.nombre}</div>
+                    <div className="admin-fila-slug">
+                      <span className="dato-mono">{r.costo_puntos}</span> puntos · {etiquetaTipo(r.tipo)}
+                      {r.descripcion ? ` · ${r.descripcion}` : ''}
+                    </div>
                   </div>
                 </div>
+                <BotonDesactivarRecompensa id={r.id} nombre={r.nombre} />
               </div>
-              <BotonDesactivarRecompensa id={r.id} nombre={r.nombre} />
+              {/* La foto se ve en el escáner del cajero y en el portal del cliente. NO dentro de la
+                  tarjeta de la billetera: el reverso de Apple son campos de TEXTO y no admite
+                  imágenes por premio. */}
+              <FotoRecompensa recompensaId={r.id} fotoUrl={r.foto_url} nombre={r.nombre} />
             </div>
           ))
         )}

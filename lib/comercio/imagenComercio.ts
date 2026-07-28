@@ -42,3 +42,15 @@ export function extensionDeMime(mime: string): string {
 export function rutaImagenComercio(comercioId: string, campo: string, ext: string): string {
   return `${comercioId}/${campo}.${ext}`;
 }
+
+// Ruta de la foto de un PREMIO dentro del mismo bucket. La validación y las extensiones se
+// comparten con las imágenes de branding (arriba): es el mismo bucket, el mismo límite de 2 MB y
+// los mismos tres formatos.
+//
+// Lleva el recompensaId en el path y no solo el campo, a diferencia de rutaImagenComercio: un
+// comercio tiene UNA imagen por campo, pero N premios, así que sin el id todos se pisarían entre
+// sí. El comercioId sigue siendo la carpeta raíz —viene del gate, nunca del formulario— así que
+// una recompensa ajena no puede escribirse aunque se conozca su id.
+export function rutaImagenRecompensa(comercioId: string, recompensaId: string, ext: string): string {
+  return `${comercioId}/recompensas/${recompensaId}.${ext}`;
+}

@@ -7,6 +7,7 @@ export interface RecompensaPortal {
   nombre: string;
   descripcion: string | null;
   costoPuntos: number;
+  fotoUrl: string | null;
 }
 
 export interface TarjetaPortal {
@@ -98,7 +99,7 @@ export async function buscarTarjetasPorTelefono(
   if (comercioIds.length > 0) {
     const { data: recompensas, error: errorRecompensas } = await supabase
       .from('recompensas')
-      .select('comercio_id, nombre, descripcion, costo_puntos')
+      .select('comercio_id, nombre, descripcion, costo_puntos, foto_url')
       .in('comercio_id', comercioIds)
       .eq('activa', true)
       .order('costo_puntos');
@@ -107,7 +108,12 @@ export async function buscarTarjetasPorTelefono(
     }
     for (const r of recompensas ?? []) {
       const lista = recompensasPorComercio.get(r.comercio_id) ?? [];
-      lista.push({ nombre: r.nombre, descripcion: r.descripcion, costoPuntos: r.costo_puntos });
+      lista.push({
+        nombre: r.nombre,
+        descripcion: r.descripcion,
+        costoPuntos: r.costo_puntos,
+        fotoUrl: r.foto_url,
+      });
       recompensasPorComercio.set(r.comercio_id, lista);
     }
   }
