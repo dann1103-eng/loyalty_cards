@@ -23,8 +23,9 @@ export async function POST(request: NextRequest) {
   }
 
   let telefono: unknown;
+  let clavePais: unknown;
   try {
-    ({ telefono } = await request.json());
+    ({ telefono, clavePais } = await request.json());
   } catch {
     return NextResponse.json({ error: 'Cuerpo inválido' }, { status: 400 });
   }
@@ -32,6 +33,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'El teléfono es obligatorio' }, { status: 400 });
   }
 
-  const resultado = await buscarTarjetasPorTelefono(supabase, telefono);
+  // Un clavePais ausente cae al default dentro de normalizarTelefono: la consulta se comporta
+  // exactamente como antes de esta feature para todo cliente salvadoreño ya registrado.
+  const resultado = await buscarTarjetasPorTelefono(
+    supabase,
+    telefono,
+    typeof clavePais === 'string' ? clavePais : undefined,
+  );
   return NextResponse.json(resultado);
 }

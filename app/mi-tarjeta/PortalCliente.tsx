@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { PAISES, PAIS_DEFAULT, buscarPaisPorClave } from '@/lib/clientes/paises';
 import type { ResultadoConsulta, TarjetaPortal } from '@/lib/portal/buscarTarjetas';
 
 function CaraTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
@@ -114,6 +115,10 @@ function DetalleTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
 
 export default function PortalCliente() {
   const [telefono, setTelefono] = useState('');
+  // El portal necesita el país por el mismo motivo que el registro: la búsqueda normaliza el
+  // teléfono antes de comparar contra la columna canónica, así que un guatemalteco tecleando sus 8
+  // dígitos sin país se buscaría como +503 y no encontraría su propia tarjeta.
+  const [clavePais, setClavePais] = useState(PAIS_DEFAULT);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<ResultadoConsulta | null>(null);
@@ -129,7 +134,7 @@ export default function PortalCliente() {
       const res = await fetch('/api/portal/consulta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telefono }),
+        body: JSON.stringify({ telefono, clavePais }),
       });
       const data = await res.json();
       if (res.status === 429) {
@@ -220,6 +225,16 @@ export default function PortalCliente() {
 
         <form className="panel reveal d3" onSubmit={handleSubmit}>
           <div className="field">
+            <label htmlFor="pais">País</label>
+            <select id="pais" value={clavePais} onChange={(e) => setClavePais(e.target.value)}>
+              {PAISES.map((p) => (
+                <option key={p.clave} value={p.clave}>
+                  {p.bandera} {p.nombre} (+{p.codigo})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
             <label htmlFor="telefono">Teléfono</label>
             <input
               id="telefono"
@@ -227,7 +242,7 @@ export default function PortalCliente() {
               inputMode="tel"
               value={telefono}
               onChange={(e) => setTelefono(e.target.value)}
-              placeholder="7777 1234"
+              placeholder={buscarPaisPorClave(clavePais)?.ejemplo ?? '7777 1234'}
               autoComplete="tel"
               required
             />

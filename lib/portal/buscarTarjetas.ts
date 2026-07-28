@@ -48,6 +48,7 @@ export function formatearSaldo(tipoTarjeta: string, puntos: number, selloMeta: n
 export async function buscarTarjetasPorTelefono(
   supabase: SupabaseClient<Database>,
   telefono: string,
+  clavePais?: string,
 ): Promise<ResultadoConsulta> {
   // Corregido tras revisión de plan: `clientes.telefono` SIEMPRE se guarda normalizado
   // (normalizarTelefono.ts: "7777-1234"/"77771234" -> "+50377771234", ver app/api/registro/
@@ -57,7 +58,7 @@ export async function buscarTarjetasPorTelefono(
   // pruebas dieran verde (si insertan y consultan con el mismo string crudo, nunca lo detectan).
   let limpio: string;
   try {
-    limpio = normalizarTelefono(telefono);
+    limpio = normalizarTelefono(telefono, clavePais);
   } catch {
     // Formato irreconocible (ni +503 válido ni 8 dígitos locales): no es un error de
     // infraestructura, es que no hay tarjeta que buscar con eso.

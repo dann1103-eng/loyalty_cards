@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Cuerpo inválido' }, { status: 400 });
   }
 
-  const { comercioSlug, nombre, telefono } = (body ?? {}) as Record<string, unknown>;
+  const { comercioSlug, nombre, telefono, clavePais } = (body ?? {}) as Record<string, unknown>;
 
   if (
     typeof comercioSlug !== 'string' ||
@@ -36,7 +36,10 @@ export async function POST(request: NextRequest) {
 
   let telefonoCanonico: string;
   try {
-    telefonoCanonico = normalizarTelefono(telefono);
+    // Un clavePais ausente o de tipo raro cae al default dentro de normalizarTelefono, que se
+    // comporta como antes de esta feature: un cliente jamás debería quedarse sin tarjeta porque el
+    // <select> no llegó.
+    telefonoCanonico = normalizarTelefono(telefono, typeof clavePais === 'string' ? clavePais : undefined);
   } catch {
     return NextResponse.json({ error: 'Teléfono inválido' }, { status: 400 });
   }

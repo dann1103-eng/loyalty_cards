@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { PAISES, PAIS_DEFAULT, buscarPaisPorClave } from '@/lib/clientes/paises';
 
 function IconoWallet() {
   return (
@@ -54,6 +55,9 @@ export default function RegistroCliente({
 }) {
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
+  // País del teléfono. El Salvador por defecto: es el mercado actual y el país de todos los
+  // clientes ya registrados.
+  const [clavePais, setClavePais] = useState(PAIS_DEFAULT);
   const [tarjetaId, setTarjetaId] = useState<string | null>(null);
   const [googleWalletDisponible, setGoogleWalletDisponible] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +71,7 @@ export default function RegistroCliente({
       const res = await fetch('/api/registro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comercioSlug, nombre, telefono }),
+        body: JSON.stringify({ comercioSlug, nombre, telefono, clavePais }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error al registrar');
@@ -139,14 +143,26 @@ export default function RegistroCliente({
             />
           </div>
           <div className="field">
+            <label htmlFor="pais">País</label>
+            <select id="pais" value={clavePais} onChange={(e) => setClavePais(e.target.value)}>
+              {PAISES.map((p) => (
+                <option key={p.clave} value={p.clave}>
+                  {p.bandera} {p.nombre} (+{p.codigo})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
             <label htmlFor="telefono">Teléfono</label>
+            {/* El ejemplo del placeholder cambia con el país: un salvadoreño viendo "55 1234 5678"
+                no sabe si tiene que escribir su número con o sin código de área. */}
             <input
               id="telefono"
               type="tel"
               inputMode="tel"
               value={telefono}
               onChange={(e) => setTelefono(e.target.value)}
-              placeholder="7777 1234"
+              placeholder={buscarPaisPorClave(clavePais)?.ejemplo ?? '7777 1234'}
               autoComplete="tel"
               required
             />

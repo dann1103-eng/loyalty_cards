@@ -67,6 +67,24 @@ export default async function PaginaClientes({
           <p className="lede" style={{ marginTop: 6, fontSize: '0.92rem' }}>
             <span className="dato-mono">{tarjetas?.length ?? 0}</span> con tu tarjeta en su billetera.
           </p>
+          {/* Solo al dueño: la ruta tiene gate de owner y exportar la base del negocio no es tarea
+              del cajero.
+
+              Va con <a download> y NO con <Link>: el destino no es una página sino un Route Handler
+              que devuelve un archivo, y Link haría navegación del router contra una respuesta que
+              no es RSC. El atributo `download` es además lo que le dice a la regla de lint de Next
+              que esto es una descarga y no un enlace interno mal hecho. */}
+          {rol === 'owner' && (
+            <a
+              className="btn-borde"
+              style={{ marginTop: 10 }}
+              href="/comercio/clientes/exportar"
+              download
+            >
+              <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">download</span>
+              Descargar mis clientes (CSV)
+            </a>
+          )}
         </div>
         <Link className="admin-fila-slug" href="/comercio/panel">← Volver</Link>
       </div>
