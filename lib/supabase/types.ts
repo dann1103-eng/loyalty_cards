@@ -15,6 +15,7 @@
 //   - supabase/migrations/0012_sucursal_principal.sql (sucursales.es_principal + índice único parcial)
 //   - supabase/migrations/0013_reverso_tarjeta.sql (columnas del reverso del pass en comercios)
 //   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
+//   - supabase/migrations/0019_vigencia_cupon_membresia.sql (tipos 'uso'/'renovacion' en el ledger; funciones usar_cupon_atomico/renovar_membresia_atomico)
 //   - supabase/migrations/0018_tipos_de_tarjeta.sql (config por tipo en comercios; vigencia_hasta/usado_en/acumulado_centavos en tarjetas; tabla niveles_descuento)
 //   - supabase/migrations/0017_plan_y_cobros.sql (tablas solicitudes_plan y cobros)
 //   - supabase/migrations/0016_geopush_sucursales.sql (latitud/longitud/mensaje_cercania/geopush_activo en sucursales)
@@ -994,6 +995,26 @@ export type Database = {
       };
       // p_desde/p_hasta son `date` (llegan como 'AAAA-MM-DD') e INCLUSIVOS, interpretados en la
       // zona horaria del comercio. null en cualquiera = sin ese borde.
+      // Migración 0019: cupón y membresía. Devuelven una FECHA y no un saldo — su estado no es un
+      // número. `vencia`/`vence` llegan como 'AAAA-MM-DD'.
+      usar_cupon_atomico: {
+        Args: {
+          p_comercio_id: string;
+          p_tarjeta_id: string;
+          p_sucursal_id: string | null;
+          p_cajero_usuario_id: string | null;
+        };
+        Returns: { estado: string; vencia: string | null }[];
+      };
+      renovar_membresia_atomico: {
+        Args: {
+          p_comercio_id: string;
+          p_tarjeta_id: string;
+          p_sucursal_id: string | null;
+          p_cajero_usuario_id: string | null;
+        };
+        Returns: { estado: string; vence: string | null }[];
+      };
       reporte_cajeros: {
         Args: {
           p_comercio_id: string;
