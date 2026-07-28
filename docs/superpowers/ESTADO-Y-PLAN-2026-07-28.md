@@ -189,6 +189,24 @@ Lo que NO es obvio y conviene recordar:
   desmarcaba la casilla de "pedir monto" en el DOM sin avisarle a React (bug encontrado en el QA del
   dueño; el dato se guardaba bien, solo se dibujaba mal). Ver el comentario del archivo.
 
+### La ronda de mutación encontró TRES pruebas falsas (ninguna en el código de produccion)
+
+Se corrió completa el 2026-07-28. Vale la pena que quede escrito porque las tres habrían pasado
+inadvertidas con la suite en verde:
+
+1. **La prueba de carrera con 8 llamadas paralelas pasaba TAMBIÉN con el lock removido.** La
+   transacción dura microsegundos y la latencia de red decenas de milisegundos, así que las
+   peticiones llegan escalonadas y casi nunca se solapan. Medido: con 8 la contención aparece 2 de
+   cada 3 veces; con 100, siempre. Ahora usa 100 por 3 rondas. **No bajar esos números.**
+2. **Agrupar M1 y M2 en un solo archivo las canceló entre sí.** Las dos tocan el conteo del tope:
+   M2 lo infla (cuenta el ajuste) y M1 afloja la comparación, así que el resultado seguía siendo
+   "bloquear" por el motivo equivocado. Moraleja: las mutaciones que tocan la misma línea se corren
+   AISLADAS.
+3. **"Un ajuste no libera cupo" miraba la dirección equivocada.** Afirmaba que la segunda
+   acreditación quedaba bloqueada, pero quitar el filtro de tipo hace que bloquee MÁS, no menos.
+   Se agregó la inversa ("un AJUSTE no CONSUME cupo"), que es la que atrapa el daño real: un cliente
+   al que le corrigieron un sello quedándose sin poder recibir uno legítimo.
+
 Hoja de ruta acordada para lo que sigue: **Tanda 2** selector de país en el registro + imagen por
 premio (`recompensas.foto_url` existe desde `0001` y nunca se cableó) + exportar clientes a CSV;
 **Tanda 3** geopush y campañas; **Tanda 4** autogestión de plan y los 6 tipos de tarjeta que dicen

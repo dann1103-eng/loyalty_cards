@@ -96,6 +96,23 @@ describe('tope de acreditaciones por día', () => {
     if (!segunda.ok) expect(segunda.bloqueoLimite).toBe(true);
   });
 
+  it('un AJUSTE no CONSUME cupo del tope diario', async () => {
+    // La cara opuesta de la prueba de abajo, y la que de verdad atrapa que falte el filtro
+    // `tipo = 'acreditacion'` en el conteo. Sin el filtro, el conteo sube y el tope bloquea MÁS,
+    // no menos: un cliente al que le corrigieron un sello se quedaría sin poder recibir uno
+    // legítimo. La de abajo afirma que la segunda queda bloqueada, así que pasa igual con la
+    // mutación aplicada — lo descubrimos corriéndola (2026-07-28).
+    const comercioId = await entorno.crearComercio({ tope_acreditaciones_dia: 2 });
+    const { id } = await entorno.crearTarjeta(comercioId, 0);
+
+    expect((await acreditarPuntos(supabase, comercioId, id, 1)).ok).toBe(true);
+    expect((await quitarPuntos(supabase, comercioId, id, 1, 'corrección')).ok).toBe(true);
+
+    // Hoy hubo UNA sola acreditación real y el tope es 2: la siguiente tiene que pasar.
+    const segunda = await acreditarPuntos(supabase, comercioId, id, 1);
+    expect(segunda.ok, 'el ajuste consumió cupo que no le correspondía').toBe(true);
+  });
+
   it('un AJUSTE no libera cupo del tope diario', async () => {
     // Si el conteo no filtrara por tipo='acreditacion', quitar un sello devolvería el cupo y el
     // tope sería trivial de burlar: acreditar, quitar, acreditar, quitar…
