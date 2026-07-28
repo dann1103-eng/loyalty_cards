@@ -8,6 +8,7 @@ describe('construirClase', () => {
       colorFondo: 'rgb(36, 24, 18)',
       logoUrl: 'https://ejemplo.com/logo.png',
       heroUrl: null,
+      ubicaciones: [],
     });
     expect(clase.id).toBe('123.comercio_abc');
     expect(clase.issuerName).toBe('Café Aurora');
@@ -20,6 +21,7 @@ describe('construirClase', () => {
   it('omite heroImage cuando el comercio no tiene hero_url (no manda null ni cadena vacía)', () => {
     const clase = construirClase('123.comercio_abc', {
       nombre: 'X', colorFondo: null, logoUrl: 'https://ejemplo.com/logo.png', heroUrl: null,
+      ubicaciones: [],
     });
     expect(clase.heroImage).toBeUndefined();
     expect(clase.hexBackgroundColor).toBeUndefined();
@@ -28,6 +30,7 @@ describe('construirClase', () => {
   it('incluye heroImage cuando el comercio sí subió una foto de franja', () => {
     const clase = construirClase('123.comercio_abc', {
       nombre: 'X', colorFondo: null, logoUrl: 'https://ejemplo.com/logo.png', heroUrl: 'https://ejemplo.com/hero.png',
+      ubicaciones: [],
     });
     expect(clase.heroImage).toEqual({ sourceUri: { uri: 'https://ejemplo.com/hero.png' } });
   });
@@ -80,5 +83,49 @@ describe('construirObjeto', () => {
       heroImageUrl: 'https://ejemplo.com/api/tarjetas/xyz/hero.png',
     });
     expect(obj.heroImage).toBeUndefined();
+  });
+});
+
+describe('construirClase — geopush', () => {
+  const base = {
+    nombre: 'Café Aurora',
+    colorFondo: null,
+    logoUrl: 'https://ejemplo.com/logo.png',
+    heroUrl: null,
+  };
+
+  it('sin ubicaciones NO manda merchantLocations', () => {
+    // Un arreglo vacío sería ruido en la clase de todos los comercios que no usan geopush.
+    const clase = construirClase('123.comercio_abc', { ...base, ubicaciones: [] });
+    expect(clase.merchantLocations).toBeUndefined();
+  });
+
+  it('manda merchantLocations, NO el campo locations que la API marca como deprecado', () => {
+    const clase = construirClase('123.comercio_abc', {
+      ...base,
+      ubicaciones: [{ latitud: 13.6989, longitud: -89.1914 }],
+    });
+    expect(clase.merchantLocations).toEqual([{ latitude: 13.6989, longitude: -89.1914 }]);
+    // `locations` (LatLongPoint) es el campo viejo: la propia definición de la API dice
+    // "This field replaces the deprecated LatLongPoints". Mandar los dos es pedir problemas.
+    expect(clase.locations).toBeUndefined();
+  });
+
+  it('corta en 10 ubicaciones porque Google RECHAZA la clase entera si mandás más', () => {
+    // Diferencia clave con Apple, que simplemente ignora de la 11 en adelante: acá pasarse deja al
+    // comercio SIN Google Wallet, no sin geopush. El corte es lo que evita ese fallo total.
+    const doce = Array.from({ length: 12 }, (_, i) => ({ latitud: 13.6 + i / 1000, longitud: -89.1 }));
+    const clase = construirClase('123.comercio_abc', { ...base, ubicaciones: doce });
+    expect(clase.merchantLocations).toHaveLength(10);
+  });
+
+  it('no lleva texto: en Android el mensaje lo pone Google y no se puede editar', () => {
+    // Fijado como prueba para que nadie pierda tiempo buscando dónde poner el mensaje del lado de
+    // Google. MerchantLocation solo tiene latitude y longitude.
+    const clase = construirClase('123.comercio_abc', {
+      ...base,
+      ubicaciones: [{ latitud: 13.6989, longitud: -89.1914 }],
+    });
+    expect(Object.keys(clase.merchantLocations![0]).sort()).toEqual(['latitude', 'longitude']);
   });
 });

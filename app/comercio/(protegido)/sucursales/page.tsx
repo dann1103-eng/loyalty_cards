@@ -6,6 +6,7 @@ import { cupoDeCuenta } from '@/lib/comercios/cuentas';
 import FormularioSucursal from './FormularioSucursal';
 import ModalAgregarLocal from './ModalAgregarLocal';
 import BotonEstadoSucursal from './BotonEstadoSucursal';
+import FormularioGeopush from './FormularioGeopush';
 import AvisoComercioActivo from '../AvisoComercioActivo';
 
 export const dynamic = 'force-dynamic';
@@ -91,6 +92,18 @@ export default async function PaginaSucursales({
                 {/* La principal no se puede desactivar (candado en la capa lib): sin botón acá. */}
                 {!s.esPrincipal && <BotonEstadoSucursal id={s.id} nombre={s.nombre} activa={s.activa} />}
               </div>
+              {/* Aviso por cercanía (0016). Va colapsado en un <details> porque es configuración
+                  ocasional: el uso diario de esta pantalla es renombrar y activar/desactivar. */}
+              <FormularioGeopush
+                sucursal={{
+                  id: s.id,
+                  nombre: s.nombre,
+                  latitud: s.latitud,
+                  longitud: s.longitud,
+                  mensajeCercania: s.mensajeCercania,
+                  geopushActivo: s.geopushActivo,
+                }}
+              />
             </div>
           ))
         )}

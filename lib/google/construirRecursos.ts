@@ -10,7 +10,20 @@ export interface ComercioParaClase {
   // filtra ANTES de llamar aquí a los comercios sin logo — Google no tiene el fallback de
   // logoText que sí usa Apple).
   heroUrl: string | null;
+  // Geopush (migración 0016). Google dispara la notificación de cercanía a partir de estas
+  // ubicaciones, igual que Apple con `locations` — pero con dos diferencias que importan:
+  //   1. `MerchantLocation` NO lleva texto. El mensaje de la notificación lo pone Google y no se
+  //      puede editar, así que `mensajeCercania` solo se usa del lado de Apple.
+  //   2. Google RECHAZA la clase entera si mandás más de 10. Apple, en cambio, ignora de la 11 en
+  //      adelante en silencio. Acá el corte no es prolijidad: sin él, un comercio con 11 sucursales
+  //      se queda sin Google Wallet por completo.
+  ubicaciones: { latitud: number; longitud: number }[];
 }
+
+// Tope duro de la API de Google, igual que el de Apple. Se declara acá y no se importa de
+// lib/comercio/geopush para no atar el módulo de construcción de recursos de Google a la capa de
+// datos del comercio: si algún día Google cambia su límite, se cambia solo este número.
+const MAXIMO_UBICACIONES_GOOGLE = 10;
 
 // reviewStatus 'UNDER_REVIEW' (no 'draft'): un draft no puede usarse para crear objetos.
 // Cuentas Admin/Developer del propio Emisor SÍ pueden agregar passes de clases underReview
@@ -26,6 +39,16 @@ export function construirClase(classId: string, comercio: ComercioParaClase): wa
     programLogo: { sourceUri: { uri: comercio.logoUrl } },
     ...(comercio.heroUrl ? { heroImage: { sourceUri: { uri: comercio.heroUrl } } } : {}),
     ...(hex ? { hexBackgroundColor: hex } : {}),
+    // `merchantLocations` y NO `locations`: este último es el LatLongPoint que la propia API marca
+    // como deprecado ("This field replaces the deprecated LatLongPoints"). Solo se manda si hay
+    // ubicaciones — un arreglo vacío es ruido en la clase de todos los comercios sin geopush.
+    ...(comercio.ubicaciones.length > 0
+      ? {
+          merchantLocations: comercio.ubicaciones
+            .slice(0, MAXIMO_UBICACIONES_GOOGLE)
+            .map((u) => ({ latitude: u.latitud, longitude: u.longitud })),
+        }
+      : {}),
   };
 }
 

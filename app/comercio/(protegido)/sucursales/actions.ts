@@ -11,6 +11,10 @@ import {
   cambiarEstadoSucursal,
 } from '@/lib/comercio/sucursales';
 import { crearComercioPropio } from '@/lib/comercios/crearComercioPropio';
+import { guardarGeopushSucursal } from '@/lib/comercio/geopush';
+import { resolverCoordenadas } from '@/lib/comercio/coordenadas';
+import { notificarCambioComercio } from '@/lib/apple/notificarCambioComercio';
+import { syncClaseComercio } from '@/lib/google/syncClase';
 import {
   COOKIE_COMERCIO_ACTIVO,
   COOKIE_SUCURSAL_ACTIVA,
@@ -102,4 +106,57 @@ export async function accionCrearComercioPropio(
   cookieStore.delete(COOKIE_SUCURSAL_ACTIVA);
   revalidatePath('/comercio', 'layout');
   redirect('/comercio/branding?nuevo=1');
+}
+
+export type EstadoGeopush = { error: string } | { ok: true } | undefined;
+
+// Guarda la ubicación y el mensaje de cercanía de una sucursal.
+//
+// Las coordenadas NO se piden como dos números: ningún dueño sabe su latitud. Se acepta lo que
+// tenga a mano —el link de Google Maps, incluido el acortador del botón Compartir, o las
+// coordenadas copiadas del mapa— y resolverCoordenadas se encarga. Ver lib/comercio/coordenadas.ts.
+export async function accionGuardarGeopush(
+  sucursalId: string,
+  _estadoPrevio: EstadoGeopush,
+  formData: FormData,
+): Promise<EstadoGeopush> {
+  const { comercioId } = await verifyComercioOwner();
+  const supabase = createServiceClient();
+
+  const pegado = String(formData.get('ubicacion') ?? '').trim();
+  const mensaje = String(formData.get('mensaje_cercania') ?? '').trim();
+  const activar = formData.get('geopush_activo') === 'on';
+
+  let latitud: number | null = null;
+  let longitud: number | null = null;
+  if (pegado) {
+    const coords = await resolverCoordenadas(pegado);
+    if (!coords) {
+      return {
+        error:
+          'No se pudo leer la ubicación. Pegá el link de Google Maps de tu local, o las coordenadas separadas por coma (ej.: 13.6989, -89.1914).',
+      };
+    }
+    latitud = coords.latitud;
+    longitud = coords.longitud;
+  }
+
+  const res = await guardarGeopushSucursal(supabase, comercioId, sucursalId, {
+    latitud,
+    longitud,
+    mensajeCercania: mensaje || null,
+    geopushActivo: activar,
+  });
+  if (!res.ok) return { error: res.error };
+
+  // Las ubicaciones van GRABADAS dentro de cada .pkpass ya emitido: sin el push, los clientes que
+  // ya tienen la tarjeta nunca reciben las coordenadas nuevas y el geopush no funciona para ellos —
+  // solo para los que se registren de ahora en adelante. Es el mismo motivo por el que el reverso
+  // configurable necesita este push.
+  await notificarCambioComercio(supabase, comercioId);
+  // Google guarda las ubicaciones en la CLASE, o sea una sola llamada para todos los clientes.
+  await syncClaseComercio(supabase, comercioId);
+
+  revalidatePath('/comercio/sucursales');
+  return { ok: true };
 }

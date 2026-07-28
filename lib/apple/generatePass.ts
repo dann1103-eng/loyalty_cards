@@ -4,6 +4,17 @@ import { requireEnv } from '@/lib/env';
 import { componerStrips, descargarImagen } from './stripPass';
 import { redimensionarLogo } from './imagenesPass';
 import type { CampoReverso } from './construirReverso';
+import {
+  MAXIMO_UBICACIONES_APPLE,
+  LARGO_MAXIMO_MENSAJE_CERCANIA,
+  type UbicacionGeopush,
+} from '@/lib/comercio/geopush';
+
+// Radio del aviso por cercanía, en metros. 100 es lo que pidió el dueño y coincide con lo que iOS
+// usa en la práctica para tarjetas de lealtad: Apple trata maxDistance como una SUGERENCIA y ya
+// aplica ~100 m a los store cards, así que pedir más no ensancha el radio real. Además suma la
+// horizontalAccuracy del GPS del momento, o sea que el radio efectivo es algo mayor.
+const RADIO_GEOPUSH_METROS = 100;
 
 function cargarCertificados() {
   return {
@@ -39,6 +50,13 @@ export interface DatosPass {
   // arme un pass sin pasar por el constructor del reverso y nadie se enteraria — el pass saldria
   // mudo al tocar la "i" y ninguna prueba lo atraparia.
   reverso: CampoReverso[];
+  // Ubicaciones del geopush (migración 0016). Arreglo vacío = el pass sale sin `locations`, que es
+  // el estado de todo comercio que no cargó coordenadas.
+  //
+  // OBLIGATORIO igual que `reverso`, y por el mismo motivo: si fuera opcional, una ruta de emisión
+  // nueva podría armar un pass sin ubicaciones y nadie se enteraría — el geopush simplemente no
+  // funcionaría para esos clientes, en silencio y sin que ninguna prueba lo note.
+  ubicaciones: UbicacionGeopush[];
 }
 
 export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
@@ -69,10 +87,38 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
       labelColor: datos.colorLabel,
       webServiceURL: datos.webServiceURL,
       authenticationToken: datos.authenticationToken,
+      // Radio del geopush, en metros. Va a nivel de PASE y no de cada ubicación: el schema
+      // `Location` de PassKit solo tiene latitude/longitude/altitude/relevantText.
+      //
+      // Solo se manda si hay ubicaciones: un maxDistance suelto no hace nada y ensucia el pass.json
+      // de todos los comercios que no usan geopush.
+      ...(datos.ubicaciones.length > 0 ? { maxDistance: RADIO_GEOPUSH_METROS } : {}),
     },
   );
 
   pass.type = 'storeCard';
+
+  // `locations` NO se puede pasar en el objeto de props de arriba: passkit-generator lo declara en
+  // PassMethodsProps, o sea que exige su método dedicado. Se llama solo si hay ubicaciones —
+  // setLocations() sin argumentos escribiría un arreglo vacío en el pass.json.
+  //
+  // El corte a 10 es la red de seguridad final: Apple ignora de la 11 en adelante EN SILENCIO, así
+  // que preferimos que el corte sea nuestro y predecible. El tope real lo hace cumplir
+  // guardarGeopushSucursal al activar una sucursal.
+  if (datos.ubicaciones.length > 0) {
+    pass.setLocations(
+      ...datos.ubicaciones.slice(0, MAXIMO_UBICACIONES_APPLE).map((u) => ({
+        latitude: u.latitud,
+        longitude: u.longitud,
+        // relevantText es lo que el cliente lee en la pantalla de bloqueo al pasar cerca. Sin él,
+        // iOS muestra la tarjeta sin ninguna línea de contexto y se pierde todo el valor de
+        // marketing. Se corta a 128 porque Apple no rechaza un texto más largo: lo trunca solo.
+        ...(u.mensajeCercania
+          ? { relevantText: u.mensajeCercania.slice(0, LARGO_MAXIMO_MENSAJE_CERCANIA) }
+          : {}),
+      })),
+    );
+  }
 
   // Franja visual (best-effort, nunca rompe la emisión): la imagen del comercio si subió una;
   // si no, para sellos una GRILLA de círculos llenos/vacíos compuesta con next/og, y para el

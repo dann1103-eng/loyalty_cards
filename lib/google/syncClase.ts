@@ -3,6 +3,7 @@ import type { Database } from '../supabase/types';
 import { walletClient, issuerId } from './walletClient';
 import { idClaseGoogle } from './ids';
 import { construirClase } from './construirRecursos';
+import { listarUbicacionesGeopush } from '../comercio/geopush';
 
 export type ResultadoSyncClase = { ok: true; classId: string } | { ok: false; error: string };
 
@@ -31,11 +32,17 @@ export async function syncClaseComercio(
 
   try {
     const classId = comercio.google_class_id ?? idClaseGoogle(issuerId(), comercioId);
+    // Las ubicaciones del geopush viven en `sucursales`, no en `comercios`, así que hacen falta una
+    // consulta aparte. listarUbicacionesGeopush ya devuelve [] ante un error: un fallo acá deja la
+    // clase sin aviso por cercanía, no sin clase.
+    const ubicaciones = await listarUbicacionesGeopush(supabase, comercioId);
+
     const cuerpo = construirClase(classId, {
       nombre: comercio.nombre,
       colorFondo: comercio.color_fondo,
       logoUrl: comercio.logo_url,
       heroUrl: comercio.hero_url,
+      ubicaciones,
     });
     const client = walletClient();
 

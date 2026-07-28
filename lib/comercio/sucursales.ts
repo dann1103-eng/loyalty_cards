@@ -15,6 +15,12 @@ export interface SucursalListada {
   nombre: string;
   activa: boolean;
   esPrincipal: boolean;
+  // Geopush (migración 0016). Se listan junto al resto para que la pantalla de sucursales pueda
+  // mostrar el estado de cada local sin una segunda consulta por fila.
+  latitud: number | null;
+  longitud: number | null;
+  mensajeCercania: string | null;
+  geopushActivo: boolean;
 }
 
 export type ResultadoSucursal = { ok: true; id: string } | { ok: false; error: string };
@@ -149,7 +155,7 @@ export async function listarSucursales(
 ): Promise<SucursalListada[] | null> {
   const { data, error } = await supabase
     .from('sucursales')
-    .select('id, nombre, activa, es_principal')
+    .select('id, nombre, activa, es_principal, latitud, longitud, mensaje_cercania, geopush_activo')
     .eq('comercio_id', comercioId)
     .order('es_principal', { ascending: false }) // la principal SIEMPRE primera (0012)
     .order('created_at');
@@ -158,7 +164,19 @@ export async function listarSucursales(
     console.error('[comercio] falló la consulta de sucursales:', error);
     return null;
   }
-  return (data ?? []).map((s) => ({ id: s.id, nombre: s.nombre, activa: s.activa, esPrincipal: s.es_principal }));
+  return (data ?? []).map((s) => ({
+    id: s.id,
+    nombre: s.nombre,
+    activa: s.activa,
+    esPrincipal: s.es_principal,
+    // numeric de Postgres llega como number por PostgREST, pero se normaliza igual: una fila vieja
+    // o un driver distinto podrían entregarlo como string y el pass saldría con "13.6989" entre
+    // comillas, que PassKit rechaza.
+    latitud: s.latitud === null ? null : Number(s.latitud),
+    longitud: s.longitud === null ? null : Number(s.longitud),
+    mensajeCercania: s.mensaje_cercania,
+    geopushActivo: s.geopush_activo,
+  }));
 }
 
 // Ids de las sucursales PRINCIPALES de VARIOS comercios en UNA sola consulta. La usa la pantalla de

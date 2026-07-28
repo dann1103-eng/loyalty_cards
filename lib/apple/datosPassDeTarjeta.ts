@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import type { DatosPass } from './generatePass';
 import { construirReverso } from './construirReverso';
+import { listarUbicacionesGeopush } from '../comercio/geopush';
 
 export async function datosPassDeTarjeta(
   supabase: SupabaseClient<Database>,
@@ -31,7 +32,7 @@ export async function datosPassDeTarjeta(
   //
   // Las dos consultas van en paralelo: son independientes entre sí y este código corre en el
   // camino de emisión de CADA pass (registro, acreditación, refresco de Wallet).
-  const [reglas, recompensas] = await Promise.all([
+  const [reglas, recompensas, ubicaciones] = await Promise.all([
     // Todas las filas, sin filtrar por tipo: construirReverso elige la vigente de cada tipo (la de
     // activa_desde mayor) porque reglas_puntos no tiene unique y admite duplicados.
     supabase
@@ -49,6 +50,10 @@ export async function datosPassDeTarjeta(
       .eq('comercio_id', tarjeta.comercio_id)
       .eq('activa', true)
       .order('costo_puntos', { ascending: true }),
+    // Ubicaciones del geopush (0016). Mismo criterio best-effort: listarUbicacionesGeopush ya
+    // devuelve [] ante un error, así que un fallo acá emite el pass SIN aviso por cercanía en vez
+    // de dejar al cliente sin tarjeta.
+    listarUbicacionesGeopush(supabase, tarjeta.comercio_id),
   ]);
   if (reglas.error) {
     console.warn('[apple] no se pudieron leer las reglas para el reverso:', reglas.error.message);
@@ -94,6 +99,7 @@ export async function datosPassDeTarjeta(
         reglas: reglas.data ?? [],
         recompensas: recompensas.data ?? [],
       }),
+      ubicaciones,
       webServiceURL: `${baseUrl}/api/apple`,
       authenticationToken: tarjeta.apple_auth_token,
     },

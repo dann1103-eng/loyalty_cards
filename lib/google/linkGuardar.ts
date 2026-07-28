@@ -7,6 +7,7 @@ import { construirClase, construirObjeto } from './construirRecursos';
 import { syncClaseComercio } from './syncClase';
 import { syncObjetoTarjeta } from './syncObjeto';
 import { urlHeroTarjeta, versionHero } from './heroUrl';
+import { listarUbicacionesGeopush } from '../comercio/geopush';
 
 // Payload con la clase y el objeto EMBEBIDOS (no solo su id): mismo patrón exacto de
 // google-wallet/rest-samples/nodejs/demo-loyalty.js, verificado 2026-07-20. La documentación
@@ -44,11 +45,17 @@ export async function generarLinkGuardar(
 
   const objectId = idObjetoGoogle(issuerId(), tarjetaId);
 
+  // Las mismas ubicaciones que pone syncClaseComercio: esta clase viaja EMBEBIDA en el JWT y es la
+  // que Google usa si todavía no existe, así que omitirlas acá dejaría sin geopush justamente a los
+  // clientes que estrenan la tarjeta por este camino.
+  const ubicaciones = await listarUbicacionesGeopush(supabase, tarjeta.comercio_id);
+
   const clase = construirClase(classId, {
     nombre: tarjeta.comercios.nombre,
     colorFondo: tarjeta.comercios.color_fondo,
     logoUrl: tarjeta.comercios.logo_url,
     heroUrl: tarjeta.comercios.hero_url,
+    ubicaciones,
   });
   const objeto = construirObjeto(objectId, classId, {
     qrToken: tarjeta.qr_token,

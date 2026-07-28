@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import { randomBytes } from 'node:crypto';
 import { generarPassApple } from './generatePass';
 import { ALTOS_LOGO } from './imagenesPass';
+import type { UbicacionGeopush } from '@/lib/comercio/geopush';
 
 // PNG de 1×1 para probar la franja subida por el comercio sin depender de la red: fetch() de Node
 // soporta data: URLs, así el test compara los bytes exactos que "subió" el comercio.
@@ -27,6 +28,10 @@ function datosBase() {
     // pass.json), no qué campos produce construirReverso — eso tiene su propio archivo de pruebas,
     // sin firmar passes ni componer imágenes.
     reverso: [],
+    // Sin ubicaciones por defecto: acá se prueba el cableado general del pass. El geopush tiene sus
+    // propias pruebas más abajo, porque lo que hay que verificar es distinto — que `locations` y
+    // `maxDistance` NO aparezcan cuando no hay ubicaciones, y que aparezcan bien cuando las hay.
+    ubicaciones: [],
   };
 }
 
@@ -219,6 +224,7 @@ describe('generarPassApple', () => {
       selloMeta: null,
       stripUrl: null,
       reverso: [],
+      ubicaciones: [],
     });
 
     const zip = await JSZip.loadAsync(buffer);
@@ -287,5 +293,81 @@ describe('generarPassApple', () => {
     // Y que sean tres imágenes DISTINTAS: con el bug las tres eran el mismo buffer, byte a byte.
     expect(densidades[0].equals(densidades[1])).toBe(false);
     expect(densidades[1].equals(densidades[2])).toBe(false);
+  });
+});
+
+// Geopush (migración 0016). Lo que se verifica acá es el CABLEADO hacia el pass.json: que las
+// ubicaciones lleguen, que el radio se declare, y sobre todo que NADA de esto aparezca cuando el
+// comercio no configuró geopush — un `locations: []` o un `maxDistance` suelto en el pase de todos
+// los comercios sería basura silenciosa en producción.
+describe('generarPassApple — geopush', () => {
+  // Tipado explícito, no inferido: sin él `mensajeCercania` infiere `string` y la prueba de "sin
+  // mensaje" no compila al pasarle null.
+  const UBICACION: UbicacionGeopush = {
+    sucursalId: 'suc-1',
+    nombre: 'Centro',
+    latitud: 13.6989,
+    longitud: -89.1914,
+    mensajeCercania: 'Pasá por tu café, tenés 3 sellos',
+  };
+
+  async function passJsonDe(ubicaciones: UbicacionGeopush[]) {
+    const buffer = await generarPassApple({
+      ...datosBase(),
+      serialNumber: `test-geo-${ubicaciones.length}-${Math.random().toString(36).slice(2)}`,
+      qrToken: 'geo001',
+      puntos: 3,
+      tipoTarjeta: 'sellos',
+      selloMeta: null,
+      stripUrl: null,
+      ubicaciones,
+    });
+    const zip = await JSZip.loadAsync(buffer);
+    return JSON.parse(await zip.file('pass.json')!.async('string'));
+  }
+
+  it('sin ubicaciones NO escribe locations ni maxDistance', async () => {
+    const passJson = await passJsonDe([]);
+    expect(passJson.locations).toBeUndefined();
+    expect(passJson.maxDistance).toBeUndefined();
+  });
+
+  it('escribe la ubicación con su texto y el radio de 100 m', async () => {
+    const passJson = await passJsonDe([UBICACION]);
+
+    expect(passJson.maxDistance).toBe(100);
+    expect(passJson.locations).toHaveLength(1);
+    expect(passJson.locations[0].latitude).toBe(13.6989);
+    expect(passJson.locations[0].longitude).toBe(-89.1914);
+    // relevantText es TODO el valor de marketing del geopush en iPhone: sin él, la tarjeta aparece
+    // en la pantalla de bloqueo sin ninguna línea de contexto.
+    expect(passJson.locations[0].relevantText).toBe('Pasá por tu café, tenés 3 sellos');
+  });
+
+  it('omite relevantText cuando la sucursal no tiene mensaje', async () => {
+    const passJson = await passJsonDe([{ ...UBICACION, mensajeCercania: null }]);
+    expect(passJson.locations).toHaveLength(1);
+    expect(passJson.locations[0].relevantText).toBeUndefined();
+  });
+
+  it('corta en 10 ubicaciones, que es el máximo que Apple respeta', async () => {
+    // Apple no rechaza un pase con más: ignora de la 11 en adelante EN SILENCIO. El corte propio
+    // hace que el comportamiento sea predecible y que la sucursal 11 no "funcione a veces".
+    const doce = Array.from({ length: 12 }, (_, i) => ({
+      ...UBICACION,
+      sucursalId: `suc-${i}`,
+      latitud: 13.6 + i / 1000,
+    }));
+    const passJson = await passJsonDe(doce);
+    expect(passJson.locations).toHaveLength(10);
+  });
+
+  it('recorta un mensaje más largo que el límite de Apple', async () => {
+    // Apple tampoco rechaza un relevantText largo: lo trunca solo. Cortarlo acá hace que lo que se
+    // guarda y lo que se ve coincidan, en vez de que el dueño escriba 200 caracteres y no entienda
+    // por qué el cliente lee otra cosa.
+    const largo = 'x'.repeat(200);
+    const passJson = await passJsonDe([{ ...UBICACION, mensajeCercania: largo }]);
+    expect(passJson.locations[0].relevantText).toHaveLength(128);
   });
 });

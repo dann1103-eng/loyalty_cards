@@ -1,4 +1,3 @@
-import type { SucursalListada } from '../comercio/sucursales';
 import type { FilaTendencia, FilaTopCliente } from './reportes';
 
 // Merges PUROS para la vista conglomerado de /comercio/reportes (plan 2026-07-25 §4.7): los RPC de
@@ -34,11 +33,15 @@ export interface ComercioOwner {
 // comercio filtrado. Lo que no valida cae a "Todo"/"todas" — nunca llega un id ajeno a un RPC.
 // Puro a propósito: la página no puede testearse, esta función sí (ver MUTATION-TESTING en el
 // .test.ts). Una sucursal sin comercio filtrado se ignora: no hay contra qué verificar pertenencia.
-export function resolverFiltrosReportes(
+// Genérica sobre la sucursal en vez de exigir SucursalListada completa: lo único que esta función
+// toca es `id`. Pedir el tipo entero acoplaba una función de filtrado de querystring a la forma de
+// la fila de la BD — cada columna nueva en sucursales (el geopush de la 0016, por ejemplo) obligaba
+// a rellenar campos irrelevantes en sus pruebas.
+export function resolverFiltrosReportes<S extends { id: string }>(
   comerciosOwner: ComercioOwner[],
-  sucursalesDelComercio: SucursalListada[],
+  sucursalesDelComercio: S[],
   params: { comercio?: string; sucursal?: string },
-): { comercio: ComercioOwner | null; sucursal: SucursalListada | null } {
+): { comercio: ComercioOwner | null; sucursal: S | null } {
   const comercio = comerciosOwner.find((c) => c.comercioId === params.comercio) ?? null;
   if (!comercio) return { comercio: null, sucursal: null };
   const sucursal = sucursalesDelComercio.find((s) => s.id === params.sucursal) ?? null;

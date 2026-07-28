@@ -15,6 +15,7 @@
 //   - supabase/migrations/0012_sucursal_principal.sql (sucursales.es_principal + índice único parcial)
 //   - supabase/migrations/0013_reverso_tarjeta.sql (columnas del reverso del pass en comercios)
 //   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
+//   - supabase/migrations/0016_geopush_sucursales.sql (latitud/longitud/mensaje_cercania/geopush_activo en sucursales)
 //   - supabase/migrations/0015_antifraude_control_sellos.sql (tipo/motivo/forzado en transacciones_puntos; perillas de control, pedir_monto_compra y zona_horaria en comercios; funciones acreditar_atomico/acreditar_forzado_atomico/ajustar_puntos_atomico/historial_tarjeta/reporte_cajeros en Functions)
 //
 // Hasta que `supabase gen types` esté cableado (requiere auth del CLI), este archivo se
@@ -610,6 +611,17 @@ export type Database = {
           // garantiza que haya como máximo UNA por comercio (índice parcial único).
           es_principal: boolean;
           created_at: string;
+          // Geopush (migración 0016). numeric en la BD → number acá. Nullable: una sucursal sin
+          // coordenadas es un estado normal (recién creada, o el dueño no las cargó todavía).
+          latitud: number | null;
+          longitud: number | null;
+          // Texto de la pantalla de bloqueo en iPhone (relevantText de PassKit). Máx. 128 — Apple
+          // no rechaza un texto más largo, lo CORTA en silencio. En Android no se usa: ahí el texto
+          // lo pone Google y no se puede editar.
+          mensaje_cercania: string | null;
+          // Qué sucursales participan del geopush. Apple admite 10 ubicaciones por pase y el tope
+          // se valida en lib/comercio/sucursales.ts (la BD no expresa "máximo N").
+          geopush_activo: boolean;
         };
         Insert: {
           id?: string;
@@ -618,6 +630,10 @@ export type Database = {
           activa?: boolean;
           es_principal?: boolean;
           created_at?: string;
+          latitud?: number | null;
+          longitud?: number | null;
+          mensaje_cercania?: string | null;
+          geopush_activo?: boolean;
         };
         Update: {
           id?: string;
@@ -626,6 +642,10 @@ export type Database = {
           activa?: boolean;
           es_principal?: boolean;
           created_at?: string;
+          latitud?: number | null;
+          longitud?: number | null;
+          mensaje_cercania?: string | null;
+          geopush_activo?: boolean;
         };
         // FK inline de la 0008 (`comercio_id ... references comercios(id)`). Necesaria para joins
         // embebidos `comercios(...)` desde sucursales si se usan.
