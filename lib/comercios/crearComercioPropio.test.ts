@@ -207,7 +207,28 @@ describe('crearComercioPropio', () => {
     });
   });
 
-  it('tipo de tarjeta no disponible (cashback): rechazado', async () => {
+  it('un tipo de tarjeta INEXISTENTE es rechazado', async () => {
+    // Hasta las migraciones 0018-0023 este caso usaba 'cashback', que entonces estaba marcado como
+    // "Próximamente". Ahora los ocho tipos del catálogo tienen su motor construido, así que el caso
+    // real que hay que seguir protegiendo es otro: un valor que NO está en el catálogo. Sin este
+    // candado llegaría a la BD y lo rechazaría el CHECK de la 0005 con un 23514 crudo.
+    const cuentaId = await crearCuentaFixture(5);
+    const activoId = await crearComercioActivoFixture(cuentaId);
+    const { authUserId } = await crearOwnerFixture(activoId);
+
+    const res = await crearComercioPropio(
+      supabase,
+      { authUserId, comercioActivoId: activoId },
+      { nombre: `Inventado ${sufijoUnico()}`, tipoTarjeta: 'multipass' },
+    );
+    registrarSiCreo(res);
+    expect(res).toEqual({ ok: false, error: 'El tipo de tarjeta no es válido.' });
+  });
+
+  it('un tipo del catálogo que antes decía "Próximamente" ahora SÍ se acepta', async () => {
+    // El otro lado del cambio: cashback era rechazado y ahora tiene que crearse bien. Sin esta
+    // prueba, alguien podría "arreglar" el catálogo volviendo disponible a false y nadie se
+    // enteraría hasta que un comercio no pudiera elegir su tipo.
     const cuentaId = await crearCuentaFixture(5);
     const activoId = await crearComercioActivoFixture(cuentaId);
     const { authUserId } = await crearOwnerFixture(activoId);
@@ -218,7 +239,7 @@ describe('crearComercioPropio', () => {
       { nombre: `Cash ${sufijoUnico()}`, tipoTarjeta: 'cashback' },
     );
     registrarSiCreo(res);
-    expect(res).toEqual({ ok: false, error: 'El tipo de tarjeta no es válido.' });
+    expect(res.ok).toBe(true);
   });
 
   // CANDADO DE MEMBRESÍA (paso 2 de la función). Dentro de esta función es lo único que impide

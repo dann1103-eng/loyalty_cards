@@ -5,19 +5,26 @@ import { verificarLimiteCuenta } from './cuentas';
 import { crearSucursalPrincipal } from '../comercio/sucursales';
 
 // Fuente única de verdad del catálogo de tipos de tarjeta: la BD tiene
-// check (tipo_tarjeta in (...8 valores...)) en la migración 0005. El <select> de FM (Tarea 3) se
-// construye desde esta MISMA constante. `disponible: false` = el tipo existe en el catálogo pero
-// su lógica de saldo/canje no está construida esta fase (aparece "(Próximamente)" y deshabilitado).
-// Solo 'puntos' y 'sellos' son funcionales hoy (spec §4.1, §7).
+// check (tipo_tarjeta in (...8 valores...)) en la migración 0005. El <select> de FM se construye
+// desde esta MISMA constante.
+//
+// `disponible` marcaba los tipos cuyo motor todavía no existía ("(Próximamente)" y deshabilitado en
+// el select). Desde las migraciones 0018-0023 los OCHO tienen su mecánica construida y probada, así
+// que están todos en true. La bandera se conserva —no se borra— porque es el mecanismo honesto para
+// cuando entre un tipo nuevo: mejor mostrarlo deshabilitado que fingir que funciona.
+//
+// OJO: este catálogo tiene las etiquetas y descripciones que ve FM. La MECÁNICA de cada tipo (si su
+// contador es dinero, si exige monto, qué hace el cajero al escanear) vive en lib/tarjetas/tipos.ts.
+// Son dos vistas de los mismos ocho valores y hay una prueba que falla si divergen.
 export const TIPOS_TARJETA = [
   { valor: 'puntos', etiqueta: 'Puntos', descripcion: 'Suma puntos por visita o por monto.', disponible: true },
   { valor: 'sellos', etiqueta: 'Sellos', descripcion: 'Junta sellos hacia una meta (ej. 9 y la 10 gratis).', disponible: true },
-  { valor: 'cashback', etiqueta: 'Cashback', descripcion: 'Reembolso hacia compras futuras.', disponible: false },
-  { valor: 'membresia', etiqueta: 'Membresías', descripcion: 'Club VIP por niveles.', disponible: false },
-  { valor: 'descuento', etiqueta: 'Descuento', descripcion: 'Ventas al por mayor.', disponible: false },
-  { valor: 'cupon', etiqueta: 'Cupón', descripcion: 'Uso único; se convierte en otro tipo tras canjear.', disponible: false },
-  { valor: 'prepago', etiqueta: 'Prepago', descripcion: 'Tarjetas de sellos prepagadas.', disponible: false },
-  { valor: 'gift_card', etiqueta: 'Gift Card', descripcion: 'Saldo de regalo prepagado.', disponible: false },
+  { valor: 'cashback', etiqueta: 'Cashback', descripcion: 'Un porcentaje de cada compra vuelve como saldo.', disponible: true },
+  { valor: 'membresia', etiqueta: 'Membresía', descripcion: 'El cliente paga por pertenecer y renueva cada cierto tiempo.', disponible: true },
+  { valor: 'descuento', etiqueta: 'Descuento por nivel', descripcion: 'Entre más gasta, mayor su descuento permanente.', disponible: true },
+  { valor: 'cupon', etiqueta: 'Cupón', descripcion: 'Una oferta de una sola vez, con fecha de vencimiento.', disponible: true },
+  { valor: 'prepago', etiqueta: 'Prepago', descripcion: 'Paquete de visitas que el cliente compra y va usando.', disponible: true },
+  { valor: 'gift_card', etiqueta: 'Gift Card', descripcion: 'Saldo cargado por adelantado que el cliente va gastando.', disponible: true },
 ] as const;
 export type TipoTarjeta = (typeof TIPOS_TARJETA)[number]['valor'];
 

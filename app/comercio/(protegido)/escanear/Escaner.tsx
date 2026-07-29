@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import jsQR from 'jsqr';
 import {
   accionBuscarPorToken,
-  accionAcreditar,
+  accionOperacionPrincipal,
+  accionOperacionSecundaria,
   accionAcreditarForzado,
   accionQuitar,
   accionCanjear,
@@ -169,23 +170,49 @@ export default function Escaner({
     setMontoCompra('');
   };
 
-  const acreditar = (delta: number) => {
+  // El cliente manda lo que TECLEO; el servidor decide que operacion corresponde segun el tipo de
+  // tarjeta. Asi el navegador no puede pedir "consumir saldo" sobre una tarjeta de sellos.
+  const operacionPrincipal = () => {
     if (!resultado?.tarjetaId) return;
-    const monto = montoNumerico();
+    const delta =
+      resultado.tipoTarjeta === 'puntos' ? Math.max(1, Math.floor(Number(deltaPuntos) || 1)) : 1;
     setMensaje(null);
     setError(null);
     setBloqueo(null);
     iniciarTransicion(async () => {
-      const res = await accionAcreditar(resultado.tarjetaId!, delta, sucursalIdCliente, monto);
+      const res = await accionOperacionPrincipal(
+        resultado.tarjetaId!,
+        sucursalIdCliente,
+        delta,
+        montoCompra,
+      );
       if (res.ok) {
         aplicarExito(res);
       } else if (res.bloqueoLimite) {
-        // No es un fallo: es una perilla del dueño haciendo su trabajo. Se guarda el intento para
-        // que él pueda autorizarlo sin que el cajero tenga que volver a teclear nada.
-        setBloqueo({ mensaje: res.error, delta, monto });
+        // No es un fallo: es una perilla del dueno haciendo su trabajo. Se guarda el intento para
+        // que el pueda autorizarlo sin que el cajero tenga que volver a teclear nada.
+        setBloqueo({ mensaje: res.error, delta, monto: montoNumerico() });
       } else {
         setError(res.error);
       }
+    });
+  };
+
+  // Solo gift card (cargar saldo) y prepago (vender paquete) tienen una segunda operacion.
+  const operacionSecundaria = () => {
+    if (!resultado?.tarjetaId) return;
+    setMensaje(null);
+    setError(null);
+    setBloqueo(null);
+    iniciarTransicion(async () => {
+      const res = await accionOperacionSecundaria(
+        resultado.tarjetaId!,
+        sucursalIdCliente,
+        montoCompra,
+      );
+      if (res.ok) aplicarExito(res);
+      else if (res.bloqueoLimite) setBloqueo({ mensaje: res.error, delta: 1, monto: montoNumerico() });
+      else setError(res.error);
     });
   };
 
@@ -345,11 +372,14 @@ export default function Escaner({
           </div>
         )}
 
-        {/* Monto de la compra: solo si el dueño lo activó. Es lo que después deja comparar cuánto
-            se vendió contra cuántos sellos se dieron, por cajero. */}
-        {resultado.pedirMontoCompra && (
+        {/* El monto es OBLIGATORIO en cashback, gift card y descuento -- sin el no hay porcentaje
+            que calcular, saldo que descontar ni gasto que acumular -- y opcional en el resto si el
+            dueno activo pedir_monto_compra (Tanda 1). */}
+        {(resultado.requiereMonto || resultado.pedirMontoCompra) && (
           <div className="field" style={{ marginTop: 14, textAlign: 'left' }}>
-            <label htmlFor="monto-compra">Monto de la compra (opcional)</label>
+            <label htmlFor="monto-compra">
+              {resultado.requiereMonto ? 'Monto de la compra' : 'Monto de la compra (opcional)'}
+            </label>
             <input
               id="monto-compra"
               type="number"
@@ -363,12 +393,9 @@ export default function Escaner({
           </div>
         )}
 
-        {resultado.esSellos ? (
-          <button className="btn-acento" style={{ marginTop: 16 }} onClick={() => acreditar(1)} disabled={pendiente}>
-            <span className="icono" aria-hidden="true">add_circle</span>
-            {pendiente ? 'Guardando…' : '+1 sello'}
-          </button>
-        ) : (
+        {/* La CANTIDAD solo existe en puntos: en sellos siempre es uno, y los demas tipos no tienen
+            cantidad que elegir (usar un cupon, renovar, cobrar del saldo). */}
+        {resultado.tipoTarjeta === 'puntos' ? (
           <div style={{ display: 'flex', gap: 10, marginTop: 16, alignItems: 'stretch' }}>
             <input
               aria-label="Puntos a sumar"
@@ -388,15 +415,28 @@ export default function Escaner({
                 fontSize: '1rem',
               }}
             />
-            <button
-              className="btn-acento"
-              style={{ flex: 1 }}
-              onClick={() => acreditar(Math.max(1, Math.floor(Number(deltaPuntos) || 1)))}
-              disabled={pendiente}
-            >
-              {pendiente ? 'Guardando…' : 'Sumar puntos'}
+            <button className="btn-acento" style={{ flex: 1 }} onClick={operacionPrincipal} disabled={pendiente}>
+              {pendiente ? 'Guardando...' : resultado.etiquetaAccion}
             </button>
           </div>
+        ) : (
+          <button className="btn-acento" style={{ marginTop: 16 }} onClick={operacionPrincipal} disabled={pendiente}>
+            <span className="icono" aria-hidden="true">add_circle</span>
+            {pendiente ? 'Guardando...' : resultado.etiquetaAccion}
+          </button>
+        )}
+
+        {/* Segunda operacion. Las dos SUMAN valor, asi que pasan por el camino de acreditar y
+            heredan el techo por transaccion. */}
+        {resultado.etiquetaSecundaria && (
+          <button
+            className="btn-borde"
+            style={{ marginTop: 10 }}
+            onClick={operacionSecundaria}
+            disabled={pendiente}
+          >
+            {pendiente ? 'Guardando...' : resultado.etiquetaSecundaria}
+          </button>
         )}
 
         {mensaje && <p className="nota" style={{ color: 'var(--menta)' }}>{mensaje} El pass del cliente se actualiza solo.</p>}
@@ -448,6 +488,9 @@ export default function Escaner({
       {/* Corrección: disponible para el cajero TAMBIÉN, para que pueda arreglar su propio error en
           el momento. Queda auditado con su nombre, su hora y su motivo. Solo resta: sumar de más
           sería una puerta trasera al tope diario. */}
+      {/* Corregir solo aparece donde hay un contador: en cupon, membresia y descuento no hay
+          numero que quitar. */}
+      {resultado.tieneContador && (
       <section style={{ marginTop: 18 }}>
         {!mostrarCorregir ? (
           <button className="btn-borde" style={{ width: '100%' }} onClick={() => setMostrarCorregir(true)}>
@@ -505,6 +548,7 @@ export default function Escaner({
           </div>
         )}
       </section>
+      )}
 
       {/* Recompensas canjeables */}
       {(resultado.recompensas ?? []).length > 0 && (

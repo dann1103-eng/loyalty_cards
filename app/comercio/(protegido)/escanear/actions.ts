@@ -10,6 +10,11 @@ import { sucursalPerteneceAComercio } from '@/lib/comercio/sucursales';
 import { formatearSaldo } from '@/lib/portal/buscarTarjetas';
 import { notificarCambioTarjeta } from '@/lib/apple/notificarCambioTarjeta';
 import { syncObjetoTarjeta } from '@/lib/google/syncObjeto';
+import { tipoOPuntos, describirSaldo, centavosDesdeTexto, nivelParaAcumulado, type AccionPrincipal } from '@/lib/tarjetas/tipos';
+import { usarCupon, renovarMembresia } from '@/lib/tarjetas/vigencia';
+import { usarVisita, venderPaquete } from '@/lib/tarjetas/prepago';
+import { acreditarCashback, cargarGiftCard, consumirSaldo } from '@/lib/tarjetas/dinero';
+import { registrarCompra, listarNiveles } from '@/lib/tarjetas/descuento';
 
 export interface RecompensaEscaner {
   id: string;
@@ -31,7 +36,39 @@ export interface ResultadoEscaneo {
   recompensas?: RecompensaEscaner[];
   // Si el comercio activó pedir_monto_compra, el escáner muestra el campo de monto (Tanda 1).
   pedirMontoCompra?: boolean;
+  // Mecánica del tipo de tarjeta (migraciones 0018-0023). El escáner dibuja SUS botones a partir de
+  // esto en vez de tener un `if` por tipo repartido por el componente.
+  tipoTarjeta?: string;
+  accionPrincipal?: AccionPrincipal;
+  etiquetaAccion?: string;
+  // null = este tipo no tiene segunda operación.
+  etiquetaSecundaria?: string | null;
+  // El monto es obligatorio en cashback, gift card y descuento: sin él no hay porcentaje que
+  // calcular, saldo que descontar ni gasto que acumular.
+  requiereMonto?: boolean;
+  // El contador tiene sentido para el cajero (sellos, visitas, plata) o no existe (cupón, membresía).
+  tieneContador?: boolean;
 }
+
+// Qué dicen los botones de cada tipo. Viven del lado del SERVIDOR, junto a la lógica que realmente
+// ejecuta, para que el texto y la acción no puedan desincronizarse — un botón que dice "Usar cupón"
+// y ejecuta otra cosa es peor que uno mal escrito.
+const ETIQUETA_PRINCIPAL: Record<string, string> = {
+  puntos: 'Sumar puntos',
+  sellos: '+1 sello',
+  prepago: 'Usar una visita',
+  gift_card: 'Cobrar con su saldo',
+  cashback: 'Acreditar cashback',
+  cupon: 'Usar cupón',
+  membresia: 'Renovar membresía',
+  descuento: 'Registrar compra',
+};
+
+// Solo dos tipos tienen una SEGUNDA operación. El resto no muestra este botón.
+const ETIQUETA_SECUNDARIA: Record<string, string> = {
+  gift_card: 'Cargar saldo',
+  prepago: 'Vender paquete',
+};
 
 // Resuelve un QR escaneado (o pegado desde /comercio/clientes) a la tarjeta del comercio de la
 // sesión, con su saldo formateado y las recompensas activas canjeables. comercio_id SIEMPRE del
@@ -50,6 +87,14 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
     .eq('id', comercioId)
     .maybeSingle();
 
+  // Estado propio de los tipos con vigencia o con nivel. Se lee acá y no en buscarTarjetaPorToken
+  // para no cargar de columnas el camino que usan los tipos con contador.
+  const { data: estado } = await supabase
+    .from('tarjetas')
+    .select('vigencia_hasta, usado_en, acumulado_centavos')
+    .eq('id', tarjeta.tarjetaId)
+    .maybeSingle();
+
   const { data: recompensas } = await supabase
     .from('recompensas')
     .select('id, nombre, costo_puntos, foto_url')
@@ -57,15 +102,45 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
     .eq('activa', true)
     .order('costo_puntos');
 
-  const tipo = comercio?.tipo_tarjeta ?? 'puntos';
+  const tipoValor = comercio?.tipo_tarjeta ?? 'puntos';
+  const tipo = tipoOPuntos(tipoValor);
+
+  // El nivel de descuento se calcula acá, al leer, nunca se guarda: cambiar los umbrales tiene que
+  // reordenar a todos los clientes de inmediato.
+  let porcentajeDescuento: number | null = null;
+  if (tipo.valor === 'descuento') {
+    const niveles = (await listarNiveles(supabase, comercioId)) ?? [];
+    porcentajeDescuento = nivelParaAcumulado(Number(estado?.acumulado_centavos ?? 0), niveles);
+  }
+
+  const hoyIso = new Date().toISOString().slice(0, 10);
+
   return {
     encontrado: true,
     tarjetaId: tarjeta.tarjetaId,
     nombreCliente: tarjeta.nombreCliente,
     telefono: tarjeta.telefono,
     puntosActuales: tarjeta.puntosActuales,
-    saldoTexto: formatearSaldo(tipo, tarjeta.puntosActuales, comercio?.sello_meta ?? null),
-    esSellos: tipo === 'sellos',
+    // describirSaldo y no formatearSaldo: es EL único lugar que sabe que un 1250 puede ser "$12.50"
+    // o "1250 puntos" según el tipo.
+    saldoTexto: describirSaldo(
+      {
+        tipo: tipo.valor,
+        contador: tarjeta.puntosActuales,
+        selloMeta: comercio?.sello_meta ?? null,
+        vigenciaHasta: estado?.vigencia_hasta ?? null,
+        usadoEn: estado?.usado_en ?? null,
+        porcentajeDescuento,
+      },
+      hoyIso,
+    ),
+    tipoTarjeta: tipo.valor,
+    accionPrincipal: tipo.accionPrincipal,
+    etiquetaAccion: ETIQUETA_PRINCIPAL[tipo.valor] ?? 'Acreditar',
+    etiquetaSecundaria: ETIQUETA_SECUNDARIA[tipo.valor] ?? null,
+    requiereMonto: tipo.requiereMonto,
+    tieneContador: tipo.contador !== 'ninguno',
+    esSellos: tipo.valor === 'sellos',
     recompensas: (recompensas ?? []).map((r) => ({
       id: r.id,
       nombre: r.nombre,
@@ -255,5 +330,192 @@ export async function accionCanjear(
     puntosActuales: res.puntosActuales,
     saldoTexto: await saldoTextoDe(sesion.comercioId, res.puntosActuales),
     mensaje: `Canjeado: ${res.nombreRecompensa}. Entregá el premio al cliente.`,
+  };
+}
+
+// Vuelve a leer el estado completo y lo describe. Se re-lee en vez de calcular el texto a partir de
+// lo que devolvió la operación porque cada tipo devuelve una cosa distinta (saldo, fecha, acumulado)
+// y armar el texto en siete ramas sería siete oportunidades de mostrar plata equivocada.
+async function saldoTextoActual(comercioId: string, tarjetaId: string): Promise<string> {
+  const supabase = createServiceClient();
+  const [{ data: comercio }, { data: t }] = await Promise.all([
+    supabase.from('comercios').select('tipo_tarjeta, sello_meta').eq('id', comercioId).maybeSingle(),
+    supabase
+      .from('tarjetas')
+      .select('puntos_actuales, vigencia_hasta, usado_en, acumulado_centavos')
+      .eq('id', tarjetaId)
+      .maybeSingle(),
+  ]);
+
+  const tipo = tipoOPuntos(comercio?.tipo_tarjeta ?? 'puntos');
+  let porcentaje: number | null = null;
+  if (tipo.valor === 'descuento') {
+    const niveles = (await listarNiveles(supabase, comercioId)) ?? [];
+    porcentaje = nivelParaAcumulado(Number(t?.acumulado_centavos ?? 0), niveles);
+  }
+
+  return describirSaldo(
+    {
+      tipo: tipo.valor,
+      contador: t?.puntos_actuales ?? 0,
+      selloMeta: comercio?.sello_meta ?? null,
+      vigenciaHasta: t?.vigencia_hasta ?? null,
+      usadoEn: t?.usado_en ?? null,
+      porcentajeDescuento: porcentaje,
+    },
+    new Date().toISOString().slice(0, 10),
+  );
+}
+
+// LA acción del escáner. El cliente manda lo que TECLEÓ (cantidad, monto); el SERVIDOR decide qué
+// operación corresponde según el tipo de tarjeta del comercio.
+//
+// Que el navegador no elija la operación no es solo prolijidad: si mandara "consumir saldo" y el
+// servidor le hiciera caso, se podría gastar el saldo de una tarjeta de sellos. Acá el tipo manda.
+export async function accionOperacionPrincipal(
+  tarjetaId: string,
+  sucursalIdCliente: string | null,
+  cantidad: number,
+  montoTexto: string,
+): Promise<RespuestaOperacion> {
+  const sesion = await verifyComercioAcceso();
+  const supabase = createServiceClient();
+
+  const atribucion = await resolverSucursalAtribuida(supabase, sesion, sucursalIdCliente);
+  if (atribucion.ok === false) return { ok: false, error: atribucion.error };
+
+  const { data: comercio } = await supabase
+    .from('comercios')
+    .select('tipo_tarjeta')
+    .eq('id', sesion.comercioId)
+    .maybeSingle();
+  const tipo = tipoOPuntos(comercio?.tipo_tarjeta ?? 'puntos');
+
+  const opciones = {
+    sucursalId: atribucion.valor,
+    cajeroUsuarioId: sesion.usuarioComercioId,
+  };
+
+  // El monto se convierte UNA vez, acá, con la función que no pasa por punto flotante.
+  const centavos = montoTexto.trim() ? centavosDesdeTexto(montoTexto) : null;
+  if (tipo.requiereMonto && centavos === null) {
+    return { ok: false, error: 'Escribí el monto de la compra (por ejemplo 19.99).' };
+  }
+
+  let resultado: { ok: true; mensaje: string } | { ok: false; error: string; bloqueoLimite?: boolean };
+
+  switch (tipo.valor) {
+    case 'cashback':
+      resultado = await acreditarCashback(supabase, sesion.comercioId, tarjetaId, centavos!, opciones);
+      break;
+    case 'gift_card':
+      resultado = await consumirSaldo(supabase, sesion.comercioId, tarjetaId, centavos!, opciones);
+      break;
+    case 'descuento':
+      resultado = await registrarCompra(supabase, sesion.comercioId, tarjetaId, centavos!, opciones);
+      break;
+    case 'prepago':
+      resultado = await usarVisita(supabase, sesion.comercioId, tarjetaId, opciones);
+      break;
+    case 'cupon':
+      resultado = await usarCupon(supabase, sesion.comercioId, tarjetaId, opciones);
+      break;
+    case 'membresia':
+      resultado = await renovarMembresia(supabase, sesion.comercioId, tarjetaId, opciones);
+      break;
+    default: {
+      // puntos y sellos: el camino de siempre. El monto viaja si el comercio lo pide (Tanda 1),
+      // aunque este tipo no lo necesite para calcular nada.
+      const res = await acreditarPuntos(supabase, sesion.comercioId, tarjetaId, cantidad, {
+        ...opciones,
+        montoCompra: centavos !== null ? centavos / 100 : null,
+      });
+      resultado = res.ok
+        ? { ok: true, mensaje: cantidad === 1 ? 'Sello agregado.' : `${cantidad} puntos agregados.` }
+        : { ok: false, error: res.error, bloqueoLimite: res.bloqueoLimite };
+    }
+  }
+
+  if (!resultado.ok) {
+    return { ok: false, error: resultado.error, bloqueoLimite: resultado.bloqueoLimite };
+  }
+
+  // El pass del cliente se refresca solo, igual que en cualquier movimiento de saldo.
+  await notificarCambioTarjeta(supabase, tarjetaId);
+  await syncObjetoTarjeta(supabase, tarjetaId);
+
+  const { data: t } = await supabase
+    .from('tarjetas')
+    .select('puntos_actuales')
+    .eq('id', tarjetaId)
+    .maybeSingle();
+
+  return {
+    ok: true,
+    puntosActuales: t?.puntos_actuales ?? 0,
+    saldoTexto: await saldoTextoActual(sesion.comercioId, tarjetaId),
+    mensaje: resultado.mensaje,
+  };
+}
+
+// La segunda operación, que solo tienen dos tipos: cargar saldo en una gift card y vender un paquete
+// de visitas. Las dos SUMAN valor, así que pasan por el camino de acreditar y heredan el techo por
+// transacción — que es lo que impide que un cajero cargue una gift card de $500 sin autorización.
+export async function accionOperacionSecundaria(
+  tarjetaId: string,
+  sucursalIdCliente: string | null,
+  montoTexto: string,
+): Promise<RespuestaOperacion> {
+  const sesion = await verifyComercioAcceso();
+  const supabase = createServiceClient();
+
+  const atribucion = await resolverSucursalAtribuida(supabase, sesion, sucursalIdCliente);
+  if (atribucion.ok === false) return { ok: false, error: atribucion.error };
+
+  const { data: comercio } = await supabase
+    .from('comercios')
+    .select('tipo_tarjeta')
+    .eq('id', sesion.comercioId)
+    .maybeSingle();
+  const tipo = tipoOPuntos(comercio?.tipo_tarjeta ?? 'puntos');
+
+  const opciones = {
+    sucursalId: atribucion.valor,
+    cajeroUsuarioId: sesion.usuarioComercioId,
+  };
+
+  let resultado: { ok: true; mensaje: string } | { ok: false; error: string; bloqueoLimite?: boolean };
+
+  if (tipo.valor === 'gift_card') {
+    const centavos = centavosDesdeTexto(montoTexto);
+    if (centavos === null) {
+      return { ok: false, error: 'Escribí cuánto saldo cargar (por ejemplo 25.00).' };
+    }
+    resultado = await cargarGiftCard(supabase, sesion.comercioId, tarjetaId, centavos, opciones);
+  } else if (tipo.valor === 'prepago') {
+    resultado = await venderPaquete(supabase, sesion.comercioId, tarjetaId, opciones);
+  } else {
+    // Defensa por si el cliente pidiera esta acción en un tipo que no la tiene.
+    return { ok: false, error: 'Esta tarjeta no admite esa operación.' };
+  }
+
+  if (!resultado.ok) {
+    return { ok: false, error: resultado.error, bloqueoLimite: resultado.bloqueoLimite };
+  }
+
+  await notificarCambioTarjeta(supabase, tarjetaId);
+  await syncObjetoTarjeta(supabase, tarjetaId);
+
+  const { data: t } = await supabase
+    .from('tarjetas')
+    .select('puntos_actuales')
+    .eq('id', tarjetaId)
+    .maybeSingle();
+
+  return {
+    ok: true,
+    puntosActuales: t?.puntos_actuales ?? 0,
+    saldoTexto: await saldoTextoActual(sesion.comercioId, tarjetaId),
+    mensaje: resultado.mensaje,
   };
 }
