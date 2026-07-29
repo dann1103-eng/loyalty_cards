@@ -10,7 +10,7 @@
 --
 --   puntos    → puntos
 --   sellos    → sellos
---   multipass → visitas que quedan
+--   prepago    → visitas que quedan
 --   gift_card → CENTAVOS de saldo
 --   cashback  → CENTAVOS acumulados de devolución
 --   cupon     → sin uso (el estado vive en usado_en)
@@ -35,7 +35,7 @@ alter table comercios
   -- CASHBACK: qué porcentaje de la compra vuelve como saldo. numeric(5,2) admite 0.01–100.00.
   add column cashback_porcentaje numeric(5, 2)
     check (cashback_porcentaje is null or (cashback_porcentaje > 0 and cashback_porcentaje <= 100)),
-  -- MULTIPASS: cuántas visitas trae el paquete que se vende.
+  -- PREPAGO: cuántas visitas trae el paquete que se vende.
   add column multipass_visitas integer
     check (multipass_visitas is null or multipass_visitas > 0),
   -- MEMBRESÍA: cuántos días dura cada renovación.
@@ -85,9 +85,12 @@ alter table niveles_descuento enable row level security;
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Nota sobre lo que NO cambia
 -- ─────────────────────────────────────────────────────────────────────────────
--- tipo_tarjeta ya acepta los ocho valores desde la 0005: no hace falta tocar ese CHECK. Lo que
--- cambia es la capa de aplicación, que hasta ahora marcaba seis de ellos como "Próximamente"
--- (TIPOS_TARJETA en lib/comercios/guardarComercio.ts).
+-- tipo_tarjeta ya acepta ocho valores desde la 0005 y NO hace falta tocar ese CHECK. Los valores
+-- EXACTOS son: puntos, sellos, cashback, membresia, descuento, cupon, prepago, gift_card.
+-- Anotarlos acá no es redundancia: el octavo se llama 'prepago', no 'multipass' (que es como lo
+-- nombra la competencia), y asumir el nombre sin leer la 0005 costó una tanda de pruebas rotas.
+-- Lo que cambia es la capa de aplicación, que hasta ahora marcaba seis de ellos como
+-- "Próximamente" (TIPOS_TARJETA en lib/comercios/guardarComercio.ts).
 --
 -- Los RPC de la 0015 (acreditar_atomico, ajustar_puntos_atomico) siguen sirviendo tal cual para
 -- todo tipo con contador: suman y restan enteros sin saber qué representan. Cupón y membresía no

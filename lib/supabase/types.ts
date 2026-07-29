@@ -15,6 +15,7 @@
 //   - supabase/migrations/0012_sucursal_principal.sql (sucursales.es_principal + índice único parcial)
 //   - supabase/migrations/0013_reverso_tarjeta.sql (columnas del reverso del pass en comercios)
 //   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
+//   - supabase/migrations/0020_usar_visita_multipass.sql (funcion usar_visita_atomico)
 //   - supabase/migrations/0019_vigencia_cupon_membresia.sql (tipos 'uso'/'renovacion' en el ledger; funciones usar_cupon_atomico/renovar_membresia_atomico)
 //   - supabase/migrations/0018_tipos_de_tarjeta.sql (config por tipo en comercios; vigencia_hasta/usado_en/acumulado_centavos en tarjetas; tabla niveles_descuento)
 //   - supabase/migrations/0017_plan_y_cobros.sql (tablas solicitudes_plan y cobros)
@@ -997,6 +998,17 @@ export type Database = {
       // zona horaria del comercio. null en cualquiera = sin ese borde.
       // Migración 0019: cupón y membresía. Devuelven una FECHA y no un saldo — su estado no es un
       // número. `vencia`/`vence` llegan como 'AAAA-MM-DD'.
+      // Migración 0020: consumir una visita de multipass. Vender el paquete NO tiene función propia
+      // — reusa acreditar_atomico, que ya suma al contador con auditoría y límites.
+      usar_visita_atomico: {
+        Args: {
+          p_comercio_id: string;
+          p_tarjeta_id: string;
+          p_sucursal_id: string | null;
+          p_cajero_usuario_id: string | null;
+        };
+        Returns: { estado: string; saldo: number }[];
+      };
       usar_cupon_atomico: {
         Args: {
           p_comercio_id: string;

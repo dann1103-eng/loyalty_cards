@@ -15,12 +15,12 @@ import {
 const HOY = '2026-07-28';
 
 describe('catálogo', () => {
-  it('tiene los ocho tipos que acepta el CHECK de la BD', () => {
-    // Si acá falta uno, el panel de FM lo ofrece y la BD lo rechaza (o al revés, queda un tipo
-    // guardado que ninguna pantalla sabe dibujar).
-    expect(TIPOS.map((t) => t.valor).sort()).toEqual(
-      ['cashback', 'cupon', 'descuento', 'gift_card', 'membresia', 'multipass', 'puntos', 'sellos'].sort(),
-    );
+  it('tiene ocho tipos', () => {
+    // Cuántos, nada más. Que COINCIDAN con lo que acepta la BD no se puede probar acá: comparar el
+    // catálogo contra una lista escrita en el mismo test no verifica nada — es lo que hacía esta
+    // prueba antes y por eso no atrapó que 'multipass' no existe en el CHECK (el octavo tipo se
+    // llama 'prepago'). La verificación real vive en tiposEnBd.test.ts, que los inserta.
+    expect(TIPOS).toHaveLength(8);
   });
 
   it('marca como "requiere monto" exactamente a los que no funcionan sin él', () => {
@@ -110,10 +110,10 @@ describe('describirSaldo', () => {
     expect(describirSaldo({ tipo: 'sellos', contador: 3, selloMeta: null }, HOY)).toBe('3 sellos');
   });
 
-  it('multipass cuenta visitas y concuerda en singular', () => {
-    expect(describirSaldo({ tipo: 'multipass', contador: 4 }, HOY)).toBe('4 visitas disponibles');
-    expect(describirSaldo({ tipo: 'multipass', contador: 1 }, HOY)).toBe('1 visita disponible');
-    expect(describirSaldo({ tipo: 'multipass', contador: 0 }, HOY)).toBe('0 visitas disponibles');
+  it('prepago cuenta visitas y concuerda en singular', () => {
+    expect(describirSaldo({ tipo: 'prepago', contador: 4 }, HOY)).toBe('4 visitas disponibles');
+    expect(describirSaldo({ tipo: 'prepago', contador: 1 }, HOY)).toBe('1 visita disponible');
+    expect(describirSaldo({ tipo: 'prepago', contador: 0 }, HOY)).toBe('0 visitas disponibles');
   });
 
   it('puntos concuerda en singular', () => {

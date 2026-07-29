@@ -2,7 +2,7 @@
 // texto para una persona.
 //
 // Por qué existe este módulo: desde la migración 0018, `tarjetas.puntos_actuales` es un contador
-// universal cuyo significado depende del tipo — en sellos son sellos, en multipass son visitas que
+// universal cuyo significado depende del tipo — en sellos son sellos, en prepago son visitas que
 // quedan, y en cashback y gift card son CENTAVOS. Un `1250` es "$12.50" o "1250 puntos" según el
 // comercio. Cualquier pantalla que imprima el número crudo va a mostrarle plata equivocada a un
 // cliente, y eso no lo atrapa el typechecker: los dos son `number`.
@@ -47,8 +47,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     usaVigencia: false,
   },
   {
-    valor: 'multipass',
-    etiqueta: 'Multipass',
+    valor: 'prepago',
+    etiqueta: 'Prepago',
     descripcion: 'El cliente compra un paquete de visitas y las va usando.',
     contador: 'entero',
     accionPrincipal: 'consumir',
@@ -197,7 +197,7 @@ export function describirSaldo(estado: EstadoTarjeta, hoyIso: string): string {
     return `${formatearCentavos(estado.contador)} disponibles`;
   }
 
-  if (tipo.valor === 'multipass') {
+  if (tipo.valor === 'prepago') {
     const n = estado.contador;
     return n === 1 ? '1 visita disponible' : `${n} visitas disponibles`;
   }
