@@ -3,6 +3,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import estilos from './_inicio/inicio.module.css';
 import FormularioDemo from './_inicio/FormularioDemo';
+import PegatinasParallax from './_inicio/PegatinasParallax';
 import { STICKERS, type Sticker } from './_inicio/stickers';
 import {
   IconoPersonas,
@@ -67,6 +68,10 @@ function Pegatina({ sticker, clase }: { sticker: Sticker; clase: string }) {
       aria-hidden="true"
       width={sticker.ancho}
       height={sticker.alto}
+      // Lo que PegatinasParallax busca para darles la deriva por scroll. Un atributo de datos y no
+      // la clase del módulo CSS: esa clase lleva un hash que cambia en cada build, así que un
+      // querySelector contra ella se rompería solo.
+      data-pegatina=""
     />
   );
 }
@@ -266,6 +271,11 @@ const PREGUNTAS = [
 export default function Inicio() {
   return (
     <div className={estilos.pagina}>
+      {/* Solo cablea el parallax sobre los stickers que ya vienen en el HTML del servidor; no
+          dibuja nada. Ver el encabezado de PegatinasParallax.tsx para por qué el efecto va en JS y
+          no con animaciones de scroll de CSS. */}
+      <PegatinasParallax />
+
       <header className={estilos.cabecera}>
         <div className={`${estilos.envoltura} ${estilos.cabeceraFila}`}>
           <span className={estilos.marca}>
