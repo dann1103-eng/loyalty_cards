@@ -44,6 +44,24 @@ export function openGraphDe({ titulo, descripcion = DESCRIPCION_SITIO, url = '/'
   };
 }
 
+// El `fb:app_id` que el depurador de Facebook reclama como "propiedad obligatoria".
+//
+// ══ NO ES OBLIGATORIO PARA LA VISTA PREVIA ══ El depurador lo marca en rojo en cualquier sitio que
+// no lo tenga, pero la tarjeta del enlace funciona igual (verificado: la previa carga bien sin él).
+// Solo sirve para atribuirle a una App de Facebook las estadísticas de dominio de lo que se
+// comparte. Sin App de Facebook no hay nada que atribuir, así que el aviso se puede ignorar.
+//
+// Se lee de env y NO se escribe a mano acá: el ID sale de crear una App en
+// developers.facebook.com, que es una cuenta del dueño. Cuando exista, es agregar
+// FACEBOOK_APP_ID en Vercel y volver a desplegar — sin tocar código.
+//
+// Sin la variable la clave se OMITE por completo. Emitir `<meta property="fb:app_id" content="">`
+// sería peor que no emitirla: Facebook lo lee como un ID inválido en vez de como ausente.
+export function facebookDe(): Metadata['facebook'] | undefined {
+  const appId = process.env.FACEBOOK_APP_ID?.trim();
+  return appId ? { appId } : undefined;
+}
+
 export function twitterDe({ titulo, descripcion = DESCRIPCION_SITIO }: Opciones): Metadata['twitter'] {
   return {
     // summary_large_image muestra la imagen grande arriba del título; `summary` la encajona chiquita

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Outfit, Hanken_Grotesk, Geist_Mono, Permanent_Marker, Anton } from "next/font/google";
 import { SCRIPT_TEMA, TEMA_POR_DEFECTO } from "@/lib/tema";
 import { MARCA } from "@/lib/marca";
-import { DESCRIPCION_SITIO, openGraphDe, twitterDe } from "@/lib/metadatosOg";
+import { DESCRIPCION_SITIO, facebookDe, openGraphDe, twitterDe } from "@/lib/metadatosOg";
 import "./globals.css";
 
 // Sistema Stitch (docs/design/C1-C7): Outfit para display/marca, Hanken Grotesk para cuerpo,
@@ -70,6 +70,9 @@ export const metadata: Metadata = {
   description: DESCRIPCION_SITIO,
   openGraph: openGraphDe({ titulo: MARCA.nombre }),
   twitter: twitterDe({ titulo: MARCA.nombre }),
+  // Solo aparece si FACEBOOK_APP_ID está puesta; ver facebookDe() para por qué el aviso del
+  // depurador de Facebook no bloquea nada.
+  facebook: facebookDe(),
 };
 
 export default function RootLayout({

@@ -761,11 +761,16 @@
   line-height: 1.55;
 }
 
-/* Las tres capturas REALES de la tarjeta en Wallet (Phone-Cardly-Image1/2/3 del kit). Antes acá
-   había un chasis de teléfono dibujado en CSS con tres pantallas inventadas adentro (un degradado
-   hacía de tarjeta, un patrón determinista hacía de QR). Con las capturas de verdad eso pasa a ser
-   una maqueta de algo que ya existe, y encima una peor: estas muestran la grilla de sellos real, el
-   QR real y el chrome real de Wallet.
+/* Las tres imágenes de la tarjeta en Wallet (Phone-Cardly-Image1/2/3 del kit). Reemplazaron un
+   chasis de teléfono dibujado en CSS con tres pantallas inventadas adentro (un degradado hacía de
+   tarjeta, un patrón determinista hacía de QR), que era una imitación mucho peor.
+   ══ SON MAQUETAS DEL DISEÑADOR, NO CAPTURAS ══ Este comentario decía "capturas REALES de Wallet" y
+   era falso. Se nota en que las tres muestran el fondo de la tarjeta con textura (diagonales,
+   remolinos), y NINGUNA de las dos billeteras puede dibujar eso: Apple usa `backgroundColor` y
+   Google `hexBackgroundColor`, los dos un color PLANO. El arte solo entra en la franja
+   (`strip.png`, 375×123) o en el `heroImage`, que es la banda del medio — y esa parte sí es fiel.
+   Pendiente con el dueño: modelos reexportados con el fondo plano, para no prometer una textura que
+   el teléfono no va a mostrar.
    Las imágenes YA traen el teléfono, así que no llevan marco propio: un borde nuestro alrededor
    dibujaría un segundo teléfono alrededor del que está en la foto. */
 .pasoTelefono {
@@ -1098,6 +1103,17 @@
   color: var(--sobre-claro-2);
   font-size: 13px;
   text-align: center;
+}
+
+/* La aclaración de "estas ilustraciones son de referencia" bajo la tira de modelos. Mismo patrón
+   que .planNota (chica, centrada, tono apagado): es la letra chica de la sección, no un segundo
+   párrafo con el mismo peso que el de arriba. */
+.modelosNota {
+  margin-top: clamp(16px, 2.5vw, 24px);
+  max-width: 60ch;
+  color: var(--sobre-claro-2);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 /* ---------- preguntas frecuentes ----------

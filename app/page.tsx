@@ -99,8 +99,9 @@ const PASOS = [
     titulo: 'Creás tu tarjeta',
     texto: 'Diseñala a tu estilo. En minutos. 100% digital.',
     imagen: '/_inicio/wallet-puntos.webp',
-    // El alt describe QUÉ SE VE, porque estas tres capturas son el argumento de la sección: quien
+    // El alt describe QUÉ SE VE, porque estas tres imágenes son el argumento de la sección: quien
     // no las ve necesita saber que la tarjeta se ve así de terminada dentro de Wallet.
+    // (Son maquetas del kit, no capturas: ver la nota en .pasoTelefono de inicio.module.css.)
     alt: 'La tarjeta de un negocio dentro de Apple Wallet, con 50 puntos y el código del cliente.',
   },
   {
@@ -185,8 +186,9 @@ interface PlanPrecio {
   etiqueta?: string;
 }
 
-// Precios y límites REALES, no los del texto de marketing: salen de `PLANES` en
-// lib/comercios/cuentas.ts, que es la fuente única del monto y del límite sugerido de cada plan.
+// Precios y límites REALES, no los del texto de marketing: el monto sale de `PLANES` en
+// lib/comercios/cuentas.ts, que es la fuente única del monto y el límite sugerido de negocios y
+// sucursales de cada plan.
 //
 // El límite del plan NO es "negocios": cuenta **comercios distintos + sucursales adicionales,
 // sumados**, y la sucursal principal de cada comercio no consume cupo (ver contarUnidadesCuenta).
@@ -197,9 +199,15 @@ interface PlanPrecio {
 // "Hasta 2 tarjetas activas" es real y es igual en los tres planes (spec de programas de tarjeta):
 // es la cantidad de programas simultáneos por comercio, cada uno con su propio QR.
 //
-// Los topes de clientes (500 / 2.500 / sin límite) vienen del catálogo comercial y NO están
-// aplicados en la app todavía. Se publican porque son la oferta vigente del dueño, pero si algún
-// día hay que hacerlos cumplir, el lugar es verificarLimiteCuenta, no este archivo.
+// ══ CLIENTES: SIN LÍMITE EN LOS TRES PLANES ══ Corrección directa del dueño (2026-07-29): el
+// catálogo comercial traía 500/2.500/sin límite, y esa cifra ya no rige — ningún plan topea
+// clientes. `verificarLimiteCuenta` (lib/comercios/cuentas.ts) tampoco los cuenta: solo mira
+// comercios y sucursales, así que el código y este texto quedan alineados sin tocar nada más.
+//
+// ══ CONTROL DE CAJEROS: EN LOS TRES PLANES ══ Corrección del dueño, misma fecha: la auditoría de
+// cada sello (Tanda 1, antifraude) es pareja en todos los planes, no un extra de Pro.
+//
+// Avisos por cercanía (geopush): arranca en Growth, así que Starter no lo lista y Pro lo hereda.
 const PLANES_PRECIO: PlanPrecio[] = [
   {
     id: 'starter',
@@ -208,7 +216,8 @@ const PLANES_PRECIO: PlanPrecio[] = [
     caracteristicas: [
       '1 negocio con su local',
       'Hasta 2 tarjetas activas, cada una con su QR',
-      'Hasta 500 clientes',
+      'Clientes ilimitados',
+      'Control de cajeros y auditoría de cada sello',
       'Soporte por WhatsApp',
     ],
     cta: 'Empezar',
@@ -222,7 +231,8 @@ const PLANES_PRECIO: PlanPrecio[] = [
     caracteristicas: [
       'Dos negocios, o uno con una sucursal más',
       'Hasta 2 tarjetas activas por negocio',
-      'Hasta 2.500 clientes',
+      'Clientes ilimitados',
+      'Control de cajeros y auditoría de cada sello',
       'Avisos por cercanía y reportes por sucursal',
     ],
     cta: 'Empezar',
@@ -233,8 +243,9 @@ const PLANES_PRECIO: PlanPrecio[] = [
     precio: 89,
     caracteristicas: [
       'Negocios y sucursales sin límite',
-      'Clientes sin límite',
-      'Control de cajeros y auditoría de cada sello',
+      'Hasta 2 tarjetas activas por negocio',
+      'Clientes ilimitados',
+      'Control de cajeros, auditoría y avisos por cercanía',
       'Soporte prioritario',
     ],
     cta: 'Hablemos',
@@ -411,7 +422,7 @@ export default function Inicio() {
               <span className={estilos.script}>para cada negocio</span>
             </h2>
             <p className={estilos.textoSeccion}>
-              Así se ven de verdad en el teléfono de tu cliente, con la marca de cada negocio.
+              Elegís el logo y los colores; nosotros armamos la tarjeta dentro de la billetera.
             </p>
 
             {/* tabIndex hace la tira recorrible con las flechas del teclado: Chrome y Safari no
@@ -462,6 +473,16 @@ export default function Inicio() {
                 </div>
               </div>
             </div>
+
+            {/* Aclaración honesta: Apple y Google pintan el fondo de la tarjeta con UN color sólido
+                (backgroundColor / hexBackgroundColor), no con la textura de estas ilustraciones. Lo
+                que sí es fiel es la franja del medio (el logo, el saldo, el QR) — ver el comentario
+                de .pasoTelefono en el CSS para el detalle técnico. */}
+            <p className={estilos.modelosNota}>
+              Estas ilustraciones muestran el diseño completo a modo de referencia. En Apple y
+              Google Wallet, el fondo de tu tarjeta es un color sólido a tu elección; el logo, el
+              saldo y el código sí se ven exactamente así.
+            </p>
           </div>
 
           <Pegatina sticker={STICKERS.iconic} clase={estilos.stickerTarjetasUno} />
