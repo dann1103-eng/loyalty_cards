@@ -1,13 +1,72 @@
 /* Estilos de la página pública (app/page.tsx).
    Va como módulo CSS y no en globals.css a propósito: nada de acá debe filtrarse al panel del
-   comercio ni al portal del cliente, que son otro producto y los toca otra gente. Los colores,
-   radios y sombras SÍ salen de las variables globales, para que la página no se despegue del
-   sistema visual cuando este cambie. */
+   comercio ni al portal del cliente, que son otro producto y los toca otra gente. Los radios y
+   las sombras SÍ salen de las variables globales, para que la página no se despegue del sistema
+   visual cuando este cambie. Los COLORES de las bandas de marca son harina de otro costal: ver el
+   bloque de `.pagina` más abajo. */
 
 .pagina {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+
+  /* ---------- la paleta de esta página, fija, INDEPENDIENTE del tema del dispositivo ----------
+     Misma excepción que .cardface en globals.css: esto no es cromo de panel que deba respetar la
+     preferencia de tema de quien visita, es la TINTA DE UN AFICHE. La página pública es la única
+     superficie "brand" del producto (ver DESIGN.md) y ahora corre una estrategia "Full palette"
+     en vez del "Committed" de un solo acento: noche + dos bandas claras + lima como energía +
+     violeta y coral como condimento. Referencia nombrada: cartel de flyer de calle / streetwear,
+     no cripto-neón (ver DESIGN.md § Página pública para la escena que lo decide).
+
+     Se declaran acá, en el contenedor de TODA la página, y no repetidas por sección: así cualquier
+     banda (clara u oscura) puede usarlas sin duplicar valores. El tema de ALTO CONTRASTE redefine
+     estas mismas doce variables más abajo y nada más: quien lo prendió está bajo el sol y quiere
+     leer, no mirar un afiche (misma regla que ya regía para --campo/--sobre-campo).
+
+     `--campo`/`--sobre-campo`/`--sobre-campo-2`/`--realce`/`--borde-campo` son los CINCO nombres
+     que ya existían para el campo de brasa; se conservan a propósito (mismo contrato, mismo lugar
+     en el CSS que loaded-context.mjs y DESIGN.md documentan) y solo cambia el valor: de un naranja
+     quemado a una noche casi negra con un realce lima. */
+  --campo: oklch(15% 0.03 264);
+  --sobre-campo: var(--blanco);
+  --sobre-campo-2: rgba(245, 245, 240, 0.68);
+  --realce: oklch(89% 0.23 126);
+  --borde-campo: rgba(245, 245, 240, 0.22);
+
+  /* Nuevo: la banda CLARA. No existía porque antes solo el hero se salía del tema; ahora la página
+     alterna noche/clara varias veces (ver comentario en .tarjetasBanda) y cada banda clara necesita
+     su propio par de contraste, fijo, por la misma razón que el de arriba. */
+  --claro: oklch(96% 0.014 85);
+  --sobre-claro: oklch(23% 0.02 85);
+  --sobre-claro-2: oklch(40% 0.02 85);
+  --linea-clara: rgba(30, 20, 10, 0.13);
+
+  /* Condimento: violeta para el segundo plano de "Planes" y el degradado del cierre; coral solo
+     para una pegatina. Ninguno de los dos carga texto de cuerpo, así que no necesitan su propio
+     "sobre-x": donde llevan texto encima reutilizan --sobre-campo (bone), que ya contrasta bien
+     contra cualquier tono oscuro de esta paleta. */
+  --violeta: oklch(38% 0.15 302);
+  --violeta-realce: oklch(66% 0.19 300);
+  --coral: oklch(70% 0.17 32);
+}
+
+:global(:root[data-tema='alto-contraste']) .pagina {
+  --campo: #000000;
+  --sobre-campo: #ffffff;
+  --sobre-campo-2: #ededed;
+  --realce: #ffcc33;
+  --borde-campo: rgba(255, 255, 255, 0.82);
+
+  /* Bajo alto contraste la alternancia clara/oscura desaparece a propósito: las dos colapsan al
+     mismo negro puro. El punto de este tema es la legibilidad al sol, no el pulso del afiche. */
+  --claro: #000000;
+  --sobre-claro: #ffffff;
+  --sobre-claro-2: #ededed;
+  --linea-clara: rgba(255, 255, 255, 0.82);
+
+  --violeta: #000000;
+  --violeta-realce: #d9b8ff;
+  --coral: #ff8a5c;
 }
 
 .envoltura {
@@ -21,42 +80,12 @@
   padding-inline: var(--sp-4);
 }
 
-/* ---------- el campo de brasa (cabecera + hero) ----------
-   ESTOS COLORES NO SIGUEN AL TEMA, Y ES A PROPÓSITO. Misma excepción que .cardface en globals.css:
-   no son cromo de panel, son la TINTA DE MARCA de un afiche. La página pública es la única
-   superficie "brand" del producto y su primera pantalla es un campo de color plano y saturado; si
-   ese campo se aclarara porque el visitante dejó el panel en tema claro, la marca cambiaría de
-   color según una preferencia que él fijó en otra pantalla, para otra tarea.
-   Van como variables locales (no como literales sueltos) por dos razones: todo lo que se pinta
-   encima hereda el par de contraste correcto sin repetirlo, y el tema de ALTO CONTRASTE se
-   resuelve redefiniendo estas cinco y nada más (bloque al final de esta sección). Ese tema sí se
-   respeta: existe para atender bajo el sol, y quien lo prendió no quiere un afiche, quiere leer.
-   Contrastes calculados contra --campo: --sobre-campo 8.7:1, --sobre-campo-2 6.3:1, --realce
-   5.8:1, --borde-campo 3.4:1 (WCAG 1.4.11 pide 3:1 para el contorno de un control; a 66% de
-   luminosidad quedaba en 3.0 justo, sin margen para el redondeo del respaldo en sRGB). */
+/* ---------- cabecera + hero: la banda NOCHE ---------- */
 
 .cabecera,
 .hero {
-  /* En oklch, no en hex: el matiz es el mismo del acento del sistema, y ahí la brasa se elige por
-     luminosidad y croma en vez de a ojo. El respaldo en sRGB para un navegador viejo lo emite solo
-     el compilador de CSS (queda un hex plano y, dentro de un @supports, la versión en lab). */
-  --campo: oklch(40% 0.115 42);
-  --sobre-campo: oklch(96% 0.012 85);
-  --sobre-campo-2: oklch(86% 0.035 70);
-  --realce: oklch(84% 0.13 72);
-  --borde-campo: oklch(68% 0.1 50);
-
   background: var(--campo);
   color: var(--sobre-campo);
-}
-
-:global(:root[data-tema="alto-contraste"]) .cabecera,
-:global(:root[data-tema="alto-contraste"]) .hero {
-  --campo: #000000;
-  --sobre-campo: #ffffff;
-  --sobre-campo-2: #ededed;
-  --realce: #ffb01f;
-  --borde-campo: rgba(255, 255, 255, 0.82);
 }
 
 /* ---------- cabecera ---------- */
@@ -89,16 +118,21 @@
   letter-spacing: -0.02em;
 }
 
+/* El ícono real (public/marca/icono-badge.svg) ya trae su propio fondo cuadrado: overflow:hidden
+   es lo que le da la esquina redondeada, no un recorte del propio SVG. El fondo/color que quedan
+   son el respaldo mientras carga o si el archivo llegara a faltar. */
 .marcaPunto {
   width: 26px;
   height: 26px;
   border-radius: 8px;
+  overflow: hidden;
   display: grid;
   place-items: center;
   background: var(--realce);
   color: var(--campo);
   font-size: 15px;
   font-weight: 700;
+  object-fit: cover;
 }
 
 .navCabecera {
@@ -112,33 +146,36 @@
   border-radius: var(--radius-pill);
   color: var(--sobre-campo-2);
   font-size: 14px;
+  font-weight: 600;
 }
 .enlaceCabecera:hover {
   color: var(--sobre-campo);
 }
 
-/* Debajo de 600 px la cabecera se queda solo con la marca y el botón: tres enlaces más no caben
-   sin apretarse, y los secundarios están repetidos en el pie. */
-@media (max-width: 599px) {
+/* Con cuatro enlaces más el botón, no hay lugar debajo de 860 px sin apretarlos: se quedan solo
+   marca y CTA, y los cuatro reaparecen repetidos en el pie. */
+@media (max-width: 859px) {
   .enlaceCabecera {
     display: none;
   }
 }
 
-/* Delineado y no sólido: el único botón lleno del campo es el del hero. Dos píldoras rellenas a
-   quince centímetros una de otra compiten y ninguna gana. */
+/* Lleno y en lima: ES el llamado a la acción de la cabecera, y en esta paleta el color hace ese
+   trabajo solo. Un botón delineado acá se perdería contra una franja ya muy saturada. */
 .botonCabecera {
-  padding: 9px 15px;
-  border: 1px solid var(--borde-campo);
+  padding: 9px 16px;
+  border: 0;
   border-radius: var(--radius-pill);
-  color: var(--sobre-campo);
+  background: var(--realce);
+  color: var(--campo);
+  font-family: var(--font-display);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   white-space: nowrap;
-  transition: border-color 160ms ease, background 160ms ease;
+  transition: transform 200ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 .botonCabecera:hover {
-  border-color: var(--sobre-campo);
+  transform: translateY(-1px);
 }
 
 .enlaceCabecera:focus-visible,
@@ -153,10 +190,44 @@
    apila (texto, después tarjetas) y el abanico se va a los dos bordes. */
 
 .hero {
+  position: relative;
+  /* No se recorta: los dos resplandores de .heroAtmosfera se salen del borde de la sección a
+     propósito (ver ese bloque) y overflow:hidden les cortaría justo la mitad que da profundidad. */
   padding-block: clamp(28px, 5.5vw, 76px) clamp(28px, 4.5vw, 60px);
 }
 
+/* Dos resplandores radiales, quietos, muy tenues: no son foco de atención, son la razón por la
+   que la noche no se siente un rectángulo plano. Van en el propio .hero con ::before/::after (cero
+   nodos nuevos en el DOM) y con pointer-events:none para no robarle el click a nada. */
+.hero::before,
+.hero::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  border-radius: 50%;
+  filter: blur(2px);
+  pointer-events: none;
+}
+.hero::before {
+  top: -18%;
+  right: -8%;
+  width: min(58vw, 640px);
+  height: min(58vw, 640px);
+  background: radial-gradient(closest-side, var(--violeta-realce), transparent 72%);
+  opacity: 0.22;
+}
+.hero::after {
+  bottom: -22%;
+  left: -12%;
+  width: min(40vw, 420px);
+  height: min(40vw, 420px);
+  background: radial-gradient(closest-side, var(--coral), transparent 72%);
+  opacity: 0.14;
+}
+
 .heroRejilla {
+  position: relative;
+  z-index: 1;
   display: grid;
   gap: clamp(26px, 4vw, 48px);
   align-items: center;
@@ -164,7 +235,7 @@
 @media (min-width: 900px) {
   .heroRejilla {
     /* La columna del abanico se lleva más de la mitad: es la que tiene que respirar, y el texto ya
-       está acotado en 36ch de todos modos. minmax(0, …) en las dos pistas para que ninguna se
+       está acotado en 20ch de todos modos. minmax(0, …) en las dos pistas para que ninguna se
        plante en el min-content de su contenido. */
     grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
     gap: clamp(28px, 3.5vw, 56px);
@@ -172,18 +243,39 @@
 }
 
 .heroTexto {
+  position: relative;
   /* Permite que la columna se encoja por debajo del min-content de una palabra larga en vez de
      estirar la rejilla y empujar el abanico fuera de la pantalla. */
   min-width: 0;
 }
 
+.heroPregon {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--realce);
+}
+.heroPregon::before {
+  content: '';
+  width: 18px;
+  height: 2px;
+  background: var(--realce);
+}
+
 .heroTitulo {
+  margin-top: 14px;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: clamp(34px, 5.4vw, 64px);
+  font-size: clamp(38px, 6.6vw, 76px);
   /* Un poco más de aire que en tema claro: el tipo claro sobre fondo oscuro se lee más liviano. */
-  line-height: 1.08;
+  line-height: 0.98;
   letter-spacing: -0.03em;
+  text-transform: uppercase;
   text-wrap: balance;
 }
 
@@ -197,7 +289,7 @@
   margin-top: 18px;
   /* Medida corta a propósito: es una bajada de afiche, no cuerpo de texto (el cuerpo largo de la
      página, en .razon dd, sí va a 66ch). */
-  max-width: 36ch;
+  max-width: 38ch;
   color: var(--sobre-campo-2);
   font-size: clamp(17px, 2.2vw, 21px);
   line-height: 1.5;
@@ -207,30 +299,61 @@
 /* Ritmo a propósito desparejo: el aire antes del botón es el doble que el de la bajada, y la nota
    queda pegada abajo. Un margen igual en los cuatro huecos aplana la lectura. En pantalla angosta
    ese aire se encoge, porque cada píxel de acá empuja las tarjetas por debajo del pliegue. */
-.botonBrasa {
+.botonHero {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 52px;
   margin-top: clamp(26px, 3.5vw, 36px);
   padding: 0 28px;
+  border: 0;
   border-radius: var(--radius-pill);
-  background: var(--sobre-campo);
+  background: var(--realce);
   color: var(--campo);
   font-family: var(--font-display);
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
+  cursor: pointer;
   transition: transform 200ms cubic-bezier(0.25, 1, 0.5, 1);
 }
-.botonBrasa:hover {
+.botonHero:hover {
   transform: translateY(-2px);
 }
-.botonBrasa:active {
+.botonHero:active {
   transform: translateY(0) scale(0.98);
 }
-.botonBrasa:focus-visible {
-  outline: 2px solid var(--realce);
+.botonHero:focus-visible {
+  outline: 2px solid var(--sobre-campo);
+  outline-offset: 4px;
+}
+
+/* Variante fantasma: borde y texto heredan el color del padre, así sirve igual sobre la noche que
+   sobre una banda clara sin necesitar una segunda variable. Es la que usan Starter y Pro en
+   "Planes", al lado del botón lleno de Growth. */
+.botonHeroContorno {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0 26px;
+  border: 2px solid currentColor;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: transform 200ms cubic-bezier(0.25, 1, 0.5, 1), opacity 160ms ease;
+}
+.botonHeroContorno:hover {
+  transform: translateY(-2px);
+  opacity: 0.82;
+}
+.botonHeroContorno:focus-visible {
+  outline: 2px solid currentColor;
   outline-offset: 4px;
 }
 
@@ -241,9 +364,66 @@
   line-height: 1.5;
 }
 
+/* ---------- pegatinas ----------
+   Dos placas rotadas, puramente decorativas (aria-hidden desde el JSX): la energía de afiche de
+   calle que le falta a un botón y un título solos. Llevan un HECHO real cada una (no son ruido:
+   "8 tipos de tarjeta" y "Apple + Google Wallet" son quienes hacen ese trabajo en el resto de la
+   página), así que si alguien las lee igual aprende algo. */
+.pegatina {
+  position: absolute;
+  z-index: 2;
+  padding: 7px 14px;
+  border-radius: 10px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: var(--shadow-2);
+}
+.pegatinaUno {
+  top: -6px;
+  right: 8%;
+  transform: rotate(-8deg);
+  background: var(--coral);
+  color: var(--campo);
+}
+.pegatinaDos {
+  bottom: 6px;
+  left: 2%;
+  transform: rotate(6deg);
+  background: var(--violeta-realce);
+  color: var(--campo);
+}
+@media (max-width: 899px) {
+  /* En una columna las pegatinas flotantes se pisan con el texto que se apila debajo: se esconden
+     y la energía de calle queda a cargo del pregón y la tipografía. */
+  .pegatina {
+    display: none;
+  }
+}
+
 .heroVitrina {
+  position: relative;
   /* Se come el padding de la envoltura para tocar los dos bordes de la pantalla. */
   margin-inline: calc(var(--sp-4) * -1);
+}
+
+/* La foto real del mockup (teléfono + las dos tarjetas de ejemplo, recortada para EXCLUIR la
+   cara de la persona: es lo mismo que ya resuelve el carrusel, sin la duda de derechos de una
+   foto de alguien). Va detrás del abanico, muy tenue: es textura, no una segunda ilustración
+   compitiendo con las tarjetas de verdad que sí importa que se lean. */
+.heroVitrina::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: url('/_inicio/hero-mockup.jpg');
+  background-size: cover;
+  background-position: center 20%;
+  opacity: 0.16;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 18%, #000 82%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 18%, #000 82%, transparent 100%);
+  pointer-events: none;
 }
 @media (min-width: 900px) {
   .heroVitrina {
@@ -264,34 +444,11 @@
   font-size: 13px;
 }
 
-/* Botón del formulario de demo (ya abajo del campo de brasa, sobre el fondo del tema). Plano y de
-   un solo color: el degradado que tenía era el reflejo de plantilla, no una decisión. */
-.botonPrimario {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-2);
-  min-height: 48px;
-  padding: 0 24px;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: var(--acento-fuerte);
-  color: var(--sobre-acento);
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.botonPrimario:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
 /* ---------- secciones ---------- */
 
 .seccion {
   padding-block: clamp(48px, 10vw, 96px);
-  /* La cabecera es pegajosa: sin esto, saltar a #demo deja el título tapado debajo de ella. */
+  /* La cabecera es pegajosa: sin esto, saltar a un ancla la deja tapada debajo de ella. */
   scroll-margin-top: 78px;
 }
 
@@ -334,6 +491,611 @@
   font-size: clamp(16px, 3vw, 18px);
   line-height: 1.6;
   text-wrap: pretty;
+}
+
+/* Las bandas de marca fijan su propio color de fondo Y de texto (igual que .hero); estas dos
+   reglas ajustan la clase genérica de arriba para que seguir dependiendo de --texto-2 (un token de
+   TEMA) no la deje ilegible dentro de una banda que ignora el tema a propósito. El título no
+   necesita regla propia: no fija su color, así que ya hereda el de la banda. */
+.bandaOscura .textoSeccion {
+  color: var(--sobre-campo-2);
+}
+.bandaClara .textoSeccion {
+  color: var(--sobre-claro-2);
+}
+
+.bandaOscura {
+  background: var(--campo);
+  color: var(--sobre-campo);
+}
+.bandaClara {
+  background: var(--claro);
+  color: var(--sobre-claro);
+}
+
+/* ---------- confianza (antes: contadores) ----------
+   Acá NO van números de piloto ("+1,200 comercios"): PRODUCT.md los descarta explícitamente porque
+   restan, no suman, en una plataforma que recién está creciendo. La franja se conserva porque el
+   ritmo de tres columnas después del hero funciona, pero cada columna dice algo verificable HOY en
+   vez de una cifra inventada. */
+.confianza {
+  background: var(--realce);
+  color: var(--campo);
+}
+
+.confianzaFila {
+  display: grid;
+  gap: clamp(20px, 4vw, 32px);
+  padding-block: clamp(22px, 4vw, 34px);
+  text-align: center;
+}
+@media (min-width: 700px) {
+  .confianzaFila {
+    grid-template-columns: repeat(3, 1fr);
+    text-align: left;
+  }
+}
+
+.confianzaItem b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.confianzaItem span {
+  display: block;
+  margin-top: 3px;
+  font-size: 14px;
+  opacity: 0.82;
+}
+
+/* ---------- cómo funciona ----------
+   Ni cajas ni círculos con un número adentro: tres columnas separadas por una regla arriba, con el
+   ordinal en mono. El paso se lee como una secuencia, que es lo que es. */
+
+.pasos {
+  margin-top: clamp(30px, 5vw, 56px);
+  display: grid;
+  gap: 0;
+  grid-template-columns: 1fr;
+  list-style: none;
+}
+@media (min-width: 720px) {
+  .pasos {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: clamp(20px, 3.5vw, 44px);
+  }
+}
+
+.paso {
+  padding-block: 20px;
+  border-top: 1px solid var(--linea-clara);
+}
+/* En una sola columna las reglas separan filas; en tres, la de arriba es la única que hace falta
+   y todas empiezan a la misma altura. */
+@media (min-width: 720px) {
+  .paso {
+    padding-block: 22px 0;
+  }
+}
+
+.pasoNumero {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  color: var(--violeta);
+}
+
+.paso h3 {
+  margin-top: 12px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.paso p {
+  margin-top: 8px;
+  max-width: 46ch;
+  color: var(--sobre-claro-2);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+/* ---------- tarjetas para cada negocio ----------
+   Los ocho tipos reales del catálogo (lib/tarjetas/tipos.ts), no una ilustración genérica: si un
+   comercio activa "Cupón" mañana, esto ya está describiendo lo que va a usar. Cada ficha tiene
+   forma de talón de boleto (borde punteado + dos muescas), coherente con que la tarjeta de
+   lealtad ES un talón, y evita la grilla de card gastada: título + ícono + texto repetido ocho
+   veces. La leve rotación alternada (nth-child) es el mismo guiño de afiche del hero, en dosis
+   menor porque acá el contenido tiene que leerse rápido, no posar. */
+.tiposGrilla {
+  margin-top: clamp(30px, 5vw, 56px);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: clamp(20px, 3vw, 28px);
+}
+
+.tipoFicha {
+  position: relative;
+  padding: 20px 20px 22px;
+  border-radius: var(--radius);
+  /* Blanco fijo y no --superficie-0 (token de TEMA): esta ficha vive dentro de .bandaClara, que
+     ignora el tema del dispositivo a propósito. Bajo tema oscuro --superficie-0 es casi negro, y
+     una ficha negra sobre la banda clara con texto --sobre-claro (oscuro) se habría vuelto
+     ilegible para cualquiera que no tenga el tema en claro. */
+  background: #ffffff;
+  box-shadow: var(--shadow-1);
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.tipoFicha:nth-child(even) {
+  transform: rotate(-0.8deg);
+}
+.tipoFicha:nth-child(odd) {
+  transform: rotate(0.8deg);
+}
+.tipoFicha:hover {
+  transform: rotate(0deg) translateY(-3px);
+}
+
+.tipoBanda {
+  height: 5px;
+  margin: -20px -20px 16px;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+/* La "muesca" del talón: dos círculos del color de fondo de la SECCIÓN (no de la ficha), montados
+   sobre una línea punteada. Truco clásico de recorte, cero imágenes. */
+.tipoPerforado {
+  position: relative;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 2px dashed var(--linea-clara);
+}
+.tipoPerforado::before,
+.tipoPerforado::after {
+  content: '';
+  position: absolute;
+  top: -7px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--claro);
+}
+.tipoPerforado::before {
+  left: -20px;
+}
+.tipoPerforado::after {
+  right: -20px;
+}
+
+.tipoNombre {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--sobre-claro);
+}
+
+.tipoDescripcion {
+  margin-top: 6px;
+  color: var(--sobre-claro-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* ---------- ¿seguís usando esto? ----------
+   Filas regladas, no cajas con tache: la misma gramática de "Cómo funciona", en la banda oscura.
+   El texto de cada fila nombra un problema que la Tanda 1 (antifraude) y el geopush ya resuelven en
+   el producto real, no una pena genérica de plantilla. */
+.dolores {
+  margin-top: clamp(30px, 5vw, 56px);
+  display: grid;
+  gap: 0;
+  grid-template-columns: 1fr;
+  list-style: none;
+}
+@media (min-width: 720px) {
+  .dolores {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: clamp(24px, 4vw, 56px);
+  }
+}
+
+.dolor {
+  display: flex;
+  gap: 14px;
+  padding-block: 18px;
+  border-top: 1px solid var(--borde-campo);
+}
+
+.dolorX {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: var(--coral);
+}
+
+.dolor h3 {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.dolor p {
+  margin-top: 4px;
+  color: var(--sobre-campo-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* ---------- planes ----------
+   Tres columnas, Growth invertida (fondo noche sobre la banda clara) para cargar la jerarquía en
+   el color y no en un badge más grande o un borde más grueso. Starter y Pro comparten la misma
+   ficha lisa a propósito: la diferencia entre ellos la cuentan las filas, no el continente. */
+.planesGrilla {
+  margin-top: clamp(30px, 5vw, 56px);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: clamp(20px, 3vw, 28px);
+  align-items: stretch;
+}
+
+.plan {
+  display: flex;
+  flex-direction: column;
+  padding: clamp(22px, 3vw, 30px);
+  border: 1px solid var(--linea-clara);
+  border-radius: var(--radius);
+  /* Blanco fijo, misma razón que en .tipoFicha: esta ficha vive en .bandaClara, que ignora el
+     tema del dispositivo, y --superficie-0 no. */
+  background: #ffffff;
+}
+
+.planDestacado {
+  background: var(--campo);
+  color: var(--sobre-campo);
+  border-color: transparent;
+  box-shadow: var(--shadow-3);
+}
+@media (min-width: 700px) {
+  .planDestacado {
+    /* Un respiro extra por encima y por debajo de sus vecinas: la jerarquía también se siente en
+       el espacio, no solo en el color. */
+    margin-block: -10px;
+    padding-block: calc(clamp(22px, 3vw, 30px) + 10px);
+  }
+}
+
+.planEtiqueta {
+  align-self: flex-start;
+  margin-bottom: 14px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--realce);
+  color: var(--campo);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.planNombre {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.planPrecio {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.planPrecio span {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.planLista {
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  font-size: 14px;
+  line-height: 1.5;
+  flex: 1;
+}
+.planLista li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.planLista li::before {
+  content: '✓';
+  flex: none;
+  font-weight: 700;
+  color: var(--violeta);
+}
+.planDestacado .planLista li::before {
+  color: var(--realce);
+}
+
+.plan .botonHero,
+.plan .botonHeroContorno {
+  width: 100%;
+  margin-top: 22px;
+}
+
+.planNota {
+  margin-top: clamp(18px, 3vw, 26px);
+  color: var(--sobre-claro-2);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ---------- preguntas frecuentes ----------
+   <details>/<summary> nativo: cero JavaScript, abre y cierra con teclado sin una sola línea de
+   React, y sigue funcionando con el script apagado (mismo principio que la tira con scroll-snap).
+   El indicador es un signo +/− dibujado con dos pseudo-elementos girados, no un ícono importado. */
+.preguntas {
+  margin-top: clamp(30px, 5vw, 56px);
+  display: grid;
+  gap: 0;
+}
+
+.pregunta {
+  border-top: 1px solid var(--borde-campo);
+  padding-block: 4px;
+}
+.pregunta:last-child {
+  border-bottom: 1px solid var(--borde-campo);
+}
+
+.pregunta summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 16px;
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+}
+/* Safari dibuja su propio triángulo si no se lo quitamos explícitamente en su propio selector. */
+.pregunta summary::-webkit-details-marker {
+  display: none;
+}
+.pregunta summary:focus-visible {
+  outline: 2px solid var(--realce);
+  outline-offset: 4px;
+}
+
+.preguntaSigno {
+  position: relative;
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+.preguntaSigno::before,
+.preguntaSigno::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  background: currentColor;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.preguntaSigno::before {
+  width: 100%;
+  height: 2px;
+}
+.preguntaSigno::after {
+  width: 2px;
+  height: 100%;
+}
+/* El signo + se aplana a − cuando el <details> está abierto: el selector :open lo resuelve el
+   propio navegador, sin estado en React. */
+.pregunta[open] .preguntaSigno::after {
+  transform: rotate(90deg) scaleX(0);
+}
+
+.pregunta p {
+  max-width: 60ch;
+  padding-bottom: 18px;
+  color: var(--sobre-campo-2);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* ---------- cierre + demo ----------
+   El botón grande del afiche y el formulario real de siempre, en la misma banda: el CTA no manda
+   a ningún lado que no sea el formulario que ya recibe leads de verdad. */
+.cierre {
+  background: linear-gradient(165deg, var(--campo) 0%, var(--violeta) 150%);
+  color: var(--sobre-campo);
+}
+
+.cierreCabecera {
+  max-width: 56ch;
+}
+
+.cierreTitulo {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(32px, 6vw, 52px);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+}
+.cierreTitulo em {
+  font-style: normal;
+  color: var(--realce);
+}
+
+.cierreGrilla {
+  display: grid;
+  gap: clamp(28px, 5vw, 48px);
+  grid-template-columns: 1fr;
+  align-items: start;
+  margin-top: clamp(28px, 4vw, 44px);
+}
+@media (min-width: 860px) {
+  .cierreGrilla {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.cierreLista {
+  margin-top: var(--sp-4);
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  color: var(--sobre-campo-2);
+  font-size: 15px;
+  line-height: 1.55;
+}
+.cierreLista li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.cierreLista li::before {
+  content: '✓';
+  flex: none;
+  color: var(--realce);
+  font-size: 13px;
+}
+.cierreLista a {
+  color: var(--sobre-campo);
+  text-decoration: underline;
+}
+
+/* El panel del formulario reusa .formulario/.campo tal cual (ver más abajo), pero esos estilos
+   están escritos para flotar sobre --superficie-1 del TEMA. Acá el fondo es un degradado fijo que
+   ignora el tema, así que el panel necesita su propio par de contraste o desaparece bajo tema claro
+   (superficie clara sobre violeta) o se lava bajo alto contraste. Panel translúcido, sin blur: es
+   agrupación funcional de un formulario real, no vidrio decorativo. */
+.cierre .formulario,
+.cierre .exito {
+  background: rgba(245, 245, 240, 0.07);
+  border-color: var(--borde-campo);
+  box-shadow: none;
+}
+.cierre .campo label {
+  color: var(--sobre-campo-2);
+}
+.cierre .campo input,
+.cierre .campo textarea {
+  background: rgba(245, 245, 240, 0.09);
+  border-color: var(--borde-campo);
+  color: var(--sobre-campo);
+}
+.cierre .campo input::placeholder,
+.cierre .campo textarea::placeholder {
+  color: var(--sobre-campo-2);
+  opacity: 0.7;
+}
+.cierre .ayuda {
+  color: var(--sobre-campo-2);
+}
+.cierre .botonPrimario {
+  background: var(--realce);
+  color: var(--campo);
+}
+.cierre .exito h3 {
+  color: var(--sobre-campo);
+}
+.cierre .exito p {
+  color: var(--sobre-campo-2);
+}
+.cierre .exito a {
+  color: var(--realce);
+}
+
+/* ---------- pie ---------- */
+
+.pie {
+  margin-top: auto;
+  background: var(--campo);
+  color: var(--sobre-campo-2);
+}
+
+.pieEnvoltura {
+  padding-block: clamp(40px, 6vw, 64px) var(--sp-6);
+}
+
+.pieGrilla {
+  display: grid;
+  gap: clamp(28px, 4vw, 40px);
+  grid-template-columns: 1fr;
+  padding-bottom: clamp(28px, 4vw, 40px);
+  border-bottom: 1px solid var(--borde-campo);
+}
+@media (min-width: 720px) {
+  .pieGrilla {
+    grid-template-columns: 1.4fr 1fr 1fr;
+  }
+}
+
+.pieMarca {
+  max-width: 34ch;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.pieMarca .marca {
+  margin-bottom: 10px;
+}
+
+.pieColumna h3 {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sobre-campo);
+}
+.pieColumna ul {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  font-size: 14px;
+}
+.pieColumna a:hover {
+  color: var(--sobre-campo);
+}
+
+.pieBase {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding-top: var(--sp-5);
+  font-size: 13px;
+}
+
+/* ---------- utilidades ---------- */
+
+.soloLectores {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ---------- carrusel ---------- */
@@ -433,8 +1195,8 @@
   gap: var(--sp-4);
 }
 
-/* Los controles viven sobre el campo de brasa: sin fondo propio (un círculo de superficie oscura
-   ahí sería una mancha) y con el par de contraste del campo. */
+/* Los controles viven sobre la noche: sin fondo propio (un círculo de superficie oscura ahí sería
+   una mancha) y con el par de contraste del campo. */
 .flecha {
   width: 46px;
   height: 46px;
@@ -510,10 +1272,9 @@
 
 /* ---------- el teléfono y la tarjeta de mentira ----------
    EL APARATO VA EN CLARO, la tarjeta de adentro NO. Con el cuerpo casi negro y la pantalla negra,
-   el teléfono se hundía en el campo de brasa (1.6:1 contra el fondo: menos contraste que el que
-   pide una imagen con información) y la mitad de arriba —el marco, la isla— directamente no se
-   veía. En claro el aparato se recorta a 3.9:1 en su borde más oscuro y a 8.2:1 en el más claro, la
-   isla pasa a 17.8:1 contra la pantalla, y la tarjeta de cada comercio (fondos oscuros y
+   el teléfono se hundía en el fondo de la sección (contraste insuficiente para una imagen con
+   información) y la mitad de arriba —el marco, la isla— directamente no se veía. En claro el
+   aparato se recorta bien contra la noche y la tarjeta de cada comercio (fondos oscuros y
    saturados: 13.3:1 la del café) queda enmarcada en vez de fundirse con el negro.
    Los grises van TINTADOS al matiz cálido de la marca, nunca neutros puros. */
 
@@ -529,12 +1290,12 @@
     oklch(84% 0.008 80) 42%,
     oklch(72% 0.012 75) 100%
   );
-  /* La sombra se achicó de 68 px de alcance a 44: un aparato claro sobre naranja necesita apoyo,
-     no un charco negro, y así entra entera en el aire del escenario (ver --aire-escenario) en vez
-     de que el degradado le corte una línea horizontal. El filo interno pasó de blanco a oscuro:
-     sobre un cuerpo claro, un reflejo blanco no dibuja ningún borde. */
+  /* Un aparato claro sobre un fondo oscuro necesita apoyo, no un charco negro, y así entra entero
+     en el aire del escenario (ver --aire-escenario) en vez de que el degradado le corte una línea
+     horizontal. El filo interno pasó de blanco a oscuro: sobre un cuerpo claro, un reflejo blanco
+     no dibuja ningún borde. */
   box-shadow:
-    0 20px 42px -18px rgba(28, 16, 6, 0.55),
+    0 20px 42px -18px rgba(10, 6, 18, 0.6),
     inset 0 0 0 1px rgba(38, 24, 12, 0.18);
 }
 
@@ -778,134 +1539,6 @@ svg.sello {
   fill: currentColor;
 }
 
-/* ---------- cómo funciona ----------
-   Ni cajas ni círculos con un número adentro: tres columnas separadas por una regla arriba, con el
-   ordinal en mono y en el acento. El paso se lee como una secuencia, que es lo que es. */
-
-.pasos {
-  margin-top: clamp(30px, 5vw, 56px);
-  display: grid;
-  gap: 0;
-  grid-template-columns: 1fr;
-  list-style: none;
-}
-@media (min-width: 720px) {
-  .pasos {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    column-gap: clamp(20px, 3.5vw, 44px);
-  }
-}
-
-.paso {
-  padding-block: 20px;
-  border-top: 1px solid var(--linea);
-}
-/* En una sola columna las reglas separan filas; en tres, la de arriba es la única que hace falta
-   y todas empiezan a la misma altura. */
-@media (min-width: 720px) {
-  .paso {
-    padding-block: 22px 0;
-  }
-}
-
-.pasoNumero {
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 0.18em;
-  color: var(--acento);
-}
-
-.paso h3 {
-  margin-top: 12px;
-  font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-}
-
-.paso p {
-  margin-top: 8px;
-  max-width: 46ch;
-  color: var(--texto-2);
-  font-size: 15px;
-  line-height: 1.65;
-}
-
-/* ---------- qué gana el comercio ----------
-   Antes: seis cajas iguales con título y párrafo, la plantilla exacta que el dueño no quiere.
-   Ahora: una lista de definiciones reglada, afirmación a la izquierda y explicación a la derecha.
-   Seis filas regladas se escanean de arriba abajo en un segundo; seis cards obligan a leerlas
-   todas para descubrir que dicen cosas distintas. */
-
-/* Es una TIRA que se desliza, no un segundo abanico. La diferencia es deliberada: si la página
-   repitiera el mecanismo del hero, el de arriba dejaría de significar "así se ve tu tarjeta" y
-   pasaría a leerse como un recurso de la plantilla. Acá no hay arco, ni giro, ni tarjetas
-   apiladas: una fila recta de columnas regladas, el mismo sistema tipográfico de "Cómo funciona".
-
-   Y no esconde nada detrás de un gesto. Cada columna mide 74vw con techo de 340 px, así que en un
-   monitor entran tres y asoma la cuarta, y en un teléfono entra una y asoma la siguiente: se ve
-   que hay más sin tener que descubrirlo deslizando. Los seis beneficios son justo lo que alguien
-   barre con la vista antes de decidir; obligarlo a seis gestos para leerlos sería peor que la
-   lista que había.
-
-   El desplazamiento es NATIVO: ni una línea de JavaScript, así que funciona igual con el script
-   apagado. Al contenedor se le pone tabindex para que también se recorra con las flechas del
-   teclado (Chrome y Safari no hacen enfocable un scroller que no tiene adentro nada enfocable). */
-.tira {
-  margin-top: clamp(26px, 4vw, 44px);
-  /* Nace y muere en los bordes de la pantalla; el padding le devuelve al primer beneficio la
-     alineación con el título de la sección. */
-  margin-inline: calc(var(--sp-4) * -1);
-  padding-inline: var(--sp-4);
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  scroll-padding-inline-start: var(--sp-4);
-  /* Al llegar a la punta el gesto NO se encadena: sin esto, seguir deslizando dispara el "atrás"
-     del navegador en un trackpad. */
-  overscroll-behavior-inline: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--linea-fuerte) transparent;
-}
-.tira:focus-visible {
-  outline: 2px solid var(--acento);
-  outline-offset: 4px;
-}
-
-.tiraFila {
-  display: flex;
-  gap: clamp(20px, 3vw, 40px);
-  /* Sin esto el flex se encoge al ancho del contenedor en vez de desbordarlo, y no hay qué
-     deslizar. */
-  width: max-content;
-  /* Aire para que la barra de desplazamiento no se le monte al texto. */
-  padding-bottom: 18px;
-}
-
-.razon {
-  flex: 0 0 clamp(250px, 74vw, 340px);
-  scroll-snap-align: start;
-  padding-top: 18px;
-  border-top: 1px solid var(--linea);
-}
-
-.razon dt {
-  font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: -0.015em;
-  text-wrap: balance;
-}
-
-.razon dd {
-  margin-top: 8px;
-  color: var(--texto-2);
-  font-size: 15px;
-  line-height: 1.65;
-  text-wrap: pretty;
-}
-
 /* ---------- formulario de demo ---------- */
 
 .demo {
@@ -1043,47 +1676,6 @@ svg.sello {
   text-decoration: underline;
 }
 
-/* ---------- pie ---------- */
-
-.pie {
-  margin-top: auto;
-  padding-block: var(--sp-6);
-  border-top: 1px solid var(--linea);
-  color: var(--texto-3);
-  font-size: 14px;
-}
-
-.pieFilas {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-}
-
-.pieEnlaces {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-4);
-}
-.pieEnlaces a:hover {
-  color: var(--texto);
-}
-
-/* ---------- utilidades ---------- */
-
-.soloLectores {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
-
 /* Quien pidió menos movimiento no recibe ninguno: el abanico sigue funcionando, solo que las
    tarjetas aparecen ya colocadas en vez de deslizarse. */
 @media (prefers-reduced-motion: reduce) {
@@ -1093,14 +1685,19 @@ svg.sello {
   .tarjeta[data-elevada],
   .flecha,
   .punto::after,
-  .botonBrasa,
+  .botonHero,
+  .botonHeroContorno,
   .botonCabecera,
+  .tipoFicha,
+  .preguntaSigno::before,
+  .preguntaSigno::after,
   .campo input,
   .campo textarea {
     transition: none;
   }
   /* El botón tampoco se despega al pasar el mouse: el desplazamiento es justo lo que molesta. */
-  .botonBrasa:hover {
+  .botonHero:hover,
+  .botonHeroContorno:hover {
     transform: none;
   }
 }

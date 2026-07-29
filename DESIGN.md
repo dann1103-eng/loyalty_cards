@@ -151,60 +151,75 @@ peligro) · `.pastilla*` · `.metric-*` (métricas del panel) · `.nav-inferior`
 
 ## Página pública (`/`)
 Vive en `app/page.tsx` + `app/_inicio/`, con su **propio módulo CSS** (`inicio.module.css`) a
-propósito: nada de ahí debe filtrarse a los paneles, que son otro producto. Los colores, radios,
-sombras y espaciados **sí** salen de las variables globales, para que la página no se despegue del
-sistema cuando este cambie.
+propósito: nada de ahí debe filtrarse a los paneles, que son otro producto. Los radios, sombras y
+espaciados **sí** salen de las variables globales, para que la página no se despegue del sistema
+cuando este cambie. Los COLORES de marca ya no: ver la estrategia de abajo.
 
 Es la única superficie **brand** del producto, y por eso es la única que se pasa de "Restrained".
 
-### Estrategia de color de `/`: **Committed**, un campo de brasa
-La primera pantalla (cabecera + hero) es un campo plano y saturado, `--campo: oklch(40% 0.115 42)`,
-un naranja quemado del mismo matiz que el acento del sistema. Cubre el 100% del primer pliegue y
-para en seco donde empieza el contenido: de ahí para abajo manda el tema. La cabecera pegajosa
-lleva el mismo campo, así que arriba del todo se lee como una sola superficie y al bajar queda una
-franja de marca.
+### Estrategia de color de `/`: **Full palette**, afiche de calle (rediseño 2026-07-29)
+Reemplaza el "Committed" de un solo campo de brasa naranja (histórico: `oklch(40% 0.115 42)`) por
+cuatro roles con nombre, a partir de un mockup que trajo el dueño: **noche** (fondo casi negro,
+`--campo: oklch(15% 0.03 264)`) alternada sección por sección con **claro** (una banda hueso,
+`--claro: oklch(96% 0.014 85)`), **lima** (`--realce: oklch(89% 0.23 126)`) como el color que carga
+TODA la energía de acción — botones, la franja de confianza, el signo del dueño — y **violeta**
+(`--violeta`) más una gota de **coral** (`--coral`) como condimento decorativo (glows del hero,
+degradado del cierre, una pegatina). Referencia nombrada: flyer de calle / streetwear, no
+cripto-neón ni SaaS-navy.
 
 Escena que lo decide: *el dueño de una pupusería cierra a las nueve de la noche, se sienta en el
-mostrador ya apagado y busca "tarjetas de lealtad" en el teléfono, con el brillo bajo.* De ahí sale
-que no puede ser una página blanca que encandile, y que el color tiene que hacer el trabajo que en
-un local haría un rótulo pintado a mano: decir de quién es esto antes de que nadie lea una palabra.
+mostrador ya apagado y busca "tarjetas de lealtad" en el teléfono, con el brillo bajo.* Sigue
+siendo la misma escena que eligió noche sobre blanco; lo que cambió es que ya no alcanza un solo
+campo de brasa para sostener nueve secciones (antes eran tres), y el ritmo de bandas oscuras y
+claras es lo que evita que una página larga se sienta un solo rectángulo de color.
 
-Cinco variables locales, declaradas en `.cabecera, .hero` de `inicio.module.css`:
-`--campo`, `--sobre-campo`, `--sobre-campo-2`, `--realce`, `--borde-campo`. Todo lo que se pinta
-encima (marca, enlaces, botones, flechas y puntos del carrusel) usa ese par de contraste y **no**
-los tokens del tema: un afiche que se aclara porque el visitante dejó el panel en claro no es un
-afiche. Es la misma excepción de `.cardface`, por la misma razón.
+**Los CINCO nombres de variable se conservan** (`--campo`, `--sobre-campo`, `--sobre-campo-2`,
+`--realce`, `--borde-campo`): es el mismo contrato de siempre, solo cambia el valor. Se declaran
+una sola vez en `.pagina` (antes vivían en `.cabecera, .hero` nada más) junto con los cuatro nuevos
+de la banda clara (`--claro`, `--sobre-claro`, `--sobre-claro-2`, `--linea-clara`) y los tres de
+condimento, para que cualquier sección de la página pueda usarlos sin redeclararlos. Todo lo que se
+pinta con ellos ignora el tema del dispositivo a propósito, misma excepción que `.cardface`: un
+afiche que cambia de color porque el visitante dejó el panel en claro no es un afiche.
 
-**La excepción de la excepción es alto contraste**, y se respeta: un bloque
-`:global(:root[data-tema="alto-contraste"])` redefine esas cinco variables (negro, blanco, ámbar) y
-nada más. Quien prendió ese tema está bajo el sol y quiere leer, no mirar un afiche.
+**La excepción de la excepción sigue siendo alto contraste.** `:global(:root[data-tema="alto-
+contraste"]) .pagina` redefine las doce variables (negro y blanco puros, lima y violeta más
+saturados) y además **colapsa la alternancia**: `--claro` pasa a valer `#000000` también, para que
+las bandas claras no le devuelvan a alguien bajo el sol un blanco deslumbrante contra el resto de
+la página en negro. Quien prendió ese tema quiere leer, no mirar un afiche.
 
 Restricciones que no se negocian:
-- **Se sirve prerenderizada estática y funciona sin JavaScript.** Verificar con `npx next build` que
-  `/` siga saliendo estática.
-- El abanico de tarjetas (`CarruselTarjetas.tsx`) funciona con dedo, teclado y mouse, y anuncia la
-  tarjeta activa a un lector de pantalla. Vive DENTRO del hero, a la derecha del texto, y abajo de
-  900px se apila debajo tocando los dos bordes de la pantalla. En escritorio la vitrina además se
-  sale de la envoltura por la derecha (con techo de 120px) para acercarse al borde de la pantalla.
-  Se le cambia el encuadre y el tamaño con `--ancho-tarjeta`, `--tope-tarjeta` y `--aire-escenario`;
-  no se reescribe.
-  Las cotas del escenario están calculadas y anotadas en el CSS, porque el degradado que difumina
-  las puntas recorta TODO lo que se salga de su caja (contenido, sombras y anillos de foco). `--tope`
-  no baja de 40px, que son píxeles fijos; **`--aire` se calcula a partir del ancho de la tarjeta**
-  (`+ 56px + ancho × 0.17`) y no se escribe a mano: lo que sobresale al girar crece con la tarjeta,
-  así que un número fijo se queda viejo la primera vez que alguien la agranda.
-- **El teléfono del abanico va en claro; la tarjeta de adentro, no.** El aparato es cromo (cuerpo,
-  marco, isla, indicador de inicio) y en claro se recorta contra la brasa a 3.9:1 en su borde más
-  oscuro; en negro se hundía a 1.6:1 y la mitad de arriba desaparecía. Los colores de la tarjeta son
-  del comercio de muestra y son el punto de la ilustración: no se tocan.
-- **Sin fondos ni cards genéricos**, pedido explícito del dueño. La página no tiene ni una caja: los
-  pasos son una lista ordenada con una regla arriba y el ordinal en mono. Lo único con contenedor
-  propio es el formulario de demo, porque agrupar campos sí es una función y no una decoración.
-- **"Qué gana tu negocio" es una tira que se desliza** (`.tira`), no un segundo abanico: si la
-  página repitiera el mecanismo del hero, el de arriba dejaría de significar "así se ve tu tarjeta".
-  Es una fila recta de columnas regladas con `scroll-snap` **nativo**: cero JavaScript, y por eso
-  sigue andando con el script apagado. Cada columna mide 74vw con techo de 340px, así que en un
-  monitor entran tres y asoma la cuarta: el contenido no queda escondido detrás de un gesto. El
-  contenedor que se desliza es un `<div tabindex="0" role="group">` aparte y **no** el `<dl>`, para
-  no pisarle el rol de lista ni desarmar los pares término/definición; el tabindex hace falta porque
-  Chrome y Safari no hacen enfocable un scroller sin nada enfocable adentro.
+- **Se sirve prerenderizada estática y funciona sin JavaScript.** Verificado con `npx next build`
+  tras el rediseño: `/` sigue saliendo `○ (Static)`. Las preguntas frecuentes son `<details>` /
+  `<summary>` nativos por la misma razón (cero JavaScript para abrir y cerrar).
+- El abanico de tarjetas (`CarruselTarjetas.tsx`) no se tocó: sigue viviendo DENTRO del hero, a la
+  derecha del texto, con el mismo sistema de `--ancho-tarjeta` / `--tope-tarjeta` / `--aire-
+  escenario`. Ver el historial de este documento (o el git log de `inicio.module.css`) si hace
+  falta el detalle de esas cotas.
+- **El teléfono del abanico va en claro; la tarjeta de adentro, no.** Se mantiene igual: el aparato
+  es cromo y necesita contraste contra la noche del fondo, y las tarjetas de muestra conservan los
+  colores de cada comercio ficticio.
+- **La regla "sin cards genéricos" se aplica con criterio, no a rajatabla.** "Cómo funciona" y
+  "¿Seguís usando esto?" y las preguntas frecuentes siguen siendo listas regladas (una raya arriba,
+  sin caja) — ahí una card seguiría siendo la respuesta perezosa. Pero "Tarjetas para cada negocio"
+  (ocho fichas, una por tipo real de `lib/tarjetas/tipos.ts`) y "Planes" (tres tarifas) SÍ usan
+  fichas: ahí una card es la afordancia correcta (comparar opciones lado a lado), y cada una evita
+  la trampa de la grilla idéntica con una decisión propia — las de tipo llevan forma de talón de
+  boleto (borde punteado + dos muescas del color de la banda, sin imágenes), y de las tres tarifas
+  solo Growth invierte a fondo noche para cargar la jerarquía en el color en vez de en un borde más
+  grueso.
+- **"Qué gana tu negocio" (la tira con `scroll-snap` nativo) se retiró** en el rediseño: sus seis
+  razones se repartieron entre la nueva franja de confianza (después del hero) y "¿Seguís usando
+  esto?" (banda oscura, filas an lugar de cards, con el tache dibujado en SVG). Si hace falta el
+  patrón de tira deslizable para una futura sección, está en el historial de git de este archivo y
+  de `inicio.module.css`.
+- **Sin contadores de piloto.** El mockup traía una franja de "+1,200 comercios / +250,000
+  tarjetas / +5 millones de escaneos": números que PRODUCT.md descarta a propósito ("son números de
+  piloto y restan"). La franja de confianza que los reemplaza dice tres cosas verificables hoy
+  (Apple + Google Wallet, la cantidad real de tipos de tarjeta del catálogo, "tu marca no la
+  nuestra"), con el mismo ritmo de tres columnas.
+- **Precios públicos: pendiente de decisión del dueño, no de diseño.** El rediseño agregó una
+  sección "Planes" con las tres tarifas reales ($29 / $49 / $89, ver el catálogo de
+  `lib/comercios/cuentas.ts`), matching el mockup. Esto revierte la política anterior de esta
+  página ("no vende precios, pide una demo"). El código ya lo muestra; si el dueño decide volver a
+  ocultarlo, la sección se saca de `app/page.tsx` sin tocar el resto del diseño, y este párrafo (y
+  la frase correspondiente en `PRODUCT.md`) hay que borrarlos junto con ella.
