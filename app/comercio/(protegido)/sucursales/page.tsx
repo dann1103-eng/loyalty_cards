@@ -101,6 +101,8 @@ export default async function PaginaSucursales({
                   latitud: s.latitud,
                   longitud: s.longitud,
                   mensajeCercania: s.mensajeCercania,
+                  mensajeCampana: s.mensajeCampana,
+                  campanaHasta: s.campanaHasta,
                   geopushActivo: s.geopushActivo,
                 }}
               />

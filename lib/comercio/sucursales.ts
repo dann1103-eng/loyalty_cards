@@ -20,6 +20,8 @@ export interface SucursalListada {
   latitud: number | null;
   longitud: number | null;
   mensajeCercania: string | null;
+  mensajeCampana: string | null;
+  campanaHasta: string | null;
   geopushActivo: boolean;
 }
 
@@ -155,7 +157,7 @@ export async function listarSucursales(
 ): Promise<SucursalListada[] | null> {
   const { data, error } = await supabase
     .from('sucursales')
-    .select('id, nombre, activa, es_principal, latitud, longitud, mensaje_cercania, geopush_activo')
+    .select('id, nombre, activa, es_principal, latitud, longitud, mensaje_cercania, mensaje_campana, campana_hasta, geopush_activo')
     .eq('comercio_id', comercioId)
     .order('es_principal', { ascending: false }) // la principal SIEMPRE primera (0012)
     .order('created_at');
@@ -175,6 +177,8 @@ export async function listarSucursales(
     latitud: s.latitud === null ? null : Number(s.latitud),
     longitud: s.longitud === null ? null : Number(s.longitud),
     mensajeCercania: s.mensaje_cercania,
+    mensajeCampana: s.mensaje_campana,
+    campanaHasta: s.campana_hasta,
     geopushActivo: s.geopush_activo,
   }));
 }

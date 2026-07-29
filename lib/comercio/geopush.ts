@@ -21,8 +21,30 @@ export const LARGO_MAXIMO_MENSAJE_CERCANIA = 128;
 export interface DatosGeopush {
   latitud: number | null;
   longitud: number | null;
+  // Mensaje BASE: permanente, describe al negocio.
   mensajeCercania: string | null;
+  // Campaña temporal (migración 0021): tapa al base mientras vive y se apaga sola al vencer.
+  mensajeCampana: string | null;
+  campanaHasta: string | null;
   geopushActivo: boolean;
+}
+
+// Qué mensaje se graba en el pase HOY. Función PURA y con `hoyIso` por argumento para poder probar
+// el borde del vencimiento sin congelar el reloj.
+//
+// La campaña TAPA al base mientras vive; al vencer se vuelve al base sin que el dueño tenga que
+// acordarse de limpiarla — que es justo lo que nadie hace.
+export function resolverMensajeCercania(
+  base: string | null,
+  campana: string | null,
+  campanaHasta: string | null,
+  hoyIso: string,
+): string | null {
+  // Se compara como TEXTO, igual que el vencimiento de un cupón: "hasta el 30" es el 30 completo en
+  // el local, y comparar instantes lo mataría a medianoche UTC — las 6 de la tarde del 29 acá.
+  const campanaVigente =
+    campana !== null && campanaHasta !== null && campanaHasta.slice(0, 10) >= hoyIso.slice(0, 10);
+  return campanaVigente ? campana : base;
 }
 
 export interface UbicacionGeopush {
@@ -30,6 +52,7 @@ export interface UbicacionGeopush {
   nombre: string;
   latitud: number;
   longitud: number;
+  // YA resuelto entre base y campaña: quien construye el pase no tiene que saber que existen dos.
   mensajeCercania: string | null;
 }
 
@@ -51,6 +74,18 @@ function validar(datos: DatosGeopush): string | null {
   }
   if (datos.mensajeCercania !== null && datos.mensajeCercania.length > LARGO_MAXIMO_MENSAJE_CERCANIA) {
     return `El mensaje no puede pasar de ${LARGO_MAXIMO_MENSAJE_CERCANIA} caracteres.`;
+  }
+  if (datos.mensajeCampana !== null && datos.mensajeCampana.length > LARGO_MAXIMO_MENSAJE_CERCANIA) {
+    return `El mensaje de la campaña no puede pasar de ${LARGO_MAXIMO_MENSAJE_CERCANIA} caracteres.`;
+  }
+  // Espejo del CHECK de la BD, para dar el mensaje en español en vez de un 23514 crudo. Una campaña
+  // sin fecha nunca terminaría (el problema que la 0021 vino a resolver) y una fecha sin mensaje no
+  // muestra nada.
+  if ((datos.mensajeCampana === null) !== (datos.campanaHasta === null)) {
+    return 'La campaña necesita un mensaje Y una fecha de fin, o ninguno de los dos.';
+  }
+  if (datos.campanaHasta !== null && !/^\d{4}-\d{2}-\d{2}$/.test(datos.campanaHasta)) {
+    return 'La fecha de fin de la campaña no es válida.';
   }
   if (datos.geopushActivo && !tieneCoordenadas) {
     return 'Para activar el aviso por cercanía hace falta la ubicación del local.';
@@ -110,6 +145,8 @@ export async function guardarGeopushSucursal(
       latitud: datos.latitud,
       longitud: datos.longitud,
       mensaje_cercania: datos.mensajeCercania,
+      mensaje_campana: datos.mensajeCampana,
+      campana_hasta: datos.campanaHasta,
       geopush_activo: datos.geopushActivo,
     })
     .eq('id', sucursalId)
@@ -134,9 +171,24 @@ export async function listarUbicacionesGeopush(
   supabase: SupabaseClient<Database>,
   comercioId: string,
 ): Promise<UbicacionGeopush[]> {
+  // La zona horaria del comercio decide qué día es "hoy" para el vencimiento de la campaña. Es una
+  // consulta extra en el camino de emisión de cada pase, y vale la pena: sin ella el corte sería en
+  // UTC y una campaña salvadoreña moriría a las 6 de la tarde del día anterior.
+  const { data: comercio } = await supabase
+    .from('comercios')
+    .select('zona_horaria')
+    .eq('id', comercioId)
+    .maybeSingle();
+  const hoyIso = new Intl.DateTimeFormat('en-CA', {
+    timeZone: comercio?.zona_horaria ?? 'America/El_Salvador',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
   const { data, error } = await supabase
     .from('sucursales')
-    .select('id, nombre, latitud, longitud, mensaje_cercania')
+    .select('id, nombre, latitud, longitud, mensaje_cercania, mensaje_campana, campana_hasta')
     .eq('comercio_id', comercioId)
     .eq('activa', true)
     .eq('geopush_activo', true)
@@ -158,6 +210,11 @@ export async function listarUbicacionesGeopush(
       nombre: s.nombre,
       latitud: Number(s.latitud),
       longitud: Number(s.longitud),
-      mensajeCercania: s.mensaje_cercania,
+      mensajeCercania: resolverMensajeCercania(
+        s.mensaje_cercania,
+        s.mensaje_campana,
+        s.campana_hasta,
+        hoyIso,
+      ),
     }));
 }

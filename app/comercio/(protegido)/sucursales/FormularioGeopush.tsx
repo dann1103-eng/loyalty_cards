@@ -15,6 +15,8 @@ export interface SucursalGeopush {
   latitud: number | null;
   longitud: number | null;
   mensajeCercania: string | null;
+  mensajeCampana: string | null;
+  campanaHasta: string | null;
   geopushActivo: boolean;
 }
 
@@ -23,7 +25,14 @@ export default function FormularioGeopush({ sucursal }: { sucursal: SucursalGeop
   const [estado, ejecutar, pendiente] = useActionState<EstadoGeopush, FormData>(accion, undefined);
 
   const tieneUbicacion = sucursal.latitud !== null && sucursal.longitud !== null;
-  const clave = [sucursal.latitud, sucursal.longitud, sucursal.mensajeCercania, sucursal.geopushActivo].join('|');
+  const clave = [
+    sucursal.latitud,
+    sucursal.longitud,
+    sucursal.mensajeCercania,
+    sucursal.mensajeCampana,
+    sucursal.campanaHasta,
+    sucursal.geopushActivo,
+  ].join('|');
 
   return (
     <details style={{ marginTop: 4 }}>
@@ -59,7 +68,7 @@ export default function FormularioGeopush({ sucursal }: { sucursal: SucursalGeop
 
         <div className="field">
           <label htmlFor={`mensaje-${sucursal.id}`}>
-            Mensaje en la pantalla de bloqueo (máx. {LARGO_MAXIMO_MENSAJE_CERCANIA})
+            Mensaje permanente (máx. {LARGO_MAXIMO_MENSAJE_CERCANIA})
           </label>
           <input
             id={`mensaje-${sucursal.id}`}
@@ -74,6 +83,34 @@ export default function FormularioGeopush({ sucursal }: { sucursal: SucursalGeop
           <p className="admin-fila-slug" style={{ marginTop: 6 }}>
             Este texto se ve en iPhone. En Android llega la notificación igual, pero el texto lo pone
             Google y no se puede cambiar.
+          </p>
+        </div>
+
+        {/* Campaña temporal. Va DEBAJO del permanente y con su fecha al lado para que quede claro
+            que uno tapa al otro y que el de arriba vuelve solo cuando esta termina. */}
+        <div className="field">
+          <label htmlFor={`campana-${sucursal.id}`}>Promoción temporal (opcional)</label>
+          <input
+            id={`campana-${sucursal.id}`}
+            name="mensaje_campana"
+            type="text"
+            maxLength={LARGO_MAXIMO_MENSAJE_CERCANIA}
+            placeholder="2x1 en hotdogs este fin de semana"
+            defaultValue={sucursal.mensajeCampana ?? ''}
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor={`hasta-${sucursal.id}`}>La promoción se muestra hasta</label>
+          <input
+            id={`hasta-${sucursal.id}`}
+            name="campana_hasta"
+            type="date"
+            defaultValue={sucursal.campanaHasta ?? ''}
+          />
+          <p className="admin-fila-slug" style={{ marginTop: 6 }}>
+            Mientras dure, tapa al mensaje permanente. Ese día todavía se muestra, y al siguiente
+            vuelve solo el de arriba — no tenés que acordarte de borrarla.
           </p>
         </div>
 

@@ -15,6 +15,7 @@
 //   - supabase/migrations/0012_sucursal_principal.sql (sucursales.es_principal + índice único parcial)
 //   - supabase/migrations/0013_reverso_tarjeta.sql (columnas del reverso del pass en comercios)
 //   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
+//   - supabase/migrations/0021_campana_con_vencimiento.sql (mensaje_campana/campana_hasta en sucursales)
 //   - supabase/migrations/0020_usar_visita_multipass.sql (funcion usar_visita_atomico)
 //   - supabase/migrations/0019_vigencia_cupon_membresia.sql (tipos 'uso'/'renovacion' en el ledger; funciones usar_cupon_atomico/renovar_membresia_atomico)
 //   - supabase/migrations/0018_tipos_de_tarjeta.sql (config por tipo en comercios; vigencia_hasta/usado_en/acumulado_centavos en tarjetas; tabla niveles_descuento)
@@ -785,7 +786,12 @@ export type Database = {
           // Texto de la pantalla de bloqueo en iPhone (relevantText de PassKit). Máx. 128 — Apple
           // no rechaza un texto más largo, lo CORTA en silencio. En Android no se usa: ahí el texto
           // lo pone Google y no se puede editar.
+          // Mensaje BASE: permanente, describe al negocio.
           mensaje_cercania: string | null;
+          // Campaña temporal (migración 0021): TAPA al base mientras vive y se apaga sola al vencer.
+          // La BD exige que mensaje_campana y campana_hasta vayan los dos o ninguno.
+          mensaje_campana: string | null;
+          campana_hasta: string | null;
           // Qué sucursales participan del geopush. Apple admite 10 ubicaciones por pase y el tope
           // se valida en lib/comercio/sucursales.ts (la BD no expresa "máximo N").
           geopush_activo: boolean;
@@ -800,6 +806,8 @@ export type Database = {
           latitud?: number | null;
           longitud?: number | null;
           mensaje_cercania?: string | null;
+          mensaje_campana?: string | null;
+          campana_hasta?: string | null;
           geopush_activo?: boolean;
         };
         Update: {
@@ -812,6 +820,8 @@ export type Database = {
           latitud?: number | null;
           longitud?: number | null;
           mensaje_cercania?: string | null;
+          mensaje_campana?: string | null;
+          campana_hasta?: string | null;
           geopush_activo?: boolean;
         };
         // FK inline de la 0008 (`comercio_id ... references comercios(id)`). Necesaria para joins

@@ -125,7 +125,12 @@ export async function accionGuardarGeopush(
 
   const pegado = String(formData.get('ubicacion') ?? '').trim();
   const mensaje = String(formData.get('mensaje_cercania') ?? '').trim();
+  const mensajeCampana = String(formData.get('mensaje_campana') ?? '').trim();
+  const campanaHasta = String(formData.get('campana_hasta') ?? '').trim();
   const activar = formData.get('geopush_activo') === 'on';
+
+  // Los dos campos de la campaña viajan juntos o ninguno: si el dueño escribió solo uno, la capa de
+  // datos lo rechaza con un mensaje en español en vez de dejar que la BD tire un 23514.
 
   let latitud: number | null = null;
   let longitud: number | null = null;
@@ -145,6 +150,8 @@ export async function accionGuardarGeopush(
     latitud,
     longitud,
     mensajeCercania: mensaje || null,
+    mensajeCampana: mensajeCampana || null,
+    campanaHasta: campanaHasta || null,
     geopushActivo: activar,
   });
   if (!res.ok) return { error: res.error };
