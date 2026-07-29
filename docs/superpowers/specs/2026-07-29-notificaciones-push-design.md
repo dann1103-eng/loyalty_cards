@@ -59,8 +59,9 @@ parejo. Se documenta así en el panel del dueño.
    ciclo.
 4. **Candado no negociable, compartido por las dos features:** antes de mandar por Google a una
    tarjeta puntual, contar cuántos avisos con notificación recibió esa tarjeta en las últimas 24
-   horas (de CUALQUIER origen — campaña o inactividad, no canal). Si ya tiene 3, se salta esa
-   tarjeta — no se manda igual, no se corta la difusión completa por una tarjeta saturada.
+   horas, sumando campaña e inactividad juntas (el candado agrupa por ORIGEN, no por canal — ver
+   "función compartida" para el detalle exacto). Si ya tiene 3, se salta esa tarjeta puntual — no
+   se manda igual, no se corta la difusión completa por una tarjeta saturada.
 5. **La inactividad se mide POR TARJETA, no por cliente.** Con programas de tarjeta (migración
    0024) un cliente puede tener su tarjeta de sellos activa y su cupón de bienvenida olvidado — y
    ese es exactamente el caso que vale la pena avisar. Evaluar por cliente-agregado escondería esa
@@ -102,6 +103,10 @@ create table notificaciones_enviadas (
 );
 create index on notificaciones_enviadas (tarjeta_id, enviada_en desc);
 alter table notificaciones_enviadas enable row level security;
+-- Ninguna de las dos lleva políticas: deny-all, mismo criterio que programas_tarjeta (0024).
+-- PRECONDICIÓN para cualquier función que las toque: supabase DEBE ser createServiceClient() —
+-- con un cliente de sesión, cada select/insert devuelve null/no-op en silencio en vez de un error
+-- (lib/comercio/programas.ts documenta el mismo riesgo dos veces, vale la pena no repetirlo).
 
 -- Estado ACTUAL del aviso en el reverso de CADA tarjeta. construirReverso/datosPassDeTarjeta
 -- reconstruyen el reverso de cero en CADA regeneración del pase (confirmado leyendo el código:
@@ -171,21 +176,31 @@ el conteo acá es una optimización para no gastar la llamada a la API en un env
 
 ## La función compartida
 
-`enviarMensajeTarjeta(supabase, tarjetaId, mensaje, vigenteHasta, origen, difusionId?)`:
+`enviarMensajeTarjeta(supabase, tarjetaId, mensaje, vigenteHasta, origen, difusionId?)` — devuelve
+`{ enviadoApple: boolean, enviadoGoogle: boolean }`, cada uno reflejando si ESE canal tenía
+realmente un dispositivo/objeto al que entregarle el mensaje (no si "se intentó"):
 
 1. Actualiza `tarjetas.aviso_texto`/`aviso_hasta` con `mensaje`/`vigenteHasta` — esto es lo que
    `construirReverso` va a leer de ahora en más, en CUALQUIER regeneración del pase, no solo esta.
 2. **Apple**: el campo nuevo del reverso (`aviso`, con `changeMessage: "%@"`) ya cambió de valor en
-   el paso 1, así que dispara el push silencioso que ya existe
-   (`notificarCambioTarjeta`/`notificarCambioComercio`) — cero código nuevo de APNs. Inserta una
-   fila en `notificaciones_enviadas` con `canal='apple'`. El límite de caracteres del campo se
-   verifica empíricamente durante la implementación (mismo criterio que ya se aplicó a
-   `relevantText`, no se asume un número sin probarlo contra Wallet real).
-3. **Google**: antes de llamar `addMessage`, cuenta en `notificaciones_enviadas` cuántas filas con
-   `canal='google'` tiene esa tarjeta en las últimas 24 horas (el filtro por canal es explícito:
-   las filas de Apple del paso 2 no cuentan para este candado, que es específicamente el tope de
-   Google). Si ya son 3, se salta el envío por este canal — Apple ya se mandó igual en el paso 2,
-   el candado es solo de Google. Si manda, inserta la fila con `canal='google'`.
+   el paso 1. `enviadoApple` es `true` solo si la tarjeta tiene al menos una fila en
+   `apple_push_registrations` (mismo chequeo que `notificarCambioTarjeta` ya hace internamente
+   antes de mandar nada) — si no tiene ninguna, no hay push que disparar y no se inserta fila de
+   auditoría: insertarla igual sería una auditoría que miente. Cuando sí hay registro, dispara el
+   push silencioso que ya existe (`notificarCambioTarjeta`/`notificarCambioComercio` — cero código
+   nuevo de APNs) e inserta la fila en `notificaciones_enviadas` con `canal='apple'`. El límite de
+   caracteres del campo se verifica empíricamente durante la implementación (mismo criterio que ya
+   se aplicó a `relevantText`, no se asume un número sin probarlo contra Wallet real).
+3. **Google**: si la tarjeta no tiene `google_object_id`, `enviadoGoogle` es `false` y no hay nada
+   más que hacer. Si lo tiene: antes de llamar `addMessage`, cuenta en `notificaciones_enviadas`
+   cuántas filas con `canal='google'` tiene esa tarjeta en las últimas 24 horas (el filtro por
+   canal es explícito: las filas de Apple del paso 2 no cuentan para este candado, que es
+   específicamente el tope de Google). Si ya son 3, `enviadoGoogle` es `false` y se salta el envío
+   por este canal — Apple ya se mandó igual en el paso 2, el candado es solo de Google. Si manda,
+   `enviadoGoogle` es `true` e inserta la fila con `canal='google'`.
+- El caller usa `enviadoApple || enviadoGoogle` para decidir si esa tarjeta cuenta en
+  `difusiones.destinatarios` — así el número mostrado en el panel y el rastro de auditoría
+  cuentan exactamente lo mismo, no dos cosas que pueden divergir.
 - `difusionId` viaja solo desde la campaña manual (origen `'campana'`) y queda en
   `notificaciones_enviadas.difusion_id` — trazabilidad de soporte ("¿a este cliente sí le llegó
   esta campaña puntual?"). El aviso de inactividad no tiene difusión que enlazar.
@@ -236,11 +251,12 @@ distintos a un modelo único (ver decisión 1) tiende a complicar más de lo que
 - El límite real de caracteres del nuevo campo del reverso de Apple no está medido — se verifica
   contra Wallet real durante la implementación, como ya se hizo con `relevantText`
   (`LARGO_MAXIMO_MENSAJE_CERCANIA`).
-- Hoy existe UNA `LoyaltyClass` por comercio (no por programa) — un `addMessage` a nivel clase
-  llega a TODOS los programas del comercio de una sola llamada, más eficiente que recorrer
-  objetos. Cuando la campaña apunta a un programa específico, hace falta recorrer los objetos
-  (`LoyaltyObject`) de las tarjetas de ese programa en vez de la clase — el plan debe decidir la
-  forma exacta de esa llamada.
+- Hoy existe UNA `LoyaltyClass` por comercio (no por programa). Aun así, el envío por Google
+  **siempre recorre objetos (`LoyaltyObject`) individuales, nunca una sola llamada a nivel de
+  clase** — ni siquiera cuando la campaña apunta a "todos los programas". Un `addMessage` a nivel
+  clase no tiene forma de excluir a una tarjeta puntual, y el candado de 3/24h de la decisión 4 es
+  no negociable precisamente porque sí necesita esa exclusión por tarjeta. La llamada a nivel
+  clase sería más eficiente, pero no puede coexistir con el candado — se descarta.
 - Cobertura de pruebas obligatoria para: el tope de 4/mes (incluida la mutación "cambiar `>=` por
   `>`"), el candado de 3/24h de Google con el filtro por `canal` (una mutación que lo quite debe
   atrapar que un push de Apple cuente contra el tope de Google), la resolución de "última
@@ -253,3 +269,12 @@ distintos a un modelo único (ver decisión 1) tiende a complicar más de lo que
   escala actual del proyecto, pero el plan debe confirmarlo explícitamente en vez de asumirlo,
   sobre todo si algún comercio llega a tener miles de tarjetas activas y una función serverless
   tiene un límite de tiempo de ejecución.
+- El vencimiento de `aviso_hasta` se resuelve solo AL LEER (como `resolverMensajeCercania`): una
+  tarjeta que no vuelve a regenerar su pase después de que su aviso vence lo seguiría mostrando
+  vencido indefinidamente en el reverso, porque nada dispara una regeneración solo para refrescar
+  eso — a diferencia de geopush, que sí tiene un cron activo (`apagarCampanasVencidas`) para este
+  caso. Probablemente autocorregible (la próxima venta o cambio real regenera el pase igual), pero
+  el plan debe decidirlo explícitamente en vez de asumirlo.
+- Del lado de Google, `addMessage` deja un historial visible más persistente que el aviso de
+  Apple (que es un letrero de una sola vez en la pantalla de bloqueo). El plan debe confirmar si
+  eso está bien dejarlo acumularse tal cual, o si hace falta superseder/limpiar mensajes viejos.
