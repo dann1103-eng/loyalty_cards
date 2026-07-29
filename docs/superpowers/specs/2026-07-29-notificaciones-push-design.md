@@ -77,27 +77,39 @@ parejo. Se documenta así en el panel del dueño.
 ## Modelo de datos
 
 ```sql
--- Registro compartido: auditoría Y fuente del candado de 3/24h de Google.
-create table notificaciones_enviadas (
-  id uuid primary key default gen_random_uuid(),
-  tarjeta_id uuid not null references tarjetas(id),
-  canal text not null check (canal in ('apple', 'google')),
-  origen text not null check (origen in ('campana', 'inactividad')),
-  enviada_en timestamptz not null default now()
-);
-create index on notificaciones_enviadas (tarjeta_id, enviada_en desc);
-
 -- Historial de campañas manuales Y fuente del tope de 4/mes.
 create table difusiones (
   id uuid primary key default gen_random_uuid(),
   comercio_id uuid not null references comercios(id),
-  programa_id uuid references programas_tarjeta(id), -- null = todos los programas del comercio
+  programa_id uuid references programas_tarjeta(id), -- null = todos los programas activos del comercio
   mensaje text not null,
+  vigente_hasta date not null, -- cuánto dura el mensaje en el reverso del pase (lo elige el dueño, como campana_hasta en geopush)
   creada_por uuid not null references usuarios_comercio(id),
   creada_en timestamptz not null default now(),
   destinatarios integer not null default 0 -- cuántas tarjetas recibieron el mensaje, para el panel
 );
 create index on difusiones (comercio_id, creada_en desc);
+
+-- Registro compartido: auditoría de AMBOS canales Y fuente del candado de 3/24h de Google.
+create table notificaciones_enviadas (
+  id uuid primary key default gen_random_uuid(),
+  tarjeta_id uuid not null references tarjetas(id),
+  canal text not null check (canal in ('apple', 'google')),
+  origen text not null check (origen in ('campana', 'inactividad')),
+  difusion_id uuid references difusiones(id), -- solo origen='campana'; null en 'inactividad'
+  enviada_en timestamptz not null default now()
+);
+create index on notificaciones_enviadas (tarjeta_id, enviada_en desc);
+
+-- Estado ACTUAL del aviso en el reverso de CADA tarjeta. construirReverso/datosPassDeTarjeta
+-- reconstruyen el reverso de cero en CADA regeneración del pase (confirmado leyendo el código:
+-- no hay copia congelada) — así que changeMessage necesita un valor persistido que sobreviva a
+-- una regeneración disparada por otra cosa (una venta, un cambio de branding). Sin esto no hay
+-- qué comparar. Mismo patrón que vigencia_hasta/usado_en: el campo vive en la tarjeta, no en el
+-- evento que lo originó.
+alter table tarjetas
+  add column aviso_texto text,
+  add column aviso_hasta date; -- null junto con aviso_texto null = sin aviso vigente en el reverso
 
 -- Perillas del aviso de inactividad, junto a las de Tanda 1 (mismo patrón de columnas en comercios).
 alter table comercios
@@ -109,23 +121,51 @@ alter table comercios
 alter table tarjetas add column aviso_inactividad_enviado_en timestamptz;
 ```
 
-Un cupo de recordatorio: si la última actividad real de la tarjeta (`transacciones_puntos` /
-`canjes`) es más nueva que `aviso_inactividad_enviado_en`, la tarjeta puede volver a avisarse la
-próxima vez que cruce el umbral — no hace falta una limpieza explícita de la columna.
+**Duración del aviso en el pase**: para una campaña, el dueño elige `vigente_hasta` al mandarla
+(igual que `campana_hasta` en geopush) — una promo de "este fin de semana" y una de "todo el mes"
+duran lo que el dueño diga, no un número fijo del sistema. Para el aviso de inactividad, la
+duración es un valor fijo del sistema (14 días sugerido, no una perilla más: el dueño ya configuró
+el umbral y el mensaje: agregar una TERCERA perilla solo para esto es la clase de configurabilidad
+que nadie pidió). Se resuelve con la misma lógica que `resolverMensajeCercania` (texto vigente si
+`aviso_hasta >= hoy`, si no, nada) — mismo patrón ya probado, función pura con `hoyIso` por
+argumento.
+
+**"Última actividad real" cuando la tarjeta nunca se usó**: el momento más reciente entre la
+última fila en `transacciones_puntos`/`canjes` para esa tarjeta, y `tarjetas.created_at` si no
+tiene ninguna fila. Esto importa en la práctica: es exactamente el caso del cupón de bienvenida
+nunca canjeado que motiva la decisión 5 — sin este fallback, una tarjeta sin ninguna fila de
+ledger nunca calificaría como inactiva y el aviso no le llegaría jamás.
+
+**"Tarjeta activa" en este documento** significa: pertenece a un programa con
+`programas_tarjeta.activo = true` (join, no una columna en `tarjetas` — esa tabla no tiene
+`activa`/`activo`). Ni las campañas ni el aviso de inactividad alcanzan tarjetas de un programa
+que el dueño ya desactivó.
+
+Un aviso de inactividad puede volver a mandarse: si la última actividad real de la tarjeta
+(definida arriba) es más nueva que `aviso_inactividad_enviado_en`, quiere decir que hubo actividad
+después del último aviso, así que puede volver a cruzar el umbral y avisarse de nuevo — no hace
+falta una limpieza explícita de la columna.
 
 ## La función compartida
 
-`enviarMensajeTarjeta(supabase, tarjetaId, mensaje, origen)`:
+`enviarMensajeTarjeta(supabase, tarjetaId, mensaje, vigenteHasta, origen, difusionId?)`:
 
-- **Apple**: escribe `mensaje` en un campo nuevo del reverso del pase (`aviso`, con
-  `changeMessage: "%@"`) y dispara el push silencioso que ya existe
-  (`notificarCambioTarjeta`/`notificarCambioComercio`) — cero código nuevo de APNs. El límite de
-  caracteres del campo se verifica empíricamente durante la implementación (mismo criterio que ya
-  se aplicó a `relevantText`, no se asume un número sin probarlo contra Wallet real).
-- **Google**: antes de llamar `addMessage`, cuenta en `notificaciones_enviadas` cuántos avisos
-  recibió esa tarjeta en las últimas 24 horas; si ya son 3, se salta el envío por este canal (Apple
-  sigue mandándose igual — el candado es solo de Google). Si manda, registra la fila en
-  `notificaciones_enviadas`.
+1. Actualiza `tarjetas.aviso_texto`/`aviso_hasta` con `mensaje`/`vigenteHasta` — esto es lo que
+   `construirReverso` va a leer de ahora en más, en CUALQUIER regeneración del pase, no solo esta.
+2. **Apple**: el campo nuevo del reverso (`aviso`, con `changeMessage: "%@"`) ya cambió de valor en
+   el paso 1, así que dispara el push silencioso que ya existe
+   (`notificarCambioTarjeta`/`notificarCambioComercio`) — cero código nuevo de APNs. Inserta una
+   fila en `notificaciones_enviadas` con `canal='apple'`. El límite de caracteres del campo se
+   verifica empíricamente durante la implementación (mismo criterio que ya se aplicó a
+   `relevantText`, no se asume un número sin probarlo contra Wallet real).
+3. **Google**: antes de llamar `addMessage`, cuenta en `notificaciones_enviadas` cuántas filas con
+   `canal='google'` tiene esa tarjeta en las últimas 24 horas (el filtro por canal es explícito:
+   las filas de Apple del paso 2 no cuentan para este candado, que es específicamente el tope de
+   Google). Si ya son 3, se salta el envío por este canal — Apple ya se mandó igual en el paso 2,
+   el candado es solo de Google. Si manda, inserta la fila con `canal='google'`.
+- `difusionId` viaja solo desde la campaña manual (origen `'campana'`) y queda en
+  `notificaciones_enviadas.difusion_id` — trazabilidad de soporte ("¿a este cliente sí le llegó
+  esta campaña puntual?"). El aviso de inactividad no tiene difusión que enlazar.
 - Reutiliza la limpieza de tokens inválidos que `notificarCambioTarjeta` ya tiene (un token
   `BadDeviceToken`/`Unregistered` se borra solo) — no hay que reconstruir eso.
 
@@ -133,14 +173,17 @@ próxima vez que cruce el umbral — no hace falta una limpieza explícita de la
 
 Pantalla nueva (`/comercio/notificaciones` o similar — nombre final a definir), gate de dueño:
 
-- Formulario: mensaje (texto libre) + selector de programa (default "todos").
-- Antes de mandar: contar `difusiones` de los últimos 30 días para el comercio; si ya hay 4,
-  rechazar con un mensaje claro.
-- Al mandar: resolver las tarjetas destino (todas las activas del comercio, o solo las del
-  programa elegido), llamar `enviarMensajeTarjeta` por cada una, insertar la fila en `difusiones`
-  con el conteo real de destinatarios.
+- Formulario: mensaje (texto libre) + hasta cuándo dura en el reverso del pase + selector de
+  programa (default "todos").
+- Antes de mandar: contar `difusiones` de los últimos 30 días (ventana móvil, no mes de
+  calendario) para el comercio; si ya hay 4, rechazar con un mensaje claro.
+- Al mandar: resolver las tarjetas destino (tarjetas activas del comercio — ver definición arriba
+  — o solo las del programa elegido), llamar `enviarMensajeTarjeta` por cada una con el
+  `difusion_id` recién creado, insertar la fila en `difusiones` con el conteo real de
+  destinatarios.
 - Historial visible en la misma pantalla: qué se mandó, cuándo, a cuántos, y el contador de "te
-  quedan N de 4 este mes".
+  quedan N de 4 en los últimos 30 días" (la copia no dice "este mes": el mecanismo es ventana
+  móvil, no reinicio de calendario, y la copia tiene que decir la verdad).
 
 ## Aviso de inactividad
 
@@ -148,10 +191,12 @@ Pantalla nueva (`/comercio/notificaciones` o similar — nombre final a definir)
   `pedir_monto_compra`/`tope_puntos_dia`): activar/desactivar, días de inactividad (número,
   default sugerido 30), mensaje.
 - Cron diario nuevo (mismo mecanismo que `/api/cron/campanas`: `CRON_SECRET`, falla cerrado si no
-  está configurado). Recorre comercios con `aviso_inactividad_activo`, y dentro de cada uno, cada
-  tarjeta activa cuya última actividad real supere `aviso_inactividad_dias` Y (no tenga
-  `aviso_inactividad_enviado_en`, o su última actividad sea más nueva que ese aviso). Llama
-  `enviarMensajeTarjeta` con origen `'inactividad'` y actualiza la columna.
+  está configurado, entrada propia en `vercel.json` junto a la de `/api/cron/campanas`). Recorre
+  comercios con `aviso_inactividad_activo`, y dentro de cada uno, cada tarjeta activa (ver
+  definición arriba) cuya última actividad real (ver definición arriba, incluye el fallback a
+  `created_at`) supere `aviso_inactividad_dias` Y (no tenga `aviso_inactividad_enviado_en`, o su
+  última actividad sea más nueva que ese aviso). Llama `enviarMensajeTarjeta` con origen
+  `'inactividad'`, `vigenteHasta` = hoy + 14 días, y actualiza `aviso_inactividad_enviado_en`.
 
 ## Lo que NO cambia
 
@@ -172,6 +217,8 @@ distintos a un modelo único (ver decisión 1) tiende a complicar más de lo que
   (`LoyaltyObject`) de las tarjetas de ese programa en vez de la clase — el plan debe decidir la
   forma exacta de esa llamada.
 - Cobertura de pruebas obligatoria para: el tope de 4/mes (incluida la mutación "cambiar `>=` por
-  `>`"), el candado de 3/24h de Google, y el caso concreto que motivó la decisión 5 — una tarjeta
-  activa y otra inactiva del MISMO cliente en el MISMO comercio, confirmando que el aviso llega
-  solo a la inactiva.
+  `>`"), el candado de 3/24h de Google con el filtro por `canal` (una mutación que lo quite debe
+  atrapar que un push de Apple cuente contra el tope de Google), la resolución de "última
+  actividad real" con el fallback a `created_at` para una tarjeta sin ninguna fila de ledger, y el
+  caso concreto que motivó la decisión 5 — una tarjeta activa y otra inactiva del MISMO cliente en
+  el MISMO comercio, confirmando que el aviso llega solo a la inactiva.
