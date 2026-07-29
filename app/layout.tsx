@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Outfit, Hanken_Grotesk, Geist_Mono } from "next/font/google";
+import { Outfit, Hanken_Grotesk, Geist_Mono, Permanent_Marker } from "next/font/google";
 import { SCRIPT_TEMA, TEMA_POR_DEFECTO } from "@/lib/tema";
 import "./globals.css";
 
@@ -23,6 +23,15 @@ const geistMono = Geist_Mono({
   weight: ["400", "700"],
 });
 
+// Solo para el acento tipo marcador de la página pública ("funciona", "GRATIS", "para crecer"):
+// el mockup de `/` repite ese trazo suelto sobre el título en bloque en casi cada sección, y
+// replicarlo pide una familia de veras distinta, no Outfit en cursiva. No se usa en ningún panel.
+const marcador = Permanent_Marker({
+  variable: "--font-marcador",
+  subsets: ["latin"],
+  weight: ["400"],
+});
+
 export const metadata: Metadata = {
   title: "Cardly SV",
   description:
@@ -37,7 +46,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`${outfit.variable} ${hanken.variable} ${geistMono.variable}`}
+      className={`${outfit.variable} ${hanken.variable} ${geistMono.variable} ${marcador.variable}`}
       // El servidor no puede saber qué tema eligió este dispositivo (vive en localStorage), así que
       // sirve SIEMPRE el por defecto y el script de abajo lo corrige antes del primer pintado. Sin
       // suppressHydrationWarning React vería que el atributo del DOM no coincide con el que él

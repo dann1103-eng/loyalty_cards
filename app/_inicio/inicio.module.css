@@ -41,11 +41,12 @@
   --sobre-claro-2: oklch(40% 0.02 85);
   --linea-clara: rgba(30, 20, 10, 0.13);
 
-  /* Condimento: violeta para el segundo plano de "Planes" y el degradado del cierre; coral solo
-     para una pegatina. Ninguno de los dos carga texto de cuerpo, así que no necesitan su propio
-     "sobre-x": donde llevan texto encima reutilizan --sobre-campo (bone), que ya contrasta bien
-     contra cualquier tono oscuro de esta paleta. */
+  /* Condimento: violeta oscuro para texto/acento sobre banda clara, violeta-tarjeta para fondos
+     grandes (la card de Growth, el cierre) que sí necesitan verse violeta de verdad como en el
+     mockup, y coral para una pegatina. Ninguno carga texto de cuerpo propio: donde llevan texto
+     encima reutilizan --sobre-campo (bone), que contrasta bien contra los tres. */
   --violeta: oklch(38% 0.15 302);
+  --violeta-tarjeta: oklch(54% 0.19 300);
   --violeta-realce: oklch(66% 0.19 300);
   --coral: oklch(70% 0.17 32);
 }
@@ -65,6 +66,7 @@
   --linea-clara: rgba(255, 255, 255, 0.82);
 
   --violeta: #000000;
+  --violeta-tarjeta: #000000;
   --violeta-realce: #d9b8ff;
   --coral: #ff8a5c;
 }
@@ -365,39 +367,83 @@
 }
 
 /* ---------- pegatinas ----------
-   Dos placas rotadas, puramente decorativas (aria-hidden desde el JSX): la energía de afiche de
-   calle que le falta a un botón y un título solos. Llevan un HECHO real cada una (no son ruido:
-   "8 tipos de tarjeta" y "Apple + Google Wallet" son quienes hacen ese trabajo en el resto de la
-   página), así que si alguien las lee igual aprende algo. */
+   Placas de afiche, puramente decorativas (aria-hidden desde el JSX): la energía de calle que le
+   falta a un botón y un título solos. Reusan cuatro variantes de color/forma a lo largo de la
+   página (hero, planes, preguntas), con la MISMA clase base, para no inventar un sistema nuevo
+   por sección. */
 .pegatina {
-  position: absolute;
-  z-index: 2;
-  padding: 7px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 8px 16px;
   border-radius: 10px;
   font-family: var(--font-display);
   font-size: 13px;
   font-weight: 700;
+  line-height: 1.2;
   white-space: nowrap;
   box-shadow: var(--shadow-2);
+}
+.pegatinaCeleste {
+  background: oklch(85% 0.07 226);
+  color: oklch(18% 0.02 240);
+}
+.pegatinaCoral {
+  background: var(--coral);
+  color: var(--campo);
+}
+.pegatinaVioleta {
+  background: var(--violeta-realce);
+  color: var(--campo);
+}
+/* El sello circular: texto chico en un anillo alrededor no vale la complejidad de un <textPath>
+   para un elemento puramente decorativo — el círculo sólido con un ícono simple transmite lo
+   mismo (una insignia) sin depender de que el texto en arco se lea. */
+.pegatinaSello {
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  background: var(--violeta);
+  color: var(--sobre-campo);
+  white-space: normal;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 2px solid var(--violeta-realce);
+}
+.pegatinaRosa {
+  background: oklch(88% 0.07 350);
+  color: oklch(30% 0.1 350);
+  font-family: var(--font-marcador);
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 1.15;
+  text-transform: none;
+  border-radius: 50% / 40%;
+  padding: 14px 20px;
+}
+
+/* Posicionamiento absoluto SOLO para las que flotan sobre el hero; las de "planes" y "preguntas"
+   van en flujo normal dentro de su propia columna. */
+.pegatinaHero {
+  position: absolute;
+  z-index: 2;
 }
 .pegatinaUno {
   top: -6px;
   right: 8%;
   transform: rotate(-8deg);
-  background: var(--coral);
-  color: var(--campo);
 }
 .pegatinaDos {
   bottom: 6px;
   left: 2%;
   transform: rotate(6deg);
-  background: var(--violeta-realce);
-  color: var(--campo);
 }
 @media (max-width: 899px) {
   /* En una columna las pegatinas flotantes se pisan con el texto que se apila debajo: se esconden
      y la energía de calle queda a cargo del pregón y la tipografía. */
-  .pegatina {
+  .pegatinaHero {
     display: none;
   }
 }
@@ -481,7 +527,24 @@
   font-size: clamp(28px, 5.2vw, 40px);
   line-height: 1.15;
   letter-spacing: -0.025em;
+  text-transform: uppercase;
   text-wrap: balance;
+}
+
+/* El trazo de marcador que acompaña casi todos los títulos de bloque del mockup ("funciona",
+   "para crecer", "para cada negocio", "frecuentes", "GRATIS"): una familia de veras, no Outfit en
+   cursiva — ver el comentario de --font-marcador en app/layout.tsx. Va en minúscula y sin la
+   mayúscula que fuerza .tituloSeccion, porque un marcador en VERSALITAS deja de leerse a mano. */
+.script {
+  display: block;
+  text-transform: none;
+  font-family: var(--font-marcador);
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--realce);
+}
+.bandaClara .script {
+  color: var(--violeta);
 }
 
 .textoSeccion {
@@ -515,18 +578,20 @@
 
 /* ---------- confianza (antes: contadores) ----------
    Acá NO van números de piloto ("+1,200 comercios"): PRODUCT.md los descarta explícitamente porque
-   restan, no suman, en una plataforma que recién está creciendo. La franja se conserva porque el
-   ritmo de tres columnas después del hero funciona, pero cada columna dice algo verificable HOY en
-   vez de una cifra inventada. */
+   restan, no suman, en una plataforma que recién está creciendo. La franja se conserva con el
+   mismo celeste y el mismo icono+número+etiqueta del mockup, pero cada columna dice algo
+   verificable HOY en vez de una cifra inventada. Celeste fijo (no --claro): es una franja propia,
+   no una banda clara genérica, y necesita su propio par de contraste. */
 .confianza {
-  background: var(--realce);
-  color: var(--campo);
+  --celeste: oklch(85% 0.07 226);
+  background: var(--celeste);
+  color: oklch(18% 0.02 240);
 }
 
 .confianzaFila {
   display: grid;
-  gap: clamp(20px, 4vw, 32px);
-  padding-block: clamp(22px, 4vw, 34px);
+  gap: clamp(18px, 4vw, 32px);
+  padding-block: clamp(18px, 3vw, 26px);
   text-align: center;
 }
 @media (min-width: 700px) {
@@ -536,211 +601,412 @@
   }
 }
 
+.confianzaItem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+@media (min-width: 700px) {
+  .confianzaItem {
+    justify-content: flex-start;
+  }
+}
+
+.confianzaIcono {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+
 .confianzaItem b {
   display: block;
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
 .confianzaItem span {
   display: block;
-  margin-top: 3px;
-  font-size: 14px;
-  opacity: 0.82;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 /* ---------- cómo funciona ----------
-   Ni cajas ni círculos con un número adentro: tres columnas separadas por una regla arriba, con el
-   ordinal en mono. El paso se lee como una secuencia, que es lo que es. */
+   Réplica del mockup: tres teléfonos con la pantalla de cada paso, no un ordinal en mono. El
+   chasis reusa la MISMA anatomía que .telefono/.pantalla (el aparato del carrusel), a una escala
+   más chica y sin la tarjeta de mentira adentro — acá la pantalla es la ilustración. */
 
 .pasos {
   margin-top: clamp(30px, 5vw, 56px);
   display: grid;
-  gap: 0;
+  gap: clamp(32px, 5vw, 48px);
   grid-template-columns: 1fr;
   list-style: none;
 }
 @media (min-width: 720px) {
   .pasos {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    column-gap: clamp(20px, 3.5vw, 44px);
+    column-gap: clamp(24px, 3.5vw, 40px);
   }
 }
 
 .paso {
-  padding-block: 20px;
-  border-top: 1px solid var(--linea-clara);
-}
-/* En una sola columna las reglas separan filas; en tres, la de arriba es la única que hace falta
-   y todas empiezan a la misma altura. */
-@media (min-width: 720px) {
-  .paso {
-    padding-block: 22px 0;
-  }
+  display: flex;
+  flex-direction: column;
 }
 
 .pasoNumero {
-  font-family: var(--font-mono);
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-pill);
+  background: var(--realce);
+  color: var(--campo);
+  font-family: var(--font-display);
   font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 0.18em;
-  color: var(--violeta);
+  font-size: 15px;
 }
 
 .paso h3 {
-  margin-top: 12px;
+  margin-top: 14px;
   font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 21px;
+  font-weight: 700;
   letter-spacing: -0.015em;
+  text-transform: uppercase;
 }
 
 .paso p {
   margin-top: 8px;
-  max-width: 46ch;
-  color: var(--sobre-claro-2);
-  font-size: 15px;
-  line-height: 1.65;
-}
-
-/* ---------- tarjetas para cada negocio ----------
-   Los ocho tipos reales del catálogo (lib/tarjetas/tipos.ts), no una ilustración genérica: si un
-   comercio activa "Cupón" mañana, esto ya está describiendo lo que va a usar. Cada ficha tiene
-   forma de talón de boleto (borde punteado + dos muescas), coherente con que la tarjeta de
-   lealtad ES un talón, y evita la grilla de card gastada: título + ícono + texto repetido ocho
-   veces. La leve rotación alternada (nth-child) es el mismo guiño de afiche del hero, en dosis
-   menor porque acá el contenido tiene que leerse rápido, no posar. */
-.tiposGrilla {
-  margin-top: clamp(30px, 5vw, 56px);
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: clamp(20px, 3vw, 28px);
-}
-
-.tipoFicha {
-  position: relative;
-  padding: 20px 20px 22px;
-  border-radius: var(--radius);
-  /* Blanco fijo y no --superficie-0 (token de TEMA): esta ficha vive dentro de .bandaClara, que
-     ignora el tema del dispositivo a propósito. Bajo tema oscuro --superficie-0 es casi negro, y
-     una ficha negra sobre la banda clara con texto --sobre-claro (oscuro) se habría vuelto
-     ilegible para cualquiera que no tenga el tema en claro. */
-  background: #ffffff;
-  box-shadow: var(--shadow-1);
-  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.tipoFicha:nth-child(even) {
-  transform: rotate(-0.8deg);
-}
-.tipoFicha:nth-child(odd) {
-  transform: rotate(0.8deg);
-}
-.tipoFicha:hover {
-  transform: rotate(0deg) translateY(-3px);
-}
-
-.tipoBanda {
-  height: 5px;
-  margin: -20px -20px 16px;
-  border-radius: var(--radius) var(--radius) 0 0;
-}
-
-/* La "muesca" del talón: dos círculos del color de fondo de la SECCIÓN (no de la ficha), montados
-   sobre una línea punteada. Truco clásico de recorte, cero imágenes. */
-.tipoPerforado {
-  position: relative;
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 2px dashed var(--linea-clara);
-}
-.tipoPerforado::before,
-.tipoPerforado::after {
-  content: '';
-  position: absolute;
-  top: -7px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--claro);
-}
-.tipoPerforado::before {
-  left: -20px;
-}
-.tipoPerforado::after {
-  right: -20px;
-}
-
-.tipoNombre {
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--sobre-claro);
-}
-
-.tipoDescripcion {
-  margin-top: 6px;
-  color: var(--sobre-claro-2);
-  font-size: 14px;
-  line-height: 1.55;
-}
-
-/* ---------- ¿seguís usando esto? ----------
-   Filas regladas, no cajas con tache: la misma gramática de "Cómo funciona", en la banda oscura.
-   El texto de cada fila nombra un problema que la Tanda 1 (antifraude) y el geopush ya resuelven en
-   el producto real, no una pena genérica de plantilla. */
-.dolores {
-  margin-top: clamp(30px, 5vw, 56px);
-  display: grid;
-  gap: 0;
-  grid-template-columns: 1fr;
-  list-style: none;
-}
-@media (min-width: 720px) {
-  .dolores {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: clamp(24px, 4vw, 56px);
-  }
-}
-
-.dolor {
-  display: flex;
-  gap: 14px;
-  padding-block: 18px;
-  border-top: 1px solid var(--borde-campo);
-}
-
-.dolorX {
-  flex: none;
-  width: 22px;
-  height: 22px;
-  color: var(--coral);
-}
-
-.dolor h3 {
-  font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.dolor p {
-  margin-top: 4px;
+  max-width: 32ch;
   color: var(--sobre-campo-2);
   font-size: 14px;
   line-height: 1.55;
 }
 
+.pasoTelefono {
+  /* Contexto de container query: los font-size de las pantallas de acá abajo van en `cqw` (1cqw =
+     1% del ancho de ESTE elemento), no en `%` — el porcentaje en font-size es relativo al tamaño
+     de fuente del padre, no al tamaño de la caja, y hubiera dado tipografías microscópicas. */
+  container-type: inline-size;
+  align-self: center;
+  width: min(100%, 220px);
+  margin-top: 24px;
+}
+
+/* Las tres pantallas de "Así funciona" reusan el chasis .telefono pero necesitan su propia
+   ilustración adentro: acá SÍ hay layout específico por paso, así que cada una tiene su propia
+   clase en vez de reusar .pase (esa es la tarjeta genérica del carrusel). */
+.pantallaCrear {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 14% 10%;
+  color: var(--sobre-campo);
+}
+.pantallaCrearLogo {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15cqw;
+  letter-spacing: -0.02em;
+}
+.pantallaCrearTarjeta {
+  flex: 1;
+  margin-top: 10%;
+  border-radius: 12%;
+  background: linear-gradient(155deg, var(--violeta) 0%, var(--campo) 120%);
+}
+.pantallaCrearColores {
+  display: flex;
+  gap: 8%;
+  margin-top: 8%;
+}
+.pantallaCrearColores span {
+  width: 15%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+
+.pantallaEscanear {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  padding: 12% 8%;
+}
+.pantallaEscanearTarjeta {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 10%;
+  background: linear-gradient(120deg, var(--coral) 0%, var(--violeta) 100%);
+}
+.pantallaEscanearNombre {
+  align-self: flex-start;
+  margin-top: 8%;
+  color: var(--sobre-claro);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13cqw;
+}
+.pantallaEscanearQr {
+  width: 62%;
+  margin-top: 6%;
+  padding: 6%;
+  border-radius: 10%;
+  background: #fff;
+  color: #101014;
+}
+
+.pantallaExito {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10%;
+  height: 100%;
+  padding: 10%;
+}
+.pantallaExitoCheck {
+  width: 34%;
+  color: var(--realce);
+}
+.pantallaExitoTexto {
+  color: var(--sobre-claro);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15cqw;
+}
+.pantallaExitoPill {
+  padding: 4% 8%;
+  border-radius: var(--radius-pill);
+  background: var(--realce);
+  color: var(--campo);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12cqw;
+}
+
+/* ---------- tarjetas para cada negocio ----------
+   Los ocho tipos reales del catálogo (lib/tarjetas/tipos.ts), como mini-tarjetas de billetera: la
+   misma anatomía que .pase (logo, nombre, código) a escala de ficha en vez de pantalla de
+   teléfono, con el color y el dato principal propios de cada tipo. Si un comercio activa "Cupón"
+   mañana, esto ya está mostrando lo que va a usar. */
+.tiposGrilla {
+  margin-top: clamp(30px, 5vw, 56px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(20px, 3vw, 32px) clamp(16px, 2.5vw, 24px);
+}
+@media (min-width: 720px) {
+  .tiposGrilla {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.tipoFicha {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.miniTarjeta {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  padding: 10%;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: var(--blanco);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+
+.miniTarjetaCabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.miniTarjetaLogo {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  color: #101014;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.miniTarjetaValor {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(20px, 3vw, 26px);
+  line-height: 1;
+}
+
+.miniTarjetaPie {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.miniTarjetaMiembro {
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.miniTarjetaQr {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 3px;
+  border-radius: 4px;
+  background: #fff;
+  color: #101014;
+}
+
+.tipoNombre {
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--sobre-claro);
+}
+
+/* ---------- ¿seguís usando esto? ----------
+   Grilla de iconos con una placa violeta y una X montada encima de cada uno, igual que el
+   mockup: no son tarjetas con borde, son ícono + título + texto, y la X es lo que carga el gesto
+   de "esto ya no", no un borde ni un tache de fondo. El texto de cada uno nombra un problema que
+   la Tanda 1 (antifraude) y el geopush ya resuelven en el producto real, no una pena genérica. */
+.dolores {
+  margin-top: clamp(30px, 5vw, 56px);
+  display: grid;
+  gap: clamp(28px, 4vw, 40px) clamp(20px, 3vw, 32px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  list-style: none;
+}
+@media (min-width: 640px) {
+  .dolores {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.dolor {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.dolorIconoEnvoltura {
+  position: relative;
+  margin-bottom: 14px;
+}
+
+.dolorIcono {
+  width: 44px;
+  height: 44px;
+  color: var(--sobre-campo);
+}
+
+.dolorBadge {
+  position: absolute;
+  top: -6px;
+  right: -10px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--violeta-realce);
+  color: var(--campo);
+}
+.dolorBadge svg {
+  width: 12px;
+  height: 12px;
+}
+
+.dolor h3 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+.dolor p {
+  margin-top: 4px;
+  max-width: 22ch;
+  color: var(--sobre-campo-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.doloresPie {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: clamp(32px, 5vw, 48px);
+  font-family: var(--font-marcador);
+  font-size: clamp(20px, 3vw, 28px);
+  color: var(--realce);
+}
+.doloresPie svg {
+  width: clamp(40px, 8vw, 72px);
+  height: auto;
+  color: var(--realce);
+  opacity: 0.8;
+}
+
 /* ---------- planes ----------
-   Tres columnas, Growth invertida (fondo noche sobre la banda clara) para cargar la jerarquía en
-   el color y no en un badge más grande o un borde más grueso. Starter y Pro comparten la misma
-   ficha lisa a propósito: la diferencia entre ellos la cuentan las filas, no el continente. */
+   Tres columnas, Growth invertida a violeta (color de marca, no el noche del resto de la página)
+   para cargar la jerarquía en el color y no en un badge más grande o un borde más grueso. Starter
+   y Pro comparten la misma ficha blanca lisa a propósito: la diferencia entre ellos la cuentan las
+   filas, no el continente. */
+.planesEnvoltura {
+  display: grid;
+  gap: clamp(24px, 4vw, 40px);
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .planesEnvoltura {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
 .planesGrilla {
   margin-top: clamp(30px, 5vw, 56px);
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: clamp(20px, 3vw, 28px);
   align-items: stretch;
+}
+
+/* Las tres pegatinas del mockup, apiladas al lado de la grilla en escritorio y ocultas abajo de
+   860px (mismo criterio que las del hero: no hay lugar sin que se pisen con las cards). */
+.planesPegatinas {
+  display: none;
+}
+@media (min-width: 900px) {
+  .planesPegatinas {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding-top: clamp(30px, 5vw, 56px);
+  }
 }
 
 .plan {
@@ -755,7 +1021,7 @@
 }
 
 .planDestacado {
-  background: var(--campo);
+  background: var(--violeta-tarjeta);
   color: var(--sobre-campo);
   border-color: transparent;
   box-shadow: var(--shadow-3);
@@ -787,6 +1053,7 @@
   font-family: var(--font-display);
   font-size: 20px;
   font-weight: 700;
+  text-transform: uppercase;
 }
 
 .planPrecio {
@@ -803,28 +1070,18 @@
   opacity: 0.7;
 }
 
+/* Texto plano, sin viñeta ni checkmark: el mockup separa cada característica en su propia línea
+   corta, sin marcador — el peso lo pone la tipografía (semibold), no un ícono repetido ocho veces
+   en la página. */
 .planLista {
   margin-top: 18px;
   display: grid;
-  gap: 10px;
+  gap: 12px;
   list-style: none;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
   flex: 1;
-}
-.planLista li {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-.planLista li::before {
-  content: '✓';
-  flex: none;
-  font-weight: 700;
-  color: var(--violeta);
-}
-.planDestacado .planLista li::before {
-  color: var(--realce);
 }
 
 .plan .botonHero,
@@ -843,19 +1100,49 @@
 /* ---------- preguntas frecuentes ----------
    <details>/<summary> nativo: cero JavaScript, abre y cierra con teclado sin una sola línea de
    React, y sigue funcionando con el script apagado (mismo principio que la tira con scroll-snap).
-   El indicador es un signo +/− dibujado con dos pseudo-elementos girados, no un ícono importado. */
+   Grilla de dos columnas de cajas con borde, como el mockup, no una lista reglada de una sola
+   columna: acá cada pregunta es una unidad autocontenida, no un paso de una secuencia. */
+.preguntasEnvoltura {
+  display: grid;
+  gap: clamp(24px, 4vw, 40px);
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .preguntasEnvoltura {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+.preguntasPegatina {
+  display: none;
+  transform: rotate(8deg);
+}
+@media (min-width: 900px) {
+  .preguntasPegatina {
+    display: inline-flex;
+    justify-self: center;
+    margin-top: 12px;
+  }
+}
+
 .preguntas {
   margin-top: clamp(30px, 5vw, 56px);
   display: grid;
-  gap: 0;
+  gap: 12px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 640px) {
+  .preguntas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
 }
 
 .pregunta {
-  border-top: 1px solid var(--borde-campo);
-  padding-block: 4px;
-}
-.pregunta:last-child {
-  border-bottom: 1px solid var(--borde-campo);
+  border: 1px solid var(--borde-campo);
+  border-radius: 14px;
+  padding-inline: 18px;
 }
 
 .pregunta summary {
@@ -863,11 +1150,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding-block: 16px;
+  padding-block: 14px;
   cursor: pointer;
   list-style: none;
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
 }
 /* Safari dibuja su propio triángulo si no se lo quitamos explícitamente en su propio selector. */
@@ -879,11 +1166,15 @@
   outline-offset: 4px;
 }
 
+/* Círculo lima con el signo adentro (no una cruz suelta en currentColor): así se lee igual que la
+   pastilla "MÁS ELEGIDO" de planes, un mismo lenguaje de insignia circular en toda la página. */
 .preguntaSigno {
   position: relative;
   flex: none;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--realce);
 }
 .preguntaSigno::before,
 .preguntaSigno::after {
@@ -891,16 +1182,16 @@
   position: absolute;
   inset: 0;
   margin: auto;
-  background: currentColor;
+  background: var(--campo);
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .preguntaSigno::before {
-  width: 100%;
+  width: 50%;
   height: 2px;
 }
 .preguntaSigno::after {
   width: 2px;
-  height: 100%;
+  height: 50%;
 }
 /* El signo + se aplana a − cuando el <details> está abierto: el selector :open lo resuelve el
    propio navegador, sin estado en React. */
@@ -920,11 +1211,43 @@
    El botón grande del afiche y el formulario real de siempre, en la misma banda: el CTA no manda
    a ningún lado que no sea el formulario que ya recibe leads de verdad. */
 .cierre {
-  background: linear-gradient(165deg, var(--campo) 0%, var(--violeta) 150%);
+  position: relative;
+  overflow: hidden;
+  background: var(--violeta-tarjeta);
   color: var(--sobre-campo);
 }
 
+/* Dos aros concéntricos de fondo, el mismo garabato del ícono de marca ampliado: textura de
+   afiche, no un segundo mensaje que competir con el título. */
+.cierre::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  right: -12%;
+  width: min(56vw, 620px);
+  aspect-ratio: 1;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  border: 28px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+.cierre::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  bottom: -30%;
+  right: 4%;
+  width: min(30vw, 320px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 16px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+
 .cierreCabecera {
+  position: relative;
+  z-index: 1;
   max-width: 56ch;
 }
 
@@ -942,6 +1265,8 @@
 }
 
 .cierreGrilla {
+  position: relative;
+  z-index: 1;
   display: grid;
   gap: clamp(28px, 5vw, 48px);
   grid-template-columns: 1fr;
@@ -1040,10 +1365,23 @@
   padding-bottom: clamp(28px, 4vw, 40px);
   border-bottom: 1px solid var(--borde-campo);
 }
-@media (min-width: 720px) {
+@media (min-width: 640px) {
   .pieGrilla {
-    grid-template-columns: 1.4fr 1fr 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
+}
+@media (min-width: 960px) {
+  .pieGrilla {
+    /* Las cuatro columnas del mockup: marca+tagline, Producto, Recursos, Empresa. */
+    grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  }
+}
+
+.pieMarcaContacto {
+  margin-top: 16px;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
 }
 
 .pieMarca {
@@ -1072,6 +1410,20 @@
 }
 .pieColumna a:hover {
   color: var(--sobre-campo);
+}
+
+/* Puramente decorativos: no hay cuentas reales de Cardly SV confirmadas todavía, así que estos
+   íconos no llevan <a href>. Se agregan por fidelidad visual con el mockup; cuando existan las
+   cuentas, envolver cada uno en un enlace es el único cambio que hace falta. */
+.pieRedes {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pieRedes svg {
+  width: 20px;
+  height: 20px;
+  color: var(--sobre-campo-2);
 }
 
 .pieBase {

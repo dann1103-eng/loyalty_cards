@@ -4,27 +4,39 @@ import Link from 'next/link';
 import estilos from './_inicio/inicio.module.css';
 import CarruselTarjetas from './_inicio/CarruselTarjetas';
 import FormularioDemo from './_inicio/FormularioDemo';
+import {
+  IconoPersonas,
+  IconoTarjeta,
+  IconoRayo,
+  IconoSello,
+  IconoLibreta,
+  IconoCalculadora,
+  IconoChat,
+  IconoPin,
+  IconoX,
+  IconoFlecha,
+  IconoCheck,
+  IconoInstagram,
+  IconoTikTok,
+  IconoWhatsApp,
+  IconoGarabato,
+} from './_inicio/iconos';
 import { MARCA } from '@/lib/marca';
 import { TIPOS } from '@/lib/tarjetas/tipos';
 
 // Página de entrada de cardly-sv.site. Le habla a DUEÑOS DE COMERCIO que todavía no son clientes:
 // el cliente final nunca llega acá, llega por el código de su propio comercio.
 //
-// Rediseño 2026-07-29 a partir de un mockup que trajo el dueño: pasa de un solo acento naranja
-// ("campo de brasa") a una paleta "Full palette" de afiche de calle (noche + lima + violeta),
-// alternando bandas oscuras y claras sección por sección. Ver DESIGN.md § Página pública para la
-// escena que decide la paleta y qué se conservó del diseño anterior (el carrusel de tarjetas, el
-// formulario de demo con su antibot, el principio de servirse sin JavaScript).
-//
-// TRES DIFERENCIAS A PROPÓSITO respecto del mockup original, documentadas acá porque no son un
-// detalle visual sino una decisión de contenido:
-// 1. Sin contadores inventados ("+1,200 comercios..."): PRODUCT.md los descarta explícitamente
-//    ("son números de piloto y restan"). La franja de confianza dice tres cosas ciertas hoy.
-// 2. El pie usa SOLO datos reales de lib/marca.ts. El mockup traía un teléfono argentino y un
-//    correo genérico que no son de Cardly SV.
-// 3. Ningún botón promete alta instantánea: todos apuntan a #demo, el formulario real que ya
-//    guarda prospectos (ver acciones.ts). "Creá tu tarjeta gratis" se volvió "Agendá tu demo
-//    gratis" por la misma razón.
+// Rediseño 2026-07-29 a partir de un mockup que trajo el dueño, en DOS pasadas: la primera trajo
+// la paleta (noche + lima + violeta) pero seguía siendo "inspirado en", no una réplica; el dueño
+// pidió explícitamente calcar la estructura de cada sección y recién después iterar. Esta segunda
+// pasada es esa réplica: la franja de confianza con íconos, "Así funciona" con capturas reales de
+// teléfono, la grilla de mini-tarjetas por tipo, "¿Seguís usando esto?" con íconos + insignia
+// violeta, las tarifas en tarjetas blancas con Growth invertida, las preguntas en grilla de dos
+// columnas y el cierre en violeta sólido con el pie de tres columnas. Ver DESIGN.md § Página
+// pública para el detalle de qué se copió tal cual y qué se sustituyó a propósito (sin contadores
+// de piloto inventados, sin teléfono ni correo falsos, sin un botón que prometa alta instantánea:
+// todo apunta al formulario real de #demo).
 
 export const metadata: Metadata = {
   title: `${MARCA.nombre} — Tarjetas de lealtad digitales para tu negocio`,
@@ -32,76 +44,139 @@ export const metadata: Metadata = {
     'Sellos, puntos, cashback, gift card y más, directo en la billetera del teléfono de tus clientes. Sin apps que instalar y sin plásticos que perder. Agendá una demo.',
 };
 
-const PASOS = [
-  {
-    titulo: 'Armás tu tarjeta',
-    texto:
-      'Elegís tus colores, subís tu logo y decidís cómo premiás: sellos, puntos, cashback o lo que más te sirva. En minutos y sin diseñador.',
-  },
-  {
-    titulo: 'Tu cliente la guarda',
-    texto:
-      'Escanea el código que ponés en el mostrador, deja su nombre y su teléfono, y la tarjeta le queda en el teléfono. No instala nada.',
-  },
-  {
-    titulo: 'Sumás en cada visita',
-    texto:
-      'Tu cajero escanea la tarjeta desde su propio acceso y el saldo se actualiza al instante, en el bolsillo del cliente.',
-  },
-];
-
 const CONFIANZA = [
   {
     titulo: 'Apple Wallet y Google Wallet',
     texto: 'Sin apps que instalar, sin plásticos que perder.',
+    Icono: IconoPersonas,
   },
   {
     titulo: `${TIPOS.length} tipos de tarjeta`,
     texto: TIPOS.map((tipo) => tipo.etiqueta).join(', ') + '.',
+    Icono: IconoTarjeta,
   },
   {
     titulo: 'Tu marca, no la nuestra',
-    texto: 'Tus colores y tu logo en la pantalla de cada cliente.',
+    texto: 'Tus colores y tu logo en cada pantalla.',
+    Icono: IconoRayo,
   },
 ];
 
-// Un color por tipo, solo para diferenciar las fichas a simple vista: no es dato de negocio, por
-// eso vive acá y no en lib/tarjetas/tipos.ts.
+// Un color y un valor de ejemplo por tipo, solo para ilustrar la mini-tarjeta: no es dato de
+// negocio (por eso vive acá y no en lib/tarjetas/tipos.ts), es la misma idea que MODELOS en
+// modelos.ts para el carrusel del hero — negocios y cifras de mentira, variedad real de tipos.
 const COLOR_TIPO: Record<string, string> = {
-  puntos: '#7c9eff',
-  sellos: '#f4a259',
-  prepago: '#5bc0be',
-  gift_card: '#e39bda',
-  cashback: '#8bd67e',
-  cupon: '#ff8a65',
-  membresia: '#8b7cf6',
-  descuento: '#ffce54',
+  puntos: '#3f5fb8',
+  sellos: '#2a2f26',
+  prepago: '#1f6f6b',
+  gift_card: '#1f5f66',
+  cashback: '#2f7d3a',
+  cupon: '#6a3fa0',
+  membresia: '#7a1f3d',
+  descuento: '#a8790f',
 };
+const VALOR_TIPO: Record<string, string> = {
+  puntos: '120',
+  sellos: '8/10',
+  prepago: '$150',
+  gift_card: '$250',
+  cashback: '5%',
+  cupon: '2X1',
+  membresia: 'VIP',
+  descuento: '-15%',
+};
+
+const PASOS = [
+  {
+    titulo: 'Creás tu tarjeta',
+    texto: 'Diséñala a tu estilo. En minutos. 100% digital.',
+    pantalla: 'crear' as const,
+  },
+  {
+    titulo: 'El cliente la guarda',
+    texto: 'En su Wallet. Sin apps. Sin registros.',
+    pantalla: 'escanear' as const,
+  },
+  {
+    titulo: 'Sumás o canjeás',
+    texto: 'Con un escaneo. Así de simple. Así de rápido.',
+    pantalla: 'exito' as const,
+  },
+];
+
+function PantallaPaso({ tipo }: { tipo: 'crear' | 'escanear' | 'exito' }) {
+  if (tipo === 'crear') {
+    return (
+      <div className={estilos.pantallaCrear}>
+        <span className={estilos.pantallaCrearLogo}>CARDLY</span>
+        <div className={estilos.pantallaCrearTarjeta} />
+        <div className={estilos.pantallaCrearColores} aria-hidden="true">
+          <span style={{ background: '#101014' }} />
+          <span style={{ background: '#8b5e3c' }} />
+          <span style={{ background: '#c0472e' }} />
+          <span style={{ background: '#3f7d3a' }} />
+        </div>
+      </div>
+    );
+  }
+  if (tipo === 'escanear') {
+    return (
+      <div className={estilos.pantallaEscanear}>
+        <div className={estilos.pantallaEscanearTarjeta} />
+        <span className={estilos.pantallaEscanearNombre}>Daniel</span>
+        <div className={estilos.pantallaEscanearQr}>
+          <svg viewBox="0 0 9 9" aria-hidden="true">
+            {Array.from({ length: 9 }, (_, fila) =>
+              Array.from({ length: 9 }, (_, col) =>
+                (fila + col * 2) % 3 === 0 ? (
+                  <rect key={`${fila}-${col}`} x={col} y={fila} width="1" height="1" fill="currentColor" />
+                ) : null,
+              ),
+            )}
+          </svg>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className={estilos.pantallaExito}>
+      <IconoCheck className={estilos.pantallaExitoCheck} />
+      <span className={estilos.pantallaExitoTexto}>¡Listo!</span>
+      <span className={estilos.pantallaExitoPill}>+10 puntos</span>
+    </div>
+  );
+}
 
 const DOLORES = [
   {
     titulo: 'Sellos falsificados',
-    texto: 'Cualquiera con un sello de goma te vacía el programa. Acá cada acreditación queda firmada por el cajero que la hizo.',
+    texto: 'Cualquiera con un sello de goma te vacía el programa.',
+    Icono: IconoSello,
   },
   {
-    titulo: 'Sin control de tus cajeros',
-    texto: 'No sabés quién dio de más ni cuándo. Poné un tope diario por cliente y mirá un reporte por cajero.',
+    titulo: 'Sin control',
+    texto: 'No sabés quién dio de más, ni cuándo ni cuánto.',
+    Icono: IconoLibreta,
   },
   {
-    titulo: 'Excel y cuaderno',
-    texto: 'Datos sueltos, sin respaldo, que se pierden con el teléfono que se rompe o el cajero que se va.',
+    titulo: 'Excel',
+    texto: 'Caos, errores y sin datos reales.',
+    Icono: IconoCalculadora,
   },
   {
-    titulo: 'Grupos de WhatsApp',
-    texto: 'Mensajes que nadie lee dos veces, y ninguna forma de saber a quién le llegaron de verdad.',
+    titulo: 'WhatsApp',
+    texto: 'Mensajes perdidos, clientes cansados.',
+    Icono: IconoChat,
   },
   {
-    titulo: 'No sabés cuándo tu cliente está cerca',
-    texto: 'Con geolocalización por sucursal, el aviso le llega solo cuando pasa cerca de tu local.',
+    titulo: 'Sin geo',
+    texto: 'No sabés cuándo tu cliente está cerca.',
+    Icono: IconoPin,
   },
   {
-    titulo: 'Tu cliente es de la plataforma, no tuyo',
-    texto: 'Tus colores y tu logo en la billetera, no los nuestros. La relación es con tu negocio.',
+    titulo: 'Sin tu base',
+    texto: 'Tu cliente no es tuyo. Es de la app.',
+    Icono: IconoPersonas,
   },
 ];
 
@@ -121,21 +196,21 @@ const PLANES_PRECIO: PlanPrecio[] = [
     nombre: 'Starter',
     precio: 29,
     caracteristicas: ['1 negocio', 'Hasta 500 clientes', 'Soporte por WhatsApp'],
-    cta: 'Quiero Starter',
+    cta: 'Empezar',
   },
   {
     id: 'growth',
     nombre: 'Growth',
     precio: 49,
     destacado: true,
-    etiqueta: 'El más elegido',
+    etiqueta: 'Más elegido',
     caracteristicas: [
       'Hasta 2 negocios o sucursales',
       'Hasta 2,500 clientes',
       'Promos push ilimitadas',
       'Reportes mensuales',
     ],
-    cta: 'Quiero Growth',
+    cta: 'Empezar',
   },
   {
     id: 'pro',
@@ -233,10 +308,10 @@ export default function Inicio() {
                 Te la mostramos con tus colores y tu logo, sin compromiso.
               </p>
 
-              <span className={`${estilos.pegatina} ${estilos.pegatinaUno}`} aria-hidden="true">
+              <span className={`${estilos.pegatina} ${estilos.pegatinaHero} ${estilos.pegatinaUno} ${estilos.pegatinaCoral}`} aria-hidden="true">
                 100% digital
               </span>
-              <span className={`${estilos.pegatina} ${estilos.pegatinaDos}`} aria-hidden="true">
+              <span className={`${estilos.pegatina} ${estilos.pegatinaHero} ${estilos.pegatinaDos} ${estilos.pegatinaVioleta}`} aria-hidden="true">
                 {TIPOS.length} tipos de tarjeta
               </span>
             </div>
@@ -256,8 +331,11 @@ export default function Inicio() {
           <div className={`${estilos.envoltura} ${estilos.confianzaFila}`}>
             {CONFIANZA.map((item) => (
               <div key={item.titulo} className={estilos.confianzaItem}>
-                <b>{item.titulo}</b>
-                <span>{item.texto}</span>
+                <item.Icono className={estilos.confianzaIcono} />
+                <div>
+                  <b>{item.titulo}</b>
+                  <span>{item.texto}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -265,21 +343,29 @@ export default function Inicio() {
 
         <section
           id="como-funciona"
-          className={`${estilos.seccion} ${estilos.bandaClara}`}
+          className={`${estilos.seccion} ${estilos.bandaOscura}`}
         >
           <div className={estilos.envoltura}>
-            <h2 className={estilos.tituloSeccion}>Cómo funciona</h2>
-            <p className={estilos.textoSeccion}>Tres pasos, y el más largo lo hacés una sola vez.</p>
-            {/* Lista ordenada de verdad: son pasos en secuencia, no tres features en una grilla.
-                role="list" explícito porque Safari le quita la semántica de lista a cualquier lista
-                con list-style: none, y el ordinal visible va con aria-hidden (leer "cero uno" no
-                ayuda a nadie): sin el rol, quien no ve la pantalla pierde que son tres pasos. */}
+            <h2 className={estilos.tituloSeccion}>
+              Así
+              <br />
+              <span className={estilos.script}>funciona</span>
+            </h2>
             <ol className={estilos.pasos} role="list">
               {PASOS.map((paso, indice) => (
                 <li key={paso.titulo} className={estilos.paso}>
-                  <span className={estilos.pasoNumero} aria-hidden="true">{`0${indice + 1}`}</span>
+                  <span className={estilos.pasoNumero} aria-hidden="true">{indice + 1}</span>
                   <h3>{paso.titulo}</h3>
                   <p>{paso.texto}</p>
+                  <div className={estilos.pasoTelefono} aria-hidden="true">
+                    <div className={estilos.telefono}>
+                      <span className={estilos.isla} />
+                      <div className={estilos.pantalla}>
+                        <PantallaPaso tipo={paso.pantalla} />
+                        <span className={estilos.barraInicio} />
+                      </div>
+                    </div>
+                  </div>
                 </li>
               ))}
             </ol>
@@ -288,23 +374,38 @@ export default function Inicio() {
 
         <section id="tarjetas" className={`${estilos.seccion} ${estilos.bandaClara}`}>
           <div className={estilos.envoltura}>
-            <h2 className={estilos.tituloSeccion}>Tarjetas para cada negocio</h2>
-            <p className={estilos.textoSeccion}>
-              {TIPOS.length} formas de premiar a tu cliente, para el negocio que tengas.
-            </p>
+            <h2 className={estilos.tituloSeccion}>
+              Tarjetas
+              <br />
+              <span className={estilos.script}>para cada negocio</span>
+            </h2>
             <div className={estilos.tiposGrilla}>
               {TIPOS.map((tipo) => (
-                <article key={tipo.valor} className={estilos.tipoFicha}>
-                  <span
-                    className={estilos.tipoBanda}
-                    aria-hidden="true"
-                    style={{ background: COLOR_TIPO[tipo.valor] }}
-                  />
-                  <h3 className={estilos.tipoNombre}>{tipo.etiqueta}</h3>
-                  <div className={estilos.tipoPerforado}>
-                    <p className={estilos.tipoDescripcion}>{tipo.descripcion}</p>
+                <div key={tipo.valor} className={estilos.tipoFicha}>
+                  <div className={estilos.miniTarjeta} style={{ background: COLOR_TIPO[tipo.valor] }}>
+                    <div className={estilos.miniTarjetaCabecera}>
+                      <span className={estilos.miniTarjetaLogo}>
+                        <Image src="/marca/icono.svg" alt="" width={12} height={12} unoptimized />
+                      </span>
+                    </div>
+                    <span className={estilos.miniTarjetaValor}>{VALOR_TIPO[tipo.valor]}</span>
+                    <div className={estilos.miniTarjetaPie}>
+                      <span className={estilos.miniTarjetaMiembro}>Daniel</span>
+                      <div className={estilos.miniTarjetaQr}>
+                        <svg viewBox="0 0 9 9" aria-hidden="true">
+                          {Array.from({ length: 9 }, (_, fila) =>
+                            Array.from({ length: 9 }, (_, col) =>
+                              (fila * 3 + col) % 4 === 0 ? (
+                                <rect key={`${fila}-${col}`} x={col} y={fila} width="1" height="1" fill="currentColor" />
+                              ) : null,
+                            ),
+                          )}
+                        </svg>
+                      </div>
+                    </div>
                   </div>
-                </article>
+                  <span className={estilos.tipoNombre}>{tipo.etiqueta}</span>
+                </div>
               ))}
             </div>
           </div>
@@ -312,83 +413,113 @@ export default function Inicio() {
 
         <section className={`${estilos.seccion} ${estilos.bandaOscura}`}>
           <div className={estilos.envoltura}>
-            <h2 className={estilos.tituloSeccion}>¿Seguís usando esto?</h2>
-            <p className={estilos.textoSeccion}>
-              Cada uno de estos problemas ya tiene una forma concreta de resolverse acá adentro.
-            </p>
+            <h2 className={estilos.tituloSeccion}>
+              ¿Seguís
+              <br />
+              usando
+              <br />
+              <span className={estilos.script}>esto?</span>
+            </h2>
             <ul className={estilos.dolores} role="list">
               {DOLORES.map((dolor) => (
                 <li key={dolor.titulo} className={estilos.dolor}>
-                  <svg className={estilos.dolorX} viewBox="0 0 24 24" aria-hidden="true">
-                    <path
-                      d="M6 6l12 12M18 6L6 18"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <div>
-                    <h3>{dolor.titulo}</h3>
-                    <p>{dolor.texto}</p>
-                  </div>
+                  <span className={estilos.dolorIconoEnvoltura} aria-hidden="true">
+                    <dolor.Icono className={estilos.dolorIcono} />
+                    <span className={estilos.dolorBadge}>
+                      <IconoX />
+                    </span>
+                  </span>
+                  <h3>{dolor.titulo}</h3>
+                  <p>{dolor.texto}</p>
                 </li>
               ))}
             </ul>
+            <p className={estilos.doloresPie} aria-hidden="true">
+              <IconoGarabato />
+              Pasate al club.
+              <IconoGarabato style={{ transform: 'scaleX(-1)' }} />
+            </p>
           </div>
         </section>
 
         <section id="precios" className={`${estilos.seccion} ${estilos.bandaClara}`}>
           <div className={estilos.envoltura}>
-            <h2 className={estilos.tituloSeccion}>Planes para crecer</h2>
-            <p className={estilos.textoSeccion}>
-              Elegís según cuántos negocios y sucursales tenés. Cambiás de plan cuando quieras.
-            </p>
-            <div className={estilos.planesGrilla}>
-              {PLANES_PRECIO.map((plan) => (
-                <div
-                  key={plan.id}
-                  className={`${estilos.plan} ${plan.destacado ? estilos.planDestacado : ''}`}
-                >
-                  {plan.etiqueta && <span className={estilos.planEtiqueta}>{plan.etiqueta}</span>}
-                  <p className={estilos.planNombre}>{plan.nombre}</p>
-                  <p className={estilos.planPrecio}>
-                    ${plan.precio}
-                    <span>/mes</span>
-                  </p>
-                  <ul className={estilos.planLista} role="list">
-                    {plan.caracteristicas.map((caracteristica) => (
-                      <li key={caracteristica}>{caracteristica}</li>
-                    ))}
-                  </ul>
-                  <a
-                    className={plan.destacado ? estilos.botonHero : estilos.botonHeroContorno}
-                    href="#demo"
-                  >
-                    {plan.cta}
-                  </a>
+            <h2 className={estilos.tituloSeccion}>
+              Planes
+              <br />
+              <span className={estilos.script}>para crecer</span>
+            </h2>
+            <div className={estilos.planesEnvoltura}>
+              <div>
+                <div className={estilos.planesGrilla}>
+                  {PLANES_PRECIO.map((plan) => (
+                    <div
+                      key={plan.id}
+                      className={`${estilos.plan} ${plan.destacado ? estilos.planDestacado : ''}`}
+                    >
+                      {plan.etiqueta && <span className={estilos.planEtiqueta}>{plan.etiqueta}</span>}
+                      <p className={estilos.planNombre}>{plan.nombre}</p>
+                      <p className={estilos.planPrecio}>
+                        ${plan.precio}
+                        <span>/mes</span>
+                      </p>
+                      <ul className={estilos.planLista} role="list">
+                        {plan.caracteristicas.map((caracteristica) => (
+                          <li key={caracteristica}>{caracteristica}</li>
+                        ))}
+                      </ul>
+                      <a
+                        className={plan.destacado ? estilos.botonHero : estilos.botonHeroContorno}
+                        href="#demo"
+                      >
+                        {plan.cta}
+                        <IconoFlecha style={{ width: 16, height: 16, marginLeft: 6 }} />
+                      </a>
+                    </div>
+                  ))}
                 </div>
-              ))}
+                <p className={estilos.planNota}>
+                  + instalación inicial de $149 (pago único, todos los planes).
+                </p>
+              </div>
+              <div className={estilos.planesPegatinas} aria-hidden="true">
+                <span className={`${estilos.pegatina} ${estilos.pegatinaCeleste}`} style={{ transform: 'rotate(-6deg)' }}>
+                  WOAH
+                </span>
+                <span className={estilos.pegatinaSello}>Vos in</span>
+                <span className={`${estilos.pegatina} ${estilos.pegatinaCoral}`} style={{ transform: 'rotate(5deg)' }}>
+                  Taste This
+                </span>
+              </div>
             </div>
-            <p className={estilos.planNota}>
-              + instalación inicial de $149 (pago único, todos los planes).
-            </p>
           </div>
         </section>
 
         <section id="preguntas" className={`${estilos.seccion} ${estilos.bandaOscura}`}>
           <div className={estilos.envoltura}>
-            <h2 className={estilos.tituloSeccion}>Preguntas frecuentes</h2>
-            <div className={estilos.preguntas}>
-              {PREGUNTAS.map((item) => (
-                <details key={item.pregunta} className={estilos.pregunta}>
-                  <summary>
-                    {item.pregunta}
-                    <span className={estilos.preguntaSigno} aria-hidden="true" />
-                  </summary>
-                  <p>{item.respuesta}</p>
-                </details>
-              ))}
+            <h2 className={estilos.tituloSeccion}>
+              Preguntas
+              <br />
+              <span className={estilos.script}>frecuentes</span>
+            </h2>
+            <div className={estilos.preguntasEnvoltura}>
+              <div className={estilos.preguntas}>
+                {PREGUNTAS.map((item) => (
+                  <details key={item.pregunta} className={estilos.pregunta}>
+                    <summary>
+                      {item.pregunta}
+                      <span className={estilos.preguntaSigno} aria-hidden="true" />
+                    </summary>
+                    <p>{item.respuesta}</p>
+                  </details>
+                ))}
+              </div>
+              <span
+                className={`${estilos.pegatina} ${estilos.pegatinaRosa} ${estilos.preguntasPegatina}`}
+                aria-hidden="true"
+              >
+                Hecha para ganar
+              </span>
             </div>
           </div>
         </section>
@@ -441,6 +572,11 @@ export default function Inicio() {
                 Tarjetas de lealtad digitales que viven en la billetera de tus clientes. Sin apps,
                 sin plásticos.
               </p>
+              <div className={estilos.pieMarcaContacto}>
+                <a href={`mailto:${MARCA.correoSoporte}`}>{MARCA.correoSoporte}</a>
+                {/* Sin teléfono: el mockup traía uno argentino, que no es de Cardly SV, y no hay
+                    uno real todavía para publicar acá. */}
+              </div>
             </div>
 
             <div className={estilos.pieColumna}>
@@ -455,23 +591,29 @@ export default function Inicio() {
                 <li>
                   <a href="#precios">Precios</a>
                 </li>
+              </ul>
+            </div>
+
+            <div className={estilos.pieColumna}>
+              <h3>Recursos</h3>
+              <ul>
                 <li>
                   <a href="#preguntas">Preguntas</a>
+                </li>
+                <li>
+                  <a href={`mailto:${MARCA.correoSoporte}`}>Soporte</a>
                 </li>
               </ul>
             </div>
 
             <div className={estilos.pieColumna}>
-              <h3>Tu cuenta</h3>
+              <h3>Cuenta</h3>
               <ul>
                 <li>
                   <Link href="/mi-tarjeta">Buscá tu tarjeta</Link>
                 </li>
                 <li>
                   <Link href="/comercio/login">Ingresar</Link>
-                </li>
-                <li>
-                  <a href={`mailto:${MARCA.correoSoporte}`}>{MARCA.correoSoporte}</a>
                 </li>
               </ul>
             </div>
@@ -481,6 +623,13 @@ export default function Inicio() {
             <span>
               © {new Date().getFullYear()} {MARCA.nombre}. Tarjetas de lealtad digitales en El
               Salvador.
+            </span>
+            {/* Íconos decorativos, sin <a>: todavía no hay cuentas sociales reales de Cardly SV
+                para enlazar (ver el comentario de .pieRedes en el CSS). */}
+            <span className={estilos.pieRedes} aria-hidden="true">
+              <IconoInstagram />
+              <IconoTikTok />
+              <IconoWhatsApp />
             </span>
           </div>
         </div>
