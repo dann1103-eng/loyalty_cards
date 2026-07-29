@@ -213,6 +213,37 @@ premio (`recompensas.foto_url` existe desde `0001` y nunca se cableó) + exporta
 "Próximamente". Stripe queda fuera: **no acepta negocios de El Salvador**, haría falta una entidad
 en EE.UU. o UK.
 
+## EN CURSO — Programas de tarjeta (migración 0024 YA APLICADA)
+
+Spec: `specs/2026-07-29-programas-de-tarjeta-design.md`. Es una reestructuración que REVIERTE la
+decisión del 2026-07-28 de "un tipo por comercio": ahora un comercio ofrece hasta 2 programas a la
+vez, cada uno con su nombre, su configuración y su propio QR de registro.
+
+**La 0024 ya está aplicada y verificada**: 21 tarjetas antes, 21 después, cada una apuntando al
+programa principal de su comercio. Fue la PRIMERA migración del proyecto que mueve datos vivos —
+las 23 anteriores solo agregaban columnas.
+
+### Lo que falta (en este orden)
+
+1. `lib/supabase/types.ts` con `programas_tarjeta` y `tarjetas.programa_id`.
+2. Capa de datos de programas (CRUD + tope de 2 activos por comercio, validado en TS).
+3. Pantalla de programas en el panel del dueño.
+4. Registro por programa: `/registro/<comercioSlug>/<programaSlug>`, conservando la URL vieja
+   (sin slug) apuntando al principal — **hay QR impresos en los locales con esa URL**.
+5. El escáner deduce la operación del programa de la TARJETA escaneada, no de `comercios.tipo_tarjeta`.
+6. Migración de contracción: retirar `comercios.tipo_tarjeta` y su configuración una vez desplegado.
+
+### Lo que NO cambia, y es la buena noticia
+
+Los seis motores (`acreditar_atomico`, `usar_cupon_atomico`, `consumir_saldo_atomico`,
+`usar_visita_atomico`, `renovar_membresia_atomico`, `registrar_compra_atomico`) trabajan sobre una
+tarjeta concreta y no leen `comercios.tipo_tarjeta`. No se tocan.
+
+### Pendientes que se DEJARON esperando a propósito
+
+El dibujo del pase por tipo, el portal del cliente y la pantalla de niveles de descuento. Son justo
+las piezas que cambian con varios programas por comercio: construirlas antes sería tirarlas.
+
 ## Si algo no cuadra
 
 El flujo de migraciones a mano + verificación con script descartable, y el patrón de merge
