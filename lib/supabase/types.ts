@@ -15,6 +15,7 @@
 //   - supabase/migrations/0012_sucursal_principal.sql (sucursales.es_principal + índice único parcial)
 //   - supabase/migrations/0013_reverso_tarjeta.sql (columnas del reverso del pass en comercios)
 //   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
+//   - supabase/migrations/0023_registrar_compra_descuento.sql (funcion registrar_compra_atomico)
 //   - supabase/migrations/0022_consumir_saldo.sql (funcion consumir_saldo_atomico)
 //   - supabase/migrations/0021_campana_con_vencimiento.sql (mensaje_campana/campana_hasta en sucursales)
 //   - supabase/migrations/0020_usar_visita_multipass.sql (funcion usar_visita_atomico)
@@ -1013,6 +1014,18 @@ export type Database = {
       // — reusa acreditar_atomico, que ya suma al contador con auditoría y límites.
       // Migración 0022: gastar saldo (gift card y cashback). `p_monto` va en CENTAVOS, igual que el
       // contador. Cargar saldo y acreditar cashback NO tienen función propia: reusan acreditar_atomico.
+      // Migración 0023: descuento por nivel. Suma al gasto HISTÓRICO (acumulado_centavos), que nunca
+      // baja; el nivel se calcula al leer y nunca se guarda.
+      registrar_compra_atomico: {
+        Args: {
+          p_comercio_id: string;
+          p_tarjeta_id: string;
+          p_monto_centavos: number;
+          p_sucursal_id: string | null;
+          p_cajero_usuario_id: string | null;
+        };
+        Returns: { estado: string; acumulado: number }[];
+      };
       consumir_saldo_atomico: {
         Args: {
           p_comercio_id: string;
