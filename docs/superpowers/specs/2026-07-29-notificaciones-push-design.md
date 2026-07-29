@@ -59,8 +59,8 @@ parejo. Se documenta así en el panel del dueño.
    ciclo.
 4. **Candado no negociable, compartido por las dos features:** antes de mandar por Google a una
    tarjeta puntual, contar cuántos avisos con notificación recibió esa tarjeta en las últimas 24
-   horas (de CUALQUIER origen). Si ya tiene 3, se salta esa tarjeta — no se manda igual, no se
-   corta la difusión completa por una tarjeta saturada.
+   horas (de CUALQUIER origen — campaña o inactividad, no canal). Si ya tiene 3, se salta esa
+   tarjeta — no se manda igual, no se corta la difusión completa por una tarjeta saturada.
 5. **La inactividad se mide POR TARJETA, no por cliente.** Con programas de tarjeta (migración
    0024) un cliente puede tener su tarjeta de sellos activa y su cupón de bienvenida olvidado — y
    ese es exactamente el caso que vale la pena avisar. Evaluar por cliente-agregado escondería esa
@@ -86,9 +86,10 @@ create table difusiones (
   vigente_hasta date not null, -- cuánto dura el mensaje en el reverso del pase (lo elige el dueño, como campana_hasta en geopush)
   creada_por uuid not null references usuarios_comercio(id),
   creada_en timestamptz not null default now(),
-  destinatarios integer not null default 0 -- cuántas tarjetas recibieron el mensaje, para el panel
+  destinatarios integer not null default 0 -- tarjetas a las que enviarMensajeTarjeta logró mandar por AL MENOS un canal (no el tamaño de la lista resuelta: con el candado de Google, pueden diferir)
 );
 create index on difusiones (comercio_id, creada_en desc);
+alter table difusiones enable row level security;
 
 -- Registro compartido: auditoría de AMBOS canales Y fuente del candado de 3/24h de Google.
 create table notificaciones_enviadas (
@@ -100,6 +101,7 @@ create table notificaciones_enviadas (
   enviada_en timestamptz not null default now()
 );
 create index on notificaciones_enviadas (tarjeta_id, enviada_en desc);
+alter table notificaciones_enviadas enable row level security;
 
 -- Estado ACTUAL del aviso en el reverso de CADA tarjeta. construirReverso/datosPassDeTarjeta
 -- reconstruyen el reverso de cero en CADA regeneración del pase (confirmado leyendo el código:
@@ -146,6 +148,27 @@ Un aviso de inactividad puede volver a mandarse: si la última actividad real de
 después del último aviso, así que puede volver a cruzar el umbral y avisarse de nuevo — no hace
 falta una limpieza explícita de la columna.
 
+**Una tarjeta de cupón ya usada nunca califica para el aviso de inactividad**, aunque
+`usado_en` sea, técnicamente, su actividad más reciente. Un cupón de un solo uso no tiene "volver":
+avisarle a ese cliente que "vuelva" a una tarjeta que ya cumplió su propósito es un push
+desperdiciado (y uno que consume el cupo de 3/24h de Google sin ninguna razón). El filtro es
+`programas_tarjeta.tipo_tarjeta <> 'cupon' or tarjetas.usado_en is null`. Los demás tipos con
+estado terminal-pero-reversible (una `membresia` vencida y no renovada, por ejemplo) SÍ califican
+— ahí "volvé" es exactamente el mensaje correcto.
+
+**Concurrencia — check-then-act deliberado, no un RPC atómico.** El tope de 4/mes y el candado de
+3/24h de Google se implementan como un conteo seguido de un insert, igual que el tope de 2
+programas activos en `crearPrograma` (`lib/comercio/programas.ts`) — y a propósito NO como los
+RPC atómicos con `for no key update` de las perillas antifraude (migración 0015). La diferencia es
+el modelo de amenaza: las perillas antifraude defienden contra un CAJERO apurado o malicioso
+regalando producto real, así que una carrera ahí es un agujero de seguridad. Acá el único actor
+que puede correr una carrera es el propio DUEÑO haciendo doble clic sobre su propio tope, y el
+peor resultado es mandar una o dos campañas de más en un mes — una molestia de cuenta, no fraude.
+Para el candado de Google en particular la carrera importa todavía menos: si dos envíos casi
+simultáneos se cuelan pasando el conteo de 3, es GOOGLE quien igual va a throttlear el cuarto —
+el conteo acá es una optimización para no gastar la llamada a la API en un envío condenado, no la
+única defensa.
+
 ## La función compartida
 
 `enviarMensajeTarjeta(supabase, tarjetaId, mensaje, vigenteHasta, origen, difusionId?)`:
@@ -171,7 +194,8 @@ falta una limpieza explícita de la columna.
 
 ## Campaña manual
 
-Pantalla nueva (`/comercio/notificaciones` o similar — nombre final a definir), gate de dueño:
+Pantalla nueva `/comercio/notificaciones` (mismo patrón de nombre que `/comercio/reglas`,
+`/comercio/programas`), gate de dueño:
 
 - Formulario: mensaje (texto libre) + hasta cuándo dura en el reverso del pase + selector de
   programa (default "todos").
@@ -195,8 +219,9 @@ Pantalla nueva (`/comercio/notificaciones` o similar — nombre final a definir)
   comercios con `aviso_inactividad_activo`, y dentro de cada uno, cada tarjeta activa (ver
   definición arriba) cuya última actividad real (ver definición arriba, incluye el fallback a
   `created_at`) supere `aviso_inactividad_dias` Y (no tenga `aviso_inactividad_enviado_en`, o su
-  última actividad sea más nueva que ese aviso). Llama `enviarMensajeTarjeta` con origen
-  `'inactividad'`, `vigenteHasta` = hoy + 14 días, y actualiza `aviso_inactividad_enviado_en`.
+  última actividad sea más nueva que ese aviso) Y no sea un cupón ya usado (ver definición arriba).
+  Llama `enviarMensajeTarjeta` con origen `'inactividad'`, `vigenteHasta` = hoy + 14 días, y
+  actualiza `aviso_inactividad_enviado_en`.
 
 ## Lo que NO cambia
 
@@ -219,6 +244,12 @@ distintos a un modelo único (ver decisión 1) tiende a complicar más de lo que
 - Cobertura de pruebas obligatoria para: el tope de 4/mes (incluida la mutación "cambiar `>=` por
   `>`"), el candado de 3/24h de Google con el filtro por `canal` (una mutación que lo quite debe
   atrapar que un push de Apple cuente contra el tope de Google), la resolución de "última
-  actividad real" con el fallback a `created_at` para una tarjeta sin ninguna fila de ledger, y el
-  caso concreto que motivó la decisión 5 — una tarjeta activa y otra inactiva del MISMO cliente en
-  el MISMO comercio, confirmando que el aviso llega solo a la inactiva.
+  actividad real" con el fallback a `created_at` para una tarjeta sin ninguna fila de ledger, el
+  cupón ya usado que NO debe recibir aviso de inactividad, y el caso concreto que motivó la
+  decisión 5 — una tarjeta activa y otra inactiva del MISMO cliente en el MISMO comercio,
+  confirmando que el aviso llega solo a la inactiva.
+- El cron de inactividad y el fan-out de una campaña grande no tienen todavía una estrategia de
+  lotes/tiempo límite — probablemente está bien dado el precedente de `/api/cron/campanas` y la
+  escala actual del proyecto, pero el plan debe confirmarlo explícitamente en vez de asumirlo,
+  sobre todo si algún comercio llega a tener miles de tarjetas activas y una función serverless
+  tiene un límite de tiempo de ejecución.
