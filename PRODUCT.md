@@ -29,8 +29,11 @@ quien está usando la pantalla.
 - Tres planes: Starter $29/mes, Growth $49/mes, Pro $89/mes. El límite del plan cuenta **comercios
   distintos y sucursales sumados**, y es un default sugerido que el operador puede ajustar por
   cuenta. El catálogo real vive en el sitio de marketing, no en este repo.
-- La página pública **no vende precios ni cuenta clientes**: pide una demo. Nada de contadores tipo
-  "8 comercios ya usan Cardly": son números de piloto y restan.
+- La página pública **muestra los tres precios** (decisión del dueño, 2026-07-29: revierte la
+  política anterior de "solo demo, sin precios públicos"). Lo que sigue vigente: **nada de
+  contadores de piloto inventados** tipo "8 comercios ya usan Cardly" — restan, no suman, en una
+  plataforma que recién está creciendo. La franja de confianza de `/` dice hechos verificables
+  (tipos de tarjeta reales, Apple + Google Wallet), no cifras de uso.
 
 ## Usuarios (cuatro superficies, dos registros)
 1. **Dueño que todavía no es cliente** — `/`. Es a quien le habla la página pública: PyME
