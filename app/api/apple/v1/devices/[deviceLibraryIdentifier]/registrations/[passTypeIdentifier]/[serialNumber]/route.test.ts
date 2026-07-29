@@ -4,12 +4,37 @@ import { POST, DELETE } from './route';
 import { createServiceClient } from '@/lib/supabase/server';
 
 const supabase = createServiceClient();
-let ids: { comercioId: string; clienteId: string; tarjetaId: string; serialNumber: string } | null = null;
+let ids: {
+  comercioId: string;
+  programaId: string;
+  clienteId: string;
+  tarjetaId: string;
+  serialNumber: string;
+} | null = null;
 
 async function crearTarjetaDePrueba() {
   const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const { data: comercio } = await supabase
-    .from('comercios').insert({ nombre: 'Comercio Test', slug: `test-ws-${sufijo}` }).select('id').single();
+    .from('comercios')
+    .insert({ nombre: 'Comercio Test', slug: `test-ws-${sufijo}` })
+    .select('id, nombre, tipo_tarjeta, sello_meta, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias')
+    .single();
+  const { data: programa } = await supabase
+    .from('programas_tarjeta')
+    .insert({
+      comercio_id: comercio!.id,
+      nombre: comercio!.nombre,
+      slug: 'principal',
+      tipo_tarjeta: comercio!.tipo_tarjeta,
+      es_principal: true,
+      sello_meta: comercio!.sello_meta,
+      cashback_porcentaje: comercio!.cashback_porcentaje,
+      multipass_visitas: comercio!.multipass_visitas,
+      membresia_dias: comercio!.membresia_dias,
+      cupon_vigencia_dias: comercio!.cupon_vigencia_dias,
+    })
+    .select('id')
+    .single();
   const { data: cliente } = await supabase
     .from('clientes').insert({ nombre: 'Cliente Test', telefono: `+503-ws-${sufijo}` }).select('id').single();
   const serialNumber = `serial-test-${sufijo}`;
@@ -18,12 +43,13 @@ async function crearTarjetaDePrueba() {
     .insert({
       cliente_id: cliente!.id,
       comercio_id: comercio!.id,
+      programa_id: programa!.id,
       apple_serial_number: serialNumber,
       apple_auth_token: 'token-de-prueba-1234567890ab',
     })
     .select('id').single();
 
-  ids = { comercioId: comercio!.id, clienteId: cliente!.id, tarjetaId: tarjeta!.id, serialNumber };
+  ids = { comercioId: comercio!.id, programaId: programa!.id, clienteId: cliente!.id, tarjetaId: tarjeta!.id, serialNumber };
   return ids;
 }
 
@@ -32,6 +58,7 @@ afterEach(async () => {
   await supabase.from('apple_push_registrations').delete().eq('tarjeta_id', ids.tarjetaId);
   await supabase.from('tarjetas').delete().eq('id', ids.tarjetaId);
   await supabase.from('clientes').delete().eq('id', ids.clienteId);
+  await supabase.from('programas_tarjeta').delete().eq('id', ids.programaId);
   await supabase.from('comercios').delete().eq('id', ids.comercioId);
   ids = null;
 });

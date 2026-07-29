@@ -15,6 +15,8 @@
 //   - supabase/migrations/0012_sucursal_principal.sql (sucursales.es_principal + índice único parcial)
 //   - supabase/migrations/0013_reverso_tarjeta.sql (columnas del reverso del pass en comercios)
 //   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
+//   - supabase/migrations/0025_backfill_programas_principales_faltantes.sql (solo datos, no cambia columnas: programa principal para comercios que la 0024 no alcanzó a cubrir)
+//   - supabase/migrations/0024_programas_de_tarjeta.sql (tabla programas_tarjeta; tarjetas.programa_id NOT NULL; unique (cliente_id, programa_id) reemplaza unique (cliente_id, comercio_id))
 //   - supabase/migrations/0023_registrar_compra_descuento.sql (funcion registrar_compra_atomico)
 //   - supabase/migrations/0022_consumir_saldo.sql (funcion consumir_saldo_atomico)
 //   - supabase/migrations/0021_campana_con_vencimiento.sql (mensaje_campana/campana_hasta en sucursales)
@@ -239,9 +241,15 @@ export type Database = {
           id: string;
           cliente_id: string;
           comercio_id: string;
-          // CONTADOR UNIVERSAL (migración 0018): su significado depende de comercios.tipo_tarjeta.
-          // En sellos son sellos; en multipass, visitas restantes; en cashback y gift_card,
-          // CENTAVOS. Nunca imprimirlo crudo — pasar siempre por describirSaldo (lib/tarjetas/tipos.ts).
+          // Migración 0024: qué programa de este comercio emitió la tarjeta. NOT NULL sin default —
+          // toda tarjeta nueva DEBE nacer con programa_id (registrarCliente.ts), no hay valor que
+          // la BD pueda inventar sola. tipo_tarjeta/la configuración por tipo ahora viven en
+          // programas_tarjeta, no en comercios.
+          programa_id: string;
+          // CONTADOR UNIVERSAL (migración 0018): su significado depende de programas_tarjeta.tipo_tarjeta
+          // (antes, de comercios.tipo_tarjeta). En sellos son sellos; en multipass, visitas restantes;
+          // en cashback y gift_card, CENTAVOS. Nunca imprimirlo crudo — pasar siempre por
+          // describirSaldo (lib/tarjetas/tipos.ts).
           puntos_actuales: number;
           qr_token: string;
           apple_serial_number: string | null;
@@ -261,6 +269,7 @@ export type Database = {
           id?: string;
           cliente_id: string;
           comercio_id: string;
+          programa_id: string;
           puntos_actuales?: number;
           qr_token?: string;
           apple_serial_number?: string | null;
@@ -275,6 +284,7 @@ export type Database = {
           id?: string;
           cliente_id?: string;
           comercio_id?: string;
+          programa_id?: string;
           puntos_actuales?: number;
           qr_token?: string;
           apple_serial_number?: string | null;
@@ -288,7 +298,8 @@ export type Database = {
         // FKs inline en la migración 0001 (`references comercios(id)` / `references clientes(id)`)
         // — Postgres las nombra `tarjetas_comercio_id_fkey` / `tarjetas_cliente_id_fkey`. Necesarias
         // para que los joins embebidos `comercios(*)` (pass) y `clientes(nombre, telefono)`
-        // (directorio de clientes) resuelvan su tipo; sin la entrada dan SelectQueryError.
+        // (directorio de clientes) resuelvan su tipo; sin la entrada dan SelectQueryError. La de
+        // programa_id (0024) sigue el mismo motivo, para `programas_tarjeta(...)` desde el escáner.
         Relationships: [
           {
             foreignKeyName: 'tarjetas_comercio_id_fkey';
@@ -302,6 +313,13 @@ export type Database = {
             columns: ['cliente_id'];
             isOneToOne: false;
             referencedRelation: 'clientes';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'tarjetas_programa_id_fkey';
+            columns: ['programa_id'];
+            isOneToOne: false;
+            referencedRelation: 'programas_tarjeta';
             referencedColumns: ['id'];
           },
         ];
@@ -831,6 +849,69 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: 'sucursales_comercio_id_fkey';
+            columns: ['comercio_id'];
+            isOneToOne: false;
+            referencedRelation: 'comercios';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      programas_tarjeta: {
+        Row: {
+          id: string;
+          comercio_id: string;
+          nombre: string;
+          // Para /registro/<comercioSlug>/<slug>. Único por comercio, no global (a diferencia de
+          // comercios.slug) — dos comercios distintos pueden cada uno tener un programa "principal".
+          slug: string;
+          tipo_tarjeta: string;
+          // Máximo UNO en true por comercio (índice único parcial). El que recibe quien escanea el
+          // QR viejo del comercio, sin programa en la URL.
+          es_principal: boolean;
+          // Soft-delete: las tarjetas emitidas lo referencian. Mismo criterio que recompensas/cajeros.
+          activo: boolean;
+          // Configuración por tipo, mudada desde comercios (migración 0018 → 0024). Cada campo solo
+          // aplica a un tipo — ver lib/comercio/programas.ts.
+          sello_meta: number | null;
+          cashback_porcentaje: number | null;
+          multipass_visitas: number | null;
+          membresia_dias: number | null;
+          cupon_vigencia_dias: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          comercio_id: string;
+          nombre: string;
+          slug: string;
+          tipo_tarjeta: string;
+          es_principal?: boolean;
+          activo?: boolean;
+          sello_meta?: number | null;
+          cashback_porcentaje?: number | null;
+          multipass_visitas?: number | null;
+          membresia_dias?: number | null;
+          cupon_vigencia_dias?: number | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          comercio_id?: string;
+          nombre?: string;
+          slug?: string;
+          tipo_tarjeta?: string;
+          es_principal?: boolean;
+          activo?: boolean;
+          sello_meta?: number | null;
+          cashback_porcentaje?: number | null;
+          multipass_visitas?: number | null;
+          membresia_dias?: number | null;
+          cupon_vigencia_dias?: number | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'programas_tarjeta_comercio_id_fkey';
             columns: ['comercio_id'];
             isOneToOne: false;
             referencedRelation: 'comercios';

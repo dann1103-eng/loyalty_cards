@@ -31,6 +31,9 @@ export const ENLACES_BARRA: readonly EnlaceNav[] = [
 export const ENLACES_MENU: readonly EnlaceNav[] = [
   { href: '/comercio/reportes', icono: 'insights', etiqueta: 'Reportes' },
   { href: '/comercio/reglas', icono: 'rule', etiqueta: 'Reglas' },
+  // Justo después de Reglas (migración 0024): absorbió la configuración por tipo que antes vivía
+  // ahí (cashback%, visitas del paquete, …), así que es la sección hermana más cercana.
+  { href: '/comercio/programas', icono: 'style', etiqueta: 'Programas' },
   { href: '/comercio/sucursales', icono: 'store', etiqueta: 'Sucursales' },
   { href: '/comercio/cajeros', icono: 'badge', etiqueta: 'Cajeros' },
   // Mi plan va al MENÚ, no a la barra: la barra lleva exactamente 5 destinos y el centro sale de la

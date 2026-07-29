@@ -3,6 +3,7 @@ import type { Database } from '../supabase/types';
 import { validarColorRgb } from './validarColorRgb';
 import { verificarLimiteCuenta } from './cuentas';
 import { crearSucursalPrincipal } from '../comercio/sucursales';
+import { crearProgramaPrincipal } from '../comercio/programas';
 
 // Fuente única de verdad del catálogo de tipos de tarjeta: la BD tiene
 // check (tipo_tarjeta in (...8 valores...)) en la migración 0005. El <select> de FM se construye
@@ -139,6 +140,16 @@ export async function crearComercio(
     console.error('[fm] el comercio quedó sin sucursal principal:', data.id);
   }
 
+  // Todo comercio nace con su programa PRINCIPAL (0024). Mismo criterio best-effort que la
+  // sucursal de arriba (no negarle el alta al admin por esto) — pero a diferencia de la sucursal,
+  // ACÁ no hay auto-reparación posible desde la pantalla de programas (crearPrograma nunca crea un
+  // es_principal:true): un fallo deja al comercio SIN poder recibir clientes hasta arreglarlo a
+  // mano en Studio. Se loguea fuerte a propósito — ver migración 0025 para el precedente real.
+  const programaPrincipal = await crearProgramaPrincipal(supabase, data.id, limpios.nombre, limpios.tipo_tarjeta);
+  if (!programaPrincipal.ok) {
+    console.error('[fm] URGENTE: el comercio quedó SIN programa principal, no puede recibir clientes:', data.id);
+  }
+
   return { ok: true, id: data.id };
 }
 
@@ -225,9 +236,10 @@ export async function actualizarComercio(
 // en JS, que podría desincronizarse si el esquema cambia. Solo traducimos el 23503 a un mensaje
 // legible.
 //
-// LA ÚNICA EXCEPCIÓN es la sucursal PRINCIPAL (0012), que se retira antes del delete y se repone
-// verbatim si el delete no procede. Sin eso, ningún comercio con principal sería borrable jamás y
-// el 23503 mentiría diciendo "tiene datos asociados".
+// LAS ÚNICAS EXCEPCIONES son la sucursal PRINCIPAL (0012) y el programa PRINCIPAL (0024), que se
+// retiran antes del delete y se reponen verbatim si el delete no procede. Sin eso, ningún comercio
+// con principal (o sea, NINGÚN comercio desde la 0024 — todos nacen con uno) sería borrable jamás
+// y el 23503 mentiría diciendo "tiene datos asociados".
 //
 // Y NO se asume que la principal sea una fila "del sistema": muy a menudo es del DUEÑO. El backfill
 // de la 0012 ascendió a principal la sucursal más antigua que ya existía —con el nombre que él le
@@ -273,15 +285,25 @@ export async function eliminarComercio(
   // DUEÑO —puede haberlo puesto él y puede haberla renombrado—, así que reponer un genérico
   // "Principal" sería renombrarle la sucursal en silencio desde un botón que no borró nada. Sin
   // fila (comercio legado o alta cuyo best-effort falló) no hay nada que retirar ni que reponer.
-  const { data: principal, error: eLeer } = await supabase
-    .from('sucursales')
-    .select('id, nombre, activa, created_at')
-    .eq('comercio_id', id)
-    .eq('es_principal', true)
-    .maybeSingle();
-  if (eLeer) {
+  const [{ data: principal, error: eLeer }, { data: programaPrincipal, error: eLeerPrograma }] = await Promise.all([
+    supabase
+      .from('sucursales')
+      .select('id, nombre, activa, created_at')
+      .eq('comercio_id', id)
+      .eq('es_principal', true)
+      .maybeSingle(),
+    // Mismo criterio que la sucursal: se lee ENTERO (no solo el id) para poder reponerlo IDÉNTICO
+    // si el borrado no procede — incluida su configuración, que el dueño puede haber cargado.
+    supabase
+      .from('programas_tarjeta')
+      .select('id, nombre, slug, tipo_tarjeta, activo, sello_meta, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias, created_at')
+      .eq('comercio_id', id)
+      .eq('es_principal', true)
+      .maybeSingle(),
+  ]);
+  if (eLeer || eLeerPrograma) {
     // Falla CERRADO: sin saber qué reponer no se puede arriesgar el retiro.
-    console.error('[fm] no se pudo leer la sucursal principal antes de borrar el comercio:', eLeer);
+    console.error('[fm] no se pudo leer la principal antes de borrar el comercio:', eLeer ?? eLeerPrograma);
     return { ok: false, error: 'No se pudo eliminar el comercio.' };
   }
 
@@ -306,12 +328,47 @@ export async function eliminarComercio(
     }
   }
 
-  // VENTANA SIN ATOMICIDAD: entre el retiro de arriba y este delete no hay transacción (supabase-js
-  // no las expone; haría falta un RPC como el de la 0009). Si el proceso muere justo acá, el
-  // comercio queda sin principal. Se auto-repara solo si NO le quedan sucursales (crearSucursal
-  // asciende la primera); con sucursales del dueño el conteo ya es > 0 y no dispara, y reintentar
-  // Eliminar tampoco la devuelve — la fila leída se perdió con el proceso. Arreglo manual entonces,
-  // o la cura de raíz: `on delete cascade` en sucursales.comercio_id, que borraría esta danza.
+  // Reponedor compartido: se llama desde CUALQUIER salida de error después de este punto, porque
+  // la sucursal ya pudo haberse retirado arriba. Repetirlo en cada `return` (como en un primer
+  // intento de este parche) es exactamente el bug que encontró la prueba: una rama devolvía el
+  // error de "tiene tarjetas" ANTES de reponer, dejando el comercio con su sucursal borrada aunque
+  // eliminarComercio hubiera devuelto ok:false.
+  async function reponerSucursalSiHaceFalta() {
+    if (!principal) return;
+    const { error: eReponer } = await supabase.from('sucursales').insert({
+      id: principal.id, comercio_id: id, nombre: principal.nombre,
+      activa: principal.activa, created_at: principal.created_at, es_principal: true,
+    });
+    if (eReponer) {
+      console.error('[fm] el comercio quedó sin su sucursal principal tras un borrado fallido:', id, eReponer);
+    }
+  }
+
+  if (programaPrincipal) {
+    const { error: eRetirarPrograma } = await supabase
+      .from('programas_tarjeta').delete().eq('id', programaPrincipal.id).eq('comercio_id', id);
+    if (eRetirarPrograma) {
+      console.error('[fm] no se pudo retirar el programa principal antes de borrar el comercio:', eRetirarPrograma);
+      await reponerSucursalSiHaceFalta();
+      // 23503 acá SOLO puede ser tarjetas.programa_id (es la única FK hacia programas_tarjeta):
+      // el comercio tiene clientes reales bajo su programa principal.
+      if (eRetirarPrograma.code === '23503') {
+        return {
+          ok: false,
+          error:
+            'No se puede eliminar: el programa principal tiene tarjetas de clientes. Solo se pueden eliminar comercios sin actividad.',
+        };
+      }
+      return { ok: false, error: 'No se pudo eliminar el comercio.' };
+    }
+  }
+
+  // VENTANA SIN ATOMICIDAD: entre los retiros de arriba y este delete no hay transacción
+  // (supabase-js no las expone; haría falta un RPC como el de la 0009). Si el proceso muere justo
+  // acá, el comercio queda sin principal. La sucursal se auto-repara sola si no le quedan otras
+  // (crearSucursal asciende la primera); el programa NO tiene auto-reparación equivalente
+  // (crearPrograma nunca crea un es_principal:true) — arreglo manual entonces, o la cura de raíz:
+  // `on delete cascade` en sucursales/programas_tarjeta.comercio_id, que borraría esta danza.
   const { error } = await supabase.from('comercios').delete().eq('id', id);
 
   if (error) {
@@ -319,28 +376,37 @@ export async function eliminarComercio(
     // así que hay que devolverle su principal TAL CUAL estaba. Mismo id: nada podía apuntarle (si
     // algo lo hiciera, el retiro habría dado 23503 y no habríamos llegado hasta acá), así que el
     // insert no choca con ningún FK ni con el índice parcial único.
-    if (principal) {
-      const { error: eReponer } = await supabase.from('sucursales').insert({
-        id: principal.id,
+    await reponerSucursalSiHaceFalta();
+    if (programaPrincipal) {
+      const { error: eReponerPrograma } = await supabase.from('programas_tarjeta').insert({
+        id: programaPrincipal.id,
         comercio_id: id,
-        nombre: principal.nombre,
-        activa: principal.activa,
-        created_at: principal.created_at,
+        nombre: programaPrincipal.nombre,
+        slug: programaPrincipal.slug,
+        tipo_tarjeta: programaPrincipal.tipo_tarjeta,
         es_principal: true,
+        activo: programaPrincipal.activo,
+        sello_meta: programaPrincipal.sello_meta,
+        cashback_porcentaje: programaPrincipal.cashback_porcentaje,
+        multipass_visitas: programaPrincipal.multipass_visitas,
+        membresia_dias: programaPrincipal.membresia_dias,
+        cupon_vigencia_dias: programaPrincipal.cupon_vigencia_dias,
+        created_at: programaPrincipal.created_at,
       });
-      if (eReponer) {
-        console.error('[fm] el comercio quedó sin su sucursal principal tras un borrado fallido:', id, eReponer);
+      if (eReponerPrograma) {
+        console.error('[fm] el comercio quedó sin su programa principal tras un borrado fallido:', id, eReponerPrograma);
       }
     }
     if (error.code === '23503') {
       // Los "accesos de dueño/cajero" (usuarios_comercio) NO son un adorno de la lista: son la causa
       // MÁS común, porque todo comercio creado self-serve nace con su membresía owner y esta función
       // no la retira (ver DEUDA CONOCIDA en la cabecera). Sin nombrarlos, el admin sale a buscar
-      // tarjetas, reglas o recompensas que no existen.
+      // tarjetas, reglas o recompensas que no existen. "Programas" cubre los ADICIONALES (no el
+      // principal, que ya se retiró arriba): igual que las sucursales adicionales, siguen bloqueando.
       return {
         ok: false,
         error:
-          'No se puede eliminar: tiene datos asociados (tarjetas, reglas de puntos, recompensas, sucursales o accesos de dueño/cajero). Solo se pueden eliminar comercios sin actividad.',
+          'No se puede eliminar: tiene datos asociados (tarjetas, reglas de puntos, recompensas, sucursales, programas adicionales o accesos de dueño/cajero). Solo se pueden eliminar comercios sin actividad.',
       };
     }
     console.error('[fm] falló el borrado de comercio:', error);

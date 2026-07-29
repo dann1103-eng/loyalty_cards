@@ -49,6 +49,9 @@ describe('enlacesMenuPorRol', () => {
     expect(hrefs).toEqual([
       '/comercio/reportes',
       '/comercio/reglas',
+      // Programas (0024): justo después de Reglas, la sección hermana de la que heredó la
+      // configuración por tipo.
+      '/comercio/programas',
       '/comercio/sucursales',
       '/comercio/cajeros',
       // Mi plan (0017). Va al final a propósito: es configuración ocasional, no operación diaria.
@@ -71,9 +74,9 @@ describe('enlacesMenuPorRol', () => {
     const barra = enlacesBarraPorRol('owner').map((e) => e.href);
     const menu = enlacesMenuPorRol('owner').map((e) => e.href);
     expect(barra.filter((h) => menu.includes(h))).toEqual([]);
-    // Las 10 secciones del panel siguen alcanzables entre las dos superficies: si alguien mueve una
+    // Las 11 secciones del panel siguen alcanzables entre las dos superficies: si alguien mueve una
     // sección de la barra al menú (o al revés) esto sigue verde, pero si la BORRA de ambas, no.
-    // (Eran 9 hasta que la 0017 sumó "Mi plan".)
-    expect(new Set([...barra, ...menu]).size).toBe(10);
+    // (Eran 9 hasta que la 0017 sumó "Mi plan"; 10 hasta que la 0024 sumó "Programas".)
+    expect(new Set([...barra, ...menu]).size).toBe(11);
   });
 });

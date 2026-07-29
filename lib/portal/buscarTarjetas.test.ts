@@ -4,15 +4,31 @@ import { buscarTarjetasPorTelefono, formatearSaldo } from './buscarTarjetas';
 
 const supabase = createServiceClient();
 const comerciosDePrueba: string[] = [];
+const programasDePrueba: string[] = [];
 const clientesDePrueba: string[] = [];
 const tarjetasDePrueba: string[] = [];
+const programaPrincipalDe = new Map<string, string>();
+
+function requerirProgramaPrincipal(comercioId: string): string {
+  const programaId = programaPrincipalDe.get(comercioId);
+  if (!programaId) {
+    throw new Error(`[test] comercio ${comercioId} no tiene programa principal — ¿se creó con crearComercio()?`);
+  }
+  return programaId;
+}
 
 afterEach(async () => {
-  // Orden: hijos antes que padres. tarjetas -> (clientes, comercios); recompensas -> comercios.
+  // Orden: hijos antes que padres. tarjetas -> programas_tarjeta (que tarjetas referencia) ->
+  // (clientes, comercios); recompensas -> comercios.
   if (tarjetasDePrueba.length) {
     const { error } = await supabase.from('tarjetas').delete().in('id', tarjetasDePrueba);
     if (error) console.error('[test] no se pudieron borrar las tarjetas:', error);
     tarjetasDePrueba.length = 0;
+  }
+  if (programasDePrueba.length) {
+    const { error } = await supabase.from('programas_tarjeta').delete().in('id', programasDePrueba);
+    if (error) console.error('[test] no se pudieron borrar los programas:', error);
+    programasDePrueba.length = 0;
   }
   if (comerciosDePrueba.length) {
     const { error: eR } = await supabase.from('recompensas').delete().in('comercio_id', comerciosDePrueba);
@@ -28,6 +44,7 @@ afterEach(async () => {
     if (error) console.error('[test] no se pudieron borrar los comercios:', error);
     comerciosDePrueba.length = 0;
   }
+  programaPrincipalDe.clear();
 });
 
 // Corregido tras revisión de plan: el fixture original de teléfono ("+000-portal-<timestamp>-
@@ -47,10 +64,34 @@ async function crearComercio(extra: Record<string, unknown> = {}): Promise<strin
   const { data, error } = await supabase
     .from('comercios')
     .insert({ nombre: 'Comercio Portal Test', slug: `test-portal-${sufijo}`, ...extra })
-    .select('id')
+    .select('id, nombre, tipo_tarjeta, sello_meta, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias')
     .single();
   if (error) throw error;
   comerciosDePrueba.push(data.id);
+
+  // Toda tarjeta necesita programa_id (migración 0024): se crea acá un programa principal que
+  // espeja el tipo/config que quedó en el comercio (incluido lo que `extra` haya pasado, p. ej.
+  // tipo_tarjeta: 'sellos'), igual que el backfill de la 0024.
+  const { data: programa, error: eP } = await supabase
+    .from('programas_tarjeta')
+    .insert({
+      comercio_id: data.id,
+      nombre: data.nombre,
+      slug: 'principal',
+      tipo_tarjeta: data.tipo_tarjeta,
+      es_principal: true,
+      sello_meta: data.sello_meta,
+      cashback_porcentaje: data.cashback_porcentaje,
+      multipass_visitas: data.multipass_visitas,
+      membresia_dias: data.membresia_dias,
+      cupon_vigencia_dias: data.cupon_vigencia_dias,
+    })
+    .select('id')
+    .single();
+  if (eP) throw eP;
+  programasDePrueba.push(programa.id);
+  programaPrincipalDe.set(data.id, programa.id);
+
   return data.id;
 }
 
@@ -65,7 +106,12 @@ async function crearClienteConTarjeta(comercioId: string, puntos: number): Promi
   clientesDePrueba.push(cliente.id);
   const { data: tarjeta, error: eT } = await supabase
     .from('tarjetas')
-    .insert({ cliente_id: cliente.id, comercio_id: comercioId, puntos_actuales: puntos })
+    .insert({
+      cliente_id: cliente.id,
+      comercio_id: comercioId,
+      programa_id: requerirProgramaPrincipal(comercioId),
+      puntos_actuales: puntos,
+    })
     .select('id')
     .single();
   if (eT) throw eT;
@@ -131,7 +177,15 @@ describe('buscarTarjetasPorTelefono', () => {
     clientesDePrueba.push(cliente.id);
     const comercioId = await crearComercio();
     const { data: t, error: eT } = await supabase
-      .from('tarjetas').insert({ cliente_id: cliente.id, comercio_id: comercioId, puntos_actuales: 3 }).select('id').single();
+      .from('tarjetas')
+      .insert({
+        cliente_id: cliente.id,
+        comercio_id: comercioId,
+        programa_id: requerirProgramaPrincipal(comercioId),
+        puntos_actuales: 3,
+      })
+      .select('id')
+      .single();
     if (eT) throw eT;
     tarjetasDePrueba.push(t.id);
 
@@ -181,8 +235,15 @@ describe('buscarTarjetasPorTelefono', () => {
     if (eC) throw eC;
     clientesDePrueba.push(cliente.id);
     for (const comercioId of [comercioA, comercioB]) {
+      // Cada comercio tiene SU PROPIO programa (creado en crearComercio()): requerirProgramaPrincipal
+      // toma el de ESTE comercioId en cada vuelta, nunca el del otro — cruzarlos sería un bug
+      // silencioso (ambos ids son UUIDs válidos de programas_tarjeta, pero la tarjeta quedaría
+      // apuntando al programa equivocado).
       const { data: t, error: eT } = await supabase
-        .from('tarjetas').insert({ cliente_id: cliente.id, comercio_id: comercioId }).select('id').single();
+        .from('tarjetas')
+        .insert({ cliente_id: cliente.id, comercio_id: comercioId, programa_id: requerirProgramaPrincipal(comercioId) })
+        .select('id')
+        .single();
       if (eT) throw eT;
       tarjetasDePrueba.push(t.id);
     }

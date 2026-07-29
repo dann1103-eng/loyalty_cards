@@ -4,11 +4,9 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { TIPOS_REGLA } from '@/lib/comercio/reglas';
 import FormularioRegla from './FormularioRegla';
 import FormularioControles from './FormularioControles';
-import FormularioTipo from './FormularioTipo';
 import BotonEliminarRegla from './BotonEliminarRegla';
 import AvisoComercioActivo from '../AvisoComercioActivo';
 import { leerControles } from '@/lib/comercio/controlesAcreditacion';
-import { leerConfiguracionTipo } from '@/lib/comercio/configuracionTipo';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,9 +24,6 @@ export default async function PaginaReglas() {
   // no imagen — y así no hace falta un sexto destino en la barra, que descentraría el botón de
   // Escanear (ver lib/comercio/navegacion.ts).
   const controles = await leerControles(supabase, comercioId);
-  // Configuracion propia del tipo (0018): el porcentaje de cashback, las visitas del paquete,
-  // los dias de la membresia. Sin esto los motores existen pero nadie puede encenderlos.
-  const configuracionTipo = await leerConfiguracionTipo(supabase, comercioId);
   const { data: comercio } = await supabase
     .from('comercios')
     .select('tipo_tarjeta')
@@ -52,11 +47,23 @@ export default async function PaginaReglas() {
         <FormularioRegla />
       </div>
 
-      {configuracionTipo && (
-        <div className="reveal d2" style={{ marginTop: 22 }}>
-          <FormularioTipo configuracion={configuracionTipo} />
-        </div>
-      )}
+      {/* La configuración por tipo (cashback%, visitas del paquete, …) vivía acá (migración 0018)
+          hasta que la 0024 la mudó a cada programa: un comercio puede tener varios tipos a la vez,
+          así que ya no tiene sentido una sola configuración a nivel comercio. */}
+      <div className="reveal d2" style={{ marginTop: 22 }}>
+        <Link className="admin-fila" href="/comercio/programas">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <span className="icono-circulo menta" aria-hidden="true">
+              <span className="icono">style</span>
+            </span>
+            <div>
+              <div className="admin-fila-nombre">Programas de tarjeta</div>
+              <div className="admin-fila-slug">Tipo, configuración y QR de cada programa</div>
+            </div>
+          </div>
+          <span className="icono icono-chevron" aria-hidden="true">chevron_right</span>
+        </Link>
+      </div>
 
       <div className="reveal d2" style={{ marginTop: 22 }}>
         {controles ? (

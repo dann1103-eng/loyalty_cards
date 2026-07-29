@@ -48,9 +48,12 @@ function VistaTarjeta({ nombreComercio }: { nombreComercio: string }) {
 
 export default function RegistroCliente({
   comercioSlug,
+  programaSlug,
   nombreComercio,
 }: {
   comercioSlug: string;
+  // null = el programa principal (migración 0024) — ver app/registro/[comercioSlug]/page.tsx.
+  programaSlug: string | null;
   nombreComercio: string;
 }) {
   const [nombre, setNombre] = useState('');
@@ -71,7 +74,7 @@ export default function RegistroCliente({
       const res = await fetch('/api/registro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comercioSlug, nombre, telefono, clavePais }),
+        body: JSON.stringify({ comercioSlug, programaSlug, nombre, telefono, clavePais }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error al registrar');

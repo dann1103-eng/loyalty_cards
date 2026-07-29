@@ -4,15 +4,26 @@ import { buscarTarjetaPorToken, acreditarPuntos } from './acreditar';
 
 const supabase = createServiceClient();
 const comerciosDePrueba: string[] = [];
+const programasDePrueba: string[] = [];
 const clientesDePrueba: string[] = [];
 const tarjetasDePrueba: string[] = [];
 const sucursalesDePrueba: string[] = [];
 const usuariosComercioDePrueba: string[] = [];
+const programaPrincipalDe = new Map<string, string>();
+
+function requerirProgramaPrincipal(comercioId: string): string {
+  const programaId = programaPrincipalDe.get(comercioId);
+  if (!programaId) {
+    throw new Error(`[test] comercio ${comercioId} no tiene programa principal — ¿se creó con crearComercio()?`);
+  }
+  return programaId;
+}
 
 afterEach(async () => {
   // Orden FK: ledger (transacciones apunta a tarjetas/sucursales/usuarios_comercio) va primero;
   // luego usuarios_comercio y sucursales (apuntan a comercios; usuarios_comercio también a
-  // sucursales, por eso va antes) → tarjetas → clientes/comercios.
+  // sucursales, por eso va antes) → tarjetas → programas_tarjeta (que tarjetas referencia) →
+  // clientes/comercios.
   if (tarjetasDePrueba.length) {
     await supabase.from('transacciones_puntos').delete().in('tarjeta_id', tarjetasDePrueba);
   }
@@ -31,6 +42,11 @@ afterEach(async () => {
     if (error) console.error('[test] no se pudieron borrar las tarjetas:', error);
     tarjetasDePrueba.length = 0;
   }
+  if (programasDePrueba.length) {
+    const { error } = await supabase.from('programas_tarjeta').delete().in('id', programasDePrueba);
+    if (error) console.error('[test] no se pudieron borrar los programas:', error);
+    programasDePrueba.length = 0;
+  }
   if (clientesDePrueba.length) {
     const { error } = await supabase.from('clientes').delete().in('id', clientesDePrueba);
     if (error) console.error('[test] no se pudieron borrar los clientes:', error);
@@ -41,6 +57,7 @@ afterEach(async () => {
     if (error) console.error('[test] no se pudieron borrar los comercios:', error);
     comerciosDePrueba.length = 0;
   }
+  programaPrincipalDe.clear();
 });
 
 async function crearComercio(): Promise<string> {
@@ -48,10 +65,33 @@ async function crearComercio(): Promise<string> {
   const { data, error } = await supabase
     .from('comercios')
     .insert({ nombre: 'Comercio Escáner', slug: `test-escaner-${sufijo}` })
-    .select('id')
+    .select('id, nombre, tipo_tarjeta, sello_meta, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias')
     .single();
   if (error) throw error;
   comerciosDePrueba.push(data.id);
+
+  // Toda tarjeta necesita programa_id (migración 0024): se crea acá un programa principal que
+  // espeja el tipo/config que quedó en el comercio, igual que el backfill de la 0024.
+  const { data: programa, error: eP } = await supabase
+    .from('programas_tarjeta')
+    .insert({
+      comercio_id: data.id,
+      nombre: data.nombre,
+      slug: 'principal',
+      tipo_tarjeta: data.tipo_tarjeta,
+      es_principal: true,
+      sello_meta: data.sello_meta,
+      cashback_porcentaje: data.cashback_porcentaje,
+      multipass_visitas: data.multipass_visitas,
+      membresia_dias: data.membresia_dias,
+      cupon_vigencia_dias: data.cupon_vigencia_dias,
+    })
+    .select('id')
+    .single();
+  if (eP) throw eP;
+  programasDePrueba.push(programa.id);
+  programaPrincipalDe.set(data.id, programa.id);
+
   return data.id;
 }
 
@@ -66,7 +106,13 @@ async function crearTarjeta(comercioId: string, puntos = 0): Promise<{ id: strin
   clientesDePrueba.push(cliente.id);
   const { data: tarjeta, error: eT } = await supabase
     .from('tarjetas')
-    .insert({ cliente_id: cliente.id, comercio_id: comercioId, puntos_actuales: puntos, qr_token: `test-tok-${sufijo}` })
+    .insert({
+      cliente_id: cliente.id,
+      comercio_id: comercioId,
+      programa_id: requerirProgramaPrincipal(comercioId),
+      puntos_actuales: puntos,
+      qr_token: `test-tok-${sufijo}`,
+    })
     .select('id, qr_token')
     .single();
   if (eT) throw eT;

@@ -12,7 +12,7 @@ import { datosPassDeTarjeta } from './datosPassDeTarjeta';
 // prueba acá no se prueba en ningún lado.
 const supabase = createServiceClient();
 
-let creados: { comercioId: string; clienteId: string; tarjetaId: string } | null = null;
+let creados: { comercioId: string; programaId: string; clienteId: string; tarjetaId: string } | null = null;
 
 afterEach(async () => {
   if (!creados) return;
@@ -20,6 +20,7 @@ afterEach(async () => {
   await supabase.from('recompensas').delete().eq('comercio_id', creados.comercioId);
   await supabase.from('tarjetas').delete().eq('id', creados.tarjetaId);
   await supabase.from('clientes').delete().eq('id', creados.clienteId);
+  await supabase.from('programas_tarjeta').delete().eq('id', creados.programaId);
   await supabase.from('comercios').delete().eq('id', creados.comercioId);
   creados = null;
 });
@@ -29,6 +30,22 @@ async function crearEscenario(costosEnOrdenDeInsercion: number[]) {
   const { data: comercio } = await supabase
     .from('comercios')
     .insert({ nombre: 'Comercio Reverso', slug: `test-reverso-${sufijo}` })
+    .select('id, nombre, tipo_tarjeta, sello_meta, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias')
+    .single();
+  const { data: programa } = await supabase
+    .from('programas_tarjeta')
+    .insert({
+      comercio_id: comercio!.id,
+      nombre: comercio!.nombre,
+      slug: 'principal',
+      tipo_tarjeta: comercio!.tipo_tarjeta,
+      es_principal: true,
+      sello_meta: comercio!.sello_meta,
+      cashback_porcentaje: comercio!.cashback_porcentaje,
+      multipass_visitas: comercio!.multipass_visitas,
+      membresia_dias: comercio!.membresia_dias,
+      cupon_vigencia_dias: comercio!.cupon_vigencia_dias,
+    })
     .select('id')
     .single();
   const { data: cliente } = await supabase
@@ -41,6 +58,7 @@ async function crearEscenario(costosEnOrdenDeInsercion: number[]) {
     .insert({
       cliente_id: cliente!.id,
       comercio_id: comercio!.id,
+      programa_id: programa!.id,
       apple_serial_number: `serial-rev-${sufijo}`,
       apple_auth_token: '0123456789abcdef0123456789abcdef',
     })
@@ -64,7 +82,7 @@ async function crearEscenario(costosEnOrdenDeInsercion: number[]) {
     if (error) throw new Error(`no se pudo crear la recompensa de ${costo}: ${error.message}`);
   }
 
-  creados = { comercioId: comercio!.id, clienteId: cliente!.id, tarjetaId: tarjeta!.id };
+  creados = { comercioId: comercio!.id, programaId: programa!.id, clienteId: cliente!.id, tarjetaId: tarjeta!.id };
   return tarjeta!.apple_serial_number!;
 }
 

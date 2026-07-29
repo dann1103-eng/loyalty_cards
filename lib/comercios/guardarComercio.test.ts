@@ -10,6 +10,7 @@ import {
 const supabase = createServiceClient();
 const slugsDePrueba: string[] = [];
 const tarjetasDePrueba: string[] = [];
+const programasDePrueba: string[] = [];
 const clientesDePrueba: string[] = [];
 const cuentasDePrueba: string[] = [];
 
@@ -18,6 +19,12 @@ afterEach(async () => {
     const { error } = await supabase.from('tarjetas').delete().in('id', tarjetasDePrueba);
     if (error) console.error('[test] no se pudieron borrar las tarjetas de prueba:', error);
     tarjetasDePrueba.length = 0;
+  }
+  if (programasDePrueba.length) {
+    // DESPUÉS de tarjetas (que lo referencian) y ANTES de comercios (al que el programa referencia).
+    const { error } = await supabase.from('programas_tarjeta').delete().in('id', programasDePrueba);
+    if (error) console.error('[test] no se pudieron borrar los programas de prueba:', error);
+    programasDePrueba.length = 0;
   }
   if (clientesDePrueba.length) {
     const { error } = await supabase.from('clientes').delete().in('id', clientesDePrueba);
@@ -29,9 +36,13 @@ afterEach(async () => {
     const idsDeSlugs = (comerciosDeSlugs ?? []).map((c) => c.id);
     if (idsDeSlugs.length) {
       // Orden FK: usuarios_comercio apunta a comercios Y a sucursales, así que va PRIMERO —
-      // borrar la sucursal antes daría 23503 y dejaría basura en la BD real de QA.
+      // borrar la sucursal antes daría 23503 y dejaría basura en la BD real de QA. programas_tarjeta
+      // (0024) es la misma historia: crearComercio le crea su principal a TODO comercio ahora, así
+      // que sin borrarlo acá el delete de comercios de abajo fallaría en silencio (console.error,
+      // no throw) para cada prueba de este archivo — dejando basura real acumulándose.
       await supabase.from('usuarios_comercio').delete().in('comercio_id', idsDeSlugs);
       await supabase.from('sucursales').delete().in('comercio_id', idsDeSlugs);
+      await supabase.from('programas_tarjeta').delete().in('comercio_id', idsDeSlugs);
     }
     const { error } = await supabase.from('comercios').delete().in('slug', slugsDePrueba);
     if (error) console.error('[test] no se pudieron borrar los comercios de prueba:', error);
@@ -503,9 +514,21 @@ describe('eliminarComercio', () => {
     if (eCliente) throw eCliente;
     clientesDePrueba.push(cliente.id);
 
+    // crearComercio() (guardarComercio.ts) YA crea el programa principal (migración 0024, vía
+    // crearProgramaPrincipal) — antes se armaba acá a mano, pero ahora insertar un segundo
+    // 'principal' chocaría con el unique (comercio_id, slug). Se lee de vuelta el que ya existe.
+    const { data: programa, error: ePrograma } = await supabase
+      .from('programas_tarjeta')
+      .select('id')
+      .eq('comercio_id', creado.id)
+      .eq('es_principal', true)
+      .single();
+    if (ePrograma) throw ePrograma;
+    programasDePrueba.push(programa.id);
+
     const { data: tarjeta, error: eTarjeta } = await supabase
       .from('tarjetas')
-      .insert({ cliente_id: cliente.id, comercio_id: creado.id })
+      .insert({ cliente_id: cliente.id, comercio_id: creado.id, programa_id: programa.id })
       .select('id')
       .single();
     if (eTarjeta) throw eTarjeta;
@@ -514,10 +537,10 @@ describe('eliminarComercio', () => {
     const res = await eliminarComercio(supabase, creado.id);
 
     expect(res.ok).toBe(false);
-    // /asociad|eliminar/i era demasiado floja: el mensaje genérico de respaldo ("No se pudo
-    // eliminar el comercio.") también la hace matchear, así que esta prueba habría pasado igual
-    // aunque se borrara la rama del 23503. Se ancla al mensaje específico para que sí lo cace.
-    if (!res.ok) expect(res.error).toMatch(/datos asociados/i);
+    // Con una tarjeta real, el bloqueo ocurre al intentar retirar el programa PRINCIPAL (la
+    // tarjeta lo referencia) — antes de llegar siquiera al delete de comercios — así que el
+    // mensaje específico es el del programa, no el genérico de "datos asociados".
+    if (!res.ok) expect(res.error).toBe('No se puede eliminar: el programa principal tiene tarjetas de clientes. Solo se pueden eliminar comercios sin actividad.');
 
     // La comprobación que de verdad importa: el comercio SIGUE existiendo. Esta es la misma
     // situación del comercio piloto real en producción, con una tarjeta real ligada a un pass

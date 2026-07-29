@@ -6,7 +6,7 @@ import { LIMITE_INTENTOS } from '@/lib/portal/limiteIntentos';
 
 const supabase = createServiceClient();
 const ipsDePrueba: string[] = [];
-let limpiar: { comercioId: string; clienteId: string; tarjetaId: string } | null = null;
+let limpiar: { comercioId: string; programaId: string; clienteId: string; tarjetaId: string } | null = null;
 
 afterEach(async () => {
   if (ipsDePrueba.length) {
@@ -16,6 +16,7 @@ afterEach(async () => {
   if (limpiar) {
     await supabase.from('tarjetas').delete().eq('id', limpiar.tarjetaId);
     await supabase.from('clientes').delete().eq('id', limpiar.clienteId);
+    await supabase.from('programas_tarjeta').delete().eq('id', limpiar.programaId);
     await supabase.from('comercios').delete().eq('id', limpiar.comercioId);
     limpiar = null;
   }
@@ -46,12 +47,30 @@ describe('POST /api/portal/consulta', () => {
     const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const telefono = telefonoUnico();
     const { data: comercio } = await supabase
-      .from('comercios').insert({ nombre: 'Portal Route Test', slug: `test-route-portal-${sufijo}` }).select('id').single();
+      .from('comercios').insert({ nombre: 'Portal Route Test', slug: `test-route-portal-${sufijo}` })
+      .select('id, nombre, tipo_tarjeta, sello_meta, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias')
+      .single();
+    const { data: programa } = await supabase
+      .from('programas_tarjeta')
+      .insert({
+        comercio_id: comercio!.id,
+        nombre: comercio!.nombre,
+        slug: 'principal',
+        tipo_tarjeta: comercio!.tipo_tarjeta,
+        es_principal: true,
+        sello_meta: comercio!.sello_meta,
+        cashback_porcentaje: comercio!.cashback_porcentaje,
+        multipass_visitas: comercio!.multipass_visitas,
+        membresia_dias: comercio!.membresia_dias,
+        cupon_vigencia_dias: comercio!.cupon_vigencia_dias,
+      })
+      .select('id')
+      .single();
     const { data: cliente } = await supabase
       .from('clientes').insert({ nombre: 'Cliente Route', telefono }).select('id').single();
     const { data: tarjeta } = await supabase
-      .from('tarjetas').insert({ cliente_id: cliente!.id, comercio_id: comercio!.id, puntos_actuales: 3 }).select('id').single();
-    limpiar = { comercioId: comercio!.id, clienteId: cliente!.id, tarjetaId: tarjeta!.id };
+      .from('tarjetas').insert({ cliente_id: cliente!.id, comercio_id: comercio!.id, programa_id: programa!.id, puntos_actuales: 3 }).select('id').single();
+    limpiar = { comercioId: comercio!.id, programaId: programa!.id, clienteId: cliente!.id, tarjetaId: tarjeta!.id };
 
     const res = await POST(pedir(telefono, `ip-ok-${sufijo}`));
     const body = await res.json();

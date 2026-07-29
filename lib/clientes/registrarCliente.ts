@@ -12,9 +12,15 @@ export interface RegistrarClienteResult {
 // Semántica de `nombre`: si el cliente ya existe (búsqueda por teléfono), su nombre NO se
 // actualiza — gana el primer registro (el spec define la búsqueda por teléfono; no define
 // semántica de actualización).
+//
+// `comercioId` y `programaId` viajan los DOS (migración 0024): el segundo identifica el programa
+// concreto (para el nuevo unique y para qué motor le corresponde a la tarjeta), pero
+// `tarjetas.comercio_id` sigue siendo una columna propia — el caller ya resolvió el programa
+// (resolverProgramaPorSlug) y de ahí sale el comercioId, así que pasar ambos evita releerlo acá.
 export async function registrarCliente(
   supabase: SupabaseClient<Database>,
   comercioId: string,
+  programaId: string,
   nombre: string,
   telefono: string,
 ): Promise<RegistrarClienteResult> {
@@ -54,11 +60,14 @@ export async function registrarCliente(
     }
   }
 
+  // Migración 0024: la unicidad es (cliente_id, programa_id), no (cliente_id, comercio_id) — un
+  // cliente puede tener una tarjeta de "Sellos" Y otra de "Cupón de bienvenida" en el MISMO
+  // comercio, siempre que sean programas distintos.
   const { data: tarjetaExistente, error: buscarTarjetaError } = await supabase
     .from('tarjetas')
     .select('id, qr_token')
     .eq('cliente_id', clienteId)
-    .eq('comercio_id', comercioId)
+    .eq('programa_id', programaId)
     .maybeSingle();
   if (buscarTarjetaError) throw buscarTarjetaError;
 
@@ -76,18 +85,18 @@ export async function registrarCliente(
   // (migración 0001); aquí solo lo leemos de vuelta.
   const { data: nuevaTarjeta, error: crearTarjetaError } = await supabase
     .from('tarjetas')
-    .insert({ cliente_id: clienteId, comercio_id: comercioId })
+    .insert({ cliente_id: clienteId, comercio_id: comercioId, programa_id: programaId })
     .select('id, qr_token')
     .single();
   if (crearTarjetaError) {
-    // Misma carrera que arriba, ahora sobre el unique (cliente_id, comercio_id):
+    // Misma carrera que arriba, ahora sobre el unique (cliente_id, programa_id):
     // recuperamos la tarjeta que ganó y conservamos su qr_token ya emitido.
     if (crearTarjetaError.code !== '23505') throw crearTarjetaError;
     const { data: tarjetaGanadora, error: relecturaTarjetaError } = await supabase
       .from('tarjetas')
       .select('id, qr_token')
       .eq('cliente_id', clienteId)
-      .eq('comercio_id', comercioId)
+      .eq('programa_id', programaId)
       .maybeSingle();
     if (relecturaTarjetaError) throw relecturaTarjetaError;
     if (!tarjetaGanadora) throw crearTarjetaError;

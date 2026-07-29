@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server';
+import { resolverProgramaPorSlug } from '@/lib/comercio/programas';
 import RegistroCliente from './RegistroCliente';
 
 export const dynamic = 'force-dynamic';
@@ -12,11 +13,15 @@ export default async function PaginaRegistro({
   const supabase = createServiceClient();
   const { data: comercio } = await supabase
     .from('comercios')
-    .select('nombre')
+    .select('id, nombre')
     .eq('slug', comercioSlug)
     .maybeSingle();
 
-  if (!comercio) {
+  // Sin programa en la URL (QR viejo, de antes de la 0024): resuelve al principal, así el código
+  // ya impreso en el mostrador sigue funcionando sin reimprimirse.
+  const programa = comercio ? await resolverProgramaPorSlug(supabase, comercio.id, null) : null;
+
+  if (!comercio || !programa) {
     return (
       <main className="shell">
         <div className="stack">
@@ -33,5 +38,5 @@ export default async function PaginaRegistro({
     );
   }
 
-  return <RegistroCliente comercioSlug={comercioSlug} nombreComercio={comercio.nombre} />;
+  return <RegistroCliente comercioSlug={comercioSlug} programaSlug={null} nombreComercio={comercio.nombre} />;
 }

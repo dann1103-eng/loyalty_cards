@@ -12,7 +12,7 @@ vi.mock('./enviarPush', () => ({
 
 const enviarMock = vi.mocked(enviarPushActualizacion);
 const supabase = createServiceClient();
-let ids: { comercioId: string; clienteId: string; tarjetaId: string } | null = null;
+let ids: { comercioId: string; programaId: string; clienteId: string; tarjetaId: string } | null = null;
 
 // Respuestas con la forma real del `send()` de @parse/node-apn: Responses<ResponseSent, ResponseFailure>.
 // En los tipos `status` es number (HTTP 410 = token muerto). Lo único que lee la lógica de poda es
@@ -30,17 +30,35 @@ function RESPUESTA_TRANSITORIA(): RespuestaApns {
 async function crearTarjeta(conDispositivo: boolean) {
   const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const { data: comercio } = await supabase
-    .from('comercios').insert({ nombre: 'Comercio Test', slug: `test-push-${sufijo}` }).select('id').single();
+    .from('comercios').insert({ nombre: 'Comercio Test', slug: `test-push-${sufijo}` })
+    .select('id, nombre, tipo_tarjeta, sello_meta, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias')
+    .single();
+  const { data: programa } = await supabase
+    .from('programas_tarjeta')
+    .insert({
+      comercio_id: comercio!.id,
+      nombre: comercio!.nombre,
+      slug: 'principal',
+      tipo_tarjeta: comercio!.tipo_tarjeta,
+      es_principal: true,
+      sello_meta: comercio!.sello_meta,
+      cashback_porcentaje: comercio!.cashback_porcentaje,
+      multipass_visitas: comercio!.multipass_visitas,
+      membresia_dias: comercio!.membresia_dias,
+      cupon_vigencia_dias: comercio!.cupon_vigencia_dias,
+    })
+    .select('id')
+    .single();
   const { data: cliente } = await supabase
     .from('clientes').insert({ nombre: 'Cliente Test', telefono: `+503-push-${sufijo}` }).select('id').single();
   const { data: tarjeta } = await supabase
-    .from('tarjetas').insert({ cliente_id: cliente!.id, comercio_id: comercio!.id }).select('id').single();
+    .from('tarjetas').insert({ cliente_id: cliente!.id, comercio_id: comercio!.id, programa_id: programa!.id }).select('id').single();
   if (conDispositivo) {
     await supabase.from('apple_push_registrations').insert({
       tarjeta_id: tarjeta!.id, device_library_identifier: 'device-mock', push_token: 'push-tok',
     });
   }
-  ids = { comercioId: comercio!.id, clienteId: cliente!.id, tarjetaId: tarjeta!.id };
+  ids = { comercioId: comercio!.id, programaId: programa!.id, clienteId: cliente!.id, tarjetaId: tarjeta!.id };
   return ids;
 }
 
@@ -59,6 +77,7 @@ afterEach(async () => {
   await supabase.from('apple_push_registrations').delete().eq('tarjeta_id', ids.tarjetaId);
   await supabase.from('tarjetas').delete().eq('id', ids.tarjetaId);
   await supabase.from('clientes').delete().eq('id', ids.clienteId);
+  await supabase.from('programas_tarjeta').delete().eq('id', ids.programaId);
   await supabase.from('comercios').delete().eq('id', ids.comercioId);
   ids = null;
 });

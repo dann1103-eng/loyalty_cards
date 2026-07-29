@@ -7,6 +7,7 @@ import { canjearRecompensa } from '@/lib/comercio/canje';
 import { quitarPuntos } from '@/lib/comercio/ajuste';
 import { resolverSucursalDeAccion } from '@/lib/comercio/atribucionEscaner';
 import { sucursalPerteneceAComercio } from '@/lib/comercio/sucursales';
+import { resolverProgramaDeTarjeta } from '@/lib/comercio/programas';
 import { formatearSaldo } from '@/lib/portal/buscarTarjetas';
 import { notificarCambioTarjeta } from '@/lib/apple/notificarCambioTarjeta';
 import { syncObjetoTarjeta } from '@/lib/google/syncObjeto';
@@ -81,28 +82,22 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
   const tarjeta = await buscarTarjetaPorToken(supabase, comercioId, qrToken);
   if (!tarjeta) return { encontrado: false };
 
-  const { data: comercio } = await supabase
-    .from('comercios')
-    .select('tipo_tarjeta, sello_meta, pedir_monto_compra')
-    .eq('id', comercioId)
-    .maybeSingle();
+  // El tipo y la config (cashback%, visitas del paquete, …) salen del PROGRAMA de la tarjeta desde
+  // la migración 0024, no del comercio — un comercio puede tener varios programas de tipos
+  // distintos a la vez. sello_meta y pedir_monto_compra siguen siendo del comercio: el primero lo
+  // edita Marca, que todavía trabaja a nivel comercio (el dibujo del pase se migra en una tanda
+  // aparte — ver docs/superpowers/specs/2026-07-29-programas-de-tarjeta-design.md); el segundo es
+  // una perilla antifraude (Tanda 1) que es política del comercio, no del programa.
+  const [{ data: comercio }, programa, { data: estado }, { data: recompensas }] = await Promise.all([
+    supabase.from('comercios').select('sello_meta, pedir_monto_compra').eq('id', comercioId).maybeSingle(),
+    resolverProgramaDeTarjeta(supabase, comercioId, tarjeta.tarjetaId),
+    // Estado propio de los tipos con vigencia o con nivel. Se lee acá y no en buscarTarjetaPorToken
+    // para no cargar de columnas el camino que usan los tipos con contador.
+    supabase.from('tarjetas').select('vigencia_hasta, usado_en, acumulado_centavos').eq('id', tarjeta.tarjetaId).maybeSingle(),
+    supabase.from('recompensas').select('id, nombre, costo_puntos, foto_url').eq('comercio_id', comercioId).eq('activa', true).order('costo_puntos'),
+  ]);
 
-  // Estado propio de los tipos con vigencia o con nivel. Se lee acá y no en buscarTarjetaPorToken
-  // para no cargar de columnas el camino que usan los tipos con contador.
-  const { data: estado } = await supabase
-    .from('tarjetas')
-    .select('vigencia_hasta, usado_en, acumulado_centavos')
-    .eq('id', tarjeta.tarjetaId)
-    .maybeSingle();
-
-  const { data: recompensas } = await supabase
-    .from('recompensas')
-    .select('id, nombre, costo_puntos, foto_url')
-    .eq('comercio_id', comercioId)
-    .eq('activa', true)
-    .order('costo_puntos');
-
-  const tipoValor = comercio?.tipo_tarjeta ?? 'puntos';
+  const tipoValor = programa?.tipoTarjeta ?? 'puntos';
   const tipo = tipoOPuntos(tipoValor);
 
   // El nivel de descuento se calcula acá, al leer, nunca se guarda: cambiar los umbrales tiene que
@@ -157,14 +152,13 @@ export type RespuestaOperacion =
   // frenó esto" (⇒ ofrecerle al dueño el panel de autorización) de "algo salió mal" (⇒ error rojo).
   | { ok: false; error: string; bloqueoLimite?: boolean };
 
-async function saldoTextoDe(comercioId: string, puntos: number): Promise<string> {
+async function saldoTextoDe(comercioId: string, tarjetaId: string, puntos: number): Promise<string> {
   const supabase = createServiceClient();
-  const { data: comercio } = await supabase
-    .from('comercios')
-    .select('tipo_tarjeta, sello_meta')
-    .eq('id', comercioId)
-    .maybeSingle();
-  return formatearSaldo(comercio?.tipo_tarjeta ?? 'puntos', puntos, comercio?.sello_meta ?? null);
+  const [{ data: comercio }, programa] = await Promise.all([
+    supabase.from('comercios').select('sello_meta').eq('id', comercioId).maybeSingle(),
+    resolverProgramaDeTarjeta(supabase, comercioId, tarjetaId),
+  ]);
+  return formatearSaldo(programa?.tipoTarjeta ?? 'puntos', puntos, comercio?.sello_meta ?? null);
 }
 
 // Solo los campos del gate que necesita la atribución (evita atar el helper al shape completo).
@@ -219,7 +213,7 @@ export async function accionAcreditar(
   return {
     ok: true,
     puntosActuales: res.puntosActuales,
-    saldoTexto: await saldoTextoDe(sesion.comercioId, res.puntosActuales),
+    saldoTexto: await saldoTextoDe(sesion.comercioId, tarjetaId, res.puntosActuales),
     mensaje: delta === 1 ? 'Sello agregado.' : `${delta} puntos agregados.`,
   };
 }
@@ -262,7 +256,7 @@ export async function accionAcreditarForzado(
   return {
     ok: true,
     puntosActuales: res.puntosActuales,
-    saldoTexto: await saldoTextoDe(sesion.comercioId, res.puntosActuales),
+    saldoTexto: await saldoTextoDe(sesion.comercioId, tarjetaId, res.puntosActuales),
     mensaje: 'Autorizado y acreditado. Queda registrado en el historial del cliente.',
   };
 }
@@ -298,7 +292,7 @@ export async function accionQuitar(
   return {
     ok: true,
     puntosActuales: res.puntosActuales,
-    saldoTexto: await saldoTextoDe(sesion.comercioId, res.puntosActuales),
+    saldoTexto: await saldoTextoDe(sesion.comercioId, tarjetaId, res.puntosActuales),
     mensaje: cantidad === 1 ? 'Se quitó 1. Queda registrado.' : `Se quitaron ${cantidad}. Queda registrado.`,
   };
 }
@@ -328,7 +322,7 @@ export async function accionCanjear(
   return {
     ok: true,
     puntosActuales: res.puntosActuales,
-    saldoTexto: await saldoTextoDe(sesion.comercioId, res.puntosActuales),
+    saldoTexto: await saldoTextoDe(sesion.comercioId, tarjetaId, res.puntosActuales),
     mensaje: `Canjeado: ${res.nombreRecompensa}. Entregá el premio al cliente.`,
   };
 }
@@ -338,8 +332,9 @@ export async function accionCanjear(
 // y armar el texto en siete ramas sería siete oportunidades de mostrar plata equivocada.
 async function saldoTextoActual(comercioId: string, tarjetaId: string): Promise<string> {
   const supabase = createServiceClient();
-  const [{ data: comercio }, { data: t }] = await Promise.all([
-    supabase.from('comercios').select('tipo_tarjeta, sello_meta').eq('id', comercioId).maybeSingle(),
+  const [{ data: comercio }, programa, { data: t }] = await Promise.all([
+    supabase.from('comercios').select('sello_meta').eq('id', comercioId).maybeSingle(),
+    resolverProgramaDeTarjeta(supabase, comercioId, tarjetaId),
     supabase
       .from('tarjetas')
       .select('puntos_actuales, vigencia_hasta, usado_en, acumulado_centavos')
@@ -347,7 +342,7 @@ async function saldoTextoActual(comercioId: string, tarjetaId: string): Promise<
       .maybeSingle(),
   ]);
 
-  const tipo = tipoOPuntos(comercio?.tipo_tarjeta ?? 'puntos');
+  const tipo = tipoOPuntos(programa?.tipoTarjeta ?? 'puntos');
   let porcentaje: number | null = null;
   if (tipo.valor === 'descuento') {
     const niveles = (await listarNiveles(supabase, comercioId)) ?? [];
@@ -384,12 +379,8 @@ export async function accionOperacionPrincipal(
   const atribucion = await resolverSucursalAtribuida(supabase, sesion, sucursalIdCliente);
   if (atribucion.ok === false) return { ok: false, error: atribucion.error };
 
-  const { data: comercio } = await supabase
-    .from('comercios')
-    .select('tipo_tarjeta')
-    .eq('id', sesion.comercioId)
-    .maybeSingle();
-  const tipo = tipoOPuntos(comercio?.tipo_tarjeta ?? 'puntos');
+  const programa = await resolverProgramaDeTarjeta(supabase, sesion.comercioId, tarjetaId);
+  const tipo = tipoOPuntos(programa?.tipoTarjeta ?? 'puntos');
 
   const opciones = {
     sucursalId: atribucion.valor,
@@ -472,12 +463,8 @@ export async function accionOperacionSecundaria(
   const atribucion = await resolverSucursalAtribuida(supabase, sesion, sucursalIdCliente);
   if (atribucion.ok === false) return { ok: false, error: atribucion.error };
 
-  const { data: comercio } = await supabase
-    .from('comercios')
-    .select('tipo_tarjeta')
-    .eq('id', sesion.comercioId)
-    .maybeSingle();
-  const tipo = tipoOPuntos(comercio?.tipo_tarjeta ?? 'puntos');
+  const programa = await resolverProgramaDeTarjeta(supabase, sesion.comercioId, tarjetaId);
+  const tipo = tipoOPuntos(programa?.tipoTarjeta ?? 'puntos');
 
   const opciones = {
     sucursalId: atribucion.valor,

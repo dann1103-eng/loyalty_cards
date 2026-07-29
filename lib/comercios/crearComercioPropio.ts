@@ -97,6 +97,12 @@ export async function crearComercioPropio(
     console.error('[comercio] falló la membresía del comercio nuevo; se revierte el alta:', eInsertMembresia);
     const { error: eSucursales } = await supabase.from('sucursales').delete().eq('comercio_id', creado.id);
     if (eSucursales) console.error('[comercio] no se pudo borrar la principal en la compensación:', eSucursales);
+    // El programa principal (0024, creado dentro de crearComercio vía crearProgramaPrincipal) es
+    // OTRA FK hacia comercios — sin retirarlo primero, el delete de comercios de abajo falla con
+    // 23503 y la compensación deja un comercio huérfano (sin membresía, invisible para el dueño,
+    // pero contando cupo del plan). Mismo motivo que las sucursales de la línea de arriba.
+    const { error: eProgramas } = await supabase.from('programas_tarjeta').delete().eq('comercio_id', creado.id);
+    if (eProgramas) console.error('[comercio] no se pudo borrar el programa principal en la compensación:', eProgramas);
     const { error: eComercio } = await supabase.from('comercios').delete().eq('id', creado.id);
     if (eComercio) console.error('[comercio] no se pudo borrar el comercio en la compensación:', eComercio);
     return { ok: false, error: 'No se pudo crear el comercio. Intentá de nuevo.' };

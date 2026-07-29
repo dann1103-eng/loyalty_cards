@@ -2,6 +2,8 @@ import Link from 'next/link';
 import QRCode from 'qrcode';
 import { verifyComercioAcceso } from '@/lib/comercio/verifyComercioAcceso';
 import { createServiceClient } from '@/lib/supabase/server';
+import { listarProgramas } from '@/lib/comercio/programas';
+import { formatearSaldo } from '@/lib/portal/buscarTarjetas';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,18 +31,19 @@ export default async function PaginaClientes({
   const busqueda = (q ?? '').trim();
 
   const supabase = createServiceClient();
-  const { data: comercio } = await supabase
-    .from('comercios')
-    .select('tipo_tarjeta, sello_meta')
-    .eq('id', comercioId)
-    .maybeSingle();
-  const esSellos = comercio?.tipo_tarjeta === 'sellos';
-
-  const { data: tarjetas, error } = await supabase
-    .from('tarjetas')
-    .select('id, qr_token, puntos_actuales, created_at, clientes(nombre, telefono)')
-    .eq('comercio_id', comercioId)
-    .order('created_at', { ascending: false });
+  // sello_meta sigue siendo del comercio (lo edita Marca, no el programa — ver la nota en el
+  // escáner). El tipo, en cambio, sale del programa de CADA tarjeta desde la 0024: un comercio con
+  // más de un programa activo puede tener clientes de tipos distintos en la misma lista.
+  const [{ data: comercio }, programas, { data: tarjetas, error }] = await Promise.all([
+    supabase.from('comercios').select('sello_meta').eq('id', comercioId).maybeSingle(),
+    listarProgramas(supabase, comercioId, { soloActivos: false }),
+    supabase
+      .from('tarjetas')
+      .select('id, qr_token, puntos_actuales, created_at, programa_id, clientes(nombre, telefono)')
+      .eq('comercio_id', comercioId)
+      .order('created_at', { ascending: false }),
+  ]);
+  const tipoPorPrograma = new Map((programas ?? []).map((p) => [p.id, p.tipoTarjeta]));
 
   if (error) console.error('[comercio] falló la consulta de clientes:', error);
 
@@ -56,8 +59,8 @@ export default async function PaginaClientes({
     filtradas.map(async (t) => ({ ...t, qrDataUrl: await qrDeTarjeta(t.qr_token) })),
   );
 
-  const saldoTexto = (puntos: number) =>
-    esSellos && comercio?.sello_meta ? `${puntos} de ${comercio.sello_meta} sellos` : `${puntos} puntos`;
+  const saldoTexto = (t: { puntos_actuales: number; programa_id: string }) =>
+    formatearSaldo(tipoPorPrograma.get(t.programa_id) ?? 'puntos', t.puntos_actuales, comercio?.sello_meta ?? null);
 
   return (
     <main className="admin-main" style={{ maxWidth: 640 }}>
@@ -136,7 +139,7 @@ export default async function PaginaClientes({
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div className="admin-fila-nombre dato-mono" style={{ fontSize: '0.95rem' }}>
-                    {saldoTexto(t.puntos_actuales)}
+                    {saldoTexto(t)}
                   </div>
                   <div className="admin-fila-slug">ver QR</div>
                 </div>

@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { createServiceClient } from '@/lib/supabase/server';
 import { registrarCliente } from '@/lib/clientes/registrarCliente';
 import { normalizarTelefono } from '@/lib/clientes/normalizarTelefono';
+import { resolverProgramaPorSlug } from '@/lib/comercio/programas';
 import { syncClaseComercio } from '@/lib/google/syncClase';
 import { syncObjetoTarjeta } from '@/lib/google/syncObjeto';
 
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Cuerpo inválido' }, { status: 400 });
   }
 
-  const { comercioSlug, nombre, telefono, clavePais } = (body ?? {}) as Record<string, unknown>;
+  const { comercioSlug, programaSlug, nombre, telefono, clavePais } = (body ?? {}) as Record<string, unknown>;
 
   if (
     typeof comercioSlug !== 'string' ||
@@ -55,7 +56,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Comercio no encontrado' }, { status: 404 });
   }
 
-  const resultado = await registrarCliente(supabase, comercio.id, nombreLimpio, telefonoCanonico);
+  // Sin programaSlug (QR viejo, sin segundo segmento en la URL): resuelve al principal (0024).
+  const programa = await resolverProgramaPorSlug(
+    supabase,
+    comercio.id,
+    typeof programaSlug === 'string' ? programaSlug : null,
+  );
+  if (!programa) {
+    return NextResponse.json({ error: 'Programa no encontrado' }, { status: 404 });
+  }
+
+  const resultado = await registrarCliente(supabase, comercio.id, programa.id, nombreLimpio, telefonoCanonico);
 
   // Init de Apple SIEMPRE (no solo cuando la tarjeta es nueva) y con chequeo de error.
   // El guard .is('apple_serial_number', null) hace que una tarjeta ya inicializada

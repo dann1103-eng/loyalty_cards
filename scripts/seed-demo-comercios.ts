@@ -199,6 +199,19 @@ async function main() {
     if (eC) throw eC;
     const comercioId = comercio.id;
 
+    // Programa principal (migración 0024): toda tarjeta necesita programa_id. Espeja el tipo y la
+    // meta de sellos que se le acaba de dar al comercio, igual que hace el backfill de la 0024.
+    const { data: programa, error: eProg } = await supabase
+      .from('programas_tarjeta')
+      .insert({
+        comercio_id: comercioId, nombre: d.nombre, slug: 'principal',
+        tipo_tarjeta: d.tipo, es_principal: true, sello_meta: d.meta,
+      })
+      .select('id')
+      .single();
+    if (eProg) throw eProg;
+    const programaId = programa.id;
+
     // 2. Assets → bucket (misma convención de rutas que el panel: {comercioId}/{campo}.png).
     const logo = await pngDe(renderLogo(d));
     const hero = await pngDe(renderHero(d));
@@ -232,7 +245,7 @@ async function main() {
     // 4. Clientes demo por el flujo REAL (registrarCliente + init de Apple como /api/registro +
     //    acreditaciones que dejan ledger — los demos se comportan igual que datos reales).
     for (const c of d.clientes) {
-      const registro = await registrarCliente(supabase, comercioId, c.nombre, c.telefono);
+      const registro = await registrarCliente(supabase, comercioId, programaId, c.nombre, c.telefono);
       const authToken = crypto.randomBytes(16).toString('hex');
       await supabase
         .from('tarjetas')

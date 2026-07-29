@@ -13,7 +13,7 @@ vi.mock('./walletClient', () => ({
 }));
 
 const supabase = createServiceClient();
-let ids: { comercioId: string; clienteId: string; tarjetaId: string } | null = null;
+let ids: { comercioId: string; programaId: string; clienteId: string; tarjetaId: string } | null = null;
 
 async function crearTarjeta(opts: { googleClassId: string | null; googleObjectId?: string | null; tipoTarjeta?: string; selloMeta?: number | null; puntos?: number }) {
   const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -26,9 +26,26 @@ async function crearTarjeta(opts: { googleClassId: string | null; googleObjectId
       tipo_tarjeta: opts.tipoTarjeta ?? 'puntos',
       sello_meta: opts.selloMeta ?? null,
     })
-    .select('id')
+    .select('id, nombre, tipo_tarjeta, sello_meta, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias')
     .single();
   if (eC) throw eC;
+  const { data: programa, error: eP } = await supabase
+    .from('programas_tarjeta')
+    .insert({
+      comercio_id: comercio.id,
+      nombre: comercio.nombre,
+      slug: 'principal',
+      tipo_tarjeta: comercio.tipo_tarjeta,
+      es_principal: true,
+      sello_meta: comercio.sello_meta,
+      cashback_porcentaje: comercio.cashback_porcentaje,
+      multipass_visitas: comercio.multipass_visitas,
+      membresia_dias: comercio.membresia_dias,
+      cupon_vigencia_dias: comercio.cupon_vigencia_dias,
+    })
+    .select('id')
+    .single();
+  if (eP) throw eP;
   const { data: cliente, error: eCl } = await supabase
     .from('clientes').insert({ nombre: 'Cliente Test', telefono: `+503-gobj-${sufijo}` }).select('id').single();
   if (eCl) throw eCl;
@@ -37,13 +54,14 @@ async function crearTarjeta(opts: { googleClassId: string | null; googleObjectId
     .insert({
       cliente_id: cliente.id,
       comercio_id: comercio.id,
+      programa_id: programa.id,
       puntos_actuales: opts.puntos ?? 0,
       google_object_id: opts.googleObjectId ?? null,
     })
     .select('id')
     .single();
   if (eT) throw eT;
-  ids = { comercioId: comercio.id, clienteId: cliente.id, tarjetaId: tarjeta.id };
+  ids = { comercioId: comercio.id, programaId: programa.id, clienteId: cliente.id, tarjetaId: tarjeta.id };
   return ids;
 }
 
@@ -56,6 +74,7 @@ afterEach(async () => {
   if (!ids) return;
   await supabase.from('tarjetas').delete().eq('id', ids.tarjetaId);
   await supabase.from('clientes').delete().eq('id', ids.clienteId);
+  await supabase.from('programas_tarjeta').delete().eq('id', ids.programaId);
   await supabase.from('comercios').delete().eq('id', ids.comercioId);
   ids = null;
 });

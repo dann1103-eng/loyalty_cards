@@ -22,6 +22,11 @@ afterEach(async () => {
     const { error: eSucursales } = await supabase
       .from('sucursales').delete().in('comercio_id', comerciosDePrueba);
     if (eSucursales) console.error('[test] no se pudieron borrar las sucursales de prueba:', eSucursales);
+    // programas_tarjeta (0024): crearComercio le crea su principal a TODO comercio ahora — mismo
+    // riesgo de fuga silenciosa que las sucursales de arriba, mismo criterio.
+    const { error: eProgramas } = await supabase
+      .from('programas_tarjeta').delete().in('comercio_id', comerciosDePrueba);
+    if (eProgramas) console.error('[test] no se pudieron borrar los programas de prueba:', eProgramas);
     const { error: eComercios } = await supabase.from('comercios').delete().in('id', comerciosDePrueba);
     if (eComercios) console.error('[test] no se pudieron borrar los comercios de prueba:', eComercios);
     comerciosDePrueba.length = 0;
