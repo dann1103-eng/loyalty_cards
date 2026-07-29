@@ -87,6 +87,25 @@ variable y tira toda la tipografía al serif del navegador.
 - `--font-mono` → **Geist Mono** (400/700): números y códigos (puntos, sellos, teléfonos, tokens de
   QR), etiquetas tipo kicker en versalitas con tracking amplio.
 
+Dos familias más, **solo de la página pública** (`/`), agregadas con el kit de marca del 2026-07-29.
+No se usan en ningún panel: los paneles conservan Outfit, porque cambiarles la identidad por un pase
+de diseño de otra superficie sería justo lo que la regla de preservación evita.
+
+- `--font-titular` → **Anton** (400): los titulares en bloque de `/`. **Es la fuente de titular del
+  kit** (`INSUMOS/Tipografías/HEADING/Anton.zip`) y está en Google Fonts, así que va por
+  `next/font/google` sin self-hostear. Condensada y de un solo peso: es exactamente el bloque de
+  mayúsculas del mockup, que Outfit 700 no lograba (Outfit es más ancha y más redonda). **No lleva
+  `letter-spacing` negativo**: Anton ya viene condensada y apretarla más junta las astas verticales
+  hasta que una palabra se lee como un bloque negro.
+- `--font-marcador` → **Permanent Marker** (400): el trazo suelto que acompaña cada titular
+  ("funciona", "para crecer", "esto?"). **Es un sustituto consciente:** el kit trae **Devina Garden**
+  para ese rol y no está en Google Fonts. Para usar la de verdad hay que meter el archivo en
+  `app/fonts/` y pasar a `next/font/local` — es un cambio de archivo, no de diseño.
+
+El kit trae tres familias más que **no** están cableadas y cuyo rol ya cubren las de arriba:
+Blogh Display (heading alternativo), Alte Haas Grotesk y Megion (subheadings). Viven en el zip del
+kit, no en el repo.
+
 Outfit está en la lista de "reflejos" de la skill `impeccable`, y aun así **se conserva**: ya es la
 identidad publicada en las cuatro superficies, y la regla de preservación de identidad le gana al
 rechazo por reflejo. Cambiar la familia es una decisión de marca del dueño, no un pase de diseño.
@@ -157,15 +176,29 @@ cuando este cambie. Los COLORES de marca ya no: ver la estrategia de abajo.
 
 Es la única superficie **brand** del producto, y por eso es la única que se pasa de "Restrained".
 
-### Estrategia de color de `/`: **Full palette**, afiche de calle (rediseño 2026-07-29)
-Reemplaza el "Committed" de un solo campo de brasa naranja (histórico: `oklch(40% 0.115 42)`) por
-cuatro roles con nombre, a partir de un mockup que trajo el dueño: **noche** (fondo casi negro,
-`--campo: oklch(15% 0.03 264)`) alternada sección por sección con **claro** (una banda hueso,
-`--claro: oklch(96% 0.014 85)`), **lima** (`--realce: oklch(89% 0.23 126)`) como el color que carga
-TODA la energía de acción — botones, la franja de confianza, el signo del dueño — y **violeta**
-(`--violeta`) más una gota de **coral** (`--coral`) como condimento decorativo (glows del hero,
-degradado del cierre, una pegatina). Referencia nombrada: flyer de calle / streetwear, no
-cripto-neón ni SaaS-navy.
+### Estrategia de color de `/`: **Full palette**, la paleta oficial del kit de marca
+Reemplaza el "Committed" de un solo campo de brasa naranja (histórico: `oklch(40% 0.115 42)`).
+Referencia nombrada: flyer de calle / streetwear, no cripto-neón ni SaaS-navy.
+
+**La fuente de verdad del color de marca es `Cardly_Brand_Palette.pdf`** (kit del dueño, entregado
+el 2026-07-29), que da hex, RGB, CMYK, HSL, LAB y Pantone de los seis colores:
+
+| Nombre del kit | Hex | Rol en la página |
+|---|---|---|
+| **Deep** | `#181849` | `--campo`: la noche. Fondo de cabecera, hero, bandas oscuras y pie. |
+| **Gray** | `#E9E8E3` | `--sobre-campo` y `--claro`: el texto sobre la noche Y el fondo de la banda clara. |
+| **Lime** | `#C9EC5E` | `--realce`: TODA la energía de acción (botones, ordinales, el signo del FAQ). |
+| **Soft** | `#8F86E0` | `--violeta-tarjeta`: fondos grandes (la card de Growth, el cierre). |
+| **Frosted** | `#B1E4F9` | `--frosted`: la franja de confianza y un glow del hero. |
+| **Teal** | `#234B59` | `--teal`: disponible, sin uso todavía en `/`. |
+
+Hasta el 2026-07-29 estos valores eran `oklch()` calculados **a ojo desde una captura del mockup**, y
+ninguno coincidía con el kit: la noche salía más neutra y menos azul que el Deep real, y el violeta
+bastante más saturado que el Soft real. Van en **hex y no en oklch** a propósito, contra la regla
+general de "color nuevo se escribe en oklch": el kit los define en hex, y convertir de ida y vuelta
+solo agrega deriva sobre un valor que ya es la autoridad. `--violeta` (`#514ba8`) es la única
+excepción calculada: es el Soft oscurecido para texto y viñetas sobre la banda clara, donde el Soft
+puro no llega a 4.5:1.
 
 Escena que lo decide: *el dueño de una pupusería cierra a las nueve de la noche, se sienta en el
 mostrador ya apagado y busca "tarjetas de lealtad" en el teléfono, con el brillo bajo.* Sigue
@@ -187,10 +220,40 @@ saturados) y además **colapsa la alternancia**: `--claro` pasa a valer `#000000
 las bandas claras no le devuelvan a alguien bajo el sol un blanco deslumbrante contra el resto de
 la página en negro. Quien prendió ese tema quiere leer, no mirar un afiche.
 
+### Los insumos del kit, y de dónde sale cada imagen
+El kit del dueño (zip `INSUMOS-…`) es la fuente de **todas** las imágenes de `/`. Se convierten a
+WebP redimensionado y viven en `public/_inicio/`; **el zip crudo NO se commitea** (traía el `.ai`, el
+PDF de la paleta y cinco zips de fuentes: servirlos desde `public/` los publicaría en
+`cardly-sv.site/INSUMOS/…`, y los zips de fuentes en un repo público son además un problema de
+licencia). El respaldo del original es el zip del dueño, no este repo.
+
+| Archivo servido | Origen en el kit | Dónde se usa |
+|---|---|---|
+| `hero-chico.webp` | `Imagen3.png` | La foto del hero. |
+| `grupo.webp` | `Imagen2grupo.png` | El cierre (`#demo`). |
+| `tarjeta-puntos/sellos/puntos-bu.webp` | `CARDLY-Imagen1/2/3.png` | Los tres modelos de "Tarjetas". |
+| `wallet-puntos/sellos-futbol/sellos-gym.webp` | `Phone-Cardly-Image1/2/3.png` | Los tres pasos de "Así funciona". |
+| `sticker-*.webp` (9) | `Sticker1…9.png` | Flotando, uno o dos por sección. |
+| `abanico-tarjetas.webp` | `Imagen1.png` | **Sin uso todavía** (los tres modelos ya compuestos en abanico con stickers). |
+
+**Los stickers son decorativos y se esconden abajo de 900 px.** Van con `aria-hidden`, `alt=""` y
+`pointer-events: none` (flotan ENCIMA del contenido: sin eso se roban clicks de los botones que
+están debajo), y ninguno carga información que no esté escrita en texto al lado. En una columna
+todos caen sobre el texto y lo vuelven ilegible, así que en teléfono no se muestra ninguno: ahí la
+energía de afiche la cargan Anton y el color.
+
+**Hueco conocido:** el kit trae **3** modelos de tarjeta y el catálogo tiene **8** tipos. La sección
+muestra los 3 reales y nombra los 8 en chips de texto. No se maquetan los otros 5: una ficha
+dibujada por nosotros para "Cupón" o "Membresía" es una promesa visual de un diseño que no existe.
+Cuando existan, entran en `.modelosGrilla` sin tocar el CSS.
+
 Restricciones que no se negocian:
 - **Se sirve prerenderizada estática y funciona sin JavaScript.** Verificado con `npx next build`
   tras el rediseño: `/` sigue saliendo `○ (Static)`. Las preguntas frecuentes son `<details>` /
   `<summary>` nativos por la misma razón (cero JavaScript para abrir y cerrar).
+- **Ninguna imagen del kit se sirve en su PNG original.** Tres de ellas pesaban 730–850 KB, y
+  PRODUCT.md dice que esta página es lo primero que ve alguien "con una conexión mala en un teléfono
+  barato". Se convierten a WebP y se redimensionan al techo con el que realmente se pintan.
 - El abanico de tarjetas (`CarruselTarjetas.tsx`) no se tocó: sigue viviendo DENTRO del hero, a la
   derecha del texto, con el mismo sistema de `--ancho-tarjeta` / `--tope-tarjeta` / `--aire-
   escenario`. Ver el historial de este documento (o el git log de `inicio.module.css`) si hace

@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import estilos from './_inicio/inicio.module.css';
-import CarruselTarjetas from './_inicio/CarruselTarjetas';
 import FormularioDemo from './_inicio/FormularioDemo';
+import { STICKERS, type Sticker } from './_inicio/stickers';
 import {
   IconoPersonas,
   IconoTarjeta,
@@ -15,34 +15,61 @@ import {
   IconoPin,
   IconoX,
   IconoFlecha,
-  IconoCheck,
   IconoInstagram,
   IconoTikTok,
   IconoWhatsApp,
   IconoGarabato,
 } from './_inicio/iconos';
 import { MARCA } from '@/lib/marca';
+import { openGraphDe, twitterDe } from '@/lib/metadatosOg';
 import { TIPOS } from '@/lib/tarjetas/tipos';
 
 // Página de entrada de cardly-sv.site. Le habla a DUEÑOS DE COMERCIO que todavía no son clientes:
 // el cliente final nunca llega acá, llega por el código de su propio comercio.
 //
-// Rediseño 2026-07-29 a partir de un mockup que trajo el dueño, en DOS pasadas: la primera trajo
-// la paleta (noche + lima + violeta) pero seguía siendo "inspirado en", no una réplica; el dueño
-// pidió explícitamente calcar la estructura de cada sección y recién después iterar. Esta segunda
-// pasada es esa réplica: la franja de confianza con íconos, "Así funciona" con capturas reales de
-// teléfono, la grilla de mini-tarjetas por tipo, "¿Seguís usando esto?" con íconos + insignia
-// violeta, las tarifas en tarjetas blancas con Growth invertida, las preguntas en grilla de dos
-// columnas y el cierre en violeta sólido con el pie de tres columnas. Ver DESIGN.md § Página
-// pública para el detalle de qué se copió tal cual y qué se sustituyó a propósito (sin contadores
-// de piloto inventados, sin teléfono ni correo falsos, sin un botón que prometa alta instantánea:
-// todo apunta al formulario real de #demo).
+// TERCERA pasada del rediseño 2026-07-29, y la primera con el KIT DE MARCA REAL en mano
+// (INSUMOS: paleta oficial en PDF, logo editable, la foto del chavo, los tres modelos de tarjeta,
+// las tres capturas de Wallet y nueve stickers). Las dos pasadas anteriores dibujaban en CSS lo
+// que se veía en una captura del mockup; todo eso se retiró y quedó reemplazado por el archivo
+// real, que siempre se ve mejor que su imitación. Lo que se dibuja en CSS es solo lo que NO viene
+// en el kit: los íconos de línea de las franjas y el garabato de "Pasate al club".
+//
+// Ver DESIGN.md § Página pública para la paleta, la tipografía y el detalle de qué se sustituyó a
+// propósito respecto del mockup: sin contadores de piloto inventados, sin teléfono ni redes falsas
+// en el pie, y todo botón apunta al formulario real de #demo (no a un alta instantánea que no
+// existe).
+
+const TITULO = `${MARCA.nombre} — Tarjetas de lealtad digitales para tu negocio`;
+const DESCRIPCION =
+  'Sellos, puntos, cashback, gift card y más, directo en la billetera del teléfono de tus clientes. Sin apps que instalar y sin plásticos que perder. Agendá una demo.';
 
 export const metadata: Metadata = {
-  title: `${MARCA.nombre} — Tarjetas de lealtad digitales para tu negocio`,
-  description:
-    'Sellos, puntos, cashback, gift card y más, directo en la billetera del teléfono de tus clientes. Sin apps que instalar y sin plásticos que perder. Agendá una demo.',
+  // `absolute` para saltarse el template `%s · Cardly SV` del layout: este título ya nombra la
+  // marca, y con el template quedaría "Cardly SV — … · Cardly SV".
+  title: { absolute: TITULO },
+  description: DESCRIPCION,
+  alternates: { canonical: '/' },
+  // Por los helpers y NO escribiendo `{ url, title, description }` a mano: Next reemplaza el objeto
+  // `openGraph` entero en vez de combinarlo con el del layout, así que armarlo a mano acá deja la
+  // página sin `og:image`. Ver el encabezado de lib/metadatosOg.ts — ya pasó una vez.
+  openGraph: openGraphDe({ titulo: TITULO, descripcion: DESCRIPCION, url: '/' }),
+  twitter: twitterDe({ titulo: TITULO, descripcion: DESCRIPCION }),
 };
+
+// Los stickers son decorativos y siempre se pintan igual: un solo componente evita repetir el
+// aria-hidden y el alt vacío nueve veces (y que a la décima se olvide uno).
+function Pegatina({ sticker, clase }: { sticker: Sticker; clase: string }) {
+  return (
+    <Image
+      className={`${estilos.pegatina} ${clase}`}
+      src={sticker.archivo}
+      alt=""
+      aria-hidden="true"
+      width={sticker.ancho}
+      height={sticker.alto}
+    />
+  );
+}
 
 const CONFIANZA = [
   {
@@ -52,7 +79,7 @@ const CONFIANZA = [
   },
   {
     titulo: `${TIPOS.length} tipos de tarjeta`,
-    texto: TIPOS.map((tipo) => tipo.etiqueta).join(', ') + '.',
+    texto: 'Sellos, puntos, cashback, gift card y más.',
     Icono: IconoTarjeta,
   },
   {
@@ -62,90 +89,53 @@ const CONFIANZA = [
   },
 ];
 
-// Un color y un valor de ejemplo por tipo, solo para ilustrar la mini-tarjeta: no es dato de
-// negocio (por eso vive acá y no en lib/tarjetas/tipos.ts), es la misma idea que MODELOS en
-// modelos.ts para el carrusel del hero — negocios y cifras de mentira, variedad real de tipos.
-const COLOR_TIPO: Record<string, string> = {
-  puntos: '#3f5fb8',
-  sellos: '#2a2f26',
-  prepago: '#1f6f6b',
-  gift_card: '#1f5f66',
-  cashback: '#2f7d3a',
-  cupon: '#6a3fa0',
-  membresia: '#7a1f3d',
-  descuento: '#a8790f',
-};
-const VALOR_TIPO: Record<string, string> = {
-  puntos: '120',
-  sellos: '8/10',
-  prepago: '$150',
-  gift_card: '$250',
-  cashback: '5%',
-  cupon: '2X1',
-  membresia: 'VIP',
-  descuento: '-15%',
-};
-
 const PASOS = [
   {
     titulo: 'Creás tu tarjeta',
-    texto: 'Diséñala a tu estilo. En minutos. 100% digital.',
-    pantalla: 'crear' as const,
+    texto: 'Diseñala a tu estilo. En minutos. 100% digital.',
+    imagen: '/_inicio/wallet-puntos.webp',
+    // El alt describe QUÉ SE VE, porque estas tres capturas son el argumento de la sección: quien
+    // no las ve necesita saber que la tarjeta se ve así de terminada dentro de Wallet.
+    alt: 'La tarjeta de un negocio dentro de Apple Wallet, con 50 puntos y el código del cliente.',
   },
   {
     titulo: 'El cliente la guarda',
     texto: 'En su Wallet. Sin apps. Sin registros.',
-    pantalla: 'escanear' as const,
+    imagen: '/_inicio/wallet-sellos-futbol.webp',
+    alt: 'Una tarjeta de sellos de una cancha de fútbol en Wallet, con siete sellos de nueve marcados.',
   },
   {
     titulo: 'Sumás o canjeás',
     texto: 'Con un escaneo. Así de simple. Así de rápido.',
-    pantalla: 'exito' as const,
+    imagen: '/_inicio/wallet-sellos-gym.webp',
+    alt: 'Una tarjeta de sellos de un gimnasio en Wallet, con dos de ocho sellos y su código.',
   },
 ];
 
-function PantallaPaso({ tipo }: { tipo: 'crear' | 'escanear' | 'exito' }) {
-  if (tipo === 'crear') {
-    return (
-      <div className={estilos.pantallaCrear}>
-        <span className={estilos.pantallaCrearLogo}>CARDLY</span>
-        <div className={estilos.pantallaCrearTarjeta} />
-        <div className={estilos.pantallaCrearColores} aria-hidden="true">
-          <span style={{ background: '#101014' }} />
-          <span style={{ background: '#8b5e3c' }} />
-          <span style={{ background: '#c0472e' }} />
-          <span style={{ background: '#3f7d3a' }} />
-        </div>
-      </div>
-    );
-  }
-  if (tipo === 'escanear') {
-    return (
-      <div className={estilos.pantallaEscanear}>
-        <div className={estilos.pantallaEscanearTarjeta} />
-        <span className={estilos.pantallaEscanearNombre}>Daniel</span>
-        <div className={estilos.pantallaEscanearQr}>
-          <svg viewBox="0 0 9 9" aria-hidden="true">
-            {Array.from({ length: 9 }, (_, fila) =>
-              Array.from({ length: 9 }, (_, col) =>
-                (fila + col * 2) % 3 === 0 ? (
-                  <rect key={`${fila}-${col}`} x={col} y={fila} width="1" height="1" fill="currentColor" />
-                ) : null,
-              ),
-            )}
-          </svg>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className={estilos.pantallaExito}>
-      <IconoCheck className={estilos.pantallaExitoCheck} />
-      <span className={estilos.pantallaExitoTexto}>¡Listo!</span>
-      <span className={estilos.pantallaExitoPill}>+10 puntos</span>
-    </div>
-  );
-}
+// Los modelos REALES del kit que se muestran. Eran tres: se retiró la de "Puntos" (la violeta con
+// el QR gigante y el logo de Cardly) por pedido del dueño — es la tarjeta de MUESTRA de Cardly, no
+// la de un comercio, así que en una sección que promete "la marca de cada negocio" contaba la
+// historia equivocada. Quedan las dos que sí son de un comercio.
+//
+// El catálogo tiene ocho tipos y el kit trae estos dos modelos, así que la tira cierra con un
+// cartel (no una maqueta) que nombra los que faltan. Ver MAS_TIPOS abajo.
+const MODELOS_REALES = [
+  {
+    imagen: '/_inicio/tarjeta-sellos.webp',
+    nombre: 'Sellos',
+    alt: 'Tarjeta de sellos de un gimnasio: fondo negro, promoción de temporada y dos de ocho sellos.',
+  },
+  {
+    imagen: '/_inicio/tarjeta-puntos-bu.webp',
+    nombre: 'Puntos',
+    alt: 'Tarjeta de puntos azul marino con una franja celeste que muestra 50 puntos.',
+  },
+];
+
+// Los tipos que no tienen modelo todavía, para el cartel del final de la tira. Se derivan del
+// catálogo real en vez de escribirse a mano: si mañana se agrega un tipo a lib/tarjetas/tipos.ts,
+// aparece acá solo. `sellos` y `puntos` se excluyen porque ya se muestran con su modelo.
+const TIPOS_SIN_MODELO = TIPOS.filter((t) => t.valor !== 'sellos' && t.valor !== 'puntos');
 
 const DOLORES = [
   {
@@ -190,12 +180,32 @@ interface PlanPrecio {
   etiqueta?: string;
 }
 
+// Precios y límites REALES, no los del texto de marketing: salen de `PLANES` en
+// lib/comercios/cuentas.ts, que es la fuente única del monto y del límite sugerido de cada plan.
+//
+// El límite del plan NO es "negocios": cuenta **comercios distintos + sucursales adicionales,
+// sumados**, y la sucursal principal de cada comercio no consume cupo (ver contarUnidadesCuenta).
+// Por eso Growth dice "dos negocios, o uno con una sucursal más" en vez del ambiguo "hasta 2
+// negocios o sucursales" que traía el mockup: con ese texto, un dueño con dos locales de la misma
+// marca no sabe si le alcanza.
+//
+// "Hasta 2 tarjetas activas" es real y es igual en los tres planes (spec de programas de tarjeta):
+// es la cantidad de programas simultáneos por comercio, cada uno con su propio QR.
+//
+// Los topes de clientes (500 / 2.500 / sin límite) vienen del catálogo comercial y NO están
+// aplicados en la app todavía. Se publican porque son la oferta vigente del dueño, pero si algún
+// día hay que hacerlos cumplir, el lugar es verificarLimiteCuenta, no este archivo.
 const PLANES_PRECIO: PlanPrecio[] = [
   {
     id: 'starter',
     nombre: 'Starter',
     precio: 29,
-    caracteristicas: ['1 negocio', 'Hasta 500 clientes', 'Soporte por WhatsApp'],
+    caracteristicas: [
+      '1 negocio con su local',
+      'Hasta 2 tarjetas activas, cada una con su QR',
+      'Hasta 500 clientes',
+      'Soporte por WhatsApp',
+    ],
     cta: 'Empezar',
   },
   {
@@ -205,10 +215,10 @@ const PLANES_PRECIO: PlanPrecio[] = [
     destacado: true,
     etiqueta: 'Más elegido',
     caracteristicas: [
-      'Hasta 2 negocios o sucursales',
-      'Hasta 2,500 clientes',
-      'Promos push ilimitadas',
-      'Reportes mensuales',
+      'Dos negocios, o uno con una sucursal más',
+      'Hasta 2 tarjetas activas por negocio',
+      'Hasta 2.500 clientes',
+      'Avisos por cercanía y reportes por sucursal',
     ],
     cta: 'Empezar',
   },
@@ -217,10 +227,10 @@ const PLANES_PRECIO: PlanPrecio[] = [
     nombre: 'Pro',
     precio: 89,
     caracteristicas: [
-      'Negocios y sucursales ilimitados',
-      'Clientes ilimitados',
+      'Negocios y sucursales sin límite',
+      'Clientes sin límite',
+      'Control de cajeros y auditoría de cada sello',
       'Soporte prioritario',
-      'Integraciones a medida',
     ],
     cta: 'Hablemos',
   },
@@ -237,7 +247,7 @@ const PREGUNTAS = [
   },
   {
     pregunta: '¿Puedo cambiar de plan después?',
-    respuesta: 'Cuando quieras, desde tu panel. Subís o bajás de plan sin escribirnos un correo.',
+    respuesta: 'Cuando quieras, desde tu panel. Pedís el cambio y lo aplicamos sin que pierdas ni un cliente ni un saldo.',
   },
   {
     pregunta: '¿Qué pasa si quiero cancelar?',
@@ -246,6 +256,10 @@ const PREGUNTAS = [
   {
     pregunta: '¿Puedo probar antes de pagar?',
     respuesta: 'Sí. Agendá una demo y te mostramos tu tarjeta funcionando con tus colores, antes de que pagues nada.',
+  },
+  {
+    pregunta: '¿Puedo tener más de una tarjeta en mi negocio?',
+    respuesta: 'Sí: hasta dos activas a la vez, cada una con su propio código. Sirve para tener la de siempre y una de campaña, y podés apagar la de campaña cuando termine.',
   },
 ];
 
@@ -280,8 +294,10 @@ export default function Inicio() {
             <a className={estilos.enlaceCabecera} href="#preguntas">
               Preguntas
             </a>
+            {/* En INGLÉS a propósito, igual que el logo: "You in?" es la firma de la marca, no una
+                frase traducible. El resto del copy sigue en español con voseo. */}
             <a className={estilos.botonCabecera} href="#demo">
-              ¿Vos in?
+              You in?
             </a>
           </nav>
         </div>
@@ -289,14 +305,35 @@ export default function Inicio() {
 
       <main>
         <section className={estilos.hero}>
+          {/* La foto va PRIMERO en el DOM y de fondo a sangre; el texto se superpone encima, a la
+              izquierda. `priority` porque es la imagen más grande del primer pliegue: sin eso Next
+              la carga en diferido y el hero arranca en negro. */}
+          {/* `unoptimized` a propósito, y es el único <Image> de la página que lo lleva por este
+              motivo: el archivo YA es el máximo que existe (688×888, el original del kit) y ya está
+              en WebP a calidad 94. Con el optimizador activo Next elegía del srcset una variante de
+              458px para un hero de 1265 de ancho — o sea que ESTIRABA 2,76× una imagen que él mismo
+              había encogido primero. Sirviendo el archivo tal cual, el estiramiento baja a 1,84×.
+              Cuando llegue un export más grande del original, esto puede volver a `optimized`. */}
+          <Image
+            className={estilos.heroFoto}
+            src="/_inicio/hero-chico.webp"
+            alt="Un cliente muestra en su teléfono la tarjeta de lealtad de un negocio, con su código listo para que se lo escaneen."
+            width={688}
+            height={888}
+            priority
+            unoptimized
+            sizes="100vw"
+          />
+          <span className={estilos.heroVelo} aria-hidden="true" />
+
           <div className={`${estilos.envoltura} ${estilos.heroRejilla}`}>
             <div className={estilos.heroTexto}>
-              <p className={estilos.heroPregon}>¿Vos in?</p>
               <h1 className={estilos.heroTitulo}>
                 Tu club.
                 <br />
-                <em>Tus reglas.</em>
+                Tus reglas.
               </h1>
+              <p className={estilos.heroFirma}>You in?</p>
               <p className={estilos.heroLinea}>
                 Sellos, puntos, cashback o lo que decidas: tus clientes lo llevan en la billetera
                 del teléfono, y vos ponés el límite de cuánto dar y a quién.
@@ -307,24 +344,11 @@ export default function Inicio() {
               <p className={estilos.heroNota}>
                 Te la mostramos con tus colores y tu logo, sin compromiso.
               </p>
-
-              <span className={`${estilos.pegatina} ${estilos.pegatinaHero} ${estilos.pegatinaUno} ${estilos.pegatinaCoral}`} aria-hidden="true">
-                100% digital
-              </span>
-              <span className={`${estilos.pegatina} ${estilos.pegatinaHero} ${estilos.pegatinaDos} ${estilos.pegatinaVioleta}`} aria-hidden="true">
-                {TIPOS.length} tipos de tarjeta
-              </span>
-            </div>
-
-            {/* En pantalla angosta el abanico se sale de la envoltura y toca los dos bordes: es la
-                única pieza de la página que gana con el ancho completo. */}
-            <div className={estilos.heroVitrina}>
-              <CarruselTarjetas />
-              <p className={estilos.pieVitrina}>
-                Ejemplos que armamos nosotros, no clientes reales.
-              </p>
             </div>
           </div>
+
+          <Pegatina sticker={STICKERS.yeah} clase={estilos.stickerHeroUno} />
+          <Pegatina sticker={STICKERS.tasteThis} clase={estilos.stickerHeroDos} />
         </section>
 
         <section className={estilos.confianza}>
@@ -341,14 +365,10 @@ export default function Inicio() {
           </div>
         </section>
 
-        <section
-          id="como-funciona"
-          className={`${estilos.seccion} ${estilos.bandaOscura}`}
-        >
+        <section id="como-funciona" className={`${estilos.seccion} ${estilos.bandaOscura}`}>
           <div className={estilos.envoltura}>
             <h2 className={estilos.tituloSeccion}>
               Así
-              <br />
               <span className={estilos.script}>funciona</span>
             </h2>
             <ol className={estilos.pasos} role="list">
@@ -357,67 +377,91 @@ export default function Inicio() {
                   <span className={estilos.pasoNumero} aria-hidden="true">{indice + 1}</span>
                   <h3>{paso.titulo}</h3>
                   <p>{paso.texto}</p>
-                  <div className={estilos.pasoTelefono} aria-hidden="true">
-                    <div className={estilos.telefono}>
-                      <span className={estilos.isla} />
-                      <div className={estilos.pantalla}>
-                        <PantallaPaso tipo={paso.pantalla} />
-                        <span className={estilos.barraInicio} />
-                      </div>
-                    </div>
+                  <div className={estilos.pasoTelefono}>
+                    <Image
+                      src={paso.imagen}
+                      alt={paso.alt}
+                      width={695}
+                      height={1090}
+                      sizes="230px"
+                    />
                   </div>
                 </li>
               ))}
             </ol>
           </div>
+
+          <Pegatina sticker={STICKERS.futuro} clase={estilos.stickerPasosUno} />
         </section>
 
         <section id="tarjetas" className={`${estilos.seccion} ${estilos.bandaClara}`}>
           <div className={estilos.envoltura}>
             <h2 className={estilos.tituloSeccion}>
               Tarjetas
-              <br />
               <span className={estilos.script}>para cada negocio</span>
             </h2>
-            <div className={estilos.tiposGrilla}>
-              {TIPOS.map((tipo) => (
-                <div key={tipo.valor} className={estilos.tipoFicha}>
-                  <div className={estilos.miniTarjeta} style={{ background: COLOR_TIPO[tipo.valor] }}>
-                    <div className={estilos.miniTarjetaCabecera}>
-                      <span className={estilos.miniTarjetaLogo}>
-                        <Image src="/marca/icono.svg" alt="" width={12} height={12} unoptimized />
-                      </span>
-                    </div>
-                    <span className={estilos.miniTarjetaValor}>{VALOR_TIPO[tipo.valor]}</span>
-                    <div className={estilos.miniTarjetaPie}>
-                      <span className={estilos.miniTarjetaMiembro}>Daniel</span>
-                      <div className={estilos.miniTarjetaQr}>
-                        <svg viewBox="0 0 9 9" aria-hidden="true">
-                          {Array.from({ length: 9 }, (_, fila) =>
-                            Array.from({ length: 9 }, (_, col) =>
-                              (fila * 3 + col) % 4 === 0 ? (
-                                <rect key={`${fila}-${col}`} x={col} y={fila} width="1" height="1" fill="currentColor" />
-                              ) : null,
-                            ),
-                          )}
-                        </svg>
-                      </div>
-                    </div>
+            <p className={estilos.textoSeccion}>
+              Así se ven de verdad en el teléfono de tu cliente, con la marca de cada negocio.
+            </p>
+
+            {/* tabIndex hace la tira recorrible con las flechas del teclado: Chrome y Safari no
+                hacen enfocable un contenedor con scroll si no tiene nada enfocable adentro, y acá
+                adentro solo hay imágenes y texto. Un elemento enfocable necesita nombre, de ahí el
+                aria-label. NO lleva aria-roledescription="carrusel" a propósito: eso anuncia
+                controles de carrusel que esta tira no tiene. */}
+            <div
+              className={estilos.modelosTira}
+              tabIndex={0}
+              role="group"
+              aria-label="Modelos de tarjeta"
+            >
+              <div className={estilos.modelosFila}>
+                {MODELOS_REALES.map((modelo) => (
+                  <div key={modelo.nombre} className={estilos.modelo}>
+                    <Image
+                      className={estilos.modeloImagen}
+                      src={modelo.imagen}
+                      alt={modelo.alt}
+                      width={695}
+                      height={1090}
+                      sizes="(max-width: 639px) 62vw, 340px"
+                    />
+                    <span className={estilos.modeloNombre}>{modelo.nombre}</span>
                   </div>
-                  <span className={estilos.tipoNombre}>{tipo.etiqueta}</span>
+                ))}
+
+                {/* El cierre de la tira: cuántos tipos más hay y cuáles son. No es una tarjeta
+                    maquetada por nosotros — es un cartel con la silueta de una tarjeta. */}
+                <div className={estilos.modelo}>
+                  <div className={estilos.modeloMas}>
+                    <span className={estilos.modeloMasCuenta} aria-hidden="true">
+                      +{TIPOS_SIN_MODELO.length}
+                    </span>
+                    <span className={estilos.modeloMasTitulo}>
+                      {TIPOS_SIN_MODELO.length} tipos más, para el negocio que tengas
+                    </span>
+                    <ul className={estilos.tiposLista} role="list">
+                      {TIPOS_SIN_MODELO.map((tipo) => (
+                        <li key={tipo.valor} className={estilos.tipoChip}>
+                          {tipo.etiqueta}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <span className={estilos.modeloNombre}>Y más</span>
                 </div>
-              ))}
+              </div>
             </div>
           </div>
+
+          <Pegatina sticker={STICKERS.iconic} clase={estilos.stickerTarjetasUno} />
+          <Pegatina sticker={STICKERS.pasaElBalon} clase={estilos.stickerTarjetasDos} />
         </section>
 
         <section className={`${estilos.seccion} ${estilos.bandaOscura}`}>
           <div className={estilos.envoltura}>
             <h2 className={estilos.tituloSeccion}>
-              ¿Seguís
-              <br />
-              usando
-              <br />
+              ¿Seguís usando
               <span className={estilos.script}>esto?</span>
             </h2>
             <ul className={estilos.dolores} role="list">
@@ -440,95 +484,82 @@ export default function Inicio() {
               <IconoGarabato style={{ transform: 'scaleX(-1)' }} />
             </p>
           </div>
+
+          <Pegatina sticker={STICKERS.evolucion} clase={estilos.stickerDoloresUno} />
         </section>
 
         <section id="precios" className={`${estilos.seccion} ${estilos.bandaClara}`}>
           <div className={estilos.envoltura}>
             <h2 className={estilos.tituloSeccion}>
               Planes
-              <br />
               <span className={estilos.script}>para crecer</span>
             </h2>
-            <div className={estilos.planesEnvoltura}>
-              <div>
-                <div className={estilos.planesGrilla}>
-                  {PLANES_PRECIO.map((plan) => (
-                    <div
-                      key={plan.id}
-                      className={`${estilos.plan} ${plan.destacado ? estilos.planDestacado : ''}`}
-                    >
-                      {plan.etiqueta && <span className={estilos.planEtiqueta}>{plan.etiqueta}</span>}
-                      <p className={estilos.planNombre}>{plan.nombre}</p>
-                      <p className={estilos.planPrecio}>
-                        ${plan.precio}
-                        <span>/mes</span>
-                      </p>
-                      <ul className={estilos.planLista} role="list">
-                        {plan.caracteristicas.map((caracteristica) => (
-                          <li key={caracteristica}>{caracteristica}</li>
-                        ))}
-                      </ul>
-                      <a
-                        className={plan.destacado ? estilos.botonHero : estilos.botonHeroContorno}
-                        href="#demo"
-                      >
-                        {plan.cta}
-                        <IconoFlecha style={{ width: 16, height: 16, marginLeft: 6 }} />
-                      </a>
-                    </div>
-                  ))}
+            <p className={estilos.textoSeccion}>
+              El plan se mide en negocios y sucursales. Tu primer local no consume cupo, y cambiás
+              de plan cuando quieras.
+            </p>
+            <div className={estilos.planesGrilla}>
+              {PLANES_PRECIO.map((plan) => (
+                <div
+                  key={plan.id}
+                  className={`${estilos.plan} ${plan.destacado ? estilos.planDestacado : ''}`}
+                >
+                  {plan.etiqueta && <span className={estilos.planEtiqueta}>{plan.etiqueta}</span>}
+                  <p className={estilos.planNombre}>{plan.nombre}</p>
+                  <p className={estilos.planPrecio}>
+                    ${plan.precio}
+                    <span>/mes</span>
+                  </p>
+                  <ul className={estilos.planLista} role="list">
+                    {plan.caracteristicas.map((caracteristica) => (
+                      <li key={caracteristica}>{caracteristica}</li>
+                    ))}
+                  </ul>
+                  <a
+                    className={plan.destacado ? estilos.botonHero : estilos.botonHeroContorno}
+                    href="#demo"
+                  >
+                    {plan.cta}
+                    <IconoFlecha style={{ width: 16, height: 16, marginLeft: 6 }} />
+                  </a>
                 </div>
-                <p className={estilos.planNota}>
-                  + instalación inicial de $149 (pago único, todos los planes).
-                </p>
-              </div>
-              <div className={estilos.planesPegatinas} aria-hidden="true">
-                <span className={`${estilos.pegatina} ${estilos.pegatinaCeleste}`} style={{ transform: 'rotate(-6deg)' }}>
-                  WOAH
-                </span>
-                <span className={estilos.pegatinaSello}>Vos in</span>
-                <span className={`${estilos.pegatina} ${estilos.pegatinaCoral}`} style={{ transform: 'rotate(5deg)' }}>
-                  Taste This
-                </span>
-              </div>
+              ))}
             </div>
+            <p className={estilos.planNota}>
+              + instalación inicial de $149 (pago único, todos los planes).
+            </p>
           </div>
+
+          <Pegatina sticker={STICKERS.woah} clase={estilos.stickerPlanesUno} />
         </section>
 
         <section id="preguntas" className={`${estilos.seccion} ${estilos.bandaOscura}`}>
           <div className={estilos.envoltura}>
             <h2 className={estilos.tituloSeccion}>
               Preguntas
-              <br />
               <span className={estilos.script}>frecuentes</span>
             </h2>
-            <div className={estilos.preguntasEnvoltura}>
-              <div className={estilos.preguntas}>
-                {PREGUNTAS.map((item) => (
-                  <details key={item.pregunta} className={estilos.pregunta}>
-                    <summary>
-                      {item.pregunta}
-                      <span className={estilos.preguntaSigno} aria-hidden="true" />
-                    </summary>
-                    <p>{item.respuesta}</p>
-                  </details>
-                ))}
-              </div>
-              <span
-                className={`${estilos.pegatina} ${estilos.pegatinaRosa} ${estilos.preguntasPegatina}`}
-                aria-hidden="true"
-              >
-                Hecha para ganar
-              </span>
+            <div className={estilos.preguntas}>
+              {PREGUNTAS.map((item) => (
+                <details key={item.pregunta} className={estilos.pregunta}>
+                  <summary>
+                    {item.pregunta}
+                    <span className={estilos.preguntaSigno} aria-hidden="true" />
+                  </summary>
+                  <p>{item.respuesta}</p>
+                </details>
+              ))}
             </div>
           </div>
+
+          <Pegatina sticker={STICKERS.hechaParaGanar} clase={estilos.stickerPreguntasUno} />
         </section>
 
         <section id="demo" className={`${estilos.seccion} ${estilos.cierre}`}>
           <div className={estilos.envoltura}>
             <div className={estilos.cierreCabecera}>
               <h2 className={estilos.cierreTitulo}>
-                ¿Vos <em>in?</em>
+                You <em>in?</em>
               </h2>
               <p className={estilos.heroLinea}>
                 Contanos de tu negocio y te escribimos para mostrarte cómo se vería tu tarjeta
@@ -537,18 +568,30 @@ export default function Inicio() {
             </div>
 
             <div className={estilos.cierreGrilla}>
-              <ul className={estilos.cierreLista} role="list">
-                <li>Te respondemos en menos de un día hábil.</li>
-                <li>Te enseñamos tu tarjeta con tus colores y tu logo.</li>
-                <li>Vemos juntos qué tipo de tarjeta te conviene.</li>
-                <li>
-                  ¿Preferís escribir vos?{' '}
-                  <a href={`mailto:${MARCA.correoSoporte}`}>{MARCA.correoSoporte}</a>
-                </li>
-              </ul>
+              <div>
+                <ul className={estilos.cierreLista} role="list">
+                  <li>Te respondemos en menos de un día hábil.</li>
+                  <li>Te enseñamos tu tarjeta con tus colores y tu logo.</li>
+                  <li>Vemos juntos qué tipo de tarjeta te conviene.</li>
+                  <li>
+                    ¿Preferís escribir vos?{' '}
+                    <a href={`mailto:${MARCA.correoSoporte}`}>{MARCA.correoSoporte}</a>
+                  </li>
+                </ul>
+                <Image
+                  className={estilos.cierreGrupo}
+                  src="/_inicio/grupo.webp"
+                  alt="Cuatro clientes muestran en sus teléfonos las tarjetas de lealtad de distintos negocios."
+                  width={1090}
+                  height={695}
+                  sizes="(max-width: 859px) 100vw, 45vw"
+                />
+              </div>
               <FormularioDemo />
             </div>
           </div>
+
+          <Pegatina sticker={STICKERS.bienvenido} clase={estilos.stickerCierreUno} />
         </section>
       </main>
 

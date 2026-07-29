@@ -13,42 +13,47 @@
   /* ---------- la paleta de esta página, fija, INDEPENDIENTE del tema del dispositivo ----------
      Misma excepción que .cardface en globals.css: esto no es cromo de panel que deba respetar la
      preferencia de tema de quien visita, es la TINTA DE UN AFICHE. La página pública es la única
-     superficie "brand" del producto (ver DESIGN.md) y ahora corre una estrategia "Full palette"
-     en vez del "Committed" de un solo acento: noche + dos bandas claras + lima como energía +
-     violeta y coral como condimento. Referencia nombrada: cartel de flyer de calle / streetwear,
-     no cripto-neón (ver DESIGN.md § Página pública para la escena que lo decide).
+     superficie "brand" del producto (ver DESIGN.md) y corre una estrategia "Full palette": noche
+     + banda clara + lima como energía, con violeta y celeste de condimento.
+
+     ══ LOS VALORES SON LA PALETA OFICIAL DE MARCA, NO APROXIMACIONES ══
+     Salen de `Cardly_Brand_Palette.pdf` (kit de marca del dueño), que da hex, RGB, CMYK y Pantone
+     de cada color. Antes de tener ese PDF acá vivían oklch() calculados a ojo desde una captura
+     del mockup, y NINGUNO coincidía: la noche era más neutra y menos azul que el Deep real, y el
+     violeta era bastante más saturado que el Soft real. Los seis nombres del kit son:
+       Gray #E9E8E3 · Lime #C9EC5E · Soft #8F86E0 · Frosted #B1E4F9 · Teal #234B59 · Deep #181849
+     Si el kit cambia, este bloque es el único lugar que hay que tocar. En hex y no en oklch a
+     propósito: el kit los define en hex y una conversión de ida y vuelta solo agrega deriva.
 
      Se declaran acá, en el contenedor de TODA la página, y no repetidas por sección: así cualquier
      banda (clara u oscura) puede usarlas sin duplicar valores. El tema de ALTO CONTRASTE redefine
-     estas mismas doce variables más abajo y nada más: quien lo prendió está bajo el sol y quiere
-     leer, no mirar un afiche (misma regla que ya regía para --campo/--sobre-campo).
+     estas mismas variables más abajo y nada más: quien lo prendió está bajo el sol y quiere leer,
+     no mirar un afiche (misma regla que ya regía para --campo/--sobre-campo).
 
      `--campo`/`--sobre-campo`/`--sobre-campo-2`/`--realce`/`--borde-campo` son los CINCO nombres
      que ya existían para el campo de brasa; se conservan a propósito (mismo contrato, mismo lugar
-     en el CSS que loaded-context.mjs y DESIGN.md documentan) y solo cambia el valor: de un naranja
-     quemado a una noche casi negra con un realce lima. */
-  --campo: oklch(15% 0.03 264);
-  --sobre-campo: var(--blanco);
-  --sobre-campo-2: rgba(245, 245, 240, 0.68);
-  --realce: oklch(89% 0.23 126);
-  --borde-campo: rgba(245, 245, 240, 0.22);
+     en el CSS que load-context.mjs y DESIGN.md documentan) y solo cambia el valor. */
+  --campo: #181849; /* Deep */
+  --sobre-campo: #e9e8e3; /* Gray */
+  --sobre-campo-2: rgba(233, 232, 227, 0.7);
+  --realce: #c9ec5e; /* Lime */
+  --borde-campo: rgba(233, 232, 227, 0.24);
 
-  /* Nuevo: la banda CLARA. No existía porque antes solo el hero se salía del tema; ahora la página
-     alterna noche/clara varias veces (ver comentario en .tarjetasBanda) y cada banda clara necesita
-     su propio par de contraste, fijo, por la misma razón que el de arriba. */
-  --claro: oklch(96% 0.014 85);
-  --sobre-claro: oklch(23% 0.02 85);
-  --sobre-claro-2: oklch(40% 0.02 85);
-  --linea-clara: rgba(30, 20, 10, 0.13);
+  /* La banda CLARA. Gray del kit, no un hueso inventado: es el mismo color que el logo usa como
+     tinta clara, así que la página y la marca no se despegan. */
+  --claro: #e9e8e3; /* Gray */
+  --sobre-claro: #181849; /* Deep: el texto de la banda clara es la noche, no un gris neutro */
+  --sobre-claro-2: rgba(24, 24, 73, 0.72);
+  --linea-clara: rgba(24, 24, 73, 0.16);
 
-  /* Condimento: violeta oscuro para texto/acento sobre banda clara, violeta-tarjeta para fondos
-     grandes (la card de Growth, el cierre) que sí necesitan verse violeta de verdad como en el
-     mockup, y coral para una pegatina. Ninguno carga texto de cuerpo propio: donde llevan texto
-     encima reutilizan --sobre-campo (bone), que contrasta bien contra los tres. */
-  --violeta: oklch(38% 0.15 302);
-  --violeta-tarjeta: oklch(54% 0.19 300);
-  --violeta-realce: oklch(66% 0.19 300);
-  --coral: oklch(70% 0.17 32);
+  /* Condimento. --violeta-tarjeta es el Soft del kit tal cual (fondos grandes: la card de Growth,
+     el cierre); --violeta es el mismo matiz oscurecido para texto y viñetas sobre banda clara,
+     donde el Soft puro no llega a 4.5:1. --frosted y --teal completan los seis del kit. */
+  --violeta: #514ba8;
+  --violeta-tarjeta: #8f86e0; /* Soft */
+  --violeta-realce: #8f86e0; /* Soft */
+  --frosted: #b1e4f9; /* Frosted */
+  --teal: #234b59; /* Teal */
 }
 
 :global(:root[data-tema='alto-contraste']) .pagina {
@@ -68,7 +73,8 @@
   --violeta: #000000;
   --violeta-tarjeta: #000000;
   --violeta-realce: #d9b8ff;
-  --coral: #ff8a5c;
+  --frosted: #9fd9ff;
+  --teal: #000000;
 }
 
 .envoltura {
@@ -187,96 +193,74 @@
 }
 
 /* ---------- hero ----------
-   Texto a la izquierda y el abanico a la derecha, en la MISMA pantalla: la primera vista tiene que
-   mostrar el producto, no describirlo. Abajo de 900 px no hay dos columnas que valgan, así que se
-   apila (texto, después tarjetas) y el abanico se va a los dos bordes. */
+   Texto a la izquierda y la FOTO REAL del kit a la derecha (el chavo con el pase en el teléfono),
+   igual que la referencia. Antes acá vivía el abanico de tarjetas dibujado en CSS
+   (CarruselTarjetas); con la foto real, ese abanico dejaría dos "así se ve tu tarjeta" compitiendo
+   en la misma pantalla, así que el carrusel se muda a la sección de Tarjetas, donde SÍ es el punto.
+   Abajo de 900 px no hay dos columnas que valgan: se apila (texto, después foto). */
 
 .hero {
   position: relative;
-  /* No se recorta: los dos resplandores de .heroAtmosfera se salen del borde de la sección a
-     propósito (ver ese bloque) y overflow:hidden les cortaría justo la mitad que da profundidad. */
-  padding-block: clamp(28px, 5.5vw, 76px) clamp(28px, 4.5vw, 60px);
+  /* La foto va A SANGRE de borde a borde, así que acá SÍ se recorta: sin esto, el `object-fit:
+     cover` de una foto más alta que el hero desbordaría la sección hacia abajo. */
+  overflow: hidden;
+  /* Alto propio: la foto es de fondo (position: absolute) y ya no aporta alto al flujo, así que
+     sin un min-height el hero mediría solo lo que mide el texto. El techo en px evita que en un
+     monitor de 1440 de alto el hero se coma dos pantallas. */
+  min-height: min(88vh, 760px);
+  display: flex;
+  align-items: center;
+  padding-block: clamp(48px, 7vw, 96px);
 }
 
-/* Dos resplandores radiales, quietos, muy tenues: no son foco de atención, son la razón por la
-   que la noche no se siente un rectángulo plano. Van en el propio .hero con ::before/::after (cero
-   nodos nuevos en el DOM) y con pointer-events:none para no robarle el click a nada. */
-.hero::before,
-.hero::after {
-  content: '';
-  position: absolute;
-  z-index: 0;
-  border-radius: 50%;
-  filter: blur(2px);
-  pointer-events: none;
-}
-.hero::before {
-  top: -18%;
-  right: -8%;
-  width: min(58vw, 640px);
-  height: min(58vw, 640px);
-  background: radial-gradient(closest-side, var(--violeta-realce), transparent 72%);
-  opacity: 0.22;
-}
-.hero::after {
-  bottom: -22%;
-  left: -12%;
-  width: min(40vw, 420px);
-  height: min(40vw, 420px);
-  background: radial-gradient(closest-side, var(--coral), transparent 72%);
-  opacity: 0.14;
-}
+/* Los dos resplandores radiales que había acá se retiraron: existían para que la noche no se
+   sintiera un rectángulo plano, y la foto a sangre hace ese trabajo mucho mejor. */
 
+/* Ya NO es una rejilla de dos columnas (texto | foto): la foto pasó a ser fondo a sangre y el
+   texto va SUPERPUESTO sobre ella, siempre pegado al lateral izquierdo. */
 .heroRejilla {
   position: relative;
-  z-index: 1;
-  display: grid;
-  gap: clamp(26px, 4vw, 48px);
-  align-items: center;
-}
-@media (min-width: 900px) {
-  .heroRejilla {
-    /* La columna del abanico se lleva más de la mitad: es la que tiene que respirar, y el texto ya
-       está acotado en 20ch de todos modos. minmax(0, …) en las dos pistas para que ninguna se
-       plante en el min-content de su contenido. */
-    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
-    gap: clamp(28px, 3.5vw, 56px);
-  }
+  z-index: 2;
+  width: 100%;
 }
 
 .heroTexto {
   position: relative;
-  /* Permite que la columna se encoja por debajo del min-content de una palabra larga en vez de
-     estirar la rejilla y empujar el abanico fuera de la pantalla. */
   min-width: 0;
+  /* Acotado para que el texto no se meta sobre el teléfono de la foto, que está al centro-derecha.
+     A partir de 900px se queda en la mitad izquierda; abajo de eso usa el ancho que haya, porque
+     ahí el velo ya oscurece toda la foto. */
+  max-width: 34rem;
+}
+@media (min-width: 900px) {
+  .heroTexto {
+    max-width: 50%;
+  }
 }
 
-.heroPregon {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
+/* La firma de marca, en marcador y lima, DEBAJO del título: es como la trae la referencia. Antes
+   era un kicker en mono ARRIBA del título; el marcador es la voz de la marca y arriba competía con
+   el bloque de Anton en vez de acompañarlo. */
+.heroFirma {
+  margin-top: 6px;
+  font-family: var(--font-marcador);
+  font-size: clamp(30px, 5.2vw, 58px);
+  line-height: 1;
   color: var(--realce);
-}
-.heroPregon::before {
-  content: '';
-  width: 18px;
-  height: 2px;
-  background: var(--realce);
+  transform: rotate(-3deg);
+  transform-origin: left center;
 }
 
 .heroTitulo {
   margin-top: 14px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: clamp(38px, 6.6vw, 76px);
-  /* Un poco más de aire que en tema claro: el tipo claro sobre fondo oscuro se lee más liviano. */
-  line-height: 0.98;
-  letter-spacing: -0.03em;
+  /* Anton (la fuente de titular del kit). No lleva letter-spacing negativo como llevaba con Outfit:
+     Anton ya viene condensada de fábrica y apretarla más junta las astas verticales hasta que
+     "TU CLUB" se lee como un solo bloque negro. */
+  font-family: var(--font-titular);
+  font-weight: 400;
+  font-size: clamp(44px, 7.6vw, 88px);
+  line-height: 0.92;
+  letter-spacing: 0;
   text-transform: uppercase;
   text-wrap: balance;
 }
@@ -367,166 +351,181 @@
 }
 
 /* ---------- pegatinas ----------
-   Placas de afiche, puramente decorativas (aria-hidden desde el JSX): la energía de calle que le
-   falta a un botón y un título solos. Reusan cuatro variantes de color/forma a lo largo de la
-   página (hero, planes, preguntas), con la MISMA clase base, para no inventar un sistema nuevo
-   por sección. */
+   Los NUEVE stickers reales del kit de marca, repartidos por toda la página. Antes acá había un
+   sistema de placas dibujadas en CSS (fondo de color + Outfit 700) que imitaba de memoria lo que
+   se veía en el mockup; con los PNG reales en mano eso pasa a ser una maqueta de algo que ya
+   existe, así que se retira entero.
+   Cada sticker es puramente decorativo: `aria-hidden` desde el JSX y `pointer-events: none` acá,
+   porque flotan ENCIMA del contenido y sin eso se roban clicks de botones y enlaces que están
+   debajo. */
 .pegatina {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 8px 16px;
-  border-radius: 10px;
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
-  box-shadow: var(--shadow-2);
-}
-.pegatinaCeleste {
-  background: oklch(85% 0.07 226);
-  color: oklch(18% 0.02 240);
-}
-.pegatinaCoral {
-  background: var(--coral);
-  color: var(--campo);
-}
-.pegatinaVioleta {
-  background: var(--violeta-realce);
-  color: var(--campo);
-}
-/* El sello circular: texto chico en un anillo alrededor no vale la complejidad de un <textPath>
-   para un elemento puramente decorativo — el círculo sólido con un ícono simple transmite lo
-   mismo (una insignia) sin depender de que el texto en arco se lea. */
-.pegatinaSello {
-  width: 74px;
-  height: 74px;
-  border-radius: 50%;
-  background: var(--violeta);
-  color: var(--sobre-campo);
-  white-space: normal;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  border: 2px solid var(--violeta-realce);
-}
-.pegatinaRosa {
-  background: oklch(88% 0.07 350);
-  color: oklch(30% 0.1 350);
-  font-family: var(--font-marcador);
-  font-weight: 400;
-  font-size: 15px;
-  line-height: 1.15;
-  text-transform: none;
-  border-radius: 50% / 40%;
-  padding: 14px 20px;
+  position: absolute;
+  z-index: 3;
+  width: var(--ancho-pegatina, 120px);
+  height: auto;
+  pointer-events: none;
+  /* La sombra va en drop-shadow y no en box-shadow: estos PNG tienen fondo transparente y forma
+     irregular, así que una box-shadow dibujaría la sombra de un RECTÁNGULO alrededor de un
+     sticker con forma de óvalo o de estrella. drop-shadow sigue el canal alfa. */
+  filter: drop-shadow(0 6px 14px rgba(24, 24, 73, 0.35));
 }
 
-/* Posicionamiento absoluto SOLO para las que flotan sobre el hero; las de "planes" y "preguntas"
-   van en flujo normal dentro de su propia columna. */
-.pegatinaHero {
-  position: absolute;
-  z-index: 2;
-}
-.pegatinaUno {
-  top: -6px;
-  right: 8%;
-  transform: rotate(-8deg);
-}
-.pegatinaDos {
-  bottom: 6px;
-  left: 2%;
-  transform: rotate(6deg);
-}
+/* En pantalla angosta NINGÚN sticker flotante se muestra: con una sola columna, todos caen encima
+   del texto que se apila y lo vuelven ilegible. Es la misma decisión que ya regía para las dos
+   pegatinas del hero, ahora aplicada a las nueve. La energía de afiche en el teléfono la cargan la
+   tipografía Anton y el color, que no compiten con nada. */
 @media (max-width: 899px) {
-  /* En una columna las pegatinas flotantes se pisan con el texto que se apila debajo: se esconden
-     y la energía de calle queda a cargo del pregón y la tipografía. */
-  .pegatinaHero {
+  .pegatina {
     display: none;
   }
 }
 
-.heroVitrina {
-  position: relative;
-  /* Se come el padding de la envoltura para tocar los dos bordes de la pantalla. */
-  margin-inline: calc(var(--sp-4) * -1);
+/* Una clase de posición por sticker. Van en % y no en px para que sigan pegados al mismo punto de
+   su sección cuando cambia el ancho, y con `top`/`bottom` acotados adentro de la sección para que
+   no se cuelen sobre la vecina (las secciones son `overflow: visible`, así que un -20% acá sí se
+   sale). Los ángulos son distintos entre sí a propósito: nueve stickers al mismo ángulo se leen
+   como una grilla, no como algo pegado a mano. */
+.stickerHeroUno {
+  --ancho-pegatina: 148px;
+  top: 6%;
+  right: 3%;
+  transform: rotate(-9deg);
+}
+.stickerHeroDos {
+  --ancho-pegatina: 116px;
+  /* A la DERECHA, no a la izquierda: desde que el texto del hero va superpuesto sobre el lateral
+     izquierdo, cualquier sticker de ese lado cae encima del botón y de la nota. Los dos del hero
+     viven ahora sobre la mitad derecha de la foto, que es donde no hay texto. */
+  bottom: 20%;
+  right: 9%;
+  transform: rotate(7deg);
+}
+.stickerPasosUno {
+  --ancho-pegatina: 104px;
+  top: 4%;
+  right: 6%;
+  transform: rotate(11deg);
+}
+.stickerTarjetasUno {
+  --ancho-pegatina: 108px;
+  top: 3%;
+  right: 4%;
+  transform: rotate(-7deg);
+}
+.stickerTarjetasDos {
+  --ancho-pegatina: 118px;
+  /* ARRIBA, al lado del título: la tira de modelos ocupa TODO el ancho de la sección de lado a lado
+     y llega hasta abajo, así que no queda ningún rincón inferior libre. Este sticker ya se movió dos
+     veces por eso (estaba abajo-izquierda tapando el primer chip, después abajo-derecha tapando el
+     rótulo "Y más"). El título es corto y va a la izquierda, así que la franja de arriba es el único
+     lugar de la sección donde no hay contenido. */
+  top: 4%;
+  right: 22%;
+  transform: rotate(8deg);
+}
+.stickerDoloresUno {
+  --ancho-pegatina: 132px;
+  top: 5%;
+  right: 4%;
+  transform: rotate(-6deg);
+}
+.stickerPlanesUno {
+  --ancho-pegatina: 124px;
+  top: 8%;
+  right: 3%;
+  transform: rotate(-10deg);
+}
+.stickerPreguntasUno {
+  --ancho-pegatina: 136px;
+  /* ARRIBA y no abajo: abajo a la derecha caía dentro de la columna derecha del acordeón, y al
+     ABRIR una pregunta de esa columna la respuesta crecía hasta debajo del sticker y quedaba
+     tapada. Es un choque que solo aparece con el <details> abierto, así que no se ve en una
+     captura del estado inicial. Acá arriba queda al lado del título, que es corto y va a la
+     izquierda. */
+  top: 5%;
+  right: 5%;
+  transform: rotate(9deg);
+}
+.stickerCierreUno {
+  --ancho-pegatina: 150px;
+  top: 6%;
+  right: 5%;
+  transform: rotate(-8deg);
 }
 
-/* La foto real del mockup (teléfono + las dos tarjetas de ejemplo, recortada para EXCLUIR la
-   cara de la persona: es lo mismo que ya resuelve el carrusel, sin la duda de derechos de una
-   foto de alguien). Va detrás del abanico, muy tenue: es textura, no una segunda ilustración
-   compitiendo con las tarjetas de verdad que sí importa que se lean. */
-.heroVitrina::before {
-  content: '';
+/* La FOTO real del kit (Imagen3: el chavo mostrando el pase en la calle) como FONDO A SANGRE del
+   hero, de borde a borde, con el texto superpuesto a la izquierda.
+   ══ LÍMITE DE RESOLUCIÓN, A PROPÓSITO ══ El original mide 688×888, y es el más grande que trae el
+   kit. Servida a sangre en un monitor de 1440 se estira ~2,1×, así que se ve suave. Se encodea a
+   calidad 94 y sin redimensionar para no sumar una segunda degradación encima del estirado. Para
+   que quede nítida hace falta un export del original a 2400px de ancho: es un cambio de archivo,
+   no de código (mismo nombre, misma ruta). */
+.heroFoto {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background-image: url('/_inicio/hero-mockup.jpg');
-  background-size: cover;
-  background-position: center 20%;
-  opacity: 0.16;
-  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 18%, #000 82%, transparent 100%);
-  mask-image: linear-gradient(180deg, transparent 0%, #000 18%, #000 82%, transparent 100%);
-  pointer-events: none;
-}
-@media (min-width: 900px) {
-  .heroVitrina {
-    /* En escritorio se sale de la envoltura por la derecha para acercarse al borde de la pantalla:
-       el abanico es lo único de la página que gana con el ancho completo. El tirón es exactamente
-       el canal que queda entre la envoltura y el borde, con techo de 120 px (en un monitor
-       ultraancho ese canal mide cientos de píxeles y no hay razón para cruzarlos todos), y a 1200
-       o menos da cero, así que no hay desborde que compensar. `body` recorta el eje horizontal de
-       todas formas, y el degradado del escenario ya difumina la punta. */
-    margin-inline: 0 calc(-1 * clamp(0px, (100vw - 1200px) / 2, 120px));
-  }
+  width: 100%;
+  height: 100%;
+  /* cover + el foco en el 66% horizontal y el 36% vertical: el chavo y el teléfono están arriba a
+     la derecha del cuadro. Centrar en 50%/50% cortaba el teléfono por la mitad y dejaba en cuadro
+     el asfalto de abajo, que no aporta nada. */
+  object-fit: cover;
+  object-position: 66% 36%;
 }
 
-.pieVitrina {
-  margin-top: 14px;
-  text-align: center;
-  color: var(--sobre-campo-2);
-  font-size: 13px;
+/* El velo que hace legible el texto encima de la foto. Es lo único que separa "afiche" de
+   "texto blanco sobre una pared clara": la foto tiene una pared iluminada por sol justo donde va el
+   título, y sin esto el contraste ahí abajo cae a ~2:1.
+   Dos capas: una horizontal que apaga la mitad izquierda (donde va el texto) y una vertical suave
+   que asienta la cabecera arriba. */
+.heroVelo {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      var(--campo) 0%,
+      rgba(24, 24, 73, 0.92) 26%,
+      rgba(24, 24, 73, 0.62) 48%,
+      rgba(24, 24, 73, 0.18) 72%,
+      rgba(24, 24, 73, 0.05) 100%
+    ),
+    linear-gradient(180deg, rgba(24, 24, 73, 0.55) 0%, transparent 26%);
+}
+/* En una columna el texto queda sobre el CENTRO de la foto, no sobre su lado apagado, así que el
+   velo pasa a ser vertical y bastante más opaco: ahí no hay lugar donde correr el texto. */
+@media (max-width: 899px) {
+  .heroVelo {
+    background: linear-gradient(
+      180deg,
+      rgba(24, 24, 73, 0.82) 0%,
+      rgba(24, 24, 73, 0.7) 45%,
+      rgba(24, 24, 73, 0.86) 100%
+    );
+  }
 }
 
 /* ---------- secciones ---------- */
 
 .seccion {
+  /* relative: es lo que ancla los stickers flotantes de cada sección. Sin esto se posicionarían
+     contra el viewport y quedarían todos apilados arriba a la derecha de la página. */
+  position: relative;
   padding-block: clamp(48px, 10vw, 96px);
   /* La cabecera es pegajosa: sin esto, saltar a un ancla la deja tapada debajo de ella. */
   scroll-margin-top: 78px;
 }
 
-.lista {
-  margin-top: var(--sp-4);
-  display: grid;
-  gap: 10px;
-  list-style: none;
-  color: var(--texto-2);
-  font-size: 15px;
-  line-height: 1.55;
-}
-.lista li {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-.lista li::before {
-  content: '✓';
-  flex: none;
-  color: var(--menta);
-  font-size: 13px;
-}
-
 /* Todo alineado a la izquierda, incluidos los encabezados de sección: la pila centrada con su
    subtítulo centrado debajo es la forma de la plantilla. */
 .tituloSeccion {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: clamp(28px, 5.2vw, 40px);
-  line-height: 1.15;
-  letter-spacing: -0.025em;
+  font-family: var(--font-titular);
+  font-weight: 400;
+  font-size: clamp(34px, 6vw, 56px);
+  line-height: 0.95;
+  letter-spacing: 0;
   text-transform: uppercase;
   text-wrap: balance;
 }
@@ -583,9 +582,9 @@
    verificable HOY en vez de una cifra inventada. Celeste fijo (no --claro): es una franja propia,
    no una banda clara genérica, y necesita su propio par de contraste. */
 .confianza {
-  --celeste: oklch(85% 0.07 226);
-  background: var(--celeste);
-  color: oklch(18% 0.02 240);
+  /* Frosted + Deep, los dos del kit: 12.4:1, de sobra para el texto chico de la etiqueta. */
+  background: var(--frosted);
+  color: var(--campo);
 }
 
 .confianzaFila {
@@ -674,10 +673,11 @@
 
 .paso h3 {
   margin-top: 14px;
-  font-family: var(--font-display);
-  font-size: 21px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
+  font-family: var(--font-titular);
+  font-size: 25px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  line-height: 1;
   text-transform: uppercase;
 }
 
@@ -689,200 +689,155 @@
   line-height: 1.55;
 }
 
+/* Las tres capturas REALES de la tarjeta en Wallet (Phone-Cardly-Image1/2/3 del kit). Antes acá
+   había un chasis de teléfono dibujado en CSS con tres pantallas inventadas adentro (un degradado
+   hacía de tarjeta, un patrón determinista hacía de QR). Con las capturas de verdad eso pasa a ser
+   una maqueta de algo que ya existe, y encima una peor: estas muestran la grilla de sellos real, el
+   QR real y el chrome real de Wallet.
+   Las imágenes YA traen el teléfono, así que no llevan marco propio: un borde nuestro alrededor
+   dibujaría un segundo teléfono alrededor del que está en la foto. */
 .pasoTelefono {
-  /* Contexto de container query: los font-size de las pantallas de acá abajo van en `cqw` (1cqw =
-     1% del ancho de ESTE elemento), no en `%` — el porcentaje en font-size es relativo al tamaño
-     de fuente del padre, no al tamaño de la caja, y hubiera dado tipografías microscópicas. */
-  container-type: inline-size;
   align-self: center;
-  width: min(100%, 220px);
+  width: min(100%, 230px);
   margin-top: 24px;
 }
 
-/* Las tres pantallas de "Así funciona" reusan el chasis .telefono pero necesitan su propia
-   ilustración adentro: acá SÍ hay layout específico por paso, así que cada una tiene su propia
-   clase en vez de reusar .pase (esa es la tarjeta genérica del carrusel). */
-.pantallaCrear {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: 14% 10%;
-  color: var(--sobre-campo);
-}
-.pantallaCrearLogo {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 15cqw;
-  letter-spacing: -0.02em;
-}
-.pantallaCrearTarjeta {
-  flex: 1;
-  margin-top: 10%;
-  border-radius: 12%;
-  background: linear-gradient(155deg, var(--violeta) 0%, var(--campo) 120%);
-}
-.pantallaCrearColores {
-  display: flex;
-  gap: 8%;
-  margin-top: 8%;
-}
-.pantallaCrearColores span {
-  width: 15%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-}
-
-.pantallaEscanear {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  height: 100%;
-  padding: 12% 8%;
-}
-.pantallaEscanearTarjeta {
+.pasoTelefono img {
+  display: block;
   width: 100%;
-  aspect-ratio: 16 / 10;
-  border-radius: 10%;
-  background: linear-gradient(120deg, var(--coral) 0%, var(--violeta) 100%);
-}
-.pantallaEscanearNombre {
-  align-self: flex-start;
-  margin-top: 8%;
-  color: var(--sobre-claro);
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 13cqw;
-}
-.pantallaEscanearQr {
-  width: 62%;
-  margin-top: 6%;
-  padding: 6%;
-  border-radius: 10%;
-  background: #fff;
-  color: #101014;
-}
-
-.pantallaExito {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10%;
-  height: 100%;
-  padding: 10%;
-}
-.pantallaExitoCheck {
-  width: 34%;
-  color: var(--realce);
-}
-.pantallaExitoTexto {
-  color: var(--sobre-claro);
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 15cqw;
-}
-.pantallaExitoPill {
-  padding: 4% 8%;
-  border-radius: var(--radius-pill);
-  background: var(--realce);
-  color: var(--campo);
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 12cqw;
+  height: auto;
 }
 
 /* ---------- tarjetas para cada negocio ----------
-   Los ocho tipos reales del catálogo (lib/tarjetas/tipos.ts), como mini-tarjetas de billetera: la
-   misma anatomía que .pase (logo, nombre, código) a escala de ficha en vez de pantalla de
-   teléfono, con el color y el dato principal propios de cada tipo. Si un comercio activa "Cupón"
-   mañana, esto ya está mostrando lo que va a usar. */
-.tiposGrilla {
+   Los TRES modelos reales de tarjeta del kit (CARDLY-Imagen1/2/3), no ocho mini-tarjetas dibujadas
+   en CSS. Antes acá había una grilla 4×2 con una ficha inventada por cada tipo del catálogo: un
+   rectángulo de color con el valor de ejemplo y un QR de patrón falso. Se retira por dos razones:
+   los modelos reales se ven muchísimo mejor, y una ficha dibujada por nosotros para "Cupón" o
+   "Membresía" es una promesa visual de un diseño que todavía no existe.
+   ══ HUECO CONOCIDO ══ El kit trae 3 modelos y el catálogo tiene 8 tipos. Se muestran los 3 reales
+   y los 8 tipos se nombran abajo en texto, sin maqueta. Cuando existan los otros 5 modelos, entran
+   en este mismo grid sin tocar el CSS. */
+/* Tira horizontal deslizable, no una grilla: es lo que hace que "hay más tipos" se ENTIENDA sin
+   escribirlo. Los modelos reales van primero y al final va una tarjeta-cartel con los tipos que
+   faltan, así el gesto de deslizar descubre que la lista sigue.
+   El desplazamiento es NATIVO (scroll-snap), cero JavaScript: la página se sirve estática y tiene
+   que funcionar con el script apagado. */
+.modelosTira {
   margin-top: clamp(30px, 5vw, 56px);
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(20px, 3vw, 32px) clamp(16px, 2.5vw, 24px);
+  /* Nace y muere en los bordes de la pantalla; el padding le devuelve al primer modelo la
+     alineación con el título de la sección. */
+  margin-inline: calc(var(--sp-4) * -1);
+  padding-inline: var(--sp-4);
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline-start: var(--sp-4);
+  /* Al llegar a la punta el gesto NO se encadena: sin esto, seguir deslizando dispara el "atrás"
+     del navegador en un trackpad. */
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--linea-clara) transparent;
 }
-@media (min-width: 720px) {
-  .tiposGrilla {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-.tipoFicha {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.miniTarjeta {
-  position: relative;
-  aspect-ratio: 4 / 3;
-  padding: 10%;
-  border-radius: 14px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  color: var(--blanco);
-  box-shadow: var(--shadow-2);
-  overflow: hidden;
+.modelosTira:focus-visible {
+  outline: 2px solid var(--violeta);
+  outline-offset: 4px;
 }
 
-.miniTarjetaCabecera {
+.modelosFila {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  gap: clamp(20px, 3vw, 36px);
+  /* Sin esto el flex se encoge al ancho del contenedor en vez de desbordarlo, y no hay qué
+     deslizar. */
+  width: max-content;
+  padding-bottom: 18px;
 }
 
-.miniTarjetaLogo {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
-  color: #101014;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 11px;
-}
-
-.miniTarjetaValor {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: clamp(20px, 3vw, 26px);
-  line-height: 1;
-}
-
-.miniTarjetaPie {
+.modelo {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  scroll-snap-align: start;
+  /* MÁS GRANDE que la grilla anterior (era 260px de techo): las tarjetas son el argumento de la
+     sección y a 260 no se leía el saldo. */
+  flex: 0 0 clamp(240px, 62vw, 340px);
 }
 
-.miniTarjetaMiembro {
-  font-size: 10px;
-  opacity: 0.85;
+/* Rotación alterna, chica: los modelos son fotos de producto, no naipes — un ángulo grande acá
+   estorbaría la lectura del saldo, que es justo lo que se viene a mirar. */
+.modelo:nth-child(odd) .modeloImagen {
+  transform: rotate(-2deg);
+}
+.modelo:nth-child(even) .modeloImagen {
+  transform: rotate(2deg);
 }
 
-.miniTarjetaQr {
-  flex: none;
-  width: 26px;
-  height: 26px;
-  padding: 3px;
-  border-radius: 4px;
-  background: #fff;
-  color: #101014;
+.modeloImagen {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 16px;
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.modelo:hover .modeloImagen {
+  transform: rotate(0deg) translateY(-4px);
 }
 
-.tipoNombre {
-  text-align: center;
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+.modeloNombre {
+  font-family: var(--font-titular);
+  font-size: 18px;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--sobre-claro);
+}
+
+/* La última pieza de la tira: NO es una tarjeta de mentira, es un cartel con la misma silueta que
+   las tarjetas reales que dice cuántos tipos más hay y los nombra. Así el que desliza hasta el
+   final entiende que la lista sigue, sin que nosotros maquetemos seis diseños que no existen. */
+.modeloMas {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  /* Misma proporción que los PNG de tarjeta (695×1090), para que la tira no tenga un escalón. */
+  aspect-ratio: 695 / 1090;
+  width: 100%;
+  padding: clamp(20px, 3vw, 30px);
+  border: 2px dashed var(--linea-clara);
+  border-radius: 16px;
+}
+
+.modeloMasCuenta {
+  font-family: var(--font-titular);
+  font-size: clamp(40px, 7vw, 62px);
+  line-height: 0.9;
+  color: var(--violeta);
+}
+
+.modeloMasTitulo {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sobre-claro);
+}
+
+/* Los tipos restantes, en texto. Chips y no cards: nombrarlos es el dato, y una caja por tipo
+   volvería a insinuar que hay una maqueta detrás de cada uno. */
+.tiposLista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+}
+
+.tipoChip {
+  padding: 5px 11px;
+  border: 1px solid var(--linea-clara);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sobre-claro-2);
 }
 
 /* ---------- ¿seguís usando esto? ----------
@@ -938,10 +893,11 @@
 }
 
 .dolor h3 {
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-family: var(--font-titular);
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.05;
   text-transform: uppercase;
 }
 .dolor p {
@@ -974,39 +930,12 @@
    para cargar la jerarquía en el color y no en un badge más grande o un borde más grueso. Starter
    y Pro comparten la misma ficha blanca lisa a propósito: la diferencia entre ellos la cuentan las
    filas, no el continente. */
-.planesEnvoltura {
-  display: grid;
-  gap: clamp(24px, 4vw, 40px);
-  grid-template-columns: 1fr;
-  align-items: start;
-}
-@media (min-width: 900px) {
-  .planesEnvoltura {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-}
-
 .planesGrilla {
   margin-top: clamp(30px, 5vw, 56px);
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: clamp(20px, 3vw, 28px);
   align-items: stretch;
-}
-
-/* Las tres pegatinas del mockup, apiladas al lado de la grilla en escritorio y ocultas abajo de
-   860px (mismo criterio que las del hero: no hay lugar sin que se pisen con las cards). */
-.planesPegatinas {
-  display: none;
-}
-@media (min-width: 900px) {
-  .planesPegatinas {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-    padding-top: clamp(30px, 5vw, 56px);
-  }
 }
 
 .plan {
@@ -1050,18 +979,20 @@
 }
 
 .planNombre {
-  font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 700;
+  font-family: var(--font-titular);
+  font-size: 26px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
   text-transform: uppercase;
 }
 
 .planPrecio {
   margin-top: 6px;
-  font-family: var(--font-display);
-  font-size: 36px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-family: var(--font-titular);
+  font-size: 46px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1;
 }
 .planPrecio span {
   font-family: var(--font-body);
@@ -1102,30 +1033,6 @@
    React, y sigue funcionando con el script apagado (mismo principio que la tira con scroll-snap).
    Grilla de dos columnas de cajas con borde, como el mockup, no una lista reglada de una sola
    columna: acá cada pregunta es una unidad autocontenida, no un paso de una secuencia. */
-.preguntasEnvoltura {
-  display: grid;
-  gap: clamp(24px, 4vw, 40px);
-  grid-template-columns: 1fr;
-  align-items: start;
-}
-@media (min-width: 900px) {
-  .preguntasEnvoltura {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-}
-
-.preguntasPegatina {
-  display: none;
-  transform: rotate(8deg);
-}
-@media (min-width: 900px) {
-  .preguntasPegatina {
-    display: inline-flex;
-    justify-self: center;
-    margin-top: 12px;
-  }
-}
-
 .preguntas {
   margin-top: clamp(30px, 5vw, 56px);
   display: grid;
@@ -1252,11 +1159,11 @@
 }
 
 .cierreTitulo {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: clamp(32px, 6vw, 52px);
-  line-height: 1;
-  letter-spacing: -0.03em;
+  font-family: var(--font-titular);
+  font-weight: 400;
+  font-size: clamp(40px, 7.4vw, 80px);
+  line-height: 0.92;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 .cierreTitulo em {
@@ -1302,6 +1209,15 @@
 .cierreLista a {
   color: var(--sobre-campo);
   text-decoration: underline;
+}
+
+/* La foto de grupo del kit, debajo de la lista de la izquierda: cierra la idea de "club" que da
+   título a la sección. Va sin marco ni sombra porque el PNG ya viene recortado sin fondo. */
+.cierreGrupo {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: clamp(20px, 3vw, 32px);
 }
 
 /* El panel del formulario reusa .formulario/.campo tal cual (ver más abajo), pero esos estilos
@@ -1436,474 +1352,7 @@
   font-size: 13px;
 }
 
-/* ---------- utilidades ---------- */
-
-.soloLectores {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
-
-/* ---------- carrusel ---------- */
-
-.carrusel {
-  /* --u = el 1 % del ancho de una tarjeta. Todo lo de adentro del teléfono se mide con esta
-     unidad, así el modelo entero escala igual en un teléfono que en un monitor sin una sola
-     consulta de medios. */
-  --ancho-tarjeta: clamp(150px, 46vw, 220px);
-  --alto-tarjeta: calc(var(--ancho-tarjeta) * 1.88);
-  --u: calc(var(--ancho-tarjeta) / 100);
-  /* Dónde empieza el abanico dentro del escenario y cuánto aire lleva debajo. Antes eran 56 px y
-     160 px fijos, cuando el carrusel era una sección aparte a lo ancho de la página; adentro del
-     hero de un teléfono ese alto empujaba el botón fuera de la pantalla.
-     LAS DOS COTAS, porque el degradado del escenario recorta TODO lo que se salga de su caja
-     (contenido, sombras y anillos de foco incluidos):
-     - --tope no baja de 40 px: la tarjeta señalada sube 26 y su anillo de foco pide 8 más. Son
-       píxeles fijos, así que esta cota no se mueve aunque crezcan las tarjetas.
-     - el aire SÍ depende del ancho de la tarjeta, y por eso se calcula en vez de escribirse: la
-       más lejana baja 3 × 16 px, su esquina de abajo cae otros (ancho/2 × 0.79 × sen 21°) ≈
-       ancho × 0.142 al girar, y su sombra alcanza 44 px más. El 0.17 deja margen sobre ese 0.142.
-       Escrito a mano, este número se queda viejo la próxima vez que alguien agrande las
-       tarjetas, que es justo lo que acaba de pasar. */
-  --tope-tarjeta: clamp(40px, 6vw, 56px);
-  --aire-escenario: calc(var(--tope-tarjeta) + 56px + var(--ancho-tarjeta) * 0.17);
-}
-/* En dos columnas la tarjeta se mide contra el ancho de SU columna, no contra la pantalla: con
-   46vw el abanico entra en el hero del teléfono y desborda la columna en un monitor. */
-@media (min-width: 900px) {
-  .carrusel {
-    --ancho-tarjeta: clamp(170px, 17vw, 240px);
-  }
-}
-
-.escenario {
-  position: relative;
-  width: 100%;
-  height: calc(var(--alto-tarjeta) + var(--aire-escenario));
-  /* Las tarjetas de las puntas se van más allá del ancho de la página; el degradado las desvanece
-     contra el borde en vez de cortarlas en seco, que es lo que da la sensación de que el abanico
-     sigue fuera de la pantalla. */
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 6%, #000 94%, transparent 100%);
-  mask-image: linear-gradient(90deg, transparent 0%, #000 6%, #000 94%, transparent 100%);
-}
-
-.tarjeta {
-  position: absolute;
-  top: var(--tope-tarjeta);
-  left: 50%;
-  width: var(--ancho-tarjeta);
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  /* El giro y la reducción pivotan en el borde de ABAJO: así las tarjetas se abren como una mano
-     de naipes en vez de girar cada una sobre su propio centro. */
-  transform-origin: 50% 100%;
-  /* Solo transform y opacity: nada de layout, que es lo que produce tirones que ninguna curva
-     arregla (el `top` de arriba es fijo, no se anima).
-     LA CURVA es una salida quíntica (easeOutQuint). La que había, cubic-bezier(0.22, 0.61, …),
-     tiene el segundo número en 0.61 en vez de 1: no es una salida exponencial sino una casi
-     lineal disfrazada, y con 520 ms encima el ojo leía el arranque como un tirón y el final como
-     un arrastre. Con y1 = 1 la velocidad máxima está en el primer instante y decae sin cortes: se
-     lee como que la tarjeta SE ACOMODA. Sin rebote: un naipe de plástico no rebota. */
-  transition:
-    transform 600ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 420ms cubic-bezier(0.25, 1, 0.5, 1);
-}
-
-/* La tarjeta señalada responde más rápido que sus vecinas (440 contra 600 ms). El desfase es el
-   punto: la que está bajo el cursor obedece al gesto y las de al lado se corren después, como si
-   le hicieran lugar. Con la misma duración para las siete, el conjunto se mueve en bloque, que es
-   lo que se sentía mecánico.
-   Y como el atributo desaparece al salir, la VUELTA al reposo se hace con los 600 ms de la regla
-   de arriba: la ida es más viva que la vuelta, sin escribir una sola regla más. */
-.tarjeta[data-elevada] {
-  transition-duration: 440ms, 420ms;
-}
-
-/* El <span> que envuelve el dibujo: en línea por defecto, y así el teléfono no toma el ancho del
-   botón. */
-.lienzo {
-  display: block;
-}
-
-.tarjeta:focus-visible {
-  outline: 2px solid var(--realce);
-  outline-offset: 8px;
-  border-radius: 26px;
-}
-
-.controles {
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-4);
-}
-
-/* Los controles viven sobre la noche: sin fondo propio (un círculo de superficie oscura ahí sería
-   una mancha) y con el par de contraste del campo. */
-.flecha {
-  width: 46px;
-  height: 46px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--borde-campo);
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--sobre-campo);
-  cursor: pointer;
-  transition: border-color 160ms ease, color 160ms ease;
-}
-.flecha svg {
-  width: 22px;
-  height: 22px;
-}
-.flecha:hover {
-  border-color: var(--realce);
-  color: var(--realce);
-}
-.flecha:focus-visible {
-  outline: 2px solid var(--realce);
-  outline-offset: 3px;
-}
-/* Sigue enfocable y anunciada: se deshabilita con aria-disabled, no con el atributo `disabled`,
-   para que el foco del teclado no se caiga al llegar a la punta del carrusel. */
-.flecha[aria-disabled='true'] {
-  opacity: 0.35;
-  cursor: default;
-}
-.flecha[aria-disabled='true']:hover {
-  border-color: var(--borde-campo);
-  color: var(--sobre-campo);
-}
-
-.puntos {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.punto {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  position: relative;
-}
-/* El botón mide 22 px (lo mínimo cómodo para un dedo) pero el punto que se ve es de 10 px, al 80%
-   mientras está inactivo. Crece con `scale` y NO con `inset`: inset es geometría de layout, y
-   animarla era el único tirón que quedaba en la página fuera del abanico. */
-.punto::after {
-  content: '';
-  position: absolute;
-  inset: 6px;
-  border-radius: var(--radius-pill);
-  background: var(--borde-campo);
-  transform: scale(0.8);
-  transition: background 240ms cubic-bezier(0.25, 1, 0.5, 1),
-    transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.puntoActivo::after {
-  transform: scale(1);
-  background: var(--realce);
-}
-.punto:focus-visible {
-  outline: 2px solid var(--realce);
-  outline-offset: 1px;
-  border-radius: var(--radius-pill);
-}
-
-/* ---------- el teléfono y la tarjeta de mentira ----------
-   EL APARATO VA EN CLARO, la tarjeta de adentro NO. Con el cuerpo casi negro y la pantalla negra,
-   el teléfono se hundía en el fondo de la sección (contraste insuficiente para una imagen con
-   información) y la mitad de arriba —el marco, la isla— directamente no se veía. En claro el
-   aparato se recorta bien contra la noche y la tarjeta de cada comercio (fondos oscuros y
-   saturados: 13.3:1 la del café) queda enmarcada en vez de fundirse con el negro.
-   Los grises van TINTADOS al matiz cálido de la marca, nunca neutros puros. */
-
-.telefono {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 100 / 188;
-  padding: calc(var(--u) * 3);
-  border-radius: calc(var(--u) * 11);
-  background: linear-gradient(
-    155deg,
-    oklch(94% 0.005 85) 0%,
-    oklch(84% 0.008 80) 42%,
-    oklch(72% 0.012 75) 100%
-  );
-  /* Un aparato claro sobre un fondo oscuro necesita apoyo, no un charco negro, y así entra entero
-     en el aire del escenario (ver --aire-escenario) en vez de que el degradado le corte una línea
-     horizontal. El filo interno pasó de blanco a oscuro: sobre un cuerpo claro, un reflejo blanco
-     no dibuja ningún borde. */
-  box-shadow:
-    0 20px 42px -18px rgba(10, 6, 18, 0.6),
-    inset 0 0 0 1px rgba(38, 24, 12, 0.18);
-}
-
-/* Negra a propósito: es el recorte de la cámara, una parte física del aparato, no cromo de
-   interfaz. Es justo lo que se vuelve legible al aclarar la pantalla. */
-.isla {
-  position: absolute;
-  top: calc(var(--u) * 5.5);
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(var(--u) * 26);
-  height: calc(var(--u) * 3.4);
-  border-radius: var(--radius-pill);
-  background: #0d0d0f;
-  z-index: 2;
-}
-
-.pantalla {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  padding: calc(var(--u) * 12) calc(var(--u) * 4) calc(var(--u) * 4);
-  border-radius: calc(var(--u) * 8);
-  background: oklch(97% 0.004 85);
-  overflow: hidden;
-  text-align: left;
-}
-
-.espacio {
-  flex: 1;
-  min-height: calc(var(--u) * 4);
-}
-
-.barraInicio {
-  flex: none;
-  align-self: center;
-  width: calc(var(--u) * 30);
-  height: calc(var(--u) * 1.6);
-  border-radius: var(--radius-pill);
-  /* Oscura ahora que la pantalla es clara: es el indicador de inicio, y su gracia es que se vea. */
-  background: rgba(24, 18, 12, 0.32);
-}
-
-.pase {
-  /* Nunca se encoge. Si el contenido no cupiera, el reparto por defecto de flex apretaría el pase
-     (lo único que importa acá) en vez del hueco de abajo; con `flex: none` lo que sobra se recorta
-     contra el `overflow: hidden` de la pantalla y la tarjeta conserva sus proporciones. */
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--u) * 5);
-  padding: calc(var(--u) * 5);
-  border-radius: calc(var(--u) * 6);
-  /* Más suave y cálida desde que la pantalla es clara: el 40% de negro que tenía servía para
-     despegar la tarjeta de un fondo negro; sobre blanco ensuciaba el borde. */
-  box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 6) rgba(28, 20, 12, 0.22);
-}
-
-.pase > * {
-  flex: none;
-}
-
-.paseCabecera {
-  display: flex;
-  align-items: center;
-  gap: calc(var(--u) * 3);
-}
-
-.paseLogo {
-  flex: none;
-  width: calc(var(--u) * 14);
-  height: calc(var(--u) * 14);
-  border-radius: var(--radius-pill);
-  display: grid;
-  place-items: center;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: calc(var(--u) * 8);
-  line-height: 1;
-}
-
-.paseNombre {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: calc(var(--u) * 6.4);
-  line-height: 1.15;
-  /* Un nombre largo se corta con puntos suspensivos en vez de empujar la etiqueta fuera de la
-     tarjeta. */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.paseTipo {
-  flex: none;
-  font-size: calc(var(--u) * 4);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-/* La franja lleva la misma proporción que la del pass de verdad (375 × 123). */
-.franja {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 375 / 123;
-  border-radius: calc(var(--u) * 3);
-  overflow: hidden;
-  background: rgba(0, 0, 0, 0.22);
-  display: grid;
-  place-items: center;
-}
-
-.resplandor,
-.resplandorChico {
-  position: absolute;
-  border-radius: var(--radius-pill);
-  pointer-events: none;
-}
-.resplandor {
-  right: calc(var(--u) * -12);
-  top: calc(var(--u) * -14);
-  width: calc(var(--u) * 46);
-  height: calc(var(--u) * 46);
-  opacity: 0.18;
-}
-.resplandorChico {
-  right: calc(var(--u) * 10);
-  bottom: calc(var(--u) * -18);
-  width: calc(var(--u) * 28);
-  height: calc(var(--u) * 28);
-  opacity: 0.11;
-}
-
-.numeroPuntos {
-  position: relative;
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: calc(var(--u) * 17);
-  line-height: 1;
-  letter-spacing: -0.02em;
-}
-
-.etiquetaPuntos {
-  position: absolute;
-  bottom: calc(var(--u) * 3);
-  right: calc(var(--u) * 5);
-  font-size: calc(var(--u) * 3.6);
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.grilla {
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--u) * 1.8);
-}
-
-.filaSellos {
-  display: flex;
-  justify-content: center;
-  gap: calc(var(--u) * 1.8);
-}
-
-.sello {
-  width: calc(var(--u) * 8);
-  height: calc(var(--u) * 8);
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-pill);
-  border: calc(var(--u) * 0.7) solid currentColor;
-}
-/* La versión de estrella es un <svg>: ni aro ni relleno de fondo, el trazo lo pone el path. */
-svg.sello {
-  display: block;
-  border: 0;
-  border-radius: 0;
-}
-
-.selloPunto {
-  width: 34%;
-  height: 34%;
-  border-radius: var(--radius-pill);
-}
-
-.paseNota {
-  font-size: calc(var(--u) * 4.2);
-  line-height: 1.3;
-  opacity: 0.78;
-}
-
-.paseCampos {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: calc(var(--u) * 4);
-}
-
-.paseCampo {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--u) * 1);
-}
-.paseCampoDerecha {
-  text-align: right;
-}
-.paseCampo small {
-  font-size: calc(var(--u) * 3.4);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.paseCampo b {
-  font-size: calc(var(--u) * 4.8);
-  font-weight: 600;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.paseCodigo {
-  align-self: center;
-  width: calc(var(--u) * 28);
-  padding: calc(var(--u) * 2);
-  border-radius: calc(var(--u) * 2.5);
-  background: #ffffff;
-  color: #101014;
-}
-
-.qr {
-  display: block;
-  width: 100%;
-  height: auto;
-  fill: currentColor;
-}
-
 /* ---------- formulario de demo ---------- */
-
-.demo {
-  display: grid;
-  gap: clamp(28px, 5vw, 48px);
-  grid-template-columns: 1fr;
-  align-items: start;
-}
-@media (min-width: 860px) {
-  .demo {
-    grid-template-columns: 1fr 1fr;
-  }
-}
 
 .formulario,
 .exito {
@@ -2028,28 +1477,25 @@ svg.sello {
   text-decoration: underline;
 }
 
-/* Quien pidió menos movimiento no recibe ninguno: el abanico sigue funcionando, solo que las
-   tarjetas aparecen ya colocadas en vez de deslizarse. */
+/* Quien pidió menos movimiento no recibe ninguno. La lista se acortó al retirarse el abanico de
+   tarjetas dibujado en CSS (.tarjeta/.flecha/.punto ya no existen): lo que queda con transición son
+   los botones, el hover de los modelos y el signo del acordeón. */
 @media (prefers-reduced-motion: reduce) {
-  .tarjeta,
-  /* Explícito aunque la regla de arriba ya lo cubriría por el shorthand: la duración propia de la
-     tarjeta señalada tiene más especificidad, y dejarlo al azar de la cascada es pedirlo. */
-  .tarjeta[data-elevada],
-  .flecha,
-  .punto::after,
   .botonHero,
   .botonHeroContorno,
   .botonCabecera,
-  .tipoFicha,
+  .modeloImagen,
   .preguntaSigno::before,
   .preguntaSigno::after,
   .campo input,
   .campo textarea {
     transition: none;
   }
-  /* El botón tampoco se despega al pasar el mouse: el desplazamiento es justo lo que molesta. */
+  /* Ni el botón ni el modelo se despegan al pasar el mouse: el desplazamiento es justo lo que
+     molesta. */
   .botonHero:hover,
-  .botonHeroContorno:hover {
+  .botonHeroContorno:hover,
+  .modelo:hover .modeloImagen {
     transform: none;
   }
 }
