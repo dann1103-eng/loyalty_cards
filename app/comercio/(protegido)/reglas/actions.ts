@@ -6,6 +6,11 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { crearRegla, eliminarRegla } from '@/lib/comercio/reglas';
 import { notificarCambioComercio } from '@/lib/apple/notificarCambioComercio';
 import { controlesDesdeFormulario, guardarControles } from '@/lib/comercio/controlesAcreditacion';
+import {
+  leerConfiguracionTipo,
+  guardarConfiguracionTipo,
+  configuracionDesdeFormulario,
+} from '@/lib/comercio/configuracionTipo';
 
 export type EstadoRegla = { error: string } | undefined;
 
@@ -75,4 +80,41 @@ export async function accionEliminarRegla(
 
   revalidatePath('/comercio/reglas');
   return undefined;
+}
+
+export type EstadoConfiguracionTipo = { error: string } | { ok: true } | undefined;
+
+// Guarda la configuración propia del tipo de tarjeta del comercio (migración 0018).
+//
+// El TIPO no viaja en el formulario: se lee del comercio del gate. Si viniera del cliente, alguien
+// podría hacerse pasar por otro tipo y guardar una configuración que su motor nunca va a leer —o
+// peor, saltarse la validación del suyo.
+export async function accionGuardarConfiguracionTipo(
+  _estadoPrevio: EstadoConfiguracionTipo,
+  formData: FormData,
+): Promise<EstadoConfiguracionTipo> {
+  const { comercioId } = await verifyComercioOwner();
+  const supabase = createServiceClient();
+
+  const actual = await leerConfiguracionTipo(supabase, comercioId);
+  if (!actual) return { error: 'No se pudo leer la configuración. Recargá la página.' };
+
+  const datos = configuracionDesdeFormulario(actual.tipoTarjeta, {
+    // Los campos que no aplican al tipo no vienen en el formulario: se conserva lo que ya había en
+    // vez de borrarlo. Un comercio que cambie de tipo y vuelva no pierde su configuración vieja.
+    cashbackPorcentaje: String(formData.get('cashback_porcentaje') ?? actual.cashbackPorcentaje ?? ''),
+    multipassVisitas: String(formData.get('multipass_visitas') ?? actual.multipassVisitas ?? ''),
+    membresiaDias: String(formData.get('membresia_dias') ?? actual.membresiaDias ?? ''),
+    cuponVigenciaDias: String(formData.get('cupon_vigencia_dias') ?? actual.cuponVigenciaDias ?? ''),
+  });
+
+  const res = await guardarConfiguracionTipo(supabase, comercioId, datos);
+  if (!res.ok) return { error: res.error };
+
+  // El reverso del pass imprime "cómo funciona" a partir de las reglas del comercio, así que un
+  // cambio de configuración puede cambiar lo que el cliente lee en su tarjeta.
+  await notificarCambioComercio(supabase, comercioId);
+
+  revalidatePath('/comercio/reglas');
+  return { ok: true };
 }

@@ -4,9 +4,11 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { TIPOS_REGLA } from '@/lib/comercio/reglas';
 import FormularioRegla from './FormularioRegla';
 import FormularioControles from './FormularioControles';
+import FormularioTipo from './FormularioTipo';
 import BotonEliminarRegla from './BotonEliminarRegla';
 import AvisoComercioActivo from '../AvisoComercioActivo';
 import { leerControles } from '@/lib/comercio/controlesAcreditacion';
+import { leerConfiguracionTipo } from '@/lib/comercio/configuracionTipo';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +26,9 @@ export default async function PaginaReglas() {
   // no imagen — y así no hace falta un sexto destino en la barra, que descentraría el botón de
   // Escanear (ver lib/comercio/navegacion.ts).
   const controles = await leerControles(supabase, comercioId);
+  // Configuracion propia del tipo (0018): el porcentaje de cashback, las visitas del paquete,
+  // los dias de la membresia. Sin esto los motores existen pero nadie puede encenderlos.
+  const configuracionTipo = await leerConfiguracionTipo(supabase, comercioId);
   const { data: comercio } = await supabase
     .from('comercios')
     .select('tipo_tarjeta')
@@ -46,6 +51,12 @@ export default async function PaginaReglas() {
       <div className="reveal d2">
         <FormularioRegla />
       </div>
+
+      {configuracionTipo && (
+        <div className="reveal d2" style={{ marginTop: 22 }}>
+          <FormularioTipo configuracion={configuracionTipo} />
+        </div>
+      )}
 
       <div className="reveal d2" style={{ marginTop: 22 }}>
         {controles ? (
