@@ -389,15 +389,28 @@ describe('tarjetasActivasDelComercio', () => {
     const resultado = await tarjetasActivasDelComercio(supabase, comercioId, null);
 
     expect(resultado.map((t) => t.id).sort()).toEqual([tarjetaPrincipal, tarjetaSegundo!.id].sort());
+    // El tipo va POR PROGRAMA (el segundo es 'cupon', no 'puntos') — si se hardcodeara un tipo fijo,
+    // esta aserción lo atrapa aunque la de arriba (que solo mira ids) no lo haga.
+    const tipoPorId = new Map(resultado.map((t) => [t.id, t.tipoTarjeta]));
+    expect(tipoPorId.get(tarjetaPrincipal)).toBe('puntos');
+    expect(tipoPorId.get(tarjetaSegundo!.id)).toBe('cupon');
   });
 
   it('con programaId, devuelve solo las tarjetas de ESE programa', async () => {
     const comercioId = await entorno.crearComercio();
     const principalId = entorno.obtenerProgramaPrincipal(comercioId);
-    await entorno.crearTarjeta(comercioId);
+    const { id: tarjetaPrincipal } = await entorno.crearTarjeta(comercioId);
+    const segundo = await crearPrograma(supabase, comercioId, datos('cupon', 'Cupón'));
+    expect(segundo.ok).toBe(true);
+    if (!segundo.ok) return;
+    const { data: cliente } = await supabase.from('clientes').insert({ nombre: 'Z', telefono: `+503-tad3-${Date.now()}` }).select('id').single();
+    const { data: tarjetaSegundo } = await supabase.from('tarjetas').insert({ cliente_id: cliente!.id, comercio_id: comercioId, programa_id: segundo.id }).select('id').single();
 
     const resultado = await tarjetasActivasDelComercio(supabase, comercioId, principalId);
 
+    // Si el filtro por programaId se neutraliza, la tarjeta del SEGUNDO programa se colaría acá.
+    expect(resultado.map((t) => t.id)).toEqual([tarjetaPrincipal]);
+    expect(resultado.map((t) => t.id)).not.toContain(tarjetaSegundo!.id);
     expect(resultado.every((t) => t.tipoTarjeta === 'puntos')).toBe(true);
   });
 

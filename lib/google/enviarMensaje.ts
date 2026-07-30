@@ -6,8 +6,10 @@ import { walletClient } from './walletClient';
 // lib/comercio/enviarMensajeTarjeta.ts) exige poder hacerlo. Ver la sección "Riesgos y
 // pendientes" del spec.
 //
-// messageType: 'TEXT' — verificado contra Wallet real que dispara notificación (no solo historial
-// del pase). Si Google cambia este comportamiento, es el primer lugar a revisar.
+// messageType: 'TEXT' — es lo que documenta Google para este endpoint, pero SIN confirmar todavía
+// contra un dispositivo real que dispare notificación (y no solo quede en el historial del pase).
+// Esa confirmación manual está pendiente (ver ESTADO-Y-PLAN-2026-07-28.md, QA de notificaciones
+// push). Si alguien la corre y falla, este es el primer lugar a revisar.
 //
 // Best-effort a propósito, mismo criterio que notificarCambioTarjeta: un fallo de Google Wallet
 // nunca debe tumbar el flujo que lo llama.
