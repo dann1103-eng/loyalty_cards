@@ -244,6 +244,37 @@ tarjeta concreta y no leen `comercios.tipo_tarjeta`. No se tocan.
 El dibujo del pase por tipo, el portal del cliente y la pantalla de niveles de descuento. Son justo
 las piezas que cambian con varios programas por comercio: construirlas antes sería tirarlas.
 
+## Notificaciones push activas — código completo, falta QA manual (2026-07-30)
+
+Spec: `specs/2026-07-29-notificaciones-push-design.md`. Plan:
+`plans/2026-07-29-notificaciones-push.md`. Migración `0026` (tablas `difusiones` y
+`notificaciones_enviadas`; `tarjetas.aviso_texto`/`aviso_hasta`/`aviso_inactividad_enviado_en`;
+`comercios.aviso_inactividad_activo`/`aviso_inactividad_dias`/`aviso_inactividad_mensaje`) — YA
+APLICADA y verificada con `scripts/verificar-0026.ts`.
+
+Push disparado por el SERVIDOR, no por cercanía (a diferencia de geopush): campaña manual desde
+`/comercio/notificaciones` (tope de 4 cada 30 días; el dueño elige mensaje, vigencia y programa) y
+aviso automático de inactividad (perilla en `/comercio/reglas`, cron diario). Los dos caminos
+comparten `enviarMensajeTarjeta` (`lib/comercio/enviarMensajeTarjeta.ts`): Apple vía
+`changeMessage` en el reverso, Google vía `addmessage`, con el candado de 3 mensajes/24h por
+tarjeta que exige Google (filtrado por canal, no por origen) y rastro en `notificaciones_enviadas`.
+
+**Task 13 del plan (verificación end-to-end) — Step 1 completo, Steps 2-3 quedan pendientes para
+el usuario/controlador** (no se puede correr un navegador real ni pegarle al cron de producción
+desde un subagente):
+- `npx tsc --noEmit && npx eslint . && npm test`: limpio. 75 archivos de prueba, 690 pruebas, todas
+  en verde.
+- Pendiente:
+  1. `/comercio/reglas`: activar el aviso de inactividad, guardar, recargar, confirmar que persiste.
+  2. `/comercio/notificaciones`: mandar una campaña, confirmar historial + contador de cupo, y que
+     la 5ª campaña del mes se rechaza con el mensaje del tope.
+  3. Con una tarjeta real instalada (Apple o Google): confirmar que el aviso llega de verdad al
+     reverso del pase / como notificación push, no solo al historial.
+  4. `curl -i https://www.cardly-sv.site/api/cron/inactividad` debe devolver `401`, no `500`
+     (confirma que `CRON_SECRET` está configurado en producción).
+- Esta rama (`claude/post-mvp-features-3f6590`) todavía no se fusionó a `master` — "en producción"
+  aplica recién después del merge y de que el usuario recorra los 4 puntos de arriba.
+
 ## Si algo no cuadra
 
 El flujo de migraciones a mano + verificación con script descartable, y el patrón de merge
