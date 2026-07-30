@@ -4,9 +4,11 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { TIPOS_REGLA } from '@/lib/comercio/reglas';
 import FormularioRegla from './FormularioRegla';
 import FormularioControles from './FormularioControles';
+import FormularioAvisoInactividad from './FormularioAvisoInactividad';
 import BotonEliminarRegla from './BotonEliminarRegla';
 import AvisoComercioActivo from '../AvisoComercioActivo';
 import { leerControles } from '@/lib/comercio/controlesAcreditacion';
+import { leerConfiguracionAvisoInactividad } from '@/lib/comercio/avisoInactividad';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +26,7 @@ export default async function PaginaReglas() {
   // no imagen — y así no hace falta un sexto destino en la barra, que descentraría el botón de
   // Escanear (ver lib/comercio/navegacion.ts).
   const controles = await leerControles(supabase, comercioId);
+  const avisoInactividad = await leerConfiguracionAvisoInactividad(supabase, comercioId);
   const { data: comercio } = await supabase
     .from('comercios')
     .select('tipo_tarjeta')
@@ -77,6 +80,12 @@ export default async function PaginaReglas() {
           </p>
         )}
       </div>
+
+      {avisoInactividad && (
+        <div className="reveal d2" style={{ marginTop: 22 }}>
+          <FormularioAvisoInactividad configuracion={avisoInactividad} />
+        </div>
+      )}
 
       <div className="admin-lista reveal d3" style={{ marginTop: 22 }}>
         {error ? (

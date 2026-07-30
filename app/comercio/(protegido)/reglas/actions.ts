@@ -6,10 +6,16 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { crearRegla, eliminarRegla } from '@/lib/comercio/reglas';
 import { notificarCambioComercio } from '@/lib/apple/notificarCambioComercio';
 import { controlesDesdeFormulario, guardarControles } from '@/lib/comercio/controlesAcreditacion';
+import {
+  guardarConfiguracionAvisoInactividad,
+  configuracionDesdeFormulario as avisoInactividadDesdeFormulario,
+} from '@/lib/comercio/avisoInactividad';
 
 export type EstadoRegla = { error: string } | undefined;
 
 export type EstadoControles = { error: string } | { guardado: true } | undefined;
+
+export type EstadoAvisoInactividad = { error: string } | { guardado: true } | undefined;
 
 // Guarda las perillas antifraude (Tanda 1). NO dispara notificarCambioComercio a propósito: a
 // diferencia de las reglas y las recompensas, estos límites no se imprimen en el reverso del pass
@@ -31,6 +37,25 @@ export async function accionGuardarControles(
   });
 
   const res = await guardarControles(createServiceClient(), comercioId, datos);
+  if (!res.ok) return { error: res.error };
+
+  revalidatePath('/comercio/reglas');
+  return { guardado: true };
+}
+
+export async function accionGuardarAvisoInactividad(
+  _estadoPrevio: EstadoAvisoInactividad,
+  formData: FormData,
+): Promise<EstadoAvisoInactividad> {
+  const { comercioId } = await verifyComercioOwner();
+
+  const datos = avisoInactividadDesdeFormulario({
+    activo: formData.get('aviso_inactividad_activo') === 'on',
+    dias: String(formData.get('aviso_inactividad_dias') ?? ''),
+    mensaje: String(formData.get('aviso_inactividad_mensaje') ?? ''),
+  });
+
+  const res = await guardarConfiguracionAvisoInactividad(createServiceClient(), comercioId, datos);
   if (!res.ok) return { error: res.error };
 
   revalidatePath('/comercio/reglas');
