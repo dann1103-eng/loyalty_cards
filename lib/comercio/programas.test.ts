@@ -9,6 +9,7 @@ import {
   resolverProgramaPorSlug,
   obtenerPrograma,
   configuracionProgramaDesdeFormulario,
+  tarjetasActivasDelComercio,
   MAXIMO_PROGRAMAS_ACTIVOS,
   type DatosNuevoPrograma,
 } from './programas';
@@ -371,5 +372,46 @@ describe('configuracionProgramaDesdeFormulario', () => {
       cuponVigenciaDias: '',
     });
     expect(Number.isNaN(res.cashbackPorcentaje)).toBe(true);
+  });
+});
+
+describe('tarjetasActivasDelComercio', () => {
+  it('devuelve tarjetas de todos los programas activos cuando programaId es null', async () => {
+    const comercioId = await entorno.crearComercio();
+    const { id: tarjetaPrincipal } = await entorno.crearTarjeta(comercioId);
+    const segundo = await crearPrograma(supabase, comercioId, datos('cupon', 'Cupón'));
+    expect(segundo.ok).toBe(true);
+    if (!segundo.ok) return;
+    // tarjeta manual en el segundo programa (no hay helper del fixture para esto — insert directo)
+    const { data: cliente } = await supabase.from('clientes').insert({ nombre: 'X', telefono: `+503-tad-${Date.now()}` }).select('id').single();
+    const { data: tarjetaSegundo } = await supabase.from('tarjetas').insert({ cliente_id: cliente!.id, comercio_id: comercioId, programa_id: segundo.id }).select('id').single();
+
+    const resultado = await tarjetasActivasDelComercio(supabase, comercioId, null);
+
+    expect(resultado.map((t) => t.id).sort()).toEqual([tarjetaPrincipal, tarjetaSegundo!.id].sort());
+  });
+
+  it('con programaId, devuelve solo las tarjetas de ESE programa', async () => {
+    const comercioId = await entorno.crearComercio();
+    const principalId = entorno.obtenerProgramaPrincipal(comercioId);
+    await entorno.crearTarjeta(comercioId);
+
+    const resultado = await tarjetasActivasDelComercio(supabase, comercioId, principalId);
+
+    expect(resultado.every((t) => t.tipoTarjeta === 'puntos')).toBe(true);
+  });
+
+  it('excluye tarjetas de un programa DESACTIVADO', async () => {
+    const comercioId = await entorno.crearComercio();
+    const creado = await crearPrograma(supabase, comercioId, datos('cupon', 'Cupón'));
+    expect(creado.ok).toBe(true);
+    if (!creado.ok) return;
+    const { data: cliente } = await supabase.from('clientes').insert({ nombre: 'Y', telefono: `+503-tad2-${Date.now()}` }).select('id').single();
+    const { data: tarjeta } = await supabase.from('tarjetas').insert({ cliente_id: cliente!.id, comercio_id: comercioId, programa_id: creado.id }).select('id').single();
+    await desactivarPrograma(supabase, comercioId, creado.id);
+
+    const resultado = await tarjetasActivasDelComercio(supabase, comercioId, null);
+
+    expect(resultado.map((t) => t.id)).not.toContain(tarjeta!.id);
   });
 });

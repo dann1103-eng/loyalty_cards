@@ -427,3 +427,49 @@ export function configuracionProgramaDesdeFormulario(campos: {
     cuponVigenciaDias: aNumero(campos.cuponVigenciaDias),
   };
 }
+
+export interface TarjetaElegible {
+  id: string;
+  tipoTarjeta: string;
+  usadoEn: string | null; // solo relevante para tipo 'cupon'
+}
+
+// Tarjetas de un comercio cuyo programa sigue activo — compartida entre la campaña manual
+// (lib/comercio/difusiones.ts) y el aviso de inactividad (lib/comercio/avisoInactividad.ts).
+// `programaId: null` trae las de TODOS los programas activos; con un id, solo las de ese uno.
+export async function tarjetasActivasDelComercio(
+  supabase: SupabaseClient<Database>,
+  comercioId: string,
+  programaId: string | null,
+): Promise<TarjetaElegible[]> {
+  let query = supabase
+    .from('programas_tarjeta')
+    .select('id, tipo_tarjeta')
+    .eq('comercio_id', comercioId)
+    .eq('activo', true);
+  if (programaId) query = query.eq('id', programaId);
+
+  const { data: programas, error: errorProgramas } = await query;
+  if (errorProgramas) {
+    console.error('[comercio] no se pudieron leer los programas activos:', errorProgramas);
+    return [];
+  }
+  if (!programas || programas.length === 0) return [];
+
+  const tipoPorPrograma = new Map(programas.map((p) => [p.id, p.tipo_tarjeta]));
+  const { data: tarjetas, error: errorTarjetas } = await supabase
+    .from('tarjetas')
+    .select('id, programa_id, usado_en')
+    .eq('comercio_id', comercioId)
+    .in('programa_id', programas.map((p) => p.id));
+  if (errorTarjetas) {
+    console.error('[comercio] no se pudieron leer las tarjetas activas:', errorTarjetas);
+    return [];
+  }
+
+  return (tarjetas ?? []).map((t) => ({
+    id: t.id,
+    tipoTarjeta: tipoPorPrograma.get(t.programa_id) ?? 'puntos',
+    usadoEn: t.usado_en,
+  }));
+}
