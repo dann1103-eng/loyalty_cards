@@ -557,7 +557,7 @@ export default function Inicio() {
               ))}
             </div>
             <p className={estilos.planNota}>
-              + instalación inicial de $149 (pago único, todos los planes).
+              + instalación inicial de $150 (pago único, todos los planes).
             </p>
           </div>
 
