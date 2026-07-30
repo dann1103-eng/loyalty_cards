@@ -15,6 +15,7 @@
 //   - supabase/migrations/0012_sucursal_principal.sql (sucursales.es_principal + índice único parcial)
 //   - supabase/migrations/0013_reverso_tarjeta.sql (columnas del reverso del pass en comercios)
 //   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
+//   - supabase/migrations/0026_notificaciones_push.sql (tablas difusiones y notificaciones_enviadas; tarjetas.aviso_texto/aviso_hasta/aviso_inactividad_enviado_en; comercios.aviso_inactividad_activo/dias/mensaje)
 //   - supabase/migrations/0025_backfill_programas_principales_faltantes.sql (solo datos, no cambia columnas: programa principal para comercios que la 0024 no alcanzó a cubrir)
 //   - supabase/migrations/0024_programas_de_tarjeta.sql (tabla programas_tarjeta; tarjetas.programa_id NOT NULL; unique (cliente_id, programa_id) reemplaza unique (cliente_id, comercio_id))
 //   - supabase/migrations/0023_registrar_compra_descuento.sql (funcion registrar_compra_atomico)
@@ -83,6 +84,11 @@ export type Database = {
           multipass_visitas: number | null;
           membresia_dias: number | null;
           cupon_vigencia_dias: number | null;
+          // Aviso de inactividad (migración 0026), mismo criterio que las perillas antifraude:
+          // null/false = apagado, el comportamiento no cambia hasta que el dueño lo configure.
+          aviso_inactividad_activo: boolean;
+          aviso_inactividad_dias: number | null;
+          aviso_inactividad_mensaje: string | null;
         };
         Insert: {
           id?: string;
@@ -117,6 +123,9 @@ export type Database = {
           multipass_visitas?: number | null;
           membresia_dias?: number | null;
           cupon_vigencia_dias?: number | null;
+          aviso_inactividad_activo?: boolean;
+          aviso_inactividad_dias?: number | null;
+          aviso_inactividad_mensaje?: string | null;
         };
         Update: {
           id?: string;
@@ -151,6 +160,9 @@ export type Database = {
           multipass_visitas?: number | null;
           membresia_dias?: number | null;
           cupon_vigencia_dias?: number | null;
+          aviso_inactividad_activo?: boolean;
+          aviso_inactividad_dias?: number | null;
+          aviso_inactividad_mensaje?: string | null;
         };
         // FK de la 0008 (`cuenta_id ... references cuentas_comercio(id)`). Necesaria para el join
         // embebido `cuentas_comercio(...)` desde comercios (panel FM, reportes).
@@ -264,6 +276,13 @@ export type Database = {
           usado_en: string | null;
           // Descuento por nivel: gasto histórico en centavos. NUNCA baja.
           acumulado_centavos: number;
+          // Migración 0026: estado ACTUAL del aviso (campaña o inactividad) en el reverso del
+          // pase. construirReverso lo lee en CADA regeneración — no solo la que lo originó.
+          aviso_texto: string | null;
+          aviso_hasta: string | null;
+          // Cuándo se mandó el último aviso de inactividad a ESTA tarjeta, para no repetirlo cada
+          // día una vez cruzado el umbral.
+          aviso_inactividad_enviado_en: string | null;
         };
         Insert: {
           id?: string;
@@ -279,6 +298,9 @@ export type Database = {
           vigencia_hasta?: string | null;
           usado_en?: string | null;
           acumulado_centavos?: number;
+          aviso_texto?: string | null;
+          aviso_hasta?: string | null;
+          aviso_inactividad_enviado_en?: string | null;
         };
         Update: {
           id?: string;
@@ -294,6 +316,9 @@ export type Database = {
           vigencia_hasta?: string | null;
           usado_en?: string | null;
           acumulado_centavos?: number;
+          aviso_texto?: string | null;
+          aviso_hasta?: string | null;
+          aviso_inactividad_enviado_en?: string | null;
         };
         // FKs inline en la migración 0001 (`references comercios(id)` / `references clientes(id)`)
         // — Postgres las nombra `tarjetas_comercio_id_fkey` / `tarjetas_cliente_id_fkey`. Necesarias
@@ -915,6 +940,108 @@ export type Database = {
             columns: ['comercio_id'];
             isOneToOne: false;
             referencedRelation: 'comercios';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      difusiones: {
+        Row: {
+          id: string;
+          comercio_id: string;
+          // null = todos los programas activos del comercio.
+          programa_id: string | null;
+          mensaje: string;
+          // Cuánto dura el mensaje en el reverso del pase — lo elige el dueño, igual que
+          // campana_hasta en geopush (0021).
+          vigente_hasta: string;
+          creada_por: string;
+          creada_en: string;
+          // Tarjetas alcanzadas por AL MENOS un canal (no el tamaño de la lista resuelta).
+          destinatarios: number;
+        };
+        Insert: {
+          id?: string;
+          comercio_id: string;
+          programa_id?: string | null;
+          mensaje: string;
+          vigente_hasta: string;
+          creada_por: string;
+          creada_en?: string;
+          destinatarios?: number;
+        };
+        Update: {
+          id?: string;
+          comercio_id?: string;
+          programa_id?: string | null;
+          mensaje?: string;
+          vigente_hasta?: string;
+          creada_por?: string;
+          creada_en?: string;
+          destinatarios?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'difusiones_comercio_id_fkey';
+            columns: ['comercio_id'];
+            isOneToOne: false;
+            referencedRelation: 'comercios';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'difusiones_programa_id_fkey';
+            columns: ['programa_id'];
+            isOneToOne: false;
+            referencedRelation: 'programas_tarjeta';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'difusiones_creada_por_fkey';
+            columns: ['creada_por'];
+            isOneToOne: false;
+            referencedRelation: 'usuarios_comercio';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      notificaciones_enviadas: {
+        Row: {
+          id: string;
+          tarjeta_id: string;
+          canal: string;
+          origen: string;
+          // Solo cuando origen='campana'; null en 'inactividad'.
+          difusion_id: string | null;
+          enviada_en: string;
+        };
+        Insert: {
+          id?: string;
+          tarjeta_id: string;
+          canal: string;
+          origen: string;
+          difusion_id?: string | null;
+          enviada_en?: string;
+        };
+        Update: {
+          id?: string;
+          tarjeta_id?: string;
+          canal?: string;
+          origen?: string;
+          difusion_id?: string | null;
+          enviada_en?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'notificaciones_enviadas_tarjeta_id_fkey';
+            columns: ['tarjeta_id'];
+            isOneToOne: false;
+            referencedRelation: 'tarjetas';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'notificaciones_enviadas_difusion_id_fkey';
+            columns: ['difusion_id'];
+            isOneToOne: false;
+            referencedRelation: 'difusiones';
             referencedColumns: ['id'];
           },
         ];
