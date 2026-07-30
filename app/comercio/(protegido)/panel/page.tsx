@@ -12,6 +12,7 @@ const ATAJOS = [
   { href: '/comercio/branding', icono: 'palette', tono: 'acento', titulo: 'Identidad visual', sub: 'Colores, imágenes y sellos' },
   { href: '/comercio/reglas', icono: 'rule', tono: 'menta', titulo: 'Reglas del programa', sub: 'Cómo se ganan los puntos/sellos' },
   { href: '/comercio/programas', icono: 'style', tono: 'acento', titulo: 'Programas de tarjeta', sub: 'Tipo, configuración y QR de cada uno' },
+  { href: '/comercio/notificaciones', icono: 'campaign', tono: 'menta', titulo: 'Notificaciones', sub: 'Campañas manuales y aviso de inactividad' },
   { href: '/comercio/recompensas', icono: 'redeem', tono: 'acento', titulo: 'Recompensas activas', sub: 'Catálogo de premios canjeables' },
   { href: '/comercio/sucursales', icono: 'store', tono: 'menta', titulo: 'Sucursales', sub: 'Locales que comparten tu tarjeta' },
   { href: '/comercio/cajeros', icono: 'badge', tono: 'acento', titulo: 'Cajeros', sub: 'Cuentas del personal por sucursal' },

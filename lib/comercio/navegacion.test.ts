@@ -52,6 +52,11 @@ describe('enlacesMenuPorRol', () => {
       // Programas (0024): justo después de Reglas, la sección hermana de la que heredó la
       // configuración por tipo.
       '/comercio/programas',
+      // Notificaciones (0026): la perilla del aviso AUTOMÁTICO de inactividad vive en Reglas
+      // (FormularioAvisoInactividad), así que esta pantalla —la campaña MANUAL y su historial— es
+      // la sección hermana más cercana de ese bloque Reglas/Programas, antes de las operativas
+      // de abajo (Sucursales/Cajeros).
+      '/comercio/notificaciones',
       '/comercio/sucursales',
       '/comercio/cajeros',
       // Mi plan (0017). Va al final a propósito: es configuración ocasional, no operación diaria.
@@ -74,9 +79,10 @@ describe('enlacesMenuPorRol', () => {
     const barra = enlacesBarraPorRol('owner').map((e) => e.href);
     const menu = enlacesMenuPorRol('owner').map((e) => e.href);
     expect(barra.filter((h) => menu.includes(h))).toEqual([]);
-    // Las 11 secciones del panel siguen alcanzables entre las dos superficies: si alguien mueve una
+    // Las 12 secciones del panel siguen alcanzables entre las dos superficies: si alguien mueve una
     // sección de la barra al menú (o al revés) esto sigue verde, pero si la BORRA de ambas, no.
-    // (Eran 9 hasta que la 0017 sumó "Mi plan"; 10 hasta que la 0024 sumó "Programas".)
-    expect(new Set([...barra, ...menu]).size).toBe(11);
+    // (Eran 9 hasta que la 0017 sumó "Mi plan"; 10 hasta que la 0024 sumó "Programas"; 11 hasta
+    // que la 0026 sumó "Notificaciones".)
+    expect(new Set([...barra, ...menu]).size).toBe(12);
   });
 });
