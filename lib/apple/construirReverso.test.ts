@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { construirReverso, escaparHtml, type CampoReverso, type DatosReverso } from './construirReverso';
+import { construirReverso, resolverAviso, escaparHtml, type CampoReverso, type DatosReverso } from './construirReverso';
 
 // El texto del emisor se aserta CARÁCTER POR CARÁCTER (y no comparando contra EMISOR_CARDLY):
 // si alguien "arregla" el sitio quitándole el `www`, la constante y la prueba cambiarían juntas y
@@ -22,6 +22,7 @@ function datosBase(): DatosReverso {
     sitioWeb: null,
     reglas: [],
     recompensas: [],
+    avisoTexto: null,
   };
 }
 
@@ -354,5 +355,71 @@ describe('meta de sellos en 0', () => {
     const comoFunciona = campos.find((c) => c.key === 'como_funciona');
     expect(comoFunciona!.value).toContain('Ganás 1 sello por cada visita.');
     expect(comoFunciona!.value).not.toContain('Completá');
+  });
+});
+
+describe('construirReverso — aviso de campaña o inactividad', () => {
+  it('con avisoTexto, agrega el campo aviso al final con changeMessage', () => {
+    const campos = construirReverso({ ...datosCompletos(), avisoTexto: 'Volvé pronto' });
+    const campoAviso = campos.find((campo) => campo.key === 'aviso');
+
+    // Va DESPUÉS de 'emisor' (el pie fijo), no antes: es la sección más nueva y más cambiante, y
+    // el resto del reverso no debe reordenarse cada vez que un aviso aparece o desaparece.
+    expect(claves(campos)[claves(campos).length - 1]).toBe('aviso');
+    expect(campoAviso?.value).toBe('Volvé pronto');
+    expect(campoAviso?.label).toBe('Aviso');
+    // changeMessage es lo único que convierte un cambio de VALOR de este campo en un aviso visible
+    // en la pantalla de bloqueo (ver "La asimetría de plataforma" del spec) — sin esta aserción, un
+    // "%@" borrado por error pasaría inadvertido.
+    expect(campoAviso?.changeMessage).toBe('%@');
+  });
+
+  it('sin avisoTexto (null), NO agrega el campo aviso', () => {
+    expect(claves(construirReverso(datosBase()))).not.toContain('aviso');
+    expect(claves(construirReverso(datosCompletos()))).not.toContain('aviso');
+  });
+
+  it('avisoTexto AUSENTE del objeto (llamador que todavía no pasa el campo) no revienta', () => {
+    // Simula lo que lib/apple/datosPassDeTarjeta.ts hace HOY, antes de la Task 3 de este plan: le
+    // arma un DatosReverso a construirReverso sin la propiedad avisoTexto. TS bien tipado no
+    // compila eso (avisoTexto es requerido), pero JS en runtime sí lo permite — la propiedad
+    // ausente da `undefined`, no `null` — y un llamador viejo que todavía no conoce el campo nuevo
+    // no puede tumbar el reverso ENTERO por eso. Sin este resguardo, hayTexto(undefined) revienta
+    // con "Cannot read properties of undefined (reading 'trim')" — confirmado corriendo
+    // datosPassDeTarjeta.test.ts contra este mismo cambio antes de este arreglo.
+    const datosSinAvisoTexto = {
+      nombreComercio: 'Cafetería Piloto',
+      tipoTarjeta: 'puntos',
+      selloMeta: null,
+      mostrarComoFunciona: true,
+      terminosUso: null,
+      redInstagram: null,
+      redFacebook: null,
+      redWhatsapp: null,
+      sitioWeb: null,
+      reglas: [],
+      recompensas: [],
+    } as unknown as DatosReverso;
+
+    expect(() => construirReverso(datosSinAvisoTexto)).not.toThrow();
+    expect(claves(construirReverso(datosSinAvisoTexto))).not.toContain('aviso');
+  });
+});
+
+describe('resolverAviso', () => {
+  it('sin texto, no hay aviso', () => {
+    expect(resolverAviso(null, null, '2026-07-29')).toBeNull();
+  });
+
+  it('con texto y sin vencer, muestra el texto', () => {
+    expect(resolverAviso('Volvé pronto', '2026-08-01', '2026-07-29')).toBe('Volvé pronto');
+  });
+
+  it('el día del vencimiento TODAVÍA se muestra (igual que resolverMensajeCercania)', () => {
+    expect(resolverAviso('Volvé pronto', '2026-07-29', '2026-07-29')).toBe('Volvé pronto');
+  });
+
+  it('un día después de vencer, ya no se muestra', () => {
+    expect(resolverAviso('Volvé pronto', '2026-07-28', '2026-07-29')).toBeNull();
   });
 });

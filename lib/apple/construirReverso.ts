@@ -15,6 +15,7 @@ export interface CampoReverso {
   // con attributedValue no aparece en el pass y no falla nada: se pierde en silencio.
   value: string;
   attributedValue?: string;
+  changeMessage?: string;
 }
 
 export interface ReglaReverso {
@@ -45,6 +46,9 @@ export interface DatosReverso {
   // reordena — si ordenara acá tambien, el orden quedaria definido en dos lugares que pueden
   // discrepar. Y re-filtrar no podria aunque quisiera: no recibe el campo `activa`.
   recompensas: RecompensaReverso[];
+  // Mensaje de campaña o de inactividad YA RESUELTO (resolverAviso) — construirReverso no sabe de
+  // fechas, solo dibuja lo que le llega. null = sin aviso vigente, el campo no se emite.
+  avisoTexto: string | null;
 }
 
 // `&` PRIMERO, siempre. Si se reemplazara `<` antes que `&`, el `&` de `&lt;` se volvería a
@@ -107,8 +111,25 @@ function campoLink(key: string, label: string, url: string): CampoReverso {
 
 // Vacío o solo-espacios cuenta como ausente: guardarReverso ya normaliza a null, pero una fila
 // vieja con '' produciría un campo con la etiqueta y el valor en blanco en la tarjeta del cliente.
+//
+// `!= null` (no `!== null`) A PROPÓSITO: descarta null Y undefined. El tipo declara `string | null`
+// porque ningún llamador bien tipado debería pasar undefined — pero un llamador de JS que todavía
+// no conoce un campo nuevo (p. ej. datosPassDeTarjeta.ts con avisoTexto, antes de que ese archivo
+// se actualice) sí puede, y esta función no puede reventar el reverso ENTERO por eso.
 function hayTexto(valor: string | null): valor is string {
-  return valor !== null && valor.trim() !== '';
+  return valor != null && valor.trim() !== '';
+}
+
+// Si el aviso (campaña o inactividad — ver docs/superpowers/specs/2026-07-29-notificaciones-push-design.md)
+// sigue vigente HOY. Se compara como TEXTO, igual que la vigencia de un cupón: "hasta el 29" es
+// el 29 completo en el local, y comparar instantes lo mataría a medianoche UTC.
+export function resolverAviso(
+  texto: string | null,
+  hasta: string | null,
+  hoyIso: string,
+): string | null {
+  if (texto === null || hasta === null) return null;
+  return hasta.slice(0, 10) >= hoyIso.slice(0, 10) ? texto : null;
 }
 
 // Las líneas de "Cómo funciona", en el orden del spec §4: por_visita, por_monto, meta de sellos y
@@ -193,6 +214,22 @@ export function construirReverso(datos: DatosReverso): CampoReverso[] {
     label: 'Información del emisor',
     value: `${EMISOR_CARDLY.nombre}\n${EMISOR_CARDLY.correo}\n${EMISOR_CARDLY.sitio}`,
   });
+
+  // 9. Aviso de campaña o inactividad (migración 0026). Va AL FINAL a propósito, después del pie
+  // fijo: es la sección más nueva y más cambiante, y el orden del resto del reverso no debe
+  // saltar cada vez que un aviso aparece o desaparece. changeMessage con "%@" es lo único que
+  // convierte un cambio de VALOR de este campo en un aviso visible en la pantalla de bloqueo —
+  // ver la sección "La asimetría de plataforma" del spec. El límite de caracteres reales de este
+  // campo (a diferencia de relevantText, que sí está medido) todavía no se verificó contra Wallet
+  // real — hacerlo es parte de la Task 4 de este plan, antes de dar por buena esta sección.
+  if (hayTexto(datos.avisoTexto)) {
+    campos.push({
+      key: 'aviso',
+      label: 'Aviso',
+      value: datos.avisoTexto,
+      changeMessage: '%@',
+    });
+  }
 
   return campos;
 }
