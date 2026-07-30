@@ -136,4 +136,32 @@ describe('datosPassDeTarjeta — reverso', () => {
     // Sin nada que decir, la sección automática no se emite: quedan solo los dos campos fijos.
     expect(resultado!.datos.reverso.map((c) => c.key)).toEqual(['empresa', 'emisor']);
   }, 30_000);
+
+  it('con aviso_texto/aviso_hasta vigente en la tarjeta, el reverso incluye el campo aviso', async () => {
+    const serial = await crearEscenario([]);
+    const { error } = await supabase
+      .from('tarjetas')
+      .update({ aviso_texto: 'Volvé pronto', aviso_hasta: '2099-12-31' })
+      .eq('id', creados!.tarjetaId);
+    if (error) throw new Error(`no se pudo guardar el aviso de prueba: ${error.message}`);
+
+    const resultado = await datosPassDeTarjeta(supabase, serial);
+
+    const aviso = resultado!.datos.reverso.find((c) => c.key === 'aviso');
+    expect(aviso, 'con aviso_hasta en el futuro, el campo aviso debe existir').toBeDefined();
+    expect(aviso!.value).toBe('Volvé pronto');
+  }, 30_000);
+
+  it('con aviso_hasta ya vencido, el reverso NO incluye el campo aviso', async () => {
+    const serial = await crearEscenario([]);
+    const { error } = await supabase
+      .from('tarjetas')
+      .update({ aviso_texto: 'Ya venció', aviso_hasta: '2020-01-01' })
+      .eq('id', creados!.tarjetaId);
+    if (error) throw new Error(`no se pudo guardar el aviso de prueba: ${error.message}`);
+
+    const resultado = await datosPassDeTarjeta(supabase, serial);
+
+    expect(resultado!.datos.reverso.find((c) => c.key === 'aviso')).toBeUndefined();
+  }, 30_000);
 });

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import type { DatosPass } from './generatePass';
-import { construirReverso } from './construirReverso';
+import { construirReverso, resolverAviso } from './construirReverso';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
 
 export async function datosPassDeTarjeta(
@@ -62,6 +62,14 @@ export async function datosPassDeTarjeta(
     console.warn('[apple] no se pudieron leer las recompensas para el reverso:', recompensas.error.message);
   }
 
+  const hoyIso = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date());
+  // UTC acá, no la zona del comercio: a diferencia de una campaña de geopush (que vive en
+  // sucursales y ya resuelve con la zona del comercio en listarUbicacionesGeopush), este aviso es
+  // un campo de LA TARJETA sin zona horaria propia asociada, y el borde de un día de diferencia
+  // en el peor caso es "el aviso se ve un día de más/de menos" — no vale la pena la consulta
+  // extra a comercios.zona_horaria solo para esto. Si en el futuro importa más precisión, seguir
+  // el mismo patrón que listarUbicacionesGeopush.
+
   return {
     authTokenAlmacenado: tarjeta.apple_auth_token,
     datos: {
@@ -98,6 +106,7 @@ export async function datosPassDeTarjeta(
         // simplemente no se emite.
         reglas: reglas.data ?? [],
         recompensas: recompensas.data ?? [],
+        avisoTexto: resolverAviso(tarjeta.aviso_texto, tarjeta.aviso_hasta, hoyIso),
       }),
       ubicaciones,
       webServiceURL: `${baseUrl}/api/apple`,
