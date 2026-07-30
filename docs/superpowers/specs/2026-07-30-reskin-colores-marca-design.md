@@ -32,17 +32,23 @@ nuevo.
 
 ## 3. Valores nuevos, por tema
 
-Todos los pares reusan hex OFICIALES de la paleta de marca — ninguno es inventado. Los alphas de
-`--acento-suave`/`--acento-borde`/`--ring`/`--sombra-acento` **se preservan tal cual** (misma fracción
-que hoy), solo cambia el color base: esas fracciones ya fueron calibradas una vez (comentario de
-`globals.css:135-139`) y no hay motivo para tocarlas de nuevo.
+La mayoría de los pares reusa hex de la paleta oficial de marca (Gray/Lima/Soft/Frosted/Teal/Deep) o
+de `--violeta` (`#514ba8`), que YA es un valor precedente en el repo — `DESIGN.md:199-201` lo documenta
+como "la única excepción calculada": Soft oscurecido para texto/viñetas donde el Soft puro no llega a
+4.5:1, no uno de los seis primarios crudos del kit. Los dos tonos de hover/press (`#3d3880` en Claro,
+`#a9d13a` en Alto contraste) SÍ son nuevos — oscurecimientos calculados para este trabajo, siguiendo el
+mismo criterio que ya usó `--violeta`, no valores del kit ni del repo existente.
+
+Los alphas de `--acento-suave`/`--acento-borde`/`--ring`/`--sombra-acento` **se preservan tal cual**
+(misma fracción que hoy), solo cambia el color base: esas fracciones ya fueron calibradas una vez
+(comentario de `globals.css:135-139`) y no hay motivo para tocarlas de nuevo.
 
 ### Oscuro (`:root`, líneas 47-49, 84-85, 101-102, 115-116)
 
 | Token | Antes | Después |
 |---|---|---|
 | `--acento` | `#ffc495` | `#8f86e0` (Soft) |
-| `--acento-fuerte` | `#ff9d42` | `#514ba8` (Violeta oficial) |
+| `--acento-fuerte` | `#ff9d42` | `#514ba8` (`--violeta`, Soft oscurecido — ver arriba) |
 | `--sobre-acento` | `#42230a` | `#181849` (Deep) |
 | `--acento-suave` | `rgba(255,196,149,.12)` | `rgba(143,134,224,.12)` |
 | `--acento-borde` | `rgba(255,196,149,.4)` | `rgba(143,134,224,.4)` |

@@ -157,6 +157,12 @@ relativas a un `viewBox` fijo por formato (p. ej. `0 0 400 400` para sticker, `0
 mostrador — proporción A5). El "Split" es la única que cambia de orientación entre formatos (franja
 lateral en mostrador, franja superior en sticker) — el resto del layout escala igual.
 
+**El `<svg>` raíz lleva `width`/`height` en milímetros reales** (`width="100mm" height="100mm"` para
+sticker, `width="148mm" height="210mm"` para mostrador), **además** del `viewBox` en unidades de diseño
+de arriba — son dos sistemas de coordenadas independientes en SVG, y esto es lo que le dice al
+rasterizador cuál es el tamaño físico real del documento (ver §5.2, es la mitad de la solución al
+problema de densidad).
+
 ## 5. Exportación
 
 ### 5.1 Tamaños reales
@@ -166,11 +172,29 @@ lateral en mostrador, franja superior en sticker) — el resto del layout escala
 | Sticker | 10×10cm | 1181×1181 | 283×283 |
 | Mostrador | A5 (148×210mm) | 1748×2480 | 419.53×595.28 |
 
-### 5.2 PNG
+### 5.2 PNG — la trampa de la densidad, verificada en el código instalado
 
-`sharp(Buffer.from(svg)).resize(anchoPx, altoPx).png().toBuffer()` — `sharp` rasteriza el SVG y lo
-escala al tamaño de destino en un solo paso (no hace falta fijar `density` a mano). Sin dependencia
-nueva: `sharp` ya está en `package.json:36`.
+⚠️ **`sharp` NO ajusta solo la resolución de rasterizado de un SVG al tamaño de `.resize()`.** Verificado
+en `node_modules/sharp/lib/constructor.js:156`: `density` (DPI para vectores) es una opción de CARGA
+(`sharp(buffer, { density: N })`), con default **72**, y `node_modules/sharp/lib/resize.js` no la toca
+ni la deriva del tamaño pedido. Sin fijarla, un `viewBox="0 0 400 400"` sin unidad física se rasteriza a
+~400×400px a 72dpi, y un `.resize(1181, 1181)` posterior sería un **upscale con pérdida** de un raster
+chico — exactamente el "resolución baja" que §8 dice que hay que evitar, y se descubriría recién al
+imprimir.
+
+La combinación correcta, apoyada en el `width`/`height` físico del §4.4:
+
+```ts
+sharp(Buffer.from(svg), { density: 300 })
+  .resize(anchoPx, altoPx)   // no-op si el density ya dio el tamaño exacto; red de seguridad si el
+                             // redondeo mm→px difiere en 1-2px del valor de la tabla de §5.1
+  .png()
+  .toBuffer()
+```
+
+Con `width="100mm"` (o `148mm`/`210mm`) en el SVG y `density: 300`, sharp rasteriza NATIVAMENTE a
+~1181×1181 (o ~1748×2480) — el `.resize()` deja de ser una ampliación y pasa a ser, como mucho, un
+recorte de redondeo de 1-2px. Sin dependencia nueva: `sharp` ya está en `package.json:36`.
 
 ### 5.3 PDF — `pdf-lib` (dependencia nueva, aprobada por el usuario)
 
@@ -206,6 +230,19 @@ y responde con `Content-Type` (`image/png` o `application/pdf`) y `Content-Dispo
 filename="cartel-{programa.slug}-{formato}.{ext}"`.
 
 ## 6. UI y flujo
+
+**Regla que aplica a TODO acceso de esta sección, sin excepción:** el `[id]` de programa que llega por
+la URL (pantalla del editor, ruta de descarga de §5.4, y la acción de guardado de §6.4) es del
+NAVEGADOR y no se confía en que pertenezca al comercio autenticado. Cada lectura y cada escritura debe
+verificar `.eq('id', programaId).eq('comercio_id', comercioId)` (con el `comercioId` del gate) ANTES de
+usar ese programa — exactamente el patrón que ya siguen `guardarConfiguracionPrograma` y
+`desactivarPrograma` (`lib/comercio/programas.ts:278-284,328-334`) y `accionSubirFotoRecompensa`, que
+verifica la recompensa contra `comercioId` **antes de escribir en Storage**
+(`app/comercio/(protegido)/recompensas/actions.ts:93-99`). Sin este chequeo, un dueño que edite la URL
+a un `programa_id` ajeno (adivinado u observado) podría, gracias al `unique` de `disenos_cartel`,
+guardar un cartel sobre el programa de OTRO comercio — un desfiguramiento persistente entre comercios,
+no una simple lectura indebida. Esto aplica igual al Server Component de §6.3 (que hoy lee
+"programa + comercio" por id) y a la ruta de descarga de §5.4.
 
 ### 6.1 Dónde se edita
 
@@ -247,7 +284,10 @@ servidor para el primer render sin parpadeo, y pasa todo a un Client Component `
 **Al apagar el toggle de personalización, los overrides se BORRAN (se guardan como `null`), no quedan
 ocultos.** Si el dueño vuelve a encenderlo después, los selectores se recargan desde la marca actual
 del comercio, nunca desde un valor viejo escondido — evita el estado fantasma de "¿por qué mi cartel
-tiene un color que no configuré en ningún lado visible?".
+tiene un color que no configuré en ningún lado visible?". Para que el toggle pueda hacer esto sin ida
+y vuelta al servidor, el Server Component le pasa a `EditorCartel` DOS objetos separados: los valores
+ya resueltos (override si existe, si no los de `comercios`) y los valores crudos de `comercios` — el
+toggle simplemente cambia cuál de los dos alimenta los inputs, en el cliente.
 
 ### 6.4 Guardado
 
