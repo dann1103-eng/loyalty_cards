@@ -60,11 +60,11 @@ Contraste `--sobre-acento` sobre `--acento` (texto del botón primario): **5.26:
 AA de 4.5:1 para texto normal. `--acento` como texto plano sobre `--superficie-1` (`#1c1b1b`, uso de
 links/nav activo, p.ej. `globals.css:353,787,1387`): **5.45:1**.
 
-### Claro (`:root[data-tema="claro"]`, líneas 153-155, 178-179)
+### Claro (`:root[data-tema="claro"]`, líneas 153-155, 167-168, 178-179, 186-188)
 
 | Token | Antes | Después |
 |---|---|---|
-| `--acento` | `#a8480a` | `#514ba8` (Violeta oficial) |
+| `--acento` | `#a8480a` | `#514ba8` (`--violeta`, Soft oscurecido — ver arriba) |
 | `--acento-fuerte` | `#c2410c` | `#3d3880` (violeta más oscuro, hover/press) |
 | `--sobre-acento` | `#fff6ee` | `#f5f4fc` |
 | `--acento-suave` | `rgba(168,72,10,.12)` | `rgba(81,75,168,.12)` |
@@ -73,11 +73,11 @@ links/nav activo, p.ej. `globals.css:353,787,1387`): **5.45:1**.
 | `--sombra-acento` | `rgba(194,65,12,.22)` | `rgba(61,56,128,.22)` |
 | `--atmosfera` (1er radial) | `rgba(255,157,66,.16)` | `rgba(81,75,168,.16)` |
 
-Contraste `--sobre-acento` sobre `--acento`: **6.71:1**. `--acento` como texto sobre `--superficie-1`
-(`#ffffff`): **7.19:1**. Ambos con más margen que el mínimo que ya tenía el naranja original (~4.5:1
-según el comentario de `globals.css:125-126`).
+Contraste `--sobre-acento` sobre `--acento`: **6.58:1**. `--acento` como texto sobre `--superficie-1`
+(`#ffffff`): **7.19:1**. El acento original de este tema (`#a8480a`) daba 5.47:1 sobre `#fff6ee` y
+5.84:1 sobre blanco puro — los nuevos valores no parten de un piso más bajo que el que ya tenían.
 
-### Alto contraste (`:root[data-tema="alto-contraste"]`, líneas 222-224, 250-251)
+### Alto contraste (`:root[data-tema="alto-contraste"]`, líneas 222-224, 238, 250-251)
 
 | Token | Antes | Después |
 |---|---|---|
@@ -88,7 +88,7 @@ según el comentario de `globals.css:125-126`).
 | `--acento-borde` | `rgba(255,176,31,.85)` | `rgba(201,236,94,.85)` |
 | `--ring` | `rgba(255,176,31,.6)` | `rgba(201,236,94,.6)` |
 
-`--sombra-acento`/`--atmosfera` ya están en `none` en este tema (`globals.css:239-240,258`) y siguen
+`--sombra-acento`/`--atmosfera` ya están en `none` en este tema (`globals.css:239,258`) y siguen
 así — no hay sombras que recolorear.
 
 Contraste `#000000` sobre `#c9ec5e`: **15.6:1** — muy por encima del `#ffb01f` original (que ya
