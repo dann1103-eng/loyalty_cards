@@ -1444,15 +1444,27 @@ describe('resolverDatosCartel', () => {
   it('sin fila en disenos_cartel, resuelve con los defaults heredados del comercio', async () => {
     const r = await resolverDatosCartel(supabase, comercioId, programaId);
     expect(r).not.toBeNull();
-    expect(r!.nombreComercio).toBe('Café de Prueba');
-    expect(r!.plantilla).toBe('centrado');
-    expect(r!.urlRegistro).toContain('/registro/');
+    expect(r!.datos.nombreComercio).toBe('Café de Prueba');
+    expect(r!.datos.plantilla).toBe('centrado');
+    expect(r!.datos.urlRegistro).toContain('/registro/');
   });
 
   it('logoDataUri es null si el logo no se pudo descargar (best-effort, no revienta)', async () => {
     // 'https://ejemplo.test/logo.webp' no es una URL real: el fetch debe fallar en silencio.
     const r = await resolverDatosCartel(supabase, comercioId, programaId);
-    expect(r!.logoDataUri).toBeNull();
+    expect(r!.datos.logoDataUri).toBeNull();
+  });
+
+  it('programaActivo refleja el estado real del programa', async () => {
+    const activo = await resolverDatosCartel(supabase, comercioId, programaId);
+    expect(activo!.programaActivo).toBe(true);
+
+    await supabase.from('programas_tarjeta').update({ activo: false }).eq('id', programaId);
+    const inactivo = await resolverDatosCartel(supabase, comercioId, programaId);
+    // La pantalla sigue siendo accesible con un programa desactivado (spec §7) — resolverDatosCartel
+    // no lo excluye, solo informa su estado para que la UI muestre el aviso.
+    expect(inactivo).not.toBeNull();
+    expect(inactivo!.programaActivo).toBe(false);
   });
 });
 ```
@@ -1494,6 +1506,15 @@ async function aDataUri(url: string | null): Promise<string | null> {
   }
 }
 
+export interface CartelResuelto {
+  datos: DatosCartel;
+  // Sigue siendo accesible con un programa desactivado (spec §7 — el dueño puede querer archivar el
+  // diseño); esto es solo lo que la UI necesita para mostrar el aviso de que el QR ya no registra
+  // clientes. No forma parte de DatosCartel a propósito: construirCartelSvg no lo necesita para
+  // nada, es puramente informativo para la pantalla.
+  programaActivo: boolean;
+}
+
 // Punto de entrada único para leer todo lo que necesita el cartel de un programa. El chequeo de
 // propiedad vive ACÁ (el filtro .eq('comercio_id', comercioId) sobre programas_tarjeta): si el
 // programaId no es de este comercio, `programa` viene null y la función devuelve null ANTES de leer
@@ -1503,7 +1524,7 @@ export async function resolverDatosCartel(
   supabase: SupabaseClient<Database>,
   comercioId: string,
   programaId: string,
-): Promise<DatosCartel | null> {
+): Promise<CartelResuelto | null> {
   const [{ data: comercio, error: eComercio }, { data: programa, error: ePrograma }, { data: diseno, error: eDiseno }] =
     await Promise.all([
       supabase
@@ -1513,7 +1534,7 @@ export async function resolverDatosCartel(
         .maybeSingle(),
       supabase
         .from('programas_tarjeta')
-        .select('slug, es_principal')
+        .select('slug, es_principal, activo')
         .eq('id', programaId)
         .eq('comercio_id', comercioId)
         .maybeSingle(),
@@ -1548,16 +1569,19 @@ export async function resolverDatosCartel(
   ]);
 
   return {
-    nombreComercio: combinados.nombreComercio,
-    plantilla: combinados.plantilla,
-    colorFondo: combinados.colorFondo,
-    colorTexto: combinados.colorTexto,
-    colorLabel: combinados.colorLabel,
-    logoDataUri,
-    fotoDataUri,
-    textoCta: combinados.textoCta,
-    textoTeaser: combinados.textoTeaser,
-    urlRegistro,
+    datos: {
+      nombreComercio: combinados.nombreComercio,
+      plantilla: combinados.plantilla,
+      colorFondo: combinados.colorFondo,
+      colorTexto: combinados.colorTexto,
+      colorLabel: combinados.colorLabel,
+      logoDataUri,
+      fotoDataUri,
+      textoCta: combinados.textoCta,
+      textoTeaser: combinados.textoTeaser,
+      urlRegistro,
+    },
+    programaActivo: programa.activo,
   };
 }
 ```
@@ -1568,7 +1592,7 @@ export async function resolverDatosCartel(
 npx vitest run lib/comercio/cartel/resolverDatosCartel.test.ts
 ```
 
-Expected: 3 PASS. Si `NEXT_PUBLIC_BASE_URL` no está en `.env.local` de pruebas, la segunda prueba
+Expected: 4 PASS. Si `NEXT_PUBLIC_BASE_URL` no está en `.env.local` de pruebas, la segunda prueba
 fallaría por eso — no por lógica; confirmar que la variable existe antes de investigar más.
 
 - [ ] **Step 5: Typecheck y lint**
@@ -1647,6 +1671,19 @@ describe('rasterizarCartelPng', () => {
     expect(meta.width).toBe(DIMENSIONES_CARTEL.mostrador.px.ancho);
     expect(meta.height).toBe(DIMENSIONES_CARTEL.mostrador.px.alto);
   });
+
+  // Esta prueba es la que realmente detecta la trampa de densidad (ver Step 6): sharp usa
+  // fit:'cover' + withoutEnlargement:false por defecto, así que un .resize(1181,1181) posterior
+  // FUERZA esa salida igual, venga de una fuente nítida o de un raster chico ampliado con pérdida —
+  // las dos pruebas de arriba miden dimensiones DESPUÉS del resize y no distinguirían un cartel
+  // borroso de uno nítido. Esta mide la rasterización NATIVA, sin resize, que es donde el density
+  // realmente cambia el resultado: sin fijarlo, el ancho nativo rondaría los ~283px (72dpi por
+  // defecto sobre el width="100mm" del SVG); con density:300, ronda los 1181px.
+  it('a density:300, la rasterización NATIVA (sin resize) ya está cerca del tamaño final', async () => {
+    const svg = await construirCartelSvg(DATOS, 'sticker');
+    const meta = await sharp(Buffer.from(svg), { density: 300 }).metadata();
+    expect(meta.width).toBeGreaterThan(1000);
+  });
 });
 
 describe('generarCartelPdf', () => {
@@ -1721,16 +1758,46 @@ export async function generarCartelPdf(pngBuffer: Buffer, formato: FormatoCartel
 npx vitest run lib/comercio/cartel/export.test.ts
 ```
 
-Expected: 4 PASS.
+Expected: 5 PASS.
 
 - [ ] **Step 6: Mutation-testing de la trampa de densidad**
 
 Quitar `{ density: 300 }` de `rasterizarCartelPng` (dejar `sharp(Buffer.from(svg))` a secas) y correr
-de nuevo las 2 pruebas de `rasterizarCartelPng`. **Deben fallar** — el PNG resultante NO va a medir
-1181x1181/1748x2480 (va a medir lo que `.resize()` diga sin importar la densidad real de carga, PERO
-la calidad/nitidez no es lo que esta prueba mide — si por casualidad las dimensiones igual dieran
-bien, es una señal de que la prueba necesita reforzarse, no de que la mutación sea inofensiva:
-avisar y no continuar sin resolverlo). Restaurar `{ density: 300 }`.
+de nuevo TODA la suite de `export.test.ts`.
+
+**Las dos primeras pruebas ("mide EXACTAMENTE...") van a seguir en PASS — eso es esperado, no un
+fallo del mutation-testing.** `sharp` usa `fit:'cover'` y `withoutEnlargement:false` por defecto
+(`node_modules/sharp/lib/resize.js`), así que un `.resize(1181,1181)` fuerza esa salida exacta sin
+importar si la fuente era nítida o un raster chico ampliado con pérdida — por diseño, esas dos
+pruebas NO pueden detectar esta mutación, solo miden dimensiones finales, no nitidez.
+
+**La que SÍ debe fallar es la tercera** ("a density:300, la rasterización NATIVA..."): sin
+`density: 300`, `sharp(Buffer.from(svg), { density: 300 })` en la prueba sigue pasando `{density:
+300}` (la prueba construye su propio `sharp(...)` para medir la carga nativa, independiente de la
+implementación) — así que en realidad esta prueba NO depende del código de `rasterizarCartelPng` en
+absoluto. Para que el mutation-testing de esta trampa sea real, la comparación correcta es: correr
+`sharp(Buffer.from(svg)).metadata()` (SIN density, simulando la mutación) y confirmar que ESE ancho
+nativo es sensiblemente menor a 1000px — confirmando que la rasterización sin fijar `density` sí
+cae en baja resolución, que es exactamente lo que `rasterizarCartelPng` evita al fijarlo. Correr esa
+comparación a mano en este paso (no hace falta agregarla como prueba permanente, ya que no ejercita
+código propio — es una verificación puntual de que el supuesto del comentario de `export.ts` es
+cierto):
+
+```bash
+npx tsx -e "
+const sharp = require('sharp');
+const { construirCartelSvg } = require('./lib/comercio/cartel/plantillas');
+construirCartelSvg({ nombreComercio: 'Test', plantilla: 'centrado', colorFondo: '#000', colorTexto: '#fff', colorLabel: '#fff', logoDataUri: null, fotoDataUri: null, textoCta: 'Test', textoTeaser: null, urlRegistro: 'https://x.test' }, 'sticker').then(async (svg) => {
+  const sinDensidad = await sharp(Buffer.from(svg)).metadata();
+  const conDensidad = await sharp(Buffer.from(svg), { density: 300 }).metadata();
+  console.log('sin density:', sinDensidad.width, '— con density:', conDensidad.width);
+});
+"
+```
+
+Expected: el ancho "sin density" ronda los ~283px y el "con density" ronda los ~1181px — confirma que
+la trampa es real y que el fix de `export.ts` la evita. Restaurar `{ density: 300 }` en
+`rasterizarCartelPng` (si se llegó a quitar para esta comprobación).
 
 - [ ] **Step 7: Typecheck y lint**
 
@@ -1981,8 +2048,9 @@ export default async function PaginaCartel({
   // resolverDatosCartel YA verifica que programaId sea del comercio de la sesión (lee
   // programas_tarjeta con .eq('comercio_id', comercioId)) — null significa "no existe o no es tuyo",
   // y las dos se tratan igual: 404, sin distinguir cuál para no filtrar si un id ajeno existe.
-  const datos = await resolverDatosCartel(supabase, comercioId, programaId);
-  if (!datos) notFound();
+  const resuelto = await resolverDatosCartel(supabase, comercioId, programaId);
+  if (!resuelto) notFound();
+  const { datos, programaActivo } = resuelto;
 
   // El comercio también se lee aparte (sin overrides) para que el toggle "usar mi marca" pueda
   // volver a estos valores crudos sin ida y vuelta al servidor (spec §6.3).
@@ -2008,6 +2076,16 @@ export default async function PaginaCartel({
         El cartel para mesa (sticker) o mostrador que tus clientes escanean para sumarse a{' '}
         {datos.nombreComercio}.
       </p>
+
+      {/* No bloqueante — spec §7: el dueño puede querer archivar/reimprimir el diseño de un programa
+          que ya desactivó, así que la pantalla sigue siendo accesible. Solo se le avisa que el QR ya
+          impreso con esa URL no registra clientes. */}
+      {!programaActivo && (
+        <p className="admin-vacio" role="status" style={{ marginBottom: 18 }}>
+          Este programa está desactivado: el QR de este cartel ya no registra clientes nuevos. Podés
+          seguir editando el diseño, pero no imprimás uno nuevo hasta reactivarlo.
+        </p>
+      )}
 
       <EditorCartel
         programaId={programaId}
@@ -2052,7 +2130,7 @@ Crear `app/comercio/(protegido)/programas/[id]/cartel/EditorCartel.tsx`:
 ```tsx
 'use client';
 
-import { useActionState, useMemo, useRef, useState } from 'react';
+import { useActionState, useEffect, useMemo, useRef, useState } from 'react';
 import { construirCartelSvg } from '@/lib/comercio/cartel/plantillas';
 import type { DatosCartel, FormatoCartel, PlantillaCartel } from '@/lib/comercio/cartel/tipos';
 import { PLANTILLAS_CARTEL } from '@/lib/comercio/cartel/tipos';
@@ -2121,8 +2199,10 @@ export default function EditorCartel({
 
   // Vista previa en vivo: la MISMA función que arma el PNG/PDF exportado (construirCartelSvg), sin
   // ida y vuelta al servidor. Es async porque `qrcode` expone una API por promesa (no hace ningún
-  // fetch de red) — el efecto descarta cualquier respuesta que ya no sea la más reciente.
-  useMemo(() => {
+  // fetch de red). DEBE ser useEffect y no useMemo: solo useEffect ejecuta la función de limpieza
+  // que retorna — con useMemo, `vigente` nunca se pondría en false y una respuesta lenta y obsoleta
+  // podría pisar una vista previa más nueva ante cambios rápidos de plantilla/color/formato.
+  useEffect(() => {
     let vigente = true;
     construirCartelSvg(datosVivos, formato).then((svg) => {
       if (vigente) setPreviewSvg(svg);
@@ -2152,17 +2232,31 @@ export default function EditorCartel({
       <div>
         <p className="label">Plantilla</p>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          {PLANTILLAS_CARTEL.map((p) => (
-            <button
-              key={p}
-              type="button"
-              className={p === plantilla ? 'btn-primary' : 'btn-borde'}
-              onClick={() => setPlantilla(p)}
-            >
-              {ETIQUETAS_PLANTILLA[p]}
-            </button>
-          ))}
+          {PLANTILLAS_CARTEL.map((p) => {
+            // "Foto de fondo" sin hero_url produciría un cartel con fondo roto (spec §7) — se
+            // deshabilita en vez de dejar que el dueño la elija y descubra el problema recién al
+            // descargar. plantillaFoto() (Tarea 7) igual cae a un color sólido si esto se salteara,
+            // pero acá se previene ANTES de que el dueño la elija.
+            const deshabilitada = p === 'foto' && !datosResueltos.fotoDataUri;
+            return (
+              <button
+                key={p}
+                type="button"
+                className={p === plantilla ? 'btn-primary' : 'btn-borde'}
+                disabled={deshabilitada}
+                title={deshabilitada ? 'Subí una foto en tu editor de marca para usar esta plantilla.' : undefined}
+                onClick={() => setPlantilla(p)}
+              >
+                {ETIQUETAS_PLANTILLA[p]}
+              </button>
+            );
+          })}
         </div>
+        {!datosResueltos.fotoDataUri && (
+          <p className="admin-fila-slug" style={{ marginTop: 6 }}>
+            "Foto de fondo" necesita una foto subida en tu editor de marca.
+          </p>
+        )}
       </div>
 
       <div>
@@ -2359,10 +2453,14 @@ export async function GET(
   const formato = formatoParam as FormatoCartel;
 
   const supabase = createServiceClient();
-  const datos = await resolverDatosCartel(supabase, comercioId, programaId);
-  if (!datos) {
+  const resuelto = await resolverDatosCartel(supabase, comercioId, programaId);
+  if (!resuelto) {
     return NextResponse.json({ error: 'No encontrado.' }, { status: 404 });
   }
+  // programaActivo no importa para la descarga: si el dueño quiere igual el archivo de un programa
+  // desactivado (para archivo, por ejemplo), la ruta no se lo impide — el aviso de §7 es informativo
+  // en la pantalla del editor (Tarea 12), no un bloqueo de descarga.
+  const { datos } = resuelto;
 
   const svg = await construirCartelSvg(datos, formato);
   const png = await rasterizarCartelPng(svg, formato);
@@ -2517,7 +2615,12 @@ quien dispatchea las tareas, con las herramientas de navegador:
 7. Con dos comercios de prueba distintos: confirmar que el comercio B NO puede ver ni sobrescribir el
    cartel del comercio A editando la URL a mano (`/comercio/programas/<id-del-otro-comercio>/cartel`
    debe dar 404, no el editor del otro comercio).
-8. Capturar una screenshot de la vista previa de al menos 2 plantillas para dejar registro visual.
+8. Con un comercio SIN foto subida en su editor de marca (`hero_url` vacío): confirmar que el botón
+   "Foto de fondo" aparece deshabilitado con su nota, y que no se puede seleccionar.
+9. Desactivar un programa de prueba (desde `/comercio/programas`) y volver a su pantalla de cartel:
+   confirmar que aparece el aviso de "programa desactivado" y que la pantalla sigue siendo usable
+   (no bloquea guardar ni descargar). Reactivarlo después para no dejar datos de prueba inconsistentes.
+10. Capturar una screenshot de la vista previa de al menos 2 plantillas para dejar registro visual.
 
 - [ ] **Step 6: Actualizar la documentación de estado del proyecto**
 
