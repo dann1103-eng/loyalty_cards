@@ -6,10 +6,18 @@ import { walletClient } from './walletClient';
 // lib/comercio/enviarMensajeTarjeta.ts) exige poder hacerlo. Ver la sección "Riesgos y
 // pendientes" del spec.
 //
-// messageType: 'TEXT' — es lo que documenta Google para este endpoint, pero SIN confirmar todavía
-// contra un dispositivo real que dispare notificación (y no solo quede en el historial del pase).
-// Esa confirmación manual está pendiente (ver ESTADO-Y-PLAN-2026-07-28.md, QA de notificaciones
-// push). Si alguien la corre y falla, este es el primer lugar a revisar.
+// messageType: 'TEXT_AND_NOTIFY' y NUNCA 'TEXT'. Es la diferencia entre que el cliente reciba una
+// notificación o que no vea absolutamente nada: 'TEXT' solo escribe el mensaje en la pantalla de
+// detalle del pase, en silencio. Se descubrió con una campaña real que no llegó a ningún teléfono
+// (2026-07-30) — la API la aceptó y devolvió éxito igual, así que NO hay forma de detectar el error
+// desde el código. Documentación: TEXT "renders the message as text on the card details screen";
+// TEXT_AND_NOTIFY "renders the message as text on the card details screen and as an Android
+// notification".
+// [developers.google.com/wallet/reference/rest/v1/Message]
+//
+// Ojo con el cupo: Google permite 3 mensajes con notificación por 24h y responde
+// QuotaExceededException al cuarto (no lo descarta en silencio). El candado que lo respeta vive en
+// lib/comercio/enviarMensajeTarjeta.ts.
 //
 // Best-effort a propósito, mismo criterio que notificarCambioTarjeta: un fallo de Google Wallet
 // nunca debe tumbar el flujo que lo llama.
@@ -22,7 +30,7 @@ export async function enviarMensajeGoogle(
     const client = walletClient();
     await client.loyaltyobject.addmessage({
       resourceId: objectId,
-      requestBody: { message: { header, body, messageType: 'TEXT' } },
+      requestBody: { message: { header, body, messageType: 'TEXT_AND_NOTIFY' } },
     });
     return true;
   } catch (err) {

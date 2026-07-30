@@ -24,7 +24,7 @@ beforeEach(() => {
 });
 
 describe('enviarMensajeGoogle', () => {
-  it('manda el mensaje al objeto indicado con messageType TEXT y devuelve true', async () => {
+  it('manda el mensaje al objeto indicado con messageType TEXT_AND_NOTIFY y devuelve true', async () => {
     const resultado = await enviarMensajeGoogle(
       'issuer-test.tarjeta_x',
       'Cardly SV',
@@ -35,11 +35,17 @@ describe('enviarMensajeGoogle', () => {
     expect(addmessageMock).toHaveBeenCalledOnce();
     const llamada = addmessageMock.mock.calls[0][0];
     expect(llamada.resourceId).toBe('issuer-test.tarjeta_x');
-    // messageType: 'TEXT' es lo que dispara una notificación real en vez de solo quedar en el
-    // historial del pase (ver la nota "IMPORTANTE" de la Task 4) — se afirma explícitamente para
-    // que una mutación que lo cambie o lo quite haga fallar esta prueba.
+    // TEXT_AND_NOTIFY y NO 'TEXT': esta es la línea que decide si el cliente ve una notificación o
+    // no ve absolutamente nada. 'TEXT' solo escribe el mensaje en el detalle del pase, en silencio
+    // — lo confirmó una prueba real de Daniel en su teléfono (2026-07-30), y la documentación de
+    // Google lo dice explícitamente: TEXT "renders the message as text on the card details screen",
+    // TEXT_AND_NOTIFY "...and as an Android notification".
     expect(llamada.requestBody).toEqual({
-      message: { header: 'Cardly SV', body: 'Mensaje de prueba automatizada', messageType: 'TEXT' },
+      message: {
+        header: 'Cardly SV',
+        body: 'Mensaje de prueba automatizada',
+        messageType: 'TEXT_AND_NOTIFY',
+      },
     });
   });
 
