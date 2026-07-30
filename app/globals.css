@@ -3,7 +3,7 @@
    Fuente: docs/design/C1-C7 (Google Stitch) unificado a mano:
    - UN solo blanco (--blanco #F5F5F0) para TODO el texto sobre
      fondo oscuro; jerarquía por opacidad, no por marrones.
-   - UN solo acento (naranja cálido). El cian suelto de C3 se
+   - UN solo acento (violeta de marca). El cian suelto de C3 se
      descartó; el menta queda como secundario de datos/éxito.
    - Bordes en blanco-alpha (nunca marrón #544337 / #a28d7d).
    Tipografía: Outfit (display) + Hanken Grotesk (cuerpo) +
@@ -285,7 +285,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: transparent;
-  /* atmósfera: glow naranja arriba-izquierda + viñeta profunda (por tema; `none` en alto contraste) */
+  /* atmósfera: glow violeta arriba-izquierda + viñeta profunda (por tema; `none` en alto contraste) */
   background-image: var(--atmosfera);
   background-attachment: fixed;
 }
@@ -484,7 +484,7 @@ a {
   cursor: progress;
 }
 
-/* acento naranja (acciones destacadas tipo "Publicar cambios") */
+/* acento violeta (acciones destacadas tipo "Publicar cambios") */
 .btn-acento {
   width: 100%;
   font-family: var(--font-display);
