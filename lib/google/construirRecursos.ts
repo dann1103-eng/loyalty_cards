@@ -63,6 +63,13 @@ export interface TarjetaParaObjeto {
   // propio progreso visual, igual que en Apple. Solo se usa para sellos (ver construirObjeto);
   // en puntos queda sin heroImage propio y se ve el de la clase (foto de fondo del comercio).
   heroImageUrl?: string | null;
+  // Las MISMAS ubicaciones que van en la clase. Google pide explícitamente ponerlas en los dos
+  // lados ("add locations to your classes and objects"), y `LoyaltyObject.merchantLocations` está
+  // documentado como disparador por su cuenta. Hasta el 2026-07-30 solo estaban en la clase y
+  // ningún Android recibía el aviso de cercanía. Requerido a propósito (igual que en
+  // ComercioParaClase): que el compilador obligue a cada llamador a decidir, en vez de que un
+  // callejero nuevo se olvide en silencio — que es exactamente el bug que esto vino a cerrar.
+  ubicaciones: { latitud: number; longitud: number }[];
 }
 
 // El texto ("7 de 10 sellos") queda SIEMPRE como loyaltyPoints, incluso con grilla visual: es lo
@@ -92,6 +99,15 @@ export function construirObjeto(
     loyaltyPoints: loyaltyPointsDe(tarjeta),
     ...(esSellosConMeta(tarjeta) && tarjeta.heroImageUrl
       ? { heroImage: { sourceUri: { uri: tarjeta.heroImageUrl } } }
+      : {}),
+    // Mismo corte de 10 y mismo criterio que la clase: un arreglo vacío es ruido en el objeto de
+    // cada cliente de todos los comercios sin geopush.
+    ...(tarjeta.ubicaciones.length > 0
+      ? {
+          merchantLocations: tarjeta.ubicaciones
+            .slice(0, MAXIMO_UBICACIONES_GOOGLE)
+            .map((u) => ({ latitude: u.latitud, longitude: u.longitud })),
+        }
       : {}),
   };
 }

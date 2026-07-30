@@ -34,14 +34,35 @@ Center](https://help.passkit.com/en/articles/11905171-understanding-push-notific
 
 **Google** sí tiene una API real (`addMessage` sobre `LoyaltyClass`/`LoyaltyObject`), documentada y
 pensada explícitamente para ofertas de retail — pero con un tope técnico duro: **máximo 3 mensajes
-que disparan notificación por pase cada 24 horas**, aplicado por throttling (el cuarto no llega, no
-avisa que no llegó). Fuente: [Google Wallet API — Trigger Push
+que disparan notificación por pase cada 24 horas**. El cuarto devuelve `QuotaExceededException`
+(error de la API, no un descarte silencioso — corregido 2026-07-30). El `messageType` DEBE ser
+`TEXT_AND_NOTIFY`: con `TEXT` la API acepta la llamada y devuelve éxito, pero el mensaje solo se
+escribe en el detalle del pase y **nadie recibe nada** (se descubrió en producción). Fuente: [Google
+Wallet API — Trigger Push
 Notifications](https://developers.google.com/wallet/retail/offers/use-cases/trigger-push-notifications).
 
-**Decisión: aceptar la asimetría.** En Android el cliente recibe una notificación real; en iPhone
-recibe algo más sutil (el mensaje asoma en la pantalla de bloqueo como una actualización de la
-tarjeta). No se baja Google al nivel de Apple para igualar — sería peor experiencia para todos por
-parejo. Se documenta así en el panel del dueño.
+**El texto de la notificación de Android NO es nuestro.** Google lo genera con sus propias
+plantillas: el cliente ve "Mensaje nuevo / Presiona para ver el pase" y el logo del comercio, nunca
+la frase que escribió el dueño. Esa frase queda DETRÁS del tap, en el detalle del pase. No hay
+forma de cambiarlo — se probaron `notifyPreference` en updates, `addmessage` a nivel de clase y
+`textModulesData`, y todas muestran el mismo genérico. La FAQ oficial lo dice sin rodeos:
+*"Developer authored push notifications are not currently supported by Google Wallet."*
+[Fuente](https://developers.google.com/wallet/retail/loyalty-cards/resources/faq). Verificado
+además con una prueba real en un teléfono Android el 2026-07-30.
+
+**Decisión: aceptar la asimetría — pero es la INVERSA de la que decía este spec.** La versión
+anterior de este párrafo afirmaba que Android recibía "una notificación real" y el iPhone "algo más
+sutil". En cuanto a texto visible es exactamente al revés, y la copia que se le muestre al dueño
+tiene que decir la verdad:
+
+| | Sonido / notificación | ¿Se ve el mensaje del dueño? |
+|---|---|---|
+| **Android** | notificación real, con sonido | **No** — texto genérico de Google |
+| **iPhone** | más discreta | **Sí** — su texto en la pantalla de bloqueo (`changeMessage`) |
+
+No se baja Google al nivel de Apple para igualar — sería peor experiencia para todos por parejo. Se
+documenta así en el panel del dueño, y la copia NO debe prometerle al comercio que su mensaje se lee
+en la notificación de Android.
 
 ## Decisiones
 

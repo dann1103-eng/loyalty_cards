@@ -62,6 +62,8 @@ export async function generarLinkGuardar(
     puntosActuales: tarjeta.puntos_actuales,
     tipoTarjeta: tarjeta.comercios.tipo_tarjeta,
     selloMeta: tarjeta.comercios.sello_meta,
+    // Las mismas del bloque de arriba: Google pide las ubicaciones en la clase Y en el objeto.
+    ubicaciones,
     heroImageUrl: urlHeroTarjeta(
       tarjetaId,
       versionHero({

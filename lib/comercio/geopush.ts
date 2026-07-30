@@ -4,12 +4,20 @@ import type { Database } from '../supabase/types';
 // Geolocalización por sucursal (migración 0016). Las plataformas resuelven ELLAS la notificación de
 // cercanía a partir de ubicaciones grabadas dentro del pase: acá solo cargamos y mantenemos el dato.
 //
-// Asimetría verificada contra la documentación de ambas (2026-07-28), y conviene tenerla presente al
-// leer este módulo:
-//   - iPhone: la tarjeta se sugiere en la pantalla de bloqueo con NUESTRO texto, radio ~100 m,
-//     MÁXIMO 10 UBICACIONES POR PASE, sin sonido.
-//   - Android: notificación real con sonido, radio ~150 m, tope de 4 por usuario por día, pero el
-//     texto lo pone Google y `mensaje_cercania` se ignora.
+// Asimetría entre las dos plataformas, revisada contra la documentación oficial el 2026-07-30:
+//   - iPhone: la tarjeta se sugiere en la pantalla de bloqueo con NUESTRO texto (`relevantText`),
+//     radio ~100 m, MÁXIMO 10 UBICACIONES POR PASE, sin sonido.
+//   - Android: notificación real con sonido, pero el texto lo pone Google y `mensaje_cercania` se
+//     ignora. Google NO publica ni el radio ni el tiempo de permanencia ("Google decides how close
+//     a user needs to be and how long they need to stay in the area"), y tampoco publica un tope
+//     diario para las notificaciones de cercanía.
+//
+// CORRECCIÓN (2026-07-30): este comentario afirmaba "radio ~150 m, tope de 4 por usuario por día"
+// como verificado contra la documentación. NINGUNO de esos dos números aparece en documento alguno
+// de Google — venían de un blog de terceros que ni siquiera cita fuente. No construyas lógica de
+// throttling sobre ellos. Los topes de 3/24h que SÍ están documentados son de otros mecanismos
+// (addMessage y notifyPreference), no del geopush.
+// [developers.google.com/wallet/retail/loyalty-cards/use-cases/trigger-push-notifications]
 
 // Límite duro de PassKit. Apple no rechaza un pase con más: ignora de la 11 en adelante EN
 // SILENCIO. Por eso el dueño elige explícitamente cuáles participan.

@@ -50,10 +50,13 @@ export async function enviarMensajeTarjeta(
     });
   }
 
-  // 3. Google: si no tiene objeto sincronizado, no hay nada que hacer.
+  // 3. Google: si no tiene objeto sincronizado, no hay nada que hacer. El nombre del comercio viaja
+  // como header del mensaje: en Android el texto de la notificación lo pone Google, pero el
+  // header/body sí se leen en el detalle del pase al tocarla, y ahí el cliente tiene que ver la
+  // marca de SU comercio — no la nuestra ("Tu marca, no la nuestra").
   const { data: tarjeta } = await supabase
     .from('tarjetas')
-    .select('google_object_id')
+    .select('google_object_id, comercios(nombre)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
@@ -70,7 +73,13 @@ export async function enviarMensajeTarjeta(
       .gte('enviada_en', hace24h);
 
     if ((count ?? 0) < 3) {
-      const exito = await enviarMensajeGoogle(tarjeta.google_object_id, 'Cardly SV', mensaje);
+      // Fallback a 'Cardly SV' solo si el join no trajo nombre (no debería pasar: comercio_id es
+      // NOT NULL). Vale más un header genérico que un mensaje sin mandar.
+      const exito = await enviarMensajeGoogle(
+        tarjeta.google_object_id,
+        tarjeta.comercios?.nombre ?? 'Cardly SV',
+        mensaje,
+      );
       if (exito) {
         enviadoGoogle = true;
         await supabase.from('notificaciones_enviadas').insert({

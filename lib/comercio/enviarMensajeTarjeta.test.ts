@@ -110,6 +110,25 @@ describe('enviarMensajeTarjeta', () => {
     expect(enviarMensajeGoogleMock).not.toHaveBeenCalled();
   });
 
+  it('el header del mensaje es el nombre del COMERCIO, no "Cardly SV"', async () => {
+    // En Android el texto de la notificación lo pone Google, pero el header/body sí se ven en el
+    // detalle del pase al tocarla. Ahí el cliente tiene que leer el nombre de SU comercio: mandar
+    // "Cardly SV" contradice el posicionamiento del producto ("Tu marca, no la nuestra") y le mete
+    // a un cliente de la farmacia el nombre de un proveedor que no conoce.
+    const comercioId = await entorno.crearComercio({ nombre: 'Farmacias ABC' });
+    const { id: tarjetaId } = await entorno.crearTarjeta(comercioId);
+    tarjetasCreadas.push(tarjetaId);
+    await supabase.from('tarjetas').update({ google_object_id: 'issuer.obj_header' }).eq('id', tarjetaId);
+
+    await enviarMensajeTarjeta(supabase, tarjetaId, 'Promo del mes', '2026-12-31', 'campana');
+
+    expect(enviarMensajeGoogleMock).toHaveBeenCalledWith(
+      'issuer.obj_header',
+      'Farmacias ABC',
+      'Promo del mes',
+    );
+  });
+
   it('el filtro del candado es por canal=google: 3 notificaciones canal=apple NO cuentan', async () => {
     const comercioId = await entorno.crearComercio();
     const { id: tarjetaId } = await entorno.crearTarjeta(comercioId);

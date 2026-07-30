@@ -39,7 +39,7 @@ describe('construirClase', () => {
 describe('construirObjeto', () => {
   it('tarjeta de puntos: loyaltyPoints usa balance.int con el saldo actual', () => {
     const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
-      qrToken: 'tok-1', puntosActuales: 42, tipoTarjeta: 'puntos', selloMeta: null,
+      qrToken: 'tok-1', puntosActuales: 42, tipoTarjeta: 'puntos', selloMeta: null, ubicaciones: [],
     });
     expect(obj.id).toBe('123.tarjeta_xyz');
     expect(obj.classId).toBe('123.comercio_abc');
@@ -50,21 +50,21 @@ describe('construirObjeto', () => {
 
   it('tarjeta de sellos: loyaltyPoints usa balance.string con "N de M sellos"', () => {
     const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
-      qrToken: 'tok-2', puntosActuales: 3, tipoTarjeta: 'sellos', selloMeta: 8,
+      qrToken: 'tok-2', puntosActuales: 3, tipoTarjeta: 'sellos', selloMeta: 8, ubicaciones: [],
     });
     expect(obj.loyaltyPoints).toEqual({ label: 'Sellos', balance: { string: '3 de 8 sellos' } });
   });
 
   it('sellos sin meta configurada (selloMeta null) cae al formato de puntos, no revienta', () => {
     const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
-      qrToken: 'tok-3', puntosActuales: 5, tipoTarjeta: 'sellos', selloMeta: null,
+      qrToken: 'tok-3', puntosActuales: 5, tipoTarjeta: 'sellos', selloMeta: null, ubicaciones: [],
     });
     expect(obj.loyaltyPoints).toEqual({ label: 'Puntos', balance: { int: 5 } });
   });
 
   it('sellos con meta y con heroImageUrl: incluye heroImage a nivel de objeto (grilla por cliente)', () => {
     const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
-      qrToken: 'tok-4', puntosActuales: 3, tipoTarjeta: 'sellos', selloMeta: 8,
+      qrToken: 'tok-4', puntosActuales: 3, tipoTarjeta: 'sellos', selloMeta: 8, ubicaciones: [],
       heroImageUrl: 'https://ejemplo.com/api/tarjetas/xyz/hero.png',
     });
     expect(obj.heroImage).toEqual({ sourceUri: { uri: 'https://ejemplo.com/api/tarjetas/xyz/hero.png' } });
@@ -73,13 +73,14 @@ describe('construirObjeto', () => {
   it('sellos sin heroImageUrl (ej. NEXT_PUBLIC_BASE_URL ausente): omite heroImage, no manda uri vacía', () => {
     const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
       qrToken: 'tok-5', puntosActuales: 3, tipoTarjeta: 'sellos', selloMeta: 8, heroImageUrl: null,
+      ubicaciones: [],
     });
     expect(obj.heroImage).toBeUndefined();
   });
 
   it('puntos (no sellos): NUNCA incluye heroImage propio aunque venga heroImageUrl — se ve el de la clase', () => {
     const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
-      qrToken: 'tok-6', puntosActuales: 40, tipoTarjeta: 'puntos', selloMeta: null,
+      qrToken: 'tok-6', puntosActuales: 40, tipoTarjeta: 'puntos', selloMeta: null, ubicaciones: [],
       heroImageUrl: 'https://ejemplo.com/api/tarjetas/xyz/hero.png',
     });
     expect(obj.heroImage).toBeUndefined();
@@ -127,5 +128,37 @@ describe('construirClase — geopush', () => {
       ubicaciones: [{ latitud: 13.6989, longitud: -89.1914 }],
     });
     expect(Object.keys(clase.merchantLocations![0]).sort()).toEqual(['latitude', 'longitude']);
+  });
+});
+
+// Las ubicaciones van en la CLASE **y** en el OBJETO. La documentación de Google es imperativa al
+// respecto ("you need to add locations to your classes and objects... up to 10 per class and 10 per
+// object") y `LoyaltyObject.merchantLocations` está documentado como disparador por su cuenta, igual
+// que el de la clase. Hasta el 2026-07-30 solo las poníamos en la clase — el geopush no llegaba a
+// ningún Android y este era el único hueco del lado del servidor.
+// [developers.google.com/wallet/retail/loyalty-cards/use-cases/trigger-push-notifications]
+describe('construirObjeto — geopush', () => {
+  const base = { qrToken: 'tok-geo', puntosActuales: 5, tipoTarjeta: 'puntos', selloMeta: null };
+
+  it('sin ubicaciones NO manda merchantLocations', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', { ...base, ubicaciones: [] });
+    expect(obj.merchantLocations).toBeUndefined();
+  });
+
+  it('manda merchantLocations en el OBJETO, no solo en la clase', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      ...base,
+      ubicaciones: [{ latitud: 13.984415, longitud: -89.547671 }],
+    });
+    expect(obj.merchantLocations).toEqual([{ latitude: 13.984415, longitude: -89.547671 }]);
+    // `locations` (LatLongPoint) está deprecado también a nivel de objeto y la propia API avisa que
+    // ya no dispara notificaciones. Mandar los dos es pedir problemas.
+    expect(obj.locations).toBeUndefined();
+  });
+
+  it('corta en 10 ubicaciones, igual que la clase', () => {
+    const doce = Array.from({ length: 12 }, (_, i) => ({ latitud: 13.6 + i / 1000, longitud: -89.1 }));
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', { ...base, ubicaciones: doce });
+    expect(obj.merchantLocations).toHaveLength(10);
   });
 });

@@ -4,6 +4,7 @@ import { walletClient, issuerId } from './walletClient';
 import { idObjetoGoogle } from './ids';
 import { construirObjeto } from './construirRecursos';
 import { urlHeroTarjeta, versionHero } from './heroUrl';
+import { listarUbicacionesGeopush } from '../comercio/geopush';
 
 export type ResultadoSyncObjeto = { ok: true; objectId: string } | { ok: false; error: string };
 
@@ -16,7 +17,7 @@ export async function syncObjetoTarjeta(
 ): Promise<ResultadoSyncObjeto> {
   const { data: tarjeta, error } = await supabase
     .from('tarjetas')
-    .select('qr_token, puntos_actuales, google_object_id, comercios(google_class_id, tipo_tarjeta, sello_meta, color_fondo, color_label, sello_icono_url, hero_url, strip_url, difuminado_franja)')
+    .select('qr_token, puntos_actuales, google_object_id, comercio_id, comercios(google_class_id, tipo_tarjeta, sello_meta, color_fondo, color_label, sello_icono_url, hero_url, strip_url, difuminado_franja)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
@@ -30,11 +31,16 @@ export async function syncObjetoTarjeta(
 
   try {
     const objectId = tarjeta.google_object_id ?? idObjetoGoogle(issuerId(), tarjetaId);
+    // Google pide las ubicaciones en la clase Y en el objeto (ver construirRecursos.ts). Es una
+    // consulta extra en cada sync, igual que la que ya hace syncClaseComercio, y devuelve [] ante
+    // un error: un fallo acá deja el objeto sin geopush, no sin objeto.
+    const ubicaciones = await listarUbicacionesGeopush(supabase, tarjeta.comercio_id);
     const cuerpo = construirObjeto(objectId, tarjeta.comercios.google_class_id, {
       qrToken: tarjeta.qr_token,
       puntosActuales: tarjeta.puntos_actuales,
       tipoTarjeta: tarjeta.comercios.tipo_tarjeta,
       selloMeta: tarjeta.comercios.sello_meta,
+      ubicaciones,
       heroImageUrl: urlHeroTarjeta(
         tarjetaId,
         versionHero({
