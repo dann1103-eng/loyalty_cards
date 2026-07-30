@@ -15,7 +15,14 @@ import type { Database } from '../../lib/supabase/types';
 
 export interface EntornoComercio {
   crearComercio(campos?: Partial<Database['public']['Tables']['comercios']['Insert']>): Promise<string>;
-  crearTarjeta(comercioId: string, puntos?: number): Promise<{ id: string; qrToken: string }>;
+  // `opciones` cubre los casos que antes obligaban a un insert directo (y por eso se escapaban de
+  // limpiar()): una tarjeta en un programa que no es el principal, y una tarjeta con created_at
+  // viejo para las pruebas de inactividad.
+  crearTarjeta(
+    comercioId: string,
+    puntos?: number,
+    opciones?: { programaId?: string; createdAt?: string },
+  ): Promise<{ id: string; qrToken: string }>;
   crearSucursal(comercioId: string, activa?: boolean): Promise<string>;
   crearCajero(comercioId: string): Promise<string>;
   crearRecompensa(comercioId: string, costo: number): Promise<string>;
@@ -91,7 +98,7 @@ export function crearEntorno(supabase: SupabaseClient<Database>): EntornoComerci
       return requerirProgramaPrincipal(comercioId);
     },
 
-    async crearTarjeta(comercioId, puntos = 0) {
+    async crearTarjeta(comercioId, puntos = 0, opciones = {}) {
       // El teléfono es UNIQUE global (0001): se arma con el reloj + azar para que dos pruebas en
       // paralelo no choquen. Formato canónico +503… como exige normalizarTelefono.
       const telefono = `+503${String(Date.now()).slice(-8)}${Math.floor(Math.random() * 10000)
@@ -110,9 +117,17 @@ export function crearEntorno(supabase: SupabaseClient<Database>): EntornoComerci
         .insert({
           cliente_id: cliente.id,
           comercio_id: comercioId,
-          programa_id: requerirProgramaPrincipal(comercioId),
+          // programaId explícito para las pruebas con más de un programa (un cupón junto al
+          // principal, p. ej.); sin él, el principal, que es lo que quiere la mayoría.
+          programa_id: opciones.programaId ?? requerirProgramaPrincipal(comercioId),
           puntos_actuales: puntos,
           qr_token: `test-tok-${sufijoUnico()}`,
+          // createdAt existe para simular una tarjeta VIEJA (aviso de inactividad). Antes de que
+          // este parámetro existiera, esas pruebas hacían el insert a mano y la tarjeta quedaba
+          // FUERA de los arreglos de limpiar() — 4 comercios huérfanos por corrida, en la base
+          // real. Si necesitás un campo que no está acá, agregalo a este helper; no vuelvas al
+          // insert directo.
+          ...(opciones.createdAt ? { created_at: opciones.createdAt } : {}),
         })
         .select('id, qr_token')
         .single();
@@ -176,7 +191,9 @@ export function crearEntorno(supabase: SupabaseClient<Database>): EntornoComerci
           | 'clientes'
           | 'comercios'
           | 'recompensas'
-          | 'programas_tarjeta',
+          | 'programas_tarjeta'
+          | 'notificaciones_enviadas'
+          | 'difusiones',
         columna: string,
         ids: string[],
       ) => {
@@ -187,17 +204,56 @@ export function crearEntorno(supabase: SupabaseClient<Database>): EntornoComerci
 
       // Ledger primero: transacciones_puntos y canjes apuntan a tarjetas, sucursales y
       // usuarios_comercio. Sin esto, borrar un cajero que ya operó lanza 23503.
-      await borrar('transacciones_puntos', 'tarjeta_id', tarjetas);
-      await borrar('canjes', 'tarjeta_id', tarjetas);
-      await borrar('usuarios_comercio', 'id', usuarios);
-      await borrar('sucursales', 'id', sucursales);
-      await borrar('recompensas', 'id', recompensas);
+      // notificaciones_enviadas y difusiones (migración 0026) NO tienen ON DELETE CASCADE, y van
+      // PRIMERO por eso: notificaciones_enviadas apunta a tarjetas Y a difusiones, así que ese es
+      // el orden entre las dos. difusiones apunta además a comercios, programas_tarjeta y
+      // usuarios_comercio — por eso va antes que las tres.
+      //
+      // Sin esto el borrado falla en cascada y en SILENCIO (borrar() solo hace console.error): no
+      // se puede borrar la tarjeta → no se puede borrar el comercio → queda basura permanente en
+      // la base REAL. No es teórico: el 2026-07-30 había 519 "Comercio Prueba" huérfanos, y 47 de
+      // ellos con aviso_inactividad_activo=true. procesarAvisosInactividad los recorría todos e
+      // intentaba mandarles mensajes, y avisoInactividad.test.ts pasó de verde a 6 pruebas con
+      // timeout de 20 s sin que nadie hubiera tocado esa lógica. El fallo se autoamplificaba:
+      // cada corrida sumaba huérfanos y hacía más lenta la siguiente.
+      // Todo lo que cuelga de un comercio se borra POR comercio_id, no por los ids que este
+      // fixture fue rastreando. La diferencia importa: una prueba puede crear un hijo por su
+      // cuenta —p. ej. un segundo programa con crearPrograma(), que es una función de producción y
+      // no sabe nada de este fixture— y ese hijo NO está en ningún arreglo. Borrando por id, esa
+      // fila sobrevive, bloquea el borrado del comercio, y como borrar() solo hace console.error
+      // el fallo es SILENCIOSO: queda basura permanente en la base REAL.
+      //
+      // No es teórico. El 2026-07-30: 519 comercios huérfanos, 47 con aviso_inactividad_activo=true.
+      // procesarAvisosInactividad los recorría todos e intentaba mandarles mensajes, y
+      // avisoInactividad.test.ts pasó de verde a 6 pruebas con timeout de 20 s sin que nadie
+      // tocara esa lógica. Se autoamplificaba: cada corrida sumaba huérfanos y frenaba la próxima.
+      const { data: filasTarjetas } = await supabase
+        .from('tarjetas')
+        .select('id, cliente_id')
+        .in('comercio_id', comercios);
+      const idsTarjetas = [...new Set([...tarjetas, ...(filasTarjetas ?? []).map((t) => t.id)])];
+      const idsClientes = [...new Set([...clientes, ...(filasTarjetas ?? []).map((t) => t.cliente_id)])];
+
+      // notificaciones_enviadas primero de todo: apunta a tarjetas Y a difusiones (migración 0026,
+      // ninguna con ON DELETE CASCADE). difusiones después, que apunta a comercios,
+      // programas_tarjeta y usuarios_comercio — por eso va antes que las tres.
+      await borrar('notificaciones_enviadas', 'tarjeta_id', idsTarjetas);
+      await borrar('difusiones', 'comercio_id', comercios);
+      await borrar('transacciones_puntos', 'tarjeta_id', idsTarjetas);
+      await borrar('canjes', 'tarjeta_id', idsTarjetas);
+      await borrar('usuarios_comercio', 'comercio_id', comercios);
+      await borrar('sucursales', 'comercio_id', comercios);
+      await borrar('recompensas', 'comercio_id', comercios);
       // tarjetas ANTES que programas_tarjeta (tarjetas.programa_id la referencia); programas_tarjeta
       // ANTES que comercios (programas_tarjeta.comercio_id lo referencia). clientes no se relaciona
       // con ninguna de las dos, así que su posición entre medio no importa.
-      await borrar('tarjetas', 'id', tarjetas);
+      // idsTarjetas ya es la UNIÓN (rastreadas + las del comercio), así que cubre las dos vías.
+      await borrar('tarjetas', 'id', idsTarjetas);
+      // Doble pasada para programas: por comercio_id caen los que creó la prueba por su cuenta
+      // (crearPrograma), y por id los que rastreó el fixture aunque su comercio ya no esté.
+      await borrar('programas_tarjeta', 'comercio_id', comercios);
       await borrar('programas_tarjeta', 'id', programas);
-      await borrar('clientes', 'id', clientes);
+      await borrar('clientes', 'id', idsClientes);
       await borrar('comercios', 'id', comercios);
 
       comercios.length = 0;

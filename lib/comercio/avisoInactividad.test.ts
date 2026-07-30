@@ -59,11 +59,10 @@ describe('procesarAvisosInactividad', () => {
     if (!cuponPrograma.ok) return;
 
     const { id: tarjetaActiva } = await entorno.crearTarjeta(comercioId);
-    const { data: cliente } = await supabase.from('clientes').insert({ nombre: 'Cliente Doble', telefono: `+503-inact-${Date.now()}` }).select('id').single();
-    const { data: tarjetaInactiva } = await supabase
-      .from('tarjetas')
-      .insert({ cliente_id: cliente!.id, comercio_id: comercioId, programa_id: cuponPrograma.id, created_at: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString() })
-      .select('id').single();
+    const tarjetaInactiva = await entorno.crearTarjeta(comercioId, 0, {
+      programaId: cuponPrograma.id,
+      createdAt: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString(),
+    });
     // Actividad reciente en la tarjeta "activa" — un acreditar de verdad, no un insert a mano, para
     // que quede una fila de transacciones_puntos con created_at de HOY (mismo helper que
     // acreditar.test.ts/historial.test.ts usan con este mismo fixture).
@@ -72,12 +71,12 @@ describe('procesarAvisosInactividad', () => {
 
     const resumen = await procesarAvisosInactividad(supabase);
 
-    expect(resumen.avisadas).toContain(tarjetaInactiva!.id);
+    expect(resumen.avisadas).toContain(tarjetaInactiva.id);
     expect(resumen.avisadas).not.toContain(tarjetaActiva);
 
     // vigenteHasta es un valor fijo del sistema (DURACION_AVISO_INACTIVIDAD_DIAS), no una perilla
     // más — confirmá que lo que quedó grabado en la tarjeta es HOY + esos días, no un valor mágico.
-    const { data: filaAviso } = await supabase.from('tarjetas').select('aviso_hasta').eq('id', tarjetaInactiva!.id).single();
+    const { data: filaAviso } = await supabase.from('tarjetas').select('aviso_hasta').eq('id', tarjetaInactiva.id).single();
     const esperado = new Date(Date.now() + DURACION_AVISO_INACTIVIDAD_DIAS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     expect(filaAviso!.aviso_hasta).toBe(esperado);
   });
@@ -85,16 +84,13 @@ describe('procesarAvisosInactividad', () => {
   it('una tarjeta SIN ninguna fila de ledger cuenta created_at como su última actividad', async () => {
     const comercioId = await entorno.crearComercio();
     await guardarConfiguracionAvisoInactividad(supabase, comercioId, { activo: true, dias: 30, mensaje: 'Volvé' });
-    const { data: cliente } = await supabase.from('clientes').insert({ nombre: 'Nunca Volvió', telefono: `+503-inact2-${Date.now()}` }).select('id').single();
-    const principalId = entorno.obtenerProgramaPrincipal(comercioId);
-    const { data: tarjeta } = await supabase
-      .from('tarjetas')
-      .insert({ cliente_id: cliente!.id, comercio_id: comercioId, programa_id: principalId, created_at: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString() })
-      .select('id').single();
+    const tarjeta = await entorno.crearTarjeta(comercioId, 0, {
+      createdAt: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString(),
+    });
 
     const resumen = await procesarAvisosInactividad(supabase);
 
-    expect(resumen.avisadas).toContain(tarjeta!.id);
+    expect(resumen.avisadas).toContain(tarjeta.id);
   });
 
   it('una tarjeta SIN ninguna fila de ledger y created_at RECIENTE no se avisa', async () => {
@@ -122,39 +118,39 @@ describe('procesarAvisosInactividad', () => {
     });
     expect(cuponPrograma.ok).toBe(true);
     if (!cuponPrograma.ok) return;
-    const { data: cliente } = await supabase.from('clientes').insert({ nombre: 'Ya Usó Su Cupón', telefono: `+503-inact3-${Date.now()}` }).select('id').single();
     const hace40dias = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
     // created_at TAMBIÉN vencido (no solo usado_en): sin esto, la tarjeta ya queda afuera por el
     // umbral de inactividad (created_at por default es HOY) y la prueba pasaría igual con o sin
     // la exclusión de cupón usado — no discriminaría la mutación del Step 6.
-    const { data: tarjeta } = await supabase
-      .from('tarjetas')
-      .insert({ cliente_id: cliente!.id, comercio_id: comercioId, programa_id: cuponPrograma.id, usado_en: hace40dias, created_at: hace40dias })
-      .select('id').single();
+    const tarjeta = await entorno.crearTarjeta(comercioId, 0, {
+      programaId: cuponPrograma.id,
+      createdAt: hace40dias,
+    });
+    // usado_en no es parte del helper (lo necesita solo esta prueba): se aplica por update, con la
+    // tarjeta YA rastreada para la limpieza.
+    await supabase.from('tarjetas').update({ usado_en: hace40dias }).eq('id', tarjeta.id);
 
     const resumen = await procesarAvisosInactividad(supabase);
 
-    expect(resumen.avisadas).not.toContain(tarjeta!.id);
+    expect(resumen.avisadas).not.toContain(tarjeta.id);
   });
 
   it('no re-avisa la misma tarjeta si no hubo actividad nueva desde el último aviso', async () => {
     const comercioId = await entorno.crearComercio();
     await guardarConfiguracionAvisoInactividad(supabase, comercioId, { activo: true, dias: 30, mensaje: 'Volvé' });
-    const { data: cliente } = await supabase.from('clientes').insert({ nombre: 'Ya Avisado', telefono: `+503-inact4-${Date.now()}` }).select('id').single();
-    const principalId = entorno.obtenerProgramaPrincipal(comercioId);
     const hace40dias = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
-    const { data: tarjeta } = await supabase
+    const tarjeta = await entorno.crearTarjeta(comercioId, 0, {
+      createdAt: hace40dias.toISOString(),
+    });
+    // "ya se avisó HOY": va por update para que la tarjeta quede rastreada por el fixture.
+    await supabase
       .from('tarjetas')
-      .insert({
-        cliente_id: cliente!.id, comercio_id: comercioId, programa_id: principalId,
-        created_at: hace40dias.toISOString(),
-        aviso_inactividad_enviado_en: new Date().toISOString(), // ya se avisó HOY
-      })
-      .select('id').single();
+      .update({ aviso_inactividad_enviado_en: new Date().toISOString() })
+      .eq('id', tarjeta.id);
 
     const resumen = await procesarAvisosInactividad(supabase);
 
-    expect(resumen.avisadas).not.toContain(tarjeta!.id);
+    expect(resumen.avisadas).not.toContain(tarjeta.id);
   });
 
   it('sin comercios con aviso_inactividad_activo, no hace nada', async () => {
