@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import QRCode from 'qrcode';
 import { verifyComercioAcceso } from '@/lib/comercio/verifyComercioAcceso';
+import { urlRegistroPrograma } from '@/lib/comercio/urlRegistroPrograma';
 import { createServiceClient } from '@/lib/supabase/server';
 import { TIPOS_TARJETA } from '@/lib/comercios/guardarComercio';
 import { reporteSucursales } from '@/lib/reportes/reportes';
@@ -68,8 +69,9 @@ export default async function PaginaPanel() {
   const esSellos = comercio?.tipo_tarjeta === 'sellos';
 
   // QR de registro: los clientes lo escanean en el local y crean su tarjeta.
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '');
-  const urlRegistro = comercio?.slug && baseUrl ? `${baseUrl}/registro/${comercio.slug}` : null;
+  const urlRegistro = comercio?.slug
+    ? urlRegistroPrograma(process.env.NEXT_PUBLIC_BASE_URL, comercio.slug, 'principal', true)
+    : null;
   const qrRegistro = urlRegistro
     ? await QRCode.toDataURL(urlRegistro, { width: 380, margin: 1, color: { dark: '#0e0e0e', light: '#ffffff' } })
     : null;

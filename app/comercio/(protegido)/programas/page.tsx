@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { listarProgramas, MAXIMO_PROGRAMAS_ACTIVOS } from '@/lib/comercio/programas';
+import { urlRegistroPrograma } from '@/lib/comercio/urlRegistroPrograma';
 import { tipoOPuntos } from '@/lib/tarjetas/tipos';
 import AvisoComercioActivo from '../AvisoComercioActivo';
 import FormularioNuevoPrograma from './FormularioNuevoPrograma';
@@ -23,12 +24,11 @@ export default async function PaginaProgramas() {
   // QR de cada programa activo. Uno desactivado no lleva QR: resolverProgramaPorSlug exige
   // activo=true, así que registrar un cliente con ese código ya no funciona — mostrarlo invitaría
   // a escanear algo roto.
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '');
   const filas = await Promise.all(
     (programas ?? []).map(async (p) => {
       const urlRegistro =
-        comercio?.slug && baseUrl && p.activo
-          ? `${baseUrl}/registro/${comercio.slug}${p.esPrincipal ? '' : `/${p.slug}`}`
+        comercio?.slug && p.activo
+          ? urlRegistroPrograma(process.env.NEXT_PUBLIC_BASE_URL, comercio.slug, p.slug, p.esPrincipal)
           : null;
       const qr = urlRegistro
         ? await QRCode.toDataURL(urlRegistro, { width: 220, margin: 1, color: { dark: '#0e0e0e', light: '#ffffff' } })
