@@ -15,6 +15,7 @@
 //   - supabase/migrations/0012_sucursal_principal.sql (sucursales.es_principal + índice único parcial)
 //   - supabase/migrations/0013_reverso_tarjeta.sql (columnas del reverso del pass en comercios)
 //   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
+//   - supabase/migrations/0028_disenos_cartel.sql (tabla disenos_cartel: cartel/QR imprimible por programa)
 //   - supabase/migrations/0029_reverso_por_programa.sql (reverso por programa en programas_tarjeta)
 //   - supabase/migrations/0027_branding_por_programa.sql (branding por programa en programas_tarjeta)
 //   - supabase/migrations/0026_notificaciones_push.sql (tablas difusiones y notificaciones_enviadas; tarjetas.aviso_texto/aviso_hasta/aviso_inactividad_enviado_en; comercios.aviso_inactividad_activo/dias/mensaje)
@@ -1058,6 +1059,70 @@ export type Database = {
             columns: ['creada_por'];
             isOneToOne: false;
             referencedRelation: 'usuarios_comercio';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      // Cartel/QR imprimible por programa (migración 0028). La AUSENCIA de fila significa "sin
+      // personalizar": los defaults se calculan en memoria, no hay backfill.
+      disenos_cartel: {
+        Row: {
+          id: string;
+          // UNIQUE: un solo diseño por programa.
+          programa_id: string;
+          comercio_id: string;
+          plantilla: string;
+          // null = heredá del branding efectivo del programa (que a su vez hereda del comercio).
+          color_fondo: string | null;
+          color_texto: string | null;
+          color_label: string | null;
+          logo_url: string | null;
+          texto_cta: string;
+          texto_teaser: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          programa_id: string;
+          comercio_id: string;
+          plantilla?: string;
+          color_fondo?: string | null;
+          color_texto?: string | null;
+          color_label?: string | null;
+          logo_url?: string | null;
+          texto_cta?: string;
+          texto_teaser?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          programa_id?: string;
+          comercio_id?: string;
+          plantilla?: string;
+          color_fondo?: string | null;
+          color_texto?: string | null;
+          color_label?: string | null;
+          logo_url?: string | null;
+          texto_cta?: string;
+          texto_teaser?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'disenos_cartel_programa_id_fkey';
+            columns: ['programa_id'];
+            isOneToOne: true;
+            referencedRelation: 'programas_tarjeta';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'disenos_cartel_comercio_id_fkey';
+            columns: ['comercio_id'];
+            isOneToOne: false;
+            referencedRelation: 'comercios';
             referencedColumns: ['id'];
           },
         ];
