@@ -3,11 +3,13 @@ import QRCode from 'qrcode';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { listarProgramas, MAXIMO_PROGRAMAS_ACTIVOS } from '@/lib/comercio/programas';
+import { brandingDeProgramas } from '@/lib/comercio/guardarBrandingPrograma';
 import { urlRegistroPrograma } from '@/lib/comercio/urlRegistroPrograma';
 import { tipoOPuntos } from '@/lib/tarjetas/tipos';
 import AvisoComercioActivo from '../AvisoComercioActivo';
 import FormularioNuevoPrograma from './FormularioNuevoPrograma';
 import FormularioConfiguracionPrograma from './FormularioConfiguracionPrograma';
+import FormularioMarcaPrograma, { type MarcaHeredada } from './FormularioMarcaPrograma';
 import BotonDesactivarPrograma from './BotonDesactivarPrograma';
 
 export const dynamic = 'force-dynamic';
@@ -16,10 +18,31 @@ export default async function PaginaProgramas() {
   const { comercioId } = await verifyComercioOwner();
   const supabase = createServiceClient();
 
-  const [{ data: comercio }, programas] = await Promise.all([
-    supabase.from('comercios').select('slug').eq('id', comercioId).maybeSingle(),
+  // El branding del comercio es lo que cada programa HEREDA cuando no define lo suyo: se muestra
+  // como placeholder de cada campo para que el dueño vea qué está usando hoy (migración 0027).
+  const [{ data: comercio }, programas, marcas] = await Promise.all([
+    supabase
+      .from('comercios')
+      .select(
+        'slug, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja',
+      )
+      .eq('id', comercioId)
+      .maybeSingle(),
     listarProgramas(supabase, comercioId, { soloActivos: false }),
+    brandingDeProgramas(supabase, comercioId),
   ]);
+
+  const heredada: MarcaHeredada = {
+    colorFondo: comercio?.color_fondo ?? null,
+    colorTexto: comercio?.color_texto ?? null,
+    colorLabel: comercio?.color_label ?? null,
+    logoUrl: comercio?.logo_url ?? null,
+    heroUrl: comercio?.hero_url ?? null,
+    stripUrl: comercio?.strip_url ?? null,
+    selloIconoUrl: comercio?.sello_icono_url ?? null,
+    difuminadoFranja: comercio?.difuminado_franja ?? 'medio',
+  };
+  const marcaPorPrograma = new Map(marcas.map((m) => [m.programaId, m]));
 
   // QR de cada programa activo. Uno desactivado no lleva QR: resolverProgramaPorSlug exige
   // activo=true, así que registrar un cliente con ese código ya no funciona — mostrarlo invitaría
@@ -59,6 +82,7 @@ export default async function PaginaProgramas() {
         <div className="reveal d2" style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {filas.map(({ programa, urlRegistro, qr }) => {
             const tipo = tipoOPuntos(programa.tipoTarjeta);
+            const marca = marcaPorPrograma.get(programa.id);
             return (
               <div key={programa.id} className="panel" style={{ marginTop: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
@@ -76,6 +100,19 @@ export default async function PaginaProgramas() {
                 </div>
 
                 {programa.activo && <FormularioConfiguracionPrograma programa={programa} />}
+
+                {/* Solo para programas activos: darle marca a uno desactivado no se ve en ningún
+                    lado, y el logo/color de fondo crearían una clase PERMANENTE en Google para un
+                    programa en el que ya nadie puede registrarse. */}
+                {programa.activo && marca && (
+                  <FormularioMarcaPrograma
+                    programaId={programa.id}
+                    nombrePrograma={programa.nombre}
+                    esSellos={tipo.valor === 'sellos'}
+                    marca={marca}
+                    heredada={heredada}
+                  />
+                )}
 
                 {qr && urlRegistro && (
                   <div style={{ marginTop: 16, textAlign: 'center' }}>
