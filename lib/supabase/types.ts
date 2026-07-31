@@ -15,6 +15,7 @@
 //   - supabase/migrations/0012_sucursal_principal.sql (sucursales.es_principal + índice único parcial)
 //   - supabase/migrations/0013_reverso_tarjeta.sql (columnas del reverso del pass en comercios)
 //   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
+//   - supabase/migrations/0027_branding_por_programa.sql (branding por programa en programas_tarjeta)
 //   - supabase/migrations/0026_notificaciones_push.sql (tablas difusiones y notificaciones_enviadas; tarjetas.aviso_texto/aviso_hasta/aviso_inactividad_enviado_en; comercios.aviso_inactividad_activo/dias/mensaje)
 //   - supabase/migrations/0025_backfill_programas_principales_faltantes.sql (solo datos, no cambia columnas: programa principal para comercios que la 0024 no alcanzó a cubrir)
 //   - supabase/migrations/0024_programas_de_tarjeta.sql (tabla programas_tarjeta; tarjetas.programa_id NOT NULL; unique (cliente_id, programa_id) reemplaza unique (cliente_id, comercio_id))
@@ -902,6 +903,19 @@ export type Database = {
           multipass_visitas: number | null;
           membresia_dias: number | null;
           cupon_vigencia_dias: number | null;
+          // Branding por programa (migración 0027). null = heredá el del comercio; el booleano
+          // branding_propio manda sobre los campos, así apagarlo no obliga a limpiar cada uno.
+          color_fondo: string | null;
+          color_texto: string | null;
+          color_label: string | null;
+          logo_url: string | null;
+          hero_url: string | null;
+          strip_url: string | null;
+          sello_icono_url: string | null;
+          difuminado_franja: string | null;
+          // Una vez seteado NUNCA vuelve a null: las clases de Google no se borran.
+          google_class_id: string | null;
+          branding_propio: boolean;
           created_at: string;
         };
         Insert: {
@@ -917,6 +931,16 @@ export type Database = {
           multipass_visitas?: number | null;
           membresia_dias?: number | null;
           cupon_vigencia_dias?: number | null;
+          color_fondo?: string | null;
+          color_texto?: string | null;
+          color_label?: string | null;
+          logo_url?: string | null;
+          hero_url?: string | null;
+          strip_url?: string | null;
+          sello_icono_url?: string | null;
+          difuminado_franja?: string | null;
+          google_class_id?: string | null;
+          branding_propio?: boolean;
           created_at?: string;
         };
         Update: {
@@ -932,6 +956,16 @@ export type Database = {
           multipass_visitas?: number | null;
           membresia_dias?: number | null;
           cupon_vigencia_dias?: number | null;
+          color_fondo?: string | null;
+          color_texto?: string | null;
+          color_label?: string | null;
+          logo_url?: string | null;
+          hero_url?: string | null;
+          strip_url?: string | null;
+          sello_icono_url?: string | null;
+          difuminado_franja?: string | null;
+          google_class_id?: string | null;
+          branding_propio?: boolean;
           created_at?: string;
         };
         Relationships: [
