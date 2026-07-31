@@ -18,8 +18,13 @@ export async function GET(
 
   const { data: tarjeta } = await supabase
     .from('tarjetas')
+    // programas_tarjeta trae el tipo y la meta REALES (0024). Esta ruta es la que DIBUJA la grilla,
+    // y su fallo es SILENCIOSO: con el tipo del comercio, un programa de sellos bajo un comercio de
+    // puntos hacía que componerStrips cayera en la banda de marca en vez de la grilla, y Google
+    // cacheaba esa imagen equivocada. Peor: el cache-busting de heroUrl.ts hashea el branding, así
+    // que la URL cambiaba y Google re-descargaba… la misma imagen mal dibujada.
     .select(
-      'puntos_actuales, comercios(tipo_tarjeta, sello_meta, color_fondo, color_label, strip_url, sello_icono_url, hero_url, difuminado_franja)',
+      'puntos_actuales, programas_tarjeta(tipo_tarjeta, sello_meta), comercios(tipo_tarjeta, sello_meta, color_fondo, color_label, strip_url, sello_icono_url, hero_url, difuminado_franja)',
     )
     .eq('id', tarjetaId)
     .maybeSingle();
@@ -28,10 +33,13 @@ export async function GET(
     return NextResponse.json({ error: 'Tarjeta no encontrada' }, { status: 404 });
   }
 
+  // Cuelga del PROGRAMA entero, no de cada campo (ver datosPassDeTarjeta.ts).
+  const programa = tarjeta.programas_tarjeta;
+
   const strips = await componerStrips({
-    tipoTarjeta: tarjeta.comercios.tipo_tarjeta,
+    tipoTarjeta: programa ? programa.tipo_tarjeta : tarjeta.comercios.tipo_tarjeta,
     puntos: tarjeta.puntos_actuales,
-    selloMeta: tarjeta.comercios.sello_meta,
+    selloMeta: programa ? programa.sello_meta : tarjeta.comercios.sello_meta,
     colorFondo: tarjeta.comercios.color_fondo ?? 'rgb(35, 24, 18)',
     colorLabel: tarjeta.comercios.color_label ?? 'rgb(255, 255, 255)',
     stripUrl: tarjeta.comercios.strip_url,

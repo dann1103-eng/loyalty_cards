@@ -70,5 +70,23 @@ export async function guardarBranding(
     return { ok: false, error: 'No se pudo guardar el branding.' };
   }
 
+  // La meta TAMBIÉN va al programa principal, y no es opcional. Desde la 0024 `sello_meta` vive en
+  // `programas_tarjeta` y desde el 2026-07-30 el pase lee de ahí — pero este formulario, que es el
+  // ÚNICO lugar donde el dueño puede tocar la meta, seguía escribiendo solo la columna legada de
+  // `comercios`. Sin esta línea, cambiar la meta no tenía ningún efecto sobre el pase: quedaba
+  // congelada en el valor que dejó el backfill de la 0024.
+  //
+  // Va al principal porque este formulario es del COMERCIO: no tiene selector de programa. Cuando
+  // exista branding por programa, la meta de cada uno se edita en su propia pantalla.
+  const { error: errorPrograma } = await supabase
+    .from('programas_tarjeta')
+    .update({ sello_meta: datos.sello_meta })
+    .eq('comercio_id', comercioId)
+    .eq('es_principal', true);
+  if (errorPrograma) {
+    console.error('[comercio] falló el update de sello_meta en el programa principal:', errorPrograma);
+    return { ok: false, error: 'No se pudo guardar el branding.' };
+  }
+
   return { ok: true };
 }

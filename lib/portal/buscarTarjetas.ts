@@ -82,7 +82,10 @@ export async function buscarTarjetasPorTelefono(
   // tipo_tarjeta y sello_meta, que agrega la migración 0005 de la Fase 3 (prerrequisito).
   const { data: tarjetas, error: errorTarjetas } = await supabase
     .from('tarjetas')
-    .select('id, puntos_actuales, comercios(id, nombre, color_fondo, color_texto, color_label, tipo_tarjeta, sello_meta)')
+    // programas_tarjeta trae el tipo y la meta REALES (0024); las columnas homónimas de comercios
+    // quedaron legadas. Sin este join, el portal le muestra al cliente su tarjeta de cupón como si
+    // fuera de sellos — el mismo bug que tenían el pase de Apple y el objeto de Google.
+    .select('id, puntos_actuales, programas_tarjeta(tipo_tarjeta, sello_meta), comercios(id, nombre, color_fondo, color_texto, color_label, tipo_tarjeta, sello_meta)')
     .eq('cliente_id', cliente.id);
 
   if (errorTarjetas) {
@@ -133,16 +136,20 @@ export async function buscarTarjetasPorTelefono(
 
   const resultado: TarjetaPortal[] = filas.map((t) => {
     const c = t.comercios!;
+    // Cuelga del PROGRAMA entero, no de cada campo (ver datosPassDeTarjeta.ts).
+    const p = t.programas_tarjeta;
+    const tipoTarjeta = p ? p.tipo_tarjeta : c.tipo_tarjeta;
+    const selloMeta = p ? p.sello_meta : c.sello_meta;
     return {
       tarjetaId: t.id,
       comercioNombre: c.nombre,
       colorFondo: c.color_fondo,
       colorTexto: c.color_texto,
       colorLabel: c.color_label,
-      tipoTarjeta: c.tipo_tarjeta,
+      tipoTarjeta,
       puntosActuales: t.puntos_actuales,
-      selloMeta: c.sello_meta,
-      saldoTexto: formatearSaldo(c.tipo_tarjeta, t.puntos_actuales, c.sello_meta),
+      selloMeta,
+      saldoTexto: formatearSaldo(tipoTarjeta, t.puntos_actuales, selloMeta),
       recompensas: recompensasPorComercio.get(c.id) ?? [],
       movimientos: movimientosPorTarjeta.get(t.id) ?? [],
     };

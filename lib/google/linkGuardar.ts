@@ -20,13 +20,24 @@ export async function generarLinkGuardar(
 ): Promise<string | null> {
   const { data: tarjeta, error } = await supabase
     .from('tarjetas')
-    .select('comercio_id, qr_token, puntos_actuales, comercios(nombre, color_fondo, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, google_class_id, tipo_tarjeta, sello_meta)')
+    // programas_tarjeta trae el tipo y la meta REALES (0024). Sin este join, el objeto que se
+    // EMBEBE en el JWT se armaba con el tipo del COMERCIO — y como Google hace upsert por id al
+    // procesar el JWT, ese cuerpo PISABA al que syncObjetoTarjeta acababa de escribir bien unas
+    // líneas más abajo. O sea que el camino "Agregar a Google Wallet" reintroducía en silencio el
+    // bug que el resto del sistema ya tenía arreglado.
+    .select('comercio_id, qr_token, puntos_actuales, programas_tarjeta(tipo_tarjeta, sello_meta), comercios(nombre, color_fondo, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, google_class_id, tipo_tarjeta, sello_meta)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
   if (error || !tarjeta || !tarjeta.comercios || !tarjeta.comercios.logo_url) {
     return null;
   }
+
+  // Cuelga del PROGRAMA entero, no de cada campo: con `??`, un cupón (sello_meta null legítimo)
+  // heredaría la meta del comercio y volvería a dibujarse como grilla de sellos.
+  const programa = tarjeta.programas_tarjeta;
+  const tipoTarjeta = programa ? programa.tipo_tarjeta : tarjeta.comercios.tipo_tarjeta;
+  const selloMeta = programa ? programa.sello_meta : tarjeta.comercios.sello_meta;
 
   // Autorreparación: la sincronización de /api/registro (o de un guardado de branding) puede
   // haber fallado en silencio (best-effort, ej. un cold start lento) dejando la clase o el
@@ -60,15 +71,15 @@ export async function generarLinkGuardar(
   const objeto = construirObjeto(objectId, classId, {
     qrToken: tarjeta.qr_token,
     puntosActuales: tarjeta.puntos_actuales,
-    tipoTarjeta: tarjeta.comercios.tipo_tarjeta,
-    selloMeta: tarjeta.comercios.sello_meta,
+    tipoTarjeta,
+    selloMeta,
     // Las mismas del bloque de arriba: Google pide las ubicaciones en la clase Y en el objeto.
     ubicaciones,
     heroImageUrl: urlHeroTarjeta(
       tarjetaId,
       versionHero({
         puntos: tarjeta.puntos_actuales,
-        selloMeta: tarjeta.comercios.sello_meta,
+        selloMeta,
         colorFondo: tarjeta.comercios.color_fondo,
         colorLabel: tarjeta.comercios.color_label,
         selloIconoUrl: tarjeta.comercios.sello_icono_url,
