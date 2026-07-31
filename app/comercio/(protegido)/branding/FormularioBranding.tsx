@@ -172,6 +172,14 @@ export default function FormularioBranding({
         <p className="titulo-seccion" style={{ marginBottom: 12 }}>
           {programaId ? `Vista previa: ${nombreTarjeta}` : 'Vista previa en vivo'}
         </p>
+        {/* En móvil la vista previa va ARRIBA del editor, así que este es el primer lugar donde el
+            ojo cae: sin esta línea, quien acaba de tocar "usar el diseño de mi negocio" ve acá el
+            diseño propio que sigue cargado y cree que el botón no hizo nada. */}
+        {programaId && !usaDisenoPropio && tieneDisenoGuardado && (
+          <p className="admin-fila-slug" style={{ marginTop: -6, marginBottom: 12 }}>
+            Así quedaría si publicás. Ahora mismo esta tarjeta usa el diseño de tu negocio.
+          </p>
+        )}
         {/* La tarjeta conserva SU PROPIO fondo (el color que eligió el comercio) en los tres temas
             del panel — es una réplica de lo que va a llegar a la billetera, no una pantalla más del
             panel. Lo ÚNICO que sigue al tema es el borde: es la línea que separa la tarjeta del

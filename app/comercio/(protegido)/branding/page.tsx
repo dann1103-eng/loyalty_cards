@@ -231,7 +231,10 @@ export default async function PaginaBranding({
             urlActual={seleccionado ? propia : heredada}
             programaId={seleccionado?.id ?? null}
             urlHeredada={seleccionado ? heredada : null}
-            avisaGoogle={google}
+            // El aviso es de la tarjeta del PROGRAMA en Google: el logo del negocio ya vive en la
+            // clase que todo comercio tiene desde su primer pase, y avisar ahí sería una alarma
+            // sobre algo que ya pasó hace rato.
+            avisaGoogle={seleccionado !== null && google}
             cruzaLaLinea={cruzaLaLinea}
           />
         ))}

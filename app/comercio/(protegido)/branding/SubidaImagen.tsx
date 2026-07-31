@@ -140,7 +140,7 @@ export default function SubidaImagen({
           onChange={alElegir}
           required
         />
-        {avisaGoogle && programaId && (
+        {avisaGoogle && (
           <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>{AVISO_GOOGLE}</p>
         )}
         {pendiente && <p className="admin-fila-slug">Subiendo…</p>}

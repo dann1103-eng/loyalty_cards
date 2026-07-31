@@ -315,25 +315,38 @@ Todo lo de abajo está **fusionado a `master` y desplegado**.
    Limpiados y la causa cerrada — hoy una corrida completa deja CERO. Ver el comentario largo en
    `test/fixtures/entornoComercio.ts:limpiar()`.
 
-## Branding por programa: 6 de 12 tareas
+## Branding por programa: 11 de 12 tareas, más el rediseño de la pantalla
 
 Plan: `docs/superpowers/plans/2026-07-30-branding-por-programa.md`.
 Spec: `docs/superpowers/specs/2026-07-30-branding-por-programa-design.md`.
 
-Hechas: **1** (migración 0027, ya aplicada), **2** (`brandingEfectivo`), **3** (ruta de Storage),
-**4** (pase de Apple), **5** (la ruta que dibuja), **8** (portal).
+Hechas: **1** (migración 0027), **2** (`brandingEfectivo`), **3** (ruta de Storage), **4** (pase de
+Apple), **5** (la ruta que dibuja), **6 y 7** (clase de Google por programa), **8** (portal),
+**9** (escritura + `sello_meta`), **10** (propagación a los teléfonos), **11** (UI).
+Falta: **12** (verificación manual en un teléfono real).
 
-**Estado seguro:** es TODO el lado de lectura. Como `branding_propio` nace en `false`, ningún
-programa lo tiene activado y **ninguna tarjeta cambió de aspecto**. El lado de escritura (9-11) es
-lo que lo haría usable.
+**Rediseño del 2026-07-31 (feedback del dueño).** La UI de la Tarea 11 se había construido dentro de
+Programas, con formulario propio, y por eso perdió la vista previa en vivo; además exponía la
+columna `branding_propio` como una casilla "Usar marca propia" que el dueño no entendió. Corregido:
 
-Faltan: **6 y 7** (clase de Google por programa), **9** (escritura + `sello_meta`), **10**
-(propagación a los teléfonos), **11** (UI), **12** (verificación manual).
+- El diseño de tarjetas vive en **Marca** (`/comercio/branding`), con un selector arriba
+  (`?programa=<id>`, enlaces GET) y REUSANDO `FormularioBranding`/`FormularioReverso` — o sea, la
+  misma vista previa que dibuja el pase real. Programas quedó con tipo, configuración y QR.
+- **Vacío = hereda**, con el valor del negocio como placeholder gris (mismo patrón que
+  `/comercio/reglas`). `branding_propio` y `reverso_propio` ya NO se muestran: se derivan de lo que
+  el dueño carga (`hayMarcaPropia` / `hayReversoPropio`), y para volver atrás hay un botón
+  "Usar el mismo diseño de mi negocio" que apaga el interruptor SIN borrar las columnas.
+- El aviso de Google dejó de ser un párrafo arriba de todo: es una línea corta, solo junto a los
+  tres campos que crean la clase (fondo, logo, portada) y solo diseñando una tarjeta.
+- **Reverso por programa** (migración `0029`, que ya estaba aplicada en la base pero cuyo `.sql`
+  nunca había llegado al repo — reconstruido y verificado con `scripts/verificar-0029.ts`).
+  `reversoEfectivo` vive junto a `brandingEfectivo` y lo consume `datosPassDeTarjeta`.
 
 **Ojo con la 6 y la 7:** son las que crean clases PERMANENTES en el emisor de Google. La API no
 tiene `delete`. El diseño las acota a los tres campos que Google realmente usa, pero es una puerta
-que no se cierra. La prueba del ciclo encender→apagar→reencender es obligatoria: sin ella, un
-segundo `insert` sobre una clase existente rompe en producción.
+que no se cierra. La clase de un programa se crea PEREZOSAMENTE, en `linkGuardar` (cuando un cliente
+toca "guardar en Google Wallet"), no al guardar el formulario: así una tarjeta que el dueño solo
+estaba probando no deja un recurso permanente en el emisor.
 
 **Verificado contra la API real:** un `LoyaltyObject` SÍ se puede mover de clase con `patch`, y las
 clases nuevas nacen `approved` (no `UNDER_REVIEW`) porque el emisor ya está aprobado. Costo: la
