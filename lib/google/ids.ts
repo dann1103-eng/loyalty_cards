@@ -8,3 +8,10 @@ export function idClaseGoogle(issuerId: string, comercioId: string): string {
 export function idObjetoGoogle(issuerId: string, tarjetaId: string): string {
   return `${issuerId}.tarjeta_${tarjetaId}`;
 }
+
+// Clase PROPIA de un programa (migración 0027). Prefijo `programa_` distinto de `comercio_` a
+// propósito: los dos ids conviven en el mismo emisor y un choque sería IRREPARABLE, porque las
+// clases de Google no se pueden borrar (la API no tiene delete).
+export function idClasePrograma(issuerId: string, programaId: string): string {
+  return `${issuerId}.programa_${programaId}`;
+}
