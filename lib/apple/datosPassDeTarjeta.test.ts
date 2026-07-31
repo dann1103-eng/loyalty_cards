@@ -190,4 +190,45 @@ describe('datosPassDeTarjeta — reverso', () => {
     expect(resultado!.datos.tipoTarjeta).toBe('cupon');
     expect(resultado!.datos.selloMeta).toBeNull();
   }, 30_000);
+
+  // Branding por programa (migración 0027). La herencia es CAMPO POR CAMPO: lo que el programa
+  // define pisa, lo que deja en null viene del comercio. Las dos mitades se asertan en la misma
+  // prueba a propósito — una que solo mirara el color propio pasaría igual si el código ignorara
+  // la herencia y copiara todo del programa, dejando el resto en null.
+  it('el pase usa el branding del PROGRAMA en lo que define, y hereda el resto del comercio', async () => {
+    const serial = await crearEscenario([]);
+    const { error: eComercio } = await supabase
+      .from('comercios')
+      .update({ color_fondo: 'rgb(10, 10, 10)', color_texto: 'rgb(200, 200, 200)' })
+      .eq('id', creados!.comercioId);
+    if (eComercio) throw new Error(`no se pudo preparar el comercio: ${eComercio.message}`);
+    const { error: ePrograma } = await supabase
+      .from('programas_tarjeta')
+      .update({ branding_propio: true, color_fondo: 'rgb(255, 0, 0)' })
+      .eq('id', creados!.programaId);
+    if (ePrograma) throw new Error(`no se pudo preparar el programa: ${ePrograma.message}`);
+
+    const resultado = await datosPassDeTarjeta(supabase, serial);
+
+    expect(resultado!.datos.colorFondo, 'el color propio del programa tiene que pisar').toBe('rgb(255, 0, 0)');
+    expect(resultado!.datos.colorTexto, 'lo que el programa NO define se hereda').toBe('rgb(200, 200, 200)');
+  }, 30_000);
+
+  it('con branding_propio APAGADO el pase hereda todo, aunque el programa tenga campos cargados', async () => {
+    // El interruptor manda sobre los campos: apagarlo no obliga al dueño a limpiar cada columna.
+    const serial = await crearEscenario([]);
+    await supabase
+      .from('comercios')
+      .update({ color_fondo: 'rgb(10, 10, 10)' })
+      .eq('id', creados!.comercioId);
+    const { error } = await supabase
+      .from('programas_tarjeta')
+      .update({ branding_propio: false, color_fondo: 'rgb(255, 0, 0)' })
+      .eq('id', creados!.programaId);
+    if (error) throw new Error(`no se pudo preparar el programa: ${error.message}`);
+
+    const resultado = await datosPassDeTarjeta(supabase, serial);
+
+    expect(resultado!.datos.colorFondo).toBe('rgb(10, 10, 10)');
+  }, 30_000);
 });

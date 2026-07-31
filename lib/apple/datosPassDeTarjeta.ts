@@ -3,6 +3,7 @@ import type { Database } from '../supabase/types';
 import type { DatosPass } from './generatePass';
 import { construirReverso, resolverAviso } from './construirReverso';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
+import { brandingEfectivo } from '../comercio/brandingEfectivo';
 
 export async function datosPassDeTarjeta(
   supabase: SupabaseClient<Database>,
@@ -23,7 +24,9 @@ export async function datosPassDeTarjeta(
   // tarjeta de sellos mientras el escáner la operaba como cupón.
   const { data: tarjeta } = await supabase
     .from('tarjetas')
-    .select('*, comercios(*), clientes(nombre), programas_tarjeta(tipo_tarjeta, sello_meta)')
+    .select(
+      '*, comercios(*), clientes(nombre), programas_tarjeta(tipo_tarjeta, sello_meta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja)',
+    )
     .eq('apple_serial_number', serialNumber)
     .maybeSingle();
 
@@ -42,6 +45,39 @@ export async function datosPassDeTarjeta(
   }
   const tipoTarjeta = programa ? programa.tipo_tarjeta : tarjeta.comercios.tipo_tarjeta;
   const selloMeta = programa ? programa.sello_meta : tarjeta.comercios.sello_meta;
+
+  // Branding por programa (0027). A DIFERENCIA de tipo/meta, acá la herencia SÍ es campo por campo:
+  // el programa define lo que quiera y el resto viene del comercio. Toda esa lógica vive en
+  // brandingEfectivo para que los nueve consumidores no puedan divergir.
+  const c = tarjeta.comercios;
+  const marca = brandingEfectivo(
+    {
+      colorFondo: c.color_fondo,
+      colorTexto: c.color_texto,
+      colorLabel: c.color_label,
+      logoUrl: c.logo_url,
+      heroUrl: c.hero_url,
+      stripUrl: c.strip_url,
+      selloIconoUrl: c.sello_icono_url,
+      difuminadoFranja: c.difuminado_franja,
+    },
+    programa
+      ? {
+          brandingPropio: programa.branding_propio,
+          colorFondo: programa.color_fondo,
+          colorTexto: programa.color_texto,
+          colorLabel: programa.color_label,
+          logoUrl: programa.logo_url,
+          heroUrl: programa.hero_url,
+          stripUrl: programa.strip_url,
+          selloIconoUrl: programa.sello_icono_url,
+          // `?? undefined` porque en el programa esta columna es nullable y en BrandingBase no:
+          // undefined activa el `??` de brandingEfectivo y hereda; null lo activaría igual, pero
+          // el tipo pide undefined para no prometer un string que no está.
+          difuminadoFranja: programa.difuminado_franja ?? undefined,
+        }
+      : null,
+  );
 
   // Reglas y recompensas para la sección automática del reverso. BEST-EFFORT: si fallan, el pass
   // sale SIN esa sección en vez de no salir. Un cliente con un reverso incompleto está
@@ -98,16 +134,16 @@ export async function datosPassDeTarjeta(
       // Puede faltar si el join falla o la fila del cliente se borró: el pass se genera igual, solo
       // sin el campo del titular (generatePass lo omite si viene null).
       nombreCliente: tarjeta.clientes?.nombre ?? null,
-      colorFondo: tarjeta.comercios.color_fondo ?? 'rgb(35, 24, 18)',
-      colorTexto: tarjeta.comercios.color_texto ?? 'rgb(255, 255, 255)',
-      colorLabel: tarjeta.comercios.color_label ?? 'rgb(255, 255, 255)',
+      colorFondo: marca.colorFondo ?? 'rgb(35, 24, 18)',
+      colorTexto: marca.colorTexto ?? 'rgb(255, 255, 255)',
+      colorLabel: marca.colorLabel ?? 'rgb(255, 255, 255)',
       tipoTarjeta,
       selloMeta,
-      stripUrl: tarjeta.comercios.strip_url,
-      selloIconoUrl: tarjeta.comercios.sello_icono_url,
-      heroUrl: tarjeta.comercios.hero_url,
-      logoUrl: tarjeta.comercios.logo_url,
-      difuminadoFranja: tarjeta.comercios.difuminado_franja,
+      stripUrl: marca.stripUrl,
+      selloIconoUrl: marca.selloIconoUrl,
+      heroUrl: marca.heroUrl,
+      logoUrl: marca.logoUrl,
+      difuminadoFranja: marca.difuminadoFranja,
       // El reverso se ARMA en cada generación, nunca se congela una copia: un reverso que promete
       // una recompensa que el dueño ya cambió es una promesa incumplida frente al cliente final.
       reverso: construirReverso({
