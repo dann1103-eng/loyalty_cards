@@ -6,6 +6,8 @@ import {
   guardarBrandingPrograma,
   brandingDeProgramas,
   brandingProgramaDesdeFormulario,
+  volverAHeredarMarca,
+  hayMarcaPropia,
 } from './guardarBrandingPrograma';
 
 const supabase = createServiceClient();
@@ -257,6 +259,85 @@ describe('brandingDeProgramas', () => {
     expect(cupon.brandingPropio).toBe(true);
     expect(cupon.colorFondo).toBe('rgb(10, 20, 30)');
     expect(cupon.selloMeta).toBe(6);
+  });
+});
+
+describe('volverAHeredarMarca', () => {
+  // El botón "Usar el mismo diseño de mi negocio". Apaga el interruptor y NO borra las columnas: es
+  // la promesa que ya documenta brandingEfectivo — apagarlo no obliga a limpiar cada columna, y
+  // publicar de nuevo le devuelve al dueño lo que tenía.
+  it('apaga el interruptor SIN borrar los colores que el dueño había puesto', async () => {
+    const { comercioId, cuponId } = await comercioConDosProgramas();
+    await guardarBrandingPrograma(supabase, comercioId, cuponId, {
+      ...BRANDING_VACIO,
+      brandingPropio: true,
+      colorFondo: 'rgb(10, 20, 30)',
+    });
+
+    const res = await volverAHeredarMarca(supabase, comercioId, cuponId);
+
+    expect(res.ok).toBe(true);
+    const { data } = await supabase
+      .from('programas_tarjeta')
+      .select('branding_propio, color_fondo')
+      .eq('id', cuponId)
+      .single();
+    expect(data!.branding_propio).toBe(false);
+    expect(
+      data!.color_fondo,
+      'no se borra: publicar de nuevo tiene que devolverle el diseño que tenía',
+    ).toBe('rgb(10, 20, 30)');
+  });
+
+  it('no apaga el de OTRO comercio aunque se conozca su id', async () => {
+    const propio = await comercioConDosProgramas();
+    const ajeno = await comercioConDosProgramas();
+    await guardarBrandingPrograma(supabase, ajeno.comercioId, ajeno.cuponId, {
+      ...BRANDING_VACIO,
+      brandingPropio: true,
+      colorFondo: 'rgb(10, 20, 30)',
+    });
+
+    const res = await volverAHeredarMarca(supabase, propio.comercioId, ajeno.cuponId);
+
+    expect(res.ok).toBe(false);
+    const { data } = await supabase
+      .from('programas_tarjeta')
+      .select('branding_propio')
+      .eq('id', ajeno.cuponId)
+      .single();
+    expect(data!.branding_propio, 'el programa ajeno queda con su marca encendida').toBe(true);
+  });
+});
+
+// Puro: la regla que decide el interruptor a partir de lo que el dueño cargó. Existe para que el
+// dueño NUNCA tenga que ver ni entender `branding_propio` — el editor viejo se lo mostraba como
+// casilla "Usar marca propia" y no se entendió.
+describe('hayMarcaPropia', () => {
+  const NADA = {
+    colorFondo: null,
+    colorTexto: null,
+    colorLabel: null,
+    difuminadoFranja: null,
+    logoUrl: null,
+    heroUrl: null,
+    stripUrl: null,
+    selloIconoUrl: null,
+  };
+
+  it('sin ningún campo: no hay marca propia', () => {
+    expect(hayMarcaPropia(NADA)).toBe(false);
+  });
+
+  it('cualquiera de los ocho campos alcanza', () => {
+    expect(hayMarcaPropia({ ...NADA, colorFondo: 'rgb(1,2,3)' })).toBe(true);
+    expect(hayMarcaPropia({ ...NADA, colorTexto: 'rgb(1,2,3)' })).toBe(true);
+    expect(hayMarcaPropia({ ...NADA, colorLabel: 'rgb(1,2,3)' })).toBe(true);
+    expect(hayMarcaPropia({ ...NADA, difuminadoFranja: 'fuerte' })).toBe(true);
+    expect(hayMarcaPropia({ ...NADA, logoUrl: 'https://ejemplo.com/l.png' })).toBe(true);
+    expect(hayMarcaPropia({ ...NADA, heroUrl: 'https://ejemplo.com/h.png' })).toBe(true);
+    expect(hayMarcaPropia({ ...NADA, stripUrl: 'https://ejemplo.com/s.png' })).toBe(true);
+    expect(hayMarcaPropia({ ...NADA, selloIconoUrl: 'https://ejemplo.com/i.png' })).toBe(true);
   });
 });
 

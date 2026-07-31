@@ -56,6 +56,16 @@ export function hayReversoPropio(valores: ReversoNormalizado & { mostrarComoFunc
   );
 }
 
+// En la pantalla del programa este campo NO puede ser una casilla: es TRI-ESTADO (heredar del
+// negocio / mostrar acá / ocultar acá) y una casilla solo tiene dos posiciones. Llega como el value
+// de un <select>. Cualquier valor desconocido cae en `null` = heredar, que es el estado que NO
+// cambia lo que el cliente ve hoy — un default a `false` apagaría la sección en silencio.
+export function mostrarComoFuncionaDesdeFormulario(valor: string): boolean | null {
+  if (valor === 'si') return true;
+  if (valor === 'no') return false;
+  return null;
+}
+
 export async function guardarReversoPrograma(
   supabase: SupabaseClient<Database>,
   comercioId: string,

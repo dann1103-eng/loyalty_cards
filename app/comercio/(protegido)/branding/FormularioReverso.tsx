@@ -2,22 +2,39 @@
 
 import { useState, useRef, useEffect, type ChangeEvent, type CSSProperties } from 'react';
 import { useActionState } from 'react';
-import { accionGuardarReverso, type EstadoBranding } from './actions';
+import {
+  accionGuardarReverso,
+  accionGuardarReversoDePrograma,
+  accionUsarReversoDelNegocio,
+  type EstadoBranding,
+} from './actions';
 
 type ClaveEnlace = 'red_instagram' | 'red_facebook' | 'red_whatsapp' | 'sitio_web';
 type ClaveTexto = ClaveEnlace | 'terminos_uso';
 
+type TextosReverso = {
+  terminos_uso: string;
+  red_instagram: string;
+  red_facebook: string;
+  red_whatsapp: string;
+  sitio_web: string;
+};
+
 type Props = {
   nombreComercio: string;
   esSellos: boolean;
-  inicial: {
-    terminos_uso: string;
-    red_instagram: string;
-    red_facebook: string;
-    red_whatsapp: string;
-    sitio_web: string;
-    mostrar_como_funciona: boolean;
+  /* null = reverso del NEGOCIO (el que heredan todas las tarjetas). Con id, el de esa tarjeta. */
+  programaId: string | null;
+  nombreTarjeta: string;
+  inicial: TextosReverso & {
+    /* Diseñando una tarjeta esto es TRI-ESTADO: null = como en mi negocio. En el negocio, la
+       columna es NOT NULL y siempre llega un booleano. */
+    mostrar_como_funciona: boolean | null;
   };
+  /* Lo que esta tarjeta toma del negocio en cada campo vacío. null en modo negocio. */
+  heredado: (TextosReverso & { mostrar_como_funciona: boolean }) | null;
+  usaReversoPropio: boolean;
+  tieneReversoGuardado: boolean;
 };
 
 /* Etiqueta, ejemplo y ayuda de cada enlace viajan juntos: agregar una red y olvidarse de su ejemplo
@@ -51,9 +68,25 @@ function borradorTerminos(unidad: string, comercio: string): string {
   ].join('\n');
 }
 
-export default function FormularioReverso({ nombreComercio, esSellos, inicial }: Props) {
+/* El tri-estado del <select>, de ida. La conversión de vuelta (formulario → base) vive en
+   lib/comercio/guardarReversoPrograma.ts, que es donde se puede probar. */
+function valorSeccion(mostrar: boolean | null): string {
+  if (mostrar === null) return '';
+  return mostrar ? 'si' : 'no';
+}
+
+export default function FormularioReverso({
+  nombreComercio,
+  esSellos,
+  programaId,
+  nombreTarjeta,
+  inicial,
+  heredado,
+  usaReversoPropio,
+  tieneReversoGuardado,
+}: Props) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoBranding, FormData>(
-    accionGuardarReverso,
+    programaId ? accionGuardarReversoDePrograma.bind(null, programaId) : accionGuardarReverso,
     undefined,
   );
 
@@ -68,7 +101,8 @@ export default function FormularioReverso({ nombreComercio, esSellos, inicial }:
     red_whatsapp: inicial.red_whatsapp,
     sitio_web: inicial.sitio_web,
   });
-  const [mostrarComoFunciona, setMostrarComoFunciona] = useState(inicial.mostrar_como_funciona);
+  const [mostrarComoFunciona, setMostrarComoFunciona] = useState(Boolean(inicial.mostrar_como_funciona));
+  const [seccionPrograma, setSeccionPrograma] = useState(valorSeccion(inicial.mostrar_como_funciona));
 
   // Mismo bug de React 19 + Server Actions que el <select> del editor de colores, y acá NO es
   // cosmético. Comprobado en el React instalado (react-dom-client.development.js):
@@ -77,7 +111,7 @@ export default function FormularioReverso({ nombreComercio, esSellos, inicial }:
   // y `updateInput` solo lo re-sincroniza cuando el checkbox NO es controlado. Resultado sin este
   // remonte: el dueño desmarca la sección, guarda bien, el checkbox vuelve a verse marcado y el
   // siguiente Guardar la vuelve a encender. Los inputs de texto y el textarea no lo sufren porque de
-  // esos React sí mantiene al día el defaultValue.
+  // esos React sí mantiene al día el defaultValue. El <select> del modo tarjeta lo sufre igual.
   const [claveCheckbox, setClaveCheckbox] = useState(0);
   const pendienteAnteriorRef = useRef(false);
   useEffect(() => {
@@ -130,114 +164,207 @@ export default function FormularioReverso({ nombreComercio, esSellos, inicial }:
     boxShadow: textareaEnfocado ? 'var(--ring)' : 'none',
   };
 
+  // Placeholder = lo que esta tarjeta toma del negocio. Un texto largo heredado se recorta: el
+  // placeholder de un textarea no hace scroll y una pared de texto gris tapa el campo.
+  const placeholderHeredado = (campo: ClaveTexto, porDefecto: string): string => {
+    const valor = heredado?.[campo];
+    if (!valor) return porDefecto;
+    return valor.length > 120 ? `${valor.slice(0, 120)}…` : valor;
+  };
+
   return (
-    <form className="panel reveal d4" action={ejecutar}>
-      <p className="titulo-seccion" style={{ marginBottom: 8 }}>Reverso de la tarjeta</p>
-      <p className="lede" style={{ marginBottom: 20, fontSize: '0.9rem' }}>
-        Lo que ve tu cliente cuando toca la &quot;i&quot; de su tarjeta en la billetera. Todo lo que
-        dejes vacío simplemente no aparece.
-      </p>
-
-      {/* Fuera de `.field` a propósito: la regla `.field input` le pone padding, fondo y borde de
-          caja de texto a TODO input, y a un checkbox nativo eso lo deforma. */}
-      <div style={{ marginBottom: 16 }}>
-        <label
-          htmlFor="mostrar_como_funciona"
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 10,
-            fontSize: '0.95rem',
-            lineHeight: 1.4,
-            color: 'var(--texto)',
-            cursor: 'pointer',
-          }}
-        >
-          <input
-            key={claveCheckbox}
-            id="mostrar_como_funciona"
-            name="mostrar_como_funciona"
-            type="checkbox"
-            checked={mostrarComoFunciona}
-            onChange={(e) => setMostrarComoFunciona(e.target.checked)}
-            style={{ width: 20, height: 20, marginTop: 1, flexShrink: 0, accentColor: 'var(--acento-fuerte)' }}
-          />
-          <span>Mostrar la sección &quot;Cómo funciona&quot;</span>
-        </label>
-        <p className="field-aviso" style={{ color: 'var(--texto-2)', marginTop: 8 }}>
-          La arma el sistema con tus reglas y tus recompensas activas, y se mantiene al día sola: si
-          subís el costo de una recompensa, el reverso de las tarjetas ya emitidas se corrige. Si
-          todavía no cargaste reglas ni recompensas, la sección no aparece.
+    <>
+      {programaId && usaReversoPropio && (
+        <BotonUsarReversoDelNegocio programaId={programaId} nombreTarjeta={nombreTarjeta} />
+      )}
+      {programaId && !usaReversoPropio && tieneReversoGuardado && (
+        <p className="admin-vacio" role="status" style={{ margin: '18px 0 0', padding: '14px 16px', textAlign: 'left' }}>
+          Ahora mismo el dorso de esta tarjeta es el de tu negocio. Abajo está el que le habías
+          escrito: si lo guardás, vuelve a usarlo.
         </p>
-      </div>
+      )}
 
-      <div className="field">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-          <label htmlFor="terminos_uso">Términos de uso</label>
-          {/* type="button" NO es opcional: dentro de un <form> un botón sin type es submit, y este
-              enviaría el formulario en vez de llenar el textarea. */}
-          <button
-            type="button"
-            className="btn-borde"
-            onClick={insertarBorrador}
-            style={{ fontSize: '0.78rem', padding: '7px 13px' }}
-          >
-            Usar un borrador sugerido
-          </button>
-        </div>
-        <textarea
-          id="terminos_uso"
-          name="terminos_uso"
-          rows={8}
-          value={valores.terminos_uso}
-          onChange={cambiarTexto('terminos_uso')}
-          onFocus={() => setTextareaEnfocado(true)}
-          onBlur={() => setTextareaEnfocado(false)}
-          placeholder="Opcional. Escribí las condiciones de tu programa, o partí del borrador sugerido."
-          style={estiloTextarea}
-        />
-        <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>
-          El borrador es un punto de partida, no un contrato revisado: leelo y ajustalo antes de
-          publicar. Lo que quede acá lo dice tu comercio.
+      <form className="panel reveal d4" action={ejecutar}>
+        <p className="titulo-seccion" style={{ marginBottom: 8 }}>
+          {programaId ? `Reverso de ${nombreTarjeta}` : 'Reverso de la tarjeta'}
         </p>
-      </div>
+        <p className="lede" style={{ marginBottom: 20, fontSize: '0.9rem' }}>
+          Lo que ve tu cliente cuando toca la &quot;i&quot; de su tarjeta en la billetera.{' '}
+          {programaId
+            ? 'Lo que dejes vacío lo toma del reverso de tu negocio.'
+            : 'Todo lo que dejes vacío simplemente no aparece.'}
+        </p>
 
-      {CAMPOS_ENLACE.map(({ campo, etiqueta, ejemplo, ayuda }) => (
-        <div className="field" key={campo}>
-          <label htmlFor={campo}>{etiqueta}</label>
-          <input
-            id={campo}
-            name={campo}
-            type="url"
-            inputMode="url"
-            // El teclado del teléfono capitaliza y autocorrige por defecto: "Https://Instagram…"
-            // pasaría la validación del navegador y fallaría la nuestra, que exige https:// exacto.
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            value={valores[campo]}
-            onChange={cambiarTexto(campo)}
-            placeholder={ejemplo}
-          />
-          {ayuda && (
-            <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>{ayuda}</p>
+        {/* Fuera de `.field` a propósito: la regla `.field input` le pone padding, fondo y borde de
+            caja de texto a TODO input, y a un checkbox nativo eso lo deforma. */}
+        <div style={{ marginBottom: 16 }}>
+          {programaId ? (
+            // Tres posiciones y no dos: "como en mi negocio" es un estado distinto de "apagada", y
+            // una casilla no puede representarlo. Sin la opción de heredar, la tarjeta quedaría
+            // congelada en la decisión de hoy cuando el dueño cambie la de su negocio.
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label htmlFor="mostrar_como_funciona">Sección &quot;Cómo funciona&quot;</label>
+              <select
+                key={claveCheckbox}
+                id="mostrar_como_funciona"
+                name="mostrar_como_funciona"
+                value={seccionPrograma}
+                onChange={(e) => setSeccionPrograma(e.target.value)}
+              >
+                <option value="">
+                  Como en mi negocio ({heredado?.mostrar_como_funciona ? 'se muestra' : 'no se muestra'})
+                </option>
+                <option value="si">Mostrarla en esta tarjeta</option>
+                <option value="no">No mostrarla en esta tarjeta</option>
+              </select>
+            </div>
+          ) : (
+            <label
+              htmlFor="mostrar_como_funciona"
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 10,
+                fontSize: '0.95rem',
+                lineHeight: 1.4,
+                color: 'var(--texto)',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                key={claveCheckbox}
+                id="mostrar_como_funciona"
+                name="mostrar_como_funciona"
+                type="checkbox"
+                checked={mostrarComoFunciona}
+                onChange={(e) => setMostrarComoFunciona(e.target.checked)}
+                style={{ width: 20, height: 20, marginTop: 1, flexShrink: 0, accentColor: 'var(--acento-fuerte)' }}
+              />
+              <span>Mostrar la sección &quot;Cómo funciona&quot;</span>
+            </label>
           )}
+          <p className="field-aviso" style={{ color: 'var(--texto-2)', marginTop: 8 }}>
+            La arma el sistema con tus reglas y tus recompensas activas, y se mantiene al día sola: si
+            subís el costo de una recompensa, el reverso de las tarjetas ya emitidas se corrige. Si
+            todavía no cargaste reglas ni recompensas, la sección no aparece.
+          </p>
         </div>
-      ))}
 
-      <button className="btn-acento" type="submit" disabled={pendiente} style={{ marginTop: 6 }}>
-        <span className="icono" style={{ fontSize: 20 }} aria-hidden="true">check_circle</span>
-        {pendiente ? 'Guardando…' : 'Guardar reverso'}
+        <div className="field">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            <label htmlFor="terminos_uso">Términos de uso</label>
+            {/* type="button" NO es opcional: dentro de un <form> un botón sin type es submit, y este
+                enviaría el formulario en vez de llenar el textarea. */}
+            <button
+              type="button"
+              className="btn-borde"
+              onClick={insertarBorrador}
+              style={{ fontSize: '0.78rem', padding: '7px 13px' }}
+            >
+              Usar un borrador sugerido
+            </button>
+          </div>
+          <textarea
+            id="terminos_uso"
+            name="terminos_uso"
+            rows={8}
+            value={valores.terminos_uso}
+            onChange={cambiarTexto('terminos_uso')}
+            onFocus={() => setTextareaEnfocado(true)}
+            onBlur={() => setTextareaEnfocado(false)}
+            placeholder={
+              programaId
+                ? placeholderHeredado(
+                    'terminos_uso',
+                    'Opcional. Vacío, esta tarjeta usa los términos de tu negocio.',
+                  )
+                : 'Opcional. Escribí las condiciones de tu programa, o partí del borrador sugerido.'
+            }
+            style={estiloTextarea}
+          />
+          <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>
+            El borrador es un punto de partida, no un contrato revisado: leelo y ajustalo antes de
+            publicar. Lo que quede acá lo dice tu comercio.
+          </p>
+        </div>
+
+        {CAMPOS_ENLACE.map(({ campo, etiqueta, ejemplo, ayuda }) => (
+          <div className="field" key={campo}>
+            <label htmlFor={campo}>{etiqueta}</label>
+            <input
+              id={campo}
+              name={campo}
+              type="url"
+              inputMode="url"
+              // El teclado del teléfono capitaliza y autocorrige por defecto: "Https://Instagram…"
+              // pasaría la validación del navegador y fallaría la nuestra, que exige https:// exacto.
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={valores[campo]}
+              onChange={cambiarTexto(campo)}
+              placeholder={programaId ? placeholderHeredado(campo, ejemplo) : ejemplo}
+            />
+            {ayuda && (
+              <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>{ayuda}</p>
+            )}
+          </div>
+        ))}
+
+        <button className="btn-acento" type="submit" disabled={pendiente} style={{ marginTop: 6 }}>
+          <span className="icono" style={{ fontSize: 20 }} aria-hidden="true">check_circle</span>
+          {pendiente ? 'Guardando…' : 'Guardar reverso'}
+        </button>
+        {estado && 'error' in estado && (
+          <p className="alerta" role="alert">{estado.error}</p>
+        )}
+        {estado && 'ok' in estado && (
+          <p className="nota" style={{ textAlign: 'left' }}>
+            Reverso guardado. Las tarjetas que ya están en la billetera de tus clientes se actualizan
+            solas.
+          </p>
+        )}
+      </form>
+    </>
+  );
+}
+
+// El botón que devuelve el dorso de una tarjeta al del negocio. En su propio <form>: el de arriba ya
+// tiene su Server Action y un <form> dentro de otro no es HTML válido.
+function BotonUsarReversoDelNegocio({
+  programaId,
+  nombreTarjeta,
+}: {
+  programaId: string;
+  nombreTarjeta: string;
+}) {
+  const [estado, ejecutar, pendiente] = useActionState<EstadoBranding, FormData>(
+    accionUsarReversoDelNegocio.bind(null, programaId),
+    undefined,
+  );
+
+  return (
+    <form
+      action={ejecutar}
+      style={{ margin: '18px 0 0' }}
+      onSubmit={(e) => {
+        if (
+          !window.confirm(
+            `El dorso de “${nombreTarjeta}” va a decir lo mismo que el del resto de tu negocio. No se borra nada: podés volver cuando quieras.`,
+          )
+        ) {
+          e.preventDefault();
+        }
+      }}
+    >
+      <button className="btn-borde" type="submit" disabled={pendiente}>
+        <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">restart_alt</span>
+        {pendiente ? 'Aplicando…' : 'Usar el mismo reverso de mi negocio'}
       </button>
-      {estado && 'error' in estado && (
-        <p className="alerta" role="alert">{estado.error}</p>
-      )}
-      {estado && 'ok' in estado && (
-        <p className="nota" style={{ textAlign: 'left' }}>
-          Reverso guardado. Las tarjetas que ya están en la billetera de tus clientes se actualizan
-          solas.
-        </p>
-      )}
+      <p className="admin-fila-slug" style={{ marginTop: 6 }}>
+        Esta tarjeta tiene su propio dorso. Con esto vuelve a decir lo mismo que el resto.
+      </p>
+      {estado && 'error' in estado && <p className="alerta" role="alert">{estado.error}</p>}
     </form>
   );
 }

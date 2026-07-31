@@ -44,6 +44,8 @@ export type ResultadoBrandingPrograma =
   // los escribe el Server Action de subida, así que el formulario por sí solo no alcanza para saberlo.
   { ok: true; necesitaClasePropia: boolean } | { ok: false; error: string };
 
+export type ResultadoAccionPrograma = { ok: true } | { ok: false; error: string };
+
 export interface BrandingProgramaFila {
   programaId: string;
   brandingPropio: boolean;
@@ -126,6 +128,57 @@ export async function guardarBrandingPrograma(
       heroUrl: data.hero_url,
     }),
   };
+}
+
+// La regla que decide el interruptor a partir de lo que el dueño cargó. Existe para que el dueño
+// NUNCA tenga que ver ni entender `branding_propio`: el editor anterior se lo mostraba como una
+// casilla "Usar marca propia" —el nombre de una columna filtrado a la interfaz— y no se entendió.
+// Ahora el interruptor se DERIVA: si esta tarjeta tiene algo propio cargado, usa su diseño.
+//
+// `sello_meta` NO entra acá a propósito: no es marca, es la mecánica del programa, y el pase la lee
+// SIEMPRE desde programas_tarjeta mire o no el interruptor (ver DatosBrandingPrograma).
+export function hayMarcaPropia(campos: {
+  colorFondo: string | null;
+  colorTexto: string | null;
+  colorLabel: string | null;
+  difuminadoFranja: string | null;
+  logoUrl: string | null;
+  heroUrl: string | null;
+  stripUrl: string | null;
+  selloIconoUrl: string | null;
+}): boolean {
+  return Object.values(campos).some((valor) => valor !== null);
+}
+
+// El botón "Usar el mismo diseño de mi negocio". Apaga el interruptor y NO borra las columnas: es la
+// promesa que ya documenta brandingEfectivo —apagarlo no obliga al dueño a limpiar cada columna— y
+// hace que publicar de nuevo le devuelva el diseño que tenía en vez de obligarlo a rehacerlo.
+//
+// NO toca `google_class_id`: una clase ya creada en Google no se puede borrar (la API no tiene
+// delete) y limpiar el id haría que reencender la marca intentara un insert sobre un id existente,
+// que es un error irreparable. Ver syncClasePrograma.
+export async function volverAHeredarMarca(
+  supabase: SupabaseClient<Database>,
+  comercioId: string,
+  programaId: string,
+): Promise<ResultadoAccionPrograma> {
+  const { error } = await supabase
+    .from('programas_tarjeta')
+    .update({ branding_propio: false })
+    .eq('id', programaId)
+    .eq('comercio_id', comercioId)
+    .select('id')
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      return { ok: false, error: 'Ese programa no existe.' };
+    }
+    console.error('[comercio] no se pudo volver a heredar la marca:', error);
+    return { ok: false, error: 'No se pudo volver al diseño del negocio.' };
+  }
+
+  return { ok: true };
 }
 
 // Lectura para la pantalla de marca. Devuelve una fila por programa del comercio; la página cruza

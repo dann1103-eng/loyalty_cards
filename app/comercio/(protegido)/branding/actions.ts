@@ -5,13 +5,25 @@ import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { guardarBranding } from '@/lib/comercio/guardarBranding';
 import { guardarReverso } from '@/lib/comercio/guardarReverso';
-import { notificarCambioComercio } from '@/lib/apple/notificarCambioComercio';
+import {
+  guardarBrandingPrograma,
+  brandingProgramaDesdeFormulario,
+  volverAHeredarMarca,
+  hayMarcaPropia,
+} from '@/lib/comercio/guardarBrandingPrograma';
+import {
+  guardarReversoPrograma,
+  volverAHeredarReverso,
+  mostrarComoFuncionaDesdeFormulario,
+} from '@/lib/comercio/guardarReversoPrograma';
+import { notificarCambioComercio, notificarCambioPrograma } from '@/lib/apple/notificarCambioComercio';
 import { syncClaseComercio } from '@/lib/google/syncClase';
-import { syncObjetosComercio } from '@/lib/google/syncComercio';
+import { syncObjetosComercio, syncObjetosPrograma } from '@/lib/google/syncComercio';
 import {
   validarImagenSubida,
   extensionDeMime,
   rutaImagenComercio,
+  rutaImagenPrograma,
   CAMPOS_IMAGEN,
 } from '@/lib/comercio/imagenComercio';
 import type { Database } from '@/lib/supabase/types';
@@ -205,4 +217,266 @@ export async function accionQuitarImagen(
 
   revalidatePath('/comercio/branding');
   return { ok: true };
+}
+
+// =================================================================================================
+// LO MISMO, PERO PARA UNA TARJETA (un programa) EN VEZ DE PARA TODO EL NEGOCIO.
+//
+// Estas acciones vivían en app/comercio/(protegido)/programas/actions.ts, junto a un editor de marca
+// propio que duplicaba el formulario y perdía la vista previa en vivo. El diseño de tarjetas vive en
+// Marca; Programas quedó con tipo, configuración y QR.
+//
+// Dos reglas que valen para las cuatro:
+//   - el comercioId SIEMPRE del gate y el programaId bindeado desde el componente, pero cada función
+//     de lib scopea el update por comercio_id: un id de programa ajeno no escribe nada;
+//   - el dueño NUNCA manda `branding_propio`/`reverso_propio`. Se DERIVAN de lo que cargó. El editor
+//     anterior se los mostraba como una casilla "Usar marca propia" y no se entendió — es el nombre
+//     de una columna filtrado a la interfaz.
+// =================================================================================================
+
+export async function accionGuardarBrandingDePrograma(
+  programaId: string,
+  _estadoPrevio: EstadoBranding,
+  formData: FormData,
+): Promise<EstadoBranding> {
+  const { comercioId } = await verifyComercioOwner();
+  const supabase = createServiceClient();
+
+  const campos = brandingProgramaDesdeFormulario({
+    // Placeholder: se recalcula abajo con hayMarcaPropia. Este booleano NO viaja en el formulario.
+    brandingPropio: false,
+    colorFondo: String(formData.get('color_fondo') ?? ''),
+    colorTexto: String(formData.get('color_texto') ?? ''),
+    colorLabel: String(formData.get('color_label') ?? ''),
+    difuminadoFranja: String(formData.get('difuminado_franja') ?? ''),
+    selloMeta: String(formData.get('sello_meta') ?? ''),
+  });
+
+  // Las imágenes NO las escribe este formulario (cada una es su propio Server Action de subida), así
+  // que para saber si esta tarjeta tiene diseño propio hay que mirarlas en la fila. Sin esto, una
+  // tarjeta con logo propio y sin colores propios volvería a heredar al guardar y el logo que el
+  // dueño subió dejaría de verse.
+  const { data: imagenes } = await supabase
+    .from('programas_tarjeta')
+    .select('logo_url, hero_url, strip_url, sello_icono_url')
+    .eq('id', programaId)
+    .eq('comercio_id', comercioId)
+    .maybeSingle();
+
+  const res = await guardarBrandingPrograma(supabase, comercioId, programaId, {
+    ...campos,
+    brandingPropio: hayMarcaPropia({
+      colorFondo: campos.colorFondo,
+      colorTexto: campos.colorTexto,
+      colorLabel: campos.colorLabel,
+      difuminadoFranja: campos.difuminadoFranja,
+      logoUrl: imagenes?.logo_url ?? null,
+      heroUrl: imagenes?.hero_url ?? null,
+      stripUrl: imagenes?.strip_url ?? null,
+      selloIconoUrl: imagenes?.sello_icono_url ?? null,
+    }),
+  });
+  if (!res.ok) return { error: res.error };
+
+  await propagarMarcaPrograma(supabase, comercioId, programaId);
+
+  revalidatePath('/comercio/branding');
+  return { ok: true };
+}
+
+// El botón "Usar el mismo diseño de mi negocio". No borra nada: apaga el interruptor y deja las
+// columnas, así publicar de nuevo le devuelve al dueño el diseño que tenía.
+export async function accionUsarDisenoDelNegocio(
+  programaId: string,
+  _estadoPrevio: EstadoBranding,
+  _formData: FormData,
+): Promise<EstadoBranding> {
+  const { comercioId } = await verifyComercioOwner();
+  const supabase = createServiceClient();
+
+  const res = await volverAHeredarMarca(supabase, comercioId, programaId);
+  if (!res.ok) return { error: res.error };
+
+  await propagarMarcaPrograma(supabase, comercioId, programaId);
+
+  revalidatePath('/comercio/branding');
+  return { ok: true };
+}
+
+export async function accionGuardarReversoDePrograma(
+  programaId: string,
+  _estadoPrevio: EstadoBranding,
+  formData: FormData,
+): Promise<EstadoBranding> {
+  const { comercioId } = await verifyComercioOwner();
+  const supabase = createServiceClient();
+
+  const res = await guardarReversoPrograma(supabase, comercioId, programaId, {
+    terminosUso: String(formData.get('terminos_uso') ?? ''),
+    redInstagram: String(formData.get('red_instagram') ?? ''),
+    redFacebook: String(formData.get('red_facebook') ?? ''),
+    redWhatsapp: String(formData.get('red_whatsapp') ?? ''),
+    sitioWeb: String(formData.get('sitio_web') ?? ''),
+    // Un <select> de tres opciones y no una casilla: acá el campo es tri-estado (heredar del
+    // negocio / mostrar / ocultar) y una casilla solo tiene dos posiciones.
+    mostrarComoFunciona: mostrarComoFuncionaDesdeFormulario(
+      String(formData.get('mostrar_como_funciona') ?? ''),
+    ),
+  });
+  if (!res.ok) return { error: res.error };
+
+  // Solo Apple: el reverso viaja DENTRO del .pkpass. Google queda fuera de alcance igual que en el
+  // reverso del comercio (su equivalente —textModulesData/linksModuleData— no se toca).
+  await notificarCambioPrograma(supabase, comercioId, programaId);
+
+  revalidatePath('/comercio/branding');
+  return { ok: true };
+}
+
+export async function accionUsarReversoDelNegocio(
+  programaId: string,
+  _estadoPrevio: EstadoBranding,
+  _formData: FormData,
+): Promise<EstadoBranding> {
+  const { comercioId } = await verifyComercioOwner();
+  const supabase = createServiceClient();
+
+  const res = await volverAHeredarReverso(supabase, comercioId, programaId);
+  if (!res.ok) return { error: res.error };
+
+  await notificarCambioPrograma(supabase, comercioId, programaId);
+
+  revalidatePath('/comercio/branding');
+  return { ok: true };
+}
+
+// Sube UNA imagen de UNA tarjeta. Mismo esqueleto que el del comercio, con tres diferencias que no
+// son cosméticas:
+//   - la ruta lleva el programaId (rutaImagenPrograma): la subida usa upsert:true, así que con la
+//     ruta del comercio el logo de la tarjeta PISARÍA el logo del negocio;
+//   - el update se scopea por comercio_id además de por id;
+//   - enciende `branding_propio`. Subirle una imagen a UNA tarjeta es la intención inequívoca de
+//     que se vea distinta: sin esta línea, la imagen queda guardada y el cliente sigue viendo la
+//     del negocio, que es exactamente el "guardé y no pasó nada" del editor anterior.
+export async function accionSubirImagenDePrograma(
+  programaId: string,
+  _estadoPrevio: EstadoBranding,
+  formData: FormData,
+): Promise<EstadoBranding> {
+  const { comercioId } = await verifyComercioOwner();
+
+  const campo = String(formData.get('campo') ?? '');
+  if (!(CAMPOS_IMAGEN as readonly string[]).includes(campo)) {
+    return { error: 'Campo de imagen no válido.' };
+  }
+
+  const archivo = formData.get('archivo');
+  if (!(archivo instanceof File)) return { error: 'No se recibió ninguna imagen.' };
+
+  const problema = validarImagenSubida({ type: archivo.type, size: archivo.size });
+  if (problema) return { error: problema };
+
+  const ext = extensionDeMime(archivo.type);
+  const ruta = rutaImagenPrograma(comercioId, programaId, campo, ext);
+  const supabase = createServiceClient();
+
+  const { error: errorSubida } = await supabase.storage
+    .from(BUCKET)
+    .upload(ruta, await archivo.arrayBuffer(), { contentType: archivo.type, upsert: true });
+  if (errorSubida) {
+    console.error('[comercio] falló la subida de imagen de programa:', errorSubida);
+    return { error: 'No se pudo subir la imagen.' };
+  }
+
+  // URL pública + cache-busting: la ruta es determinística y el CDN cachea, así que re-subir al
+  // mismo path serviría la imagen vieja sin el ?v=.
+  const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(ruta);
+  const urlConVersion = `${pub.publicUrl}?v=${Date.now()}`;
+
+  const actualizacion = {
+    [`${campo}_url`]: urlConVersion,
+    branding_propio: true,
+  } as Database['public']['Tables']['programas_tarjeta']['Update'];
+
+  const { error: errorUpdate } = await supabase
+    .from('programas_tarjeta')
+    .update(actualizacion)
+    .eq('id', programaId)
+    .eq('comercio_id', comercioId)
+    .select('id')
+    .single();
+  if (errorUpdate) {
+    console.error('[comercio] falló el guardado de la URL de imagen del programa:', errorUpdate);
+    return { error: 'La imagen se subió pero no se pudo guardar su dirección.' };
+  }
+
+  await propagarMarcaPrograma(supabase, comercioId, programaId);
+
+  revalidatePath('/comercio/branding');
+  return { ok: true };
+}
+
+// Quita una imagen de la tarjeta: vacía la columna y borra el archivo del bucket (best-effort).
+//
+// A propósito NO recalcula `branding_propio`: quitar una imagen es sacar UNA cosa, no pedir volver
+// al diseño del negocio. Para eso está el botón "Usar el mismo diseño de mi negocio", que es
+// explícito. Recalcular acá también significaría que quitar la última imagen de una tarjeta que el
+// dueño había mandado a heredar la devolviera a diseño propio sin que él lo pidiera.
+export async function accionQuitarImagenDePrograma(
+  programaId: string,
+  campo: string,
+  _estadoPrevio: EstadoBranding,
+  _formData: FormData,
+): Promise<EstadoBranding> {
+  const { comercioId } = await verifyComercioOwner();
+
+  if (!(CAMPOS_IMAGEN as readonly string[]).includes(campo)) {
+    return { error: 'Campo de imagen no válido.' };
+  }
+
+  const supabase = createServiceClient();
+  const actualizacion = {
+    [`${campo}_url`]: null,
+  } as Database['public']['Tables']['programas_tarjeta']['Update'];
+
+  const { error: errorUpdate } = await supabase
+    .from('programas_tarjeta')
+    .update(actualizacion)
+    .eq('id', programaId)
+    .eq('comercio_id', comercioId)
+    .select('id')
+    .single();
+  if (errorUpdate) {
+    console.error('[comercio] no se pudo quitar la imagen del programa:', errorUpdate);
+    return { error: 'No se pudo quitar la imagen.' };
+  }
+
+  // El archivo pudo subirse con cualquiera de las tres extensiones permitidas; borrar de más no
+  // falla (remove ignora rutas inexistentes) y es best-effort: la referencia en la BD ya no existe.
+  const rutas = ['png', 'jpg', 'webp'].map((ext) => rutaImagenPrograma(comercioId, programaId, campo, ext));
+  const { error: errorStorage } = await supabase.storage.from(BUCKET).remove(rutas);
+  if (errorStorage) console.warn('[comercio] no se pudo borrar el archivo del bucket:', errorStorage);
+
+  await propagarMarcaPrograma(supabase, comercioId, programaId);
+
+  revalidatePath('/comercio/branding');
+  return { ok: true };
+}
+
+// Sin esto el dueño publica el diseño y NO PASA NADA VISIBLE: Wallet solo re-descarga el .pkpass
+// cuando recibe un push, y Google tiene la grilla de cada tarjeta cacheada por URL. Las dos son
+// best-effort (tragan y loguean sus fallos) y van acotadas al programa: las tarjetas del OTRO
+// programa no cambiaron de aspecto y no tienen por qué re-descargar nada.
+//
+// La LoyaltyClass propia del programa NO se sincroniza acá, y es deliberado: se crea perezosamente
+// en linkGuardar, cuando un cliente toca "guardar en Google Wallet". Una clase de Google no se
+// puede borrar (la API no tiene delete), así que crearla al guardar el formulario dejaría un recurso
+// permanente en el emisor por cada tarjeta que el dueño solo estaba probando.
+async function propagarMarcaPrograma(
+  supabase: ReturnType<typeof createServiceClient>,
+  comercioId: string,
+  programaId: string,
+): Promise<void> {
+  await notificarCambioPrograma(supabase, comercioId, programaId);
+  await syncObjetosPrograma(supabase, comercioId, programaId);
 }

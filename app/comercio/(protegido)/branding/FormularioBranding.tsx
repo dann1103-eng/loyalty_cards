@@ -2,7 +2,12 @@
 
 import { useState, useRef, useEffect, type ChangeEvent, type ReactNode } from 'react';
 import { useActionState } from 'react';
-import { accionGuardarBranding, type EstadoBranding } from './actions';
+import {
+  accionGuardarBranding,
+  accionGuardarBrandingDePrograma,
+  accionUsarDisenoDelNegocio,
+  type EstadoBranding,
+} from './actions';
 import { NIVELES_DIFUMINADO, stopsDifuminado, type NivelDifuminado } from '@/lib/apple/difuminadoFranja';
 
 const ETIQUETAS_DIFUMINADO: Record<NivelDifuminado, string> = {
@@ -12,16 +17,39 @@ const ETIQUETAS_DIFUMINADO: Record<NivelDifuminado, string> = {
   fuerte: 'Fuerte',
 };
 
+// El único campo de ESTE formulario que crea la tarjeta del programa en Google Wallet (los otros
+// dos son el logo y la imagen de portada, que se suben en SubidaImagen). Corto y llano a propósito:
+// el aviso anterior era un párrafo alarmante arriba de toda la pantalla, y aparecía también en los
+// campos reversibles.
+const AVISO_GOOGLE = 'Esto crea la tarjeta de este programa en Google Wallet y no se puede deshacer.';
+
+type Colores = {
+  color_fondo: string;
+  color_texto: string;
+  color_label: string;
+  difuminado_franja: string;
+};
+
 type Props = {
   nombreComercio: string;
   esSellos: boolean;
-  inicial: {
-    color_fondo: string;
-    color_texto: string;
-    color_label: string;
-    sello_meta: string;
-    difuminado_franja: string;
-  };
+  /* null = se está diseñando la marca del NEGOCIO (la base que heredan todas las tarjetas). Con id,
+     el diseño de esa tarjeta sola. Es la única diferencia entre los dos modos de esta pantalla. */
+  programaId: string | null;
+  /* Cómo se llama lo que se está diseñando, para los textos: el comercio o el programa. */
+  nombreTarjeta: string;
+  inicial: Colores & { sello_meta: string };
+  /* Lo que esta tarjeta toma del negocio en cada campo que quede vacío. null en modo negocio, donde
+     no hay de quién heredar. Se muestra como placeholder gris: el dueño VE qué está usando hoy en
+     vez de una caja vacía que no le dice si hereda o si no hay nada configurado. */
+  heredado: Colores | null;
+  /* Si esta tarjeta usa hoy su propio diseño. Solo decide qué se le MUESTRA al dueño (el botón de
+     volver al diseño del negocio y el aviso de estado): el booleano de la base no se edita a mano
+     nunca, se deriva de lo que el dueño cargue. */
+  usaDisenoPropio: boolean;
+  /* Si la tarjeta tiene un diseño propio GUARDADO aunque hoy no lo esté usando (pasa justo después
+     de tocar "usar el mismo diseño de mi negocio", que no borra nada). */
+  tieneDisenoGuardado: boolean;
   urls: {
     logo: string | null;
     hero: string | null;
@@ -56,9 +84,20 @@ const CAMPOS_COLOR = [
   ['color_label', 'Color de etiqueta'],
 ] as const;
 
-export default function FormularioBranding({ nombreComercio, esSellos, inicial, urls, subidas }: Props) {
+export default function FormularioBranding({
+  nombreComercio,
+  esSellos,
+  programaId,
+  nombreTarjeta,
+  inicial,
+  heredado,
+  usaDisenoPropio,
+  tieneDisenoGuardado,
+  urls,
+  subidas,
+}: Props) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoBranding, FormData>(
-    accionGuardarBranding,
+    programaId ? accionGuardarBrandingDePrograma.bind(null, programaId) : accionGuardarBranding,
     undefined,
   );
 
@@ -102,17 +141,26 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
       if (rgb) setValores((v) => ({ ...v, [campo]: rgb }));
     };
 
-  // Para pintar la vista previa usamos lo que haya válido; si el texto está a medio escribir,
-  // caemos al último color válido convertible (hexDesdeRgb tolera ambos formatos).
-  const fondo = rgbDesdeTexto(valores.color_fondo) ?? inicial.color_fondo;
-  const texto = rgbDesdeTexto(valores.color_texto) ?? inicial.color_texto;
-  const label = rgbDesdeTexto(valores.color_label) ?? inicial.color_label;
+  // De dónde sale el color cuando el campo está vacío o a medio escribir. En modo negocio es lo que
+  // ya estaba guardado; diseñando UNA tarjeta es lo que hereda del negocio — sin este respaldo, la
+  // vista previa de una tarjeta que hereda todo saldría negra y no se parecería en nada a la que el
+  // cliente tiene en el teléfono.
+  const respaldo: Colores = heredado ?? {
+    color_fondo: inicial.color_fondo,
+    color_texto: inicial.color_texto,
+    color_label: inicial.color_label,
+    difuminado_franja: inicial.difuminado_franja,
+  };
+
+  const fondo = rgbDesdeTexto(valores.color_fondo) ?? respaldo.color_fondo;
+  const texto = rgbDesdeTexto(valores.color_texto) ?? respaldo.color_texto;
+  const label = rgbDesdeTexto(valores.color_label) ?? respaldo.color_label;
 
   const meta = Number(valores.sello_meta) > 0 ? Math.min(20, Number(valores.sello_meta)) : 10;
   const llenos = Math.min(7, meta);
   // Misma función que usa el pass real (lib/apple/stripPass.tsx): el preview y el pass NUNCA
   // pueden mostrar un difuminado distinto para el mismo nivel elegido.
-  const stops = stopsDifuminado(valores.difuminado_franja);
+  const stops = stopsDifuminado(valores.difuminado_franja || respaldo.difuminado_franja);
 
   return (
     <div className="branding-grid">
@@ -121,7 +169,9 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
           franja, campos debajo, QR al pie) — antes el preview inventaba un layout propio y no se
           parecía a lo que llegaba al Wallet (observación del usuario). */}
       <div className="branding-preview reveal d1">
-        <p className="titulo-seccion" style={{ marginBottom: 12 }}>Vista previa en vivo</p>
+        <p className="titulo-seccion" style={{ marginBottom: 12 }}>
+          {programaId ? `Vista previa: ${nombreTarjeta}` : 'Vista previa en vivo'}
+        </p>
         {/* La tarjeta conserva SU PROPIO fondo (el color que eligió el comercio) en los tres temas
             del panel — es una réplica de lo que va a llegar a la billetera, no una pantalla más del
             panel. Lo ÚNICO que sigue al tema es el borde: es la línea que separa la tarjeta del
@@ -243,6 +293,18 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
 
       {/* -------- EDITOR -------- */}
       <div className="branding-editor">
+        {/* Estado de la tarjeta y la salida. Solo diseñando UNA tarjeta: el negocio no hereda de
+            nadie y no tiene a dónde volver. */}
+        {programaId && usaDisenoPropio && (
+          <BotonUsarDisenoDelNegocio programaId={programaId} nombreTarjeta={nombreTarjeta} />
+        )}
+        {programaId && !usaDisenoPropio && tieneDisenoGuardado && (
+          <p className="admin-vacio" role="status" style={{ marginBottom: 16, padding: '14px 16px', textAlign: 'left' }}>
+            Ahora mismo esta tarjeta usa el diseño de tu negocio. Abajo está el diseño propio que le
+            habías guardado: si lo publicás, vuelve a usarlo.
+          </p>
+        )}
+
         <section className="panel reveal d2" style={{ marginTop: 0 }}>
           <p className="titulo-seccion" style={{ marginBottom: 14 }}>Recursos visuales</p>
           {subidas}
@@ -258,7 +320,7 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
                 <input
                   type="color"
                   aria-label={`${etiqueta} (selector)`}
-                  value={hexDesdeRgb(valores[campo])}
+                  value={hexDesdeRgb(valores[campo] || respaldo[campo])}
                   onChange={cambiarPicker(campo)}
                 />
                 <div style={{ flex: 1 }}>
@@ -267,13 +329,21 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
                     name={campo}
                     value={valores[campo]}
                     onChange={cambiarTexto(campo)}
-                    placeholder="rgb(19, 19, 21)"
-                    required
+                    // Diseñando una tarjeta, el placeholder es el color que HEREDA del negocio: así
+                    // el dueño ve qué está usando hoy y entiende que dejarlo vacío no es un error.
+                    placeholder={heredado ? respaldo[campo] : 'rgb(19, 19, 21)'}
+                    // Obligatorio solo para el negocio: en una tarjeta, vacío = heredá.
+                    required={!programaId}
                     style={{ width: '100%' }}
                   />
-                  <p className="hex" style={{ marginTop: 4 }}>{hexDesdeRgb(valores[campo])}</p>
+                  <p className="hex" style={{ marginTop: 4 }}>{hexDesdeRgb(valores[campo] || respaldo[campo])}</p>
                 </div>
               </div>
+              {/* El aviso va solo acá y solo diseñando una tarjeta: de los tres colores, únicamente
+                  el de fondo viaja a la LoyaltyClass de Google. Los otros dos son reversibles. */}
+              {programaId && campo === 'color_fondo' && (
+                <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>{AVISO_GOOGLE}</p>
+              )}
             </div>
           ))}
 
@@ -292,6 +362,13 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
                 placeholder="10"
                 className="dato-mono"
               />
+              {/* La meta NO se hereda: no es diseño, es la mecánica de la tarjeta, y el pase la lee
+                  siempre de la tarjeta misma. Un cupón sin meta la tiene vacía LEGÍTIMAMENTE. */}
+              {programaId && (
+                <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>
+                  Cuántos sellos necesita el cliente para el premio de esta tarjeta.
+                </p>
+              )}
             </div>
           )}
 
@@ -304,6 +381,13 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
               value={valores.difuminado_franja}
               onChange={cambiarDifuminado}
             >
+              {/* La opción vacía existe SOLO diseñando una tarjeta, y es la herencia: sin ella no
+                  habría forma de volver a "como en mi negocio" una vez elegido un nivel. */}
+              {heredado && (
+                <option value="">
+                  Como en mi negocio ({ETIQUETAS_DIFUMINADO[heredado.difuminado_franja as NivelDifuminado] ?? heredado.difuminado_franja})
+                </option>
+              )}
               {NIVELES_DIFUMINADO.map((nivel) => (
                 <option key={nivel} value={nivel}>{ETIQUETAS_DIFUMINADO[nivel]}</option>
               ))}
@@ -321,10 +405,54 @@ export default function FormularioBranding({ nombreComercio, esSellos, inicial, 
             <p className="alerta" role="alert">{estado.error}</p>
           )}
           {estado && 'ok' in estado && (
-            <p className="nota" style={{ textAlign: 'left' }}>Branding guardado. Los passes nuevos ya salen con estos colores.</p>
+            <p className="nota" style={{ textAlign: 'left' }}>
+              {programaId
+                ? `Listo. Las tarjetas de ${nombreTarjeta} ya se están actualizando.`
+                : 'Branding guardado. Los passes nuevos ya salen con estos colores.'}
+            </p>
           )}
         </form>
       </div>
     </div>
+  );
+}
+
+// El botón que devuelve una tarjeta al diseño del negocio. Va en su propio <form> porque el de
+// arriba ya tiene su Server Action, y un <form> dentro de otro no es HTML válido.
+function BotonUsarDisenoDelNegocio({
+  programaId,
+  nombreTarjeta,
+}: {
+  programaId: string;
+  nombreTarjeta: string;
+}) {
+  const [estado, ejecutar, pendiente] = useActionState<EstadoBranding, FormData>(
+    accionUsarDisenoDelNegocio.bind(null, programaId),
+    undefined,
+  );
+
+  return (
+    <form
+      action={ejecutar}
+      style={{ marginBottom: 16 }}
+      onSubmit={(e) => {
+        if (
+          !window.confirm(
+            `“${nombreTarjeta}” va a verse igual que el resto de tu negocio. No se borra nada: podés volver a su diseño propio cuando quieras.`,
+          )
+        ) {
+          e.preventDefault();
+        }
+      }}
+    >
+      <button className="btn-borde" type="submit" disabled={pendiente}>
+        <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">restart_alt</span>
+        {pendiente ? 'Aplicando…' : 'Usar el mismo diseño de mi negocio'}
+      </button>
+      <p className="admin-fila-slug" style={{ marginTop: 6 }}>
+        Esta tarjeta tiene su propio diseño. Con esto vuelve a verse como el resto.
+      </p>
+      {estado && 'error' in estado && <p className="alerta" role="alert">{estado.error}</p>}
+    </form>
   );
 }

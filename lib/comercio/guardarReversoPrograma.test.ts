@@ -7,6 +7,7 @@ import {
   reversoDePrograma,
   volverAHeredarReverso,
   hayReversoPropio,
+  mostrarComoFuncionaDesdeFormulario,
 } from './guardarReversoPrograma';
 
 const supabase = createServiceClient();
@@ -292,5 +293,25 @@ describe('hayReversoPropio', () => {
     // `false` NO es "vacío": es la decisión de apagar la sección solo en esta tarjeta.
     expect(hayReversoPropio({ ...NADA, mostrarComoFunciona: false })).toBe(true);
     expect(hayReversoPropio({ ...NADA, mostrarComoFunciona: true })).toBe(true);
+  });
+});
+
+// En la pantalla del programa este campo NO es una casilla: es tri-estado (heredar / mostrar /
+// ocultar) y una casilla solo tiene dos. La conversión vive acá, en un módulo puro y testeable, y
+// no adentro del Server Action — mismo criterio que brandingProgramaDesdeFormulario.
+describe('mostrarComoFuncionaDesdeFormulario', () => {
+  it('la opción vacía es heredar (null), no apagar', () => {
+    expect(mostrarComoFuncionaDesdeFormulario('')).toBeNull();
+  });
+
+  it('"si" y "no" son decisiones propias de esta tarjeta', () => {
+    expect(mostrarComoFuncionaDesdeFormulario('si')).toBe(true);
+    expect(mostrarComoFuncionaDesdeFormulario('no')).toBe(false);
+  });
+
+  // Cualquier otra cosa (un <select> manipulado, un campo que no llegó) cae en heredar: es el
+  // estado que NO cambia lo que el cliente ve hoy.
+  it('un valor desconocido cae en heredar, no en apagar la sección', () => {
+    expect(mostrarComoFuncionaDesdeFormulario('cualquiera')).toBeNull();
   });
 });
