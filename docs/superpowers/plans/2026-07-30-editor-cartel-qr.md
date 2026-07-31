@@ -32,20 +32,20 @@ del navegador es del comercio correcto. La Tarea 8/9 (`resolverDatosCartel`) y l
 (`accionGuardarCartel`/subida de logo) son los dos lugares donde este chequeo se implementa una sola
 vez cada uno; todo lo demás los reusa.
 
-## Task 1: Migración 0026 + `types.ts` + verificador
+## Task 1: Migración 0028 + `types.ts` + verificador
 
 **Files:**
-- Create: `supabase/migrations/0026_disenos_cartel.sql`
+- Create: `supabase/migrations/0028_disenos_cartel.sql`
 - Modify: `lib/supabase/types.ts`
-- Create: `scripts/verificar-0026.ts`
+- Create: `scripts/verificar-0028.ts`
 
 - [ ] **Step 1: Escribir la migración**
 
-Crear `supabase/migrations/0026_disenos_cartel.sql` con este contenido exacto (copiado del spec §3,
+Crear `supabase/migrations/0028_disenos_cartel.sql` con este contenido exacto (copiado del spec §3,
 byte-idéntico):
 
 ```sql
--- 0026: diseños de cartel/QR por programa.
+-- 0028: diseños de cartel/QR por programa.
 --
 -- Un comercio puede diseñar el cartel de mesa/mostrador que imprime con el QR de registro de CADA
 -- uno de sus programas activos. Sin backfill: la ausencia de fila para un programa_id significa "sin
@@ -136,13 +136,13 @@ vecinas:
 
 - [ ] **Step 3: Escribir el script de verificación**
 
-Crear `scripts/verificar-0026.ts`, siguiendo el mismo patrón que `scripts/verificar-0024.ts` (que ya
+Crear `scripts/verificar-0028.ts`, siguiendo el mismo patrón que `scripts/verificar-0024.ts` (que ya
 existe en el repo): mismos imports, mismos helpers `ok`/`fallo`, crea y borra sus propios datos, y
 termina probando que el rol anónimo no puede leer la tabla.
 
 ```ts
-// Ejecutar vía: npx tsx --conditions=react-server scripts/verificar-0026.ts
-// Verificación de la migración 0026 (disenos_cartel). Lee/escribe datos propios de prueba y los
+// Ejecutar vía: npx tsx --conditions=react-server scripts/verificar-0028.ts
+// Verificación de la migración 0028 (disenos_cartel). Lee/escribe datos propios de prueba y los
 // borra al final; además confirma que la llave pública (anon) no puede ver la tabla.
 import { config } from 'dotenv';
 config({ path: '.env.local' });
@@ -174,7 +174,7 @@ async function main() {
   const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const { data: com, error: eCom } = await supabase
     .from('comercios')
-    .insert({ nombre: 'Verificacion 0026', slug: `verif-0026-${sufijo}` })
+    .insert({ nombre: 'Verificacion 0028', slug: `verif-0028-${sufijo}` })
     .select('id')
     .single();
   if (eCom || !com) {
@@ -262,7 +262,7 @@ async function main() {
     console.error(`\n${fallas} verificación(es) fallaron.`);
     process.exit(1);
   }
-  console.log('\nTodo en orden: la migración 0026 está aplicada.');
+  console.log('\nTodo en orden: la migración 0028 está aplicada.');
   process.exit(0);
 }
 
@@ -281,15 +281,15 @@ de verificación no corre en este paso porque la migración todavía no está ap
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/0026_disenos_cartel.sql lib/supabase/types.ts scripts/verificar-0026.ts
-git commit -m "Cartel: migracion 0026 (disenos_cartel) + types.ts + verificador
+git add supabase/migrations/0028_disenos_cartel.sql lib/supabase/types.ts scripts/verificar-0028.ts
+git commit -m "Cartel: migracion 0028 (disenos_cartel) + types.ts + verificador
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ```
 
 - [ ] **Step 6: Entregar la migración al usuario**
 
-Pegar el contenido de `supabase/migrations/0026_disenos_cartel.sql` en el chat y pedirle al usuario
+Pegar el contenido de `supabase/migrations/0028_disenos_cartel.sql` en el chat y pedirle al usuario
 que lo corra en Supabase Studio (regla del proyecto: el asistente no corre DDL). **No avanzar a
 ninguna tarea que dependa de la tabla existiendo en la base real hasta que el usuario confirme que la
 corrió** — las Tareas 2 a 7 no la necesitan (son código puro/TypeScript), pero la Tarea 8 en adelante
@@ -523,7 +523,7 @@ Expected: FAIL — `Cannot find module './tipos'`.
 Crear `lib/comercio/cartel/tipos.ts`:
 
 ```ts
-// Tipos y dimensiones del cartel/QR (migración 0026). Puro — sin Supabase, sin fetch, sin DOM.
+// Tipos y dimensiones del cartel/QR (migración 0028). Puro — sin Supabase, sin fetch, sin DOM.
 
 export const PLANTILLAS_CARTEL = ['centrado', 'split', 'foto'] as const;
 export type PlantillaCartel = (typeof PLANTILLAS_CARTEL)[number];
@@ -1381,7 +1381,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Create: `lib/comercio/cartel/resolverDatosCartel.ts`
 - Create: `lib/comercio/cartel/resolverDatosCartel.test.ts`
 
-**Depende de que la migración 0026 ya esté aplicada en la base real** (Task 1, Step 6) — este archivo
+**Depende de que la migración 0028 ya esté aplicada en la base real** (Task 1, Step 6) — este archivo
 consulta `disenos_cartel` de verdad.
 
 - [ ] **Step 1: Escribir la prueba que falla**
@@ -2559,16 +2559,16 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 
 **Files:** ninguno nuevo — solo verificación.
 
-- [ ] **Step 1: Confirmar que la migración 0026 ya está aplicada**
+- [ ] **Step 1: Confirmar que la migración 0028 ya está aplicada**
 
-Si el usuario todavía no confirmó haber corrido `0026_disenos_cartel.sql` (Task 1, Step 6), **parar
+Si el usuario todavía no confirmó haber corrido `0028_disenos_cartel.sql` (Task 1, Step 6), **parar
 acá** y esperar la confirmación antes de seguir — las Tareas 9, 11 y 12 en adelante ya asumieron que la
 tabla existe, pero esta es la primera vez que se corre la suite completa contra la base real.
 
 - [ ] **Step 2: Correr el verificador de la migración**
 
 ```bash
-npx tsx --conditions=react-server scripts/verificar-0026.ts
+npx tsx --conditions=react-server scripts/verificar-0028.ts
 ```
 
 Expected: todas las líneas `OK:`, ninguna `FALLO:`, termina con "Todo en orden".
