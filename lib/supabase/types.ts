@@ -15,6 +15,7 @@
 //   - supabase/migrations/0012_sucursal_principal.sql (sucursales.es_principal + índice único parcial)
 //   - supabase/migrations/0013_reverso_tarjeta.sql (columnas del reverso del pass en comercios)
 //   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
+//   - supabase/migrations/0029_reverso_por_programa.sql (reverso por programa en programas_tarjeta)
 //   - supabase/migrations/0027_branding_por_programa.sql (branding por programa en programas_tarjeta)
 //   - supabase/migrations/0026_notificaciones_push.sql (tablas difusiones y notificaciones_enviadas; tarjetas.aviso_texto/aviso_hasta/aviso_inactividad_enviado_en; comercios.aviso_inactividad_activo/dias/mensaje)
 //   - supabase/migrations/0025_backfill_programas_principales_faltantes.sql (solo datos, no cambia columnas: programa principal para comercios que la 0024 no alcanzó a cubrir)
@@ -916,6 +917,16 @@ export type Database = {
           // Una vez seteado NUNCA vuelve a null: las clases de Google no se borran.
           google_class_id: string | null;
           branding_propio: boolean;
+          // Reverso por programa (migración 0029), espejo del branding de arriba. null = heredá el
+          // del comercio; el booleano reverso_propio manda sobre los campos.
+          terminos_uso: string | null;
+          red_instagram: string | null;
+          red_facebook: string | null;
+          red_whatsapp: string | null;
+          sitio_web: string | null;
+          // NULLABLE acá y NOT NULL en comercios: null es "heredá", no "apagada".
+          mostrar_como_funciona: boolean | null;
+          reverso_propio: boolean;
           created_at: string;
         };
         Insert: {
@@ -941,6 +952,13 @@ export type Database = {
           difuminado_franja?: string | null;
           google_class_id?: string | null;
           branding_propio?: boolean;
+          terminos_uso?: string | null;
+          red_instagram?: string | null;
+          red_facebook?: string | null;
+          red_whatsapp?: string | null;
+          sitio_web?: string | null;
+          mostrar_como_funciona?: boolean | null;
+          reverso_propio?: boolean;
           created_at?: string;
         };
         Update: {
@@ -966,6 +984,13 @@ export type Database = {
           difuminado_franja?: string | null;
           google_class_id?: string | null;
           branding_propio?: boolean;
+          terminos_uso?: string | null;
+          red_instagram?: string | null;
+          red_facebook?: string | null;
+          red_whatsapp?: string | null;
+          sitio_web?: string | null;
+          mostrar_como_funciona?: boolean | null;
+          reverso_propio?: boolean;
           created_at?: string;
         };
         Relationships: [

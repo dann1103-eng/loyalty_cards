@@ -63,3 +63,47 @@ export function necesitaClasePropia(
   if (!programa || !programa.brandingPropio) return false;
   return programa.colorFondo !== null || programa.logoUrl !== null || programa.heroUrl !== null;
 }
+
+// ---------------------------------------------------------------------------------------------
+// El REVERSO del pass (migración 0029), hermano exacto de brandingEfectivo. Vive en este archivo y
+// no en uno propio porque es la MISMA regla —el interruptor manda sobre los campos, `null` es
+// "heredá"— y separarlas invita a que una de las dos evolucione sin la otra, que es justo el
+// problema que brandingEfectivo vino a cerrar.
+
+export interface ReversoBase {
+  terminosUso: string | null;
+  redInstagram: string | null;
+  redFacebook: string | null;
+  redWhatsapp: string | null;
+  sitioWeb: string | null;
+  // En `comercios` esta columna es NOT NULL (0013): el comercio SIEMPRE tiene una decisión tomada.
+  mostrarComoFunciona: boolean;
+}
+
+// En el programa `mostrar_como_funciona` es NULLABLE a propósito: null = heredar. Por eso este tipo
+// no puede ser un `Partial<ReversoBase>` a secas — necesita admitir `boolean | null` en ese campo.
+export type ReversoPrograma = Partial<Omit<ReversoBase, 'mostrarComoFunciona'>> & {
+  reversoPropio: boolean;
+  mostrarComoFunciona?: boolean | null;
+};
+
+export function reversoEfectivo(
+  comercio: ReversoBase,
+  programa: ReversoPrograma | null,
+): ReversoBase {
+  // Mismo criterio que arriba: el booleano manda SOBRE los campos, así apagar el reverso propio no
+  // obliga al dueño a limpiar cada columna y volver a encenderlo le devuelve lo que tenía.
+  if (!programa || !programa.reversoPropio) return comercio;
+
+  return {
+    terminosUso: programa.terminosUso ?? comercio.terminosUso,
+    redInstagram: programa.redInstagram ?? comercio.redInstagram,
+    redFacebook: programa.redFacebook ?? comercio.redFacebook,
+    redWhatsapp: programa.redWhatsapp ?? comercio.redWhatsapp,
+    sitioWeb: programa.sitioWeb ?? comercio.sitioWeb,
+    // `??` y NUNCA `||`: acá el valor es un BOOLEANO y `false` es una decisión del dueño ("en esta
+    // tarjeta no quiero la sección automática"), no una ausencia. Con `||`, ese false se lo comería
+    // el true del comercio y el cliente vería en su cupón una sección que el dueño apagó.
+    mostrarComoFunciona: programa.mostrarComoFunciona ?? comercio.mostrarComoFunciona,
+  };
+}

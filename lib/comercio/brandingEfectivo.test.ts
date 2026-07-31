@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { brandingEfectivo, necesitaClasePropia, type BrandingBase } from './brandingEfectivo';
+import {
+  brandingEfectivo,
+  necesitaClasePropia,
+  reversoEfectivo,
+  type BrandingBase,
+  type ReversoBase,
+} from './brandingEfectivo';
 
 // Módulo PURO. Es la única definición de "qué branding ve el cliente" y la comparten los NUEVE
 // consumidores (pase de Apple, clase y objeto de Google, JWT de guardado, portal, la ruta que
@@ -87,5 +93,76 @@ describe('necesitaClasePropia', () => {
     expect(necesitaClasePropia({ ...base, colorFondo: 'rgb(1,2,3)' })).toBe(true);
     expect(necesitaClasePropia({ ...base, logoUrl: 'https://ejemplo.com/l.png' })).toBe(true);
     expect(necesitaClasePropia({ ...base, heroUrl: 'https://ejemplo.com/h.png' })).toBe(true);
+  });
+});
+
+// El hermano de brandingEfectivo para el REVERSO (migración 0029). Misma regla —el booleano manda
+// sobre los campos, null es "heredá"— con una diferencia que sí muerde: mostrarComoFunciona es un
+// BOOLEANO, y ahí `||` en lugar de `??` haría que un programa que apagó la sección la viera
+// encendida porque el comercio la tiene encendida.
+const REVERSO_COMERCIO: ReversoBase = {
+  terminosUso: 'Términos del negocio.',
+  redInstagram: 'https://instagram.com/negocio',
+  redFacebook: 'https://facebook.com/negocio',
+  redWhatsapp: 'https://wa.me/50370000000',
+  sitioWeb: 'https://negocio.com',
+  mostrarComoFunciona: true,
+};
+
+describe('reversoEfectivo', () => {
+  it('sin programa: devuelve tal cual el reverso del comercio', () => {
+    expect(reversoEfectivo(REVERSO_COMERCIO, null)).toEqual(REVERSO_COMERCIO);
+  });
+
+  it('programa con reverso_propio APAGADO: hereda todo aunque tenga campos cargados', () => {
+    const resultado = reversoEfectivo(REVERSO_COMERCIO, {
+      reversoPropio: false,
+      terminosUso: 'Términos del cupón.',
+      mostrarComoFunciona: false,
+    });
+    expect(resultado).toEqual(REVERSO_COMERCIO);
+  });
+
+  it('herencia CAMPO POR CAMPO: lo definido pisa, lo null hereda', () => {
+    const resultado = reversoEfectivo(REVERSO_COMERCIO, {
+      reversoPropio: true,
+      terminosUso: 'Términos del cupón.',
+      redInstagram: 'https://instagram.com/cupon',
+    });
+    expect(resultado.terminosUso).toBe('Términos del cupón.');
+    expect(resultado.redInstagram).toBe('https://instagram.com/cupon');
+    expect(resultado.redFacebook).toBe(REVERSO_COMERCIO.redFacebook);
+    expect(resultado.redWhatsapp).toBe(REVERSO_COMERCIO.redWhatsapp);
+    expect(resultado.sitioWeb).toBe(REVERSO_COMERCIO.sitioWeb);
+    expect(resultado.mostrarComoFunciona).toBe(true);
+  });
+
+  // LA prueba de este módulo. `false` es un valor ELEGIDO por el dueño ("no quiero la sección en
+  // esta tarjeta"), no una ausencia: con `||` se lo tragaría el true del comercio y el cliente
+  // vería en el cupón una sección que el dueño apagó.
+  it('mostrarComoFunciona en false NO hereda el true del comercio', () => {
+    const resultado = reversoEfectivo(REVERSO_COMERCIO, {
+      reversoPropio: true,
+      mostrarComoFunciona: false,
+    });
+    expect(resultado.mostrarComoFunciona, 'false es una decisión, no una ausencia').toBe(false);
+  });
+
+  it('mostrarComoFunciona en null SÍ hereda el del comercio', () => {
+    const resultado = reversoEfectivo(REVERSO_COMERCIO, {
+      reversoPropio: true,
+      mostrarComoFunciona: null,
+      terminosUso: 'Términos del cupón.',
+    });
+    expect(resultado.mostrarComoFunciona).toBe(true);
+  });
+
+  it('un campo del comercio que es null y el programa tampoco define: queda null', () => {
+    const sinRedes: ReversoBase = { ...REVERSO_COMERCIO, redFacebook: null };
+    const resultado = reversoEfectivo(sinRedes, {
+      reversoPropio: true,
+      terminosUso: 'Términos del cupón.',
+    });
+    expect(resultado.redFacebook).toBeNull();
   });
 });

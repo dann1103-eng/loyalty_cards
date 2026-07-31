@@ -42,16 +42,34 @@ function normalizarOpcional(valor: string): string | null {
   return recortado === '' ? null : recortado;
 }
 
-// Guarda SOLO el reverso configurable (términos, redes e interruptor de la sección automática).
-// Separado a propósito de guardarBranding, que ya valida colores, meta de sellos y difuminado: son
-// responsabilidades distintas y el formulario del dueño también es otro. El comercioId SIEMPRE
-// viene del gate (verifyComercioOwner), nunca del formulario (spec §8).
-export async function guardarReverso(
-  supabase: SupabaseClient<Database>,
-  comercioId: string,
-  datos: DatosReversoComercio,
-): Promise<ResultadoReverso> {
-  const terminos = normalizarOpcional(datos.terminos_uso);
+// Lo que llega del formulario (crudo) y lo que sale ya normalizado. En camelCase porque lo comparten
+// el reverso del comercio y el del PROGRAMA (guardarReversoPrograma.ts), y ese módulo sigue la
+// convención de guardarBrandingPrograma.
+export interface CamposReverso {
+  terminosUso: string;
+  redInstagram: string;
+  redFacebook: string;
+  redWhatsapp: string;
+  sitioWeb: string;
+}
+
+export interface ReversoNormalizado {
+  terminosUso: string | null;
+  redInstagram: string | null;
+  redFacebook: string | null;
+  redWhatsapp: string | null;
+  sitioWeb: string | null;
+}
+
+export type ResultadoNormalizacion =
+  | { ok: true; valores: ReversoNormalizado }
+  | { ok: false; error: string };
+
+// Normaliza y valida los cinco campos de texto del reverso. Vive acá y la usan LOS DOS que escriben
+// reverso —el del comercio y el del programa— para que el tope de caracteres y la exigencia de
+// https:// no puedan divergir entre las dos pantallas: el texto termina en la misma tarjeta.
+export function normalizarReverso(campos: CamposReverso): ResultadoNormalizacion {
+  const terminos = normalizarOpcional(campos.terminosUso);
   if (terminos !== null && terminos.length > LARGO_MAXIMO_TERMINOS) {
     // El largo actual va en el mensaje: "es muy largo" a secas no le dice al dueño cuánto recortar.
     return {
@@ -63,10 +81,10 @@ export async function guardarReverso(
   // La etiqueta es la frase completa para que el mensaje se lea natural en los dos campos
   // ("El enlace de Instagram…" / "La dirección del sitio web…") sin armar preposiciones a mano.
   const enlaces: [string, string | null][] = [
-    ['El enlace de Instagram', normalizarOpcional(datos.red_instagram)],
-    ['El enlace de Facebook', normalizarOpcional(datos.red_facebook)],
-    ['El enlace de WhatsApp', normalizarOpcional(datos.red_whatsapp)],
-    ['La dirección del sitio web', normalizarOpcional(datos.sitio_web)],
+    ['El enlace de Instagram', normalizarOpcional(campos.redInstagram)],
+    ['El enlace de Facebook', normalizarOpcional(campos.redFacebook)],
+    ['El enlace de WhatsApp', normalizarOpcional(campos.redWhatsapp)],
+    ['La dirección del sitio web', normalizarOpcional(campos.sitioWeb)],
   ];
   for (const [etiqueta, valor] of enlaces) {
     if (valor === null) continue;
@@ -81,17 +99,48 @@ export async function guardarReverso(
     }
   }
 
-  const { error } = await supabase
-    .from('comercios')
-    .update({
-      terminos_uso: terminos,
+  return {
+    ok: true,
+    valores: {
+      terminosUso: terminos,
       // La cadena CRUDA con trim(), no new URL().href: la normalización agrega barras finales y
       // percent-encodea, y devolverle al dueño algo distinto de lo que escribió es desconcertante.
       // La defensa contra comillas es el escape del render (spec §7.1), no esta normalización.
-      red_instagram: enlaces[0][1],
-      red_facebook: enlaces[1][1],
-      red_whatsapp: enlaces[2][1],
-      sitio_web: enlaces[3][1],
+      redInstagram: enlaces[0][1],
+      redFacebook: enlaces[1][1],
+      redWhatsapp: enlaces[2][1],
+      sitioWeb: enlaces[3][1],
+    },
+  };
+}
+
+// Guarda SOLO el reverso configurable (términos, redes e interruptor de la sección automática).
+// Separado a propósito de guardarBranding, que ya valida colores, meta de sellos y difuminado: son
+// responsabilidades distintas y el formulario del dueño también es otro. El comercioId SIEMPRE
+// viene del gate (verifyComercioOwner), nunca del formulario (spec §8).
+export async function guardarReverso(
+  supabase: SupabaseClient<Database>,
+  comercioId: string,
+  datos: DatosReversoComercio,
+): Promise<ResultadoReverso> {
+  const normalizado = normalizarReverso({
+    terminosUso: datos.terminos_uso,
+    redInstagram: datos.red_instagram,
+    redFacebook: datos.red_facebook,
+    redWhatsapp: datos.red_whatsapp,
+    sitioWeb: datos.sitio_web,
+  });
+  if (!normalizado.ok) return normalizado;
+  const v = normalizado.valores;
+
+  const { error } = await supabase
+    .from('comercios')
+    .update({
+      terminos_uso: v.terminosUso,
+      red_instagram: v.redInstagram,
+      red_facebook: v.redFacebook,
+      red_whatsapp: v.redWhatsapp,
+      sitio_web: v.sitioWeb,
       // Boolean() no es redundante pese al tipo: si un llamador de JS mandara undefined, la
       // serialización a JSON borraría la clave y la columna (NOT NULL) quedaría sin tocar en
       // silencio, que es peor que guardar false.
