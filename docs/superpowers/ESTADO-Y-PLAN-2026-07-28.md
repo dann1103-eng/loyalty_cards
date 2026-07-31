@@ -281,3 +281,80 @@ El flujo de migraciones a mano + verificación con script descartable, y el patr
 fast-forward a `master` (sin merge commit), son los mismos de siempre — ver `CLAUDE.md`. Si un
 subagente reporta un git worktree con historia de OTRA feature (Google Wallet, etc.) al arrancar,
 es la infraestructura de la sesión, no un error — ver la nota sobre esto en `CLAUDE.md`.
+
+---
+
+# Sesión del 2026-07-30 (madrugada) — qué quedó hecho y qué sigue
+
+Todo lo de abajo está **fusionado a `master` y desplegado**.
+
+## Corregido en producción
+
+1. **Notificaciones push a Android: `messageType` era `'TEXT'`.** Con ese valor la API devuelve éxito
+   pero el mensaje solo se escribe en el detalle del pase y NADIE recibe nada. Con
+   `TEXT_AND_NOTIFY` llega. Confirmado en un teléfono real.
+   - **El texto de la notificación de Android NO se puede controlar.** Google lo genera ("Mensaje
+     nuevo / Presiona para ver el pase"). La FAQ oficial: *"Developer authored push notifications are
+     not currently supported"*. En **iPhone SÍ** se lee el mensaje del dueño (`changeMessage`). La
+     asimetría es la INVERSA de la que decía el spec original; ya está corregida ahí.
+2. **Geopush: faltaba `merchantLocations` en el OBJETO**, no solo en la clase. Empujado a las
+   tarjetas existentes con `scripts/resincronizar-objetos-google.ts` (ojo: ese script necesita
+   `NEXT_PUBLIC_BASE_URL` de producción, si no Google rechaza el patch ENTERO por la heroImage).
+3. **El pase leía `comercios.tipo_tarjeta`**, columna legada desde la 0024, en SEIS lugares. Una
+   tarjeta de cupón se le instalaba al cliente dibujada como sellos. Costó dos rondas: el primer
+   arreglo tocó 2 de 6 y se declaró cerrado. **Lección: cuando una columna se muda de tabla, barrer
+   TODOS los consumidores con grep.**
+4. **Regresión de `sello_meta`** que introdujo ese arreglo: `guardarBranding` escribía solo la
+   columna del comercio, así que cambiar la meta de sellos dejó de tener efecto. Ya escribe también
+   el programa principal.
+5. **Dinero mostrado como puntos.** Una gift card de $25.00 decía "PUNTOS 2500". Nuevo módulo puro
+   `lib/tarjetas/contadorPase.ts`, compartido por Apple y Google.
+6. **El conteo de "tarjetas alcanzadas" contaba llamadas exitosas, no clientes.** Ahora usa
+   `hasUsers`, que viene gratis en la respuesta del `addmessage`.
+7. **519 comercios huérfanos en la base REAL**, por tres fugas encadenadas del fixture de pruebas.
+   Limpiados y la causa cerrada — hoy una corrida completa deja CERO. Ver el comentario largo en
+   `test/fixtures/entornoComercio.ts:limpiar()`.
+
+## Branding por programa: 6 de 12 tareas
+
+Plan: `docs/superpowers/plans/2026-07-30-branding-por-programa.md`.
+Spec: `docs/superpowers/specs/2026-07-30-branding-por-programa-design.md`.
+
+Hechas: **1** (migración 0027, ya aplicada), **2** (`brandingEfectivo`), **3** (ruta de Storage),
+**4** (pase de Apple), **5** (la ruta que dibuja), **8** (portal).
+
+**Estado seguro:** es TODO el lado de lectura. Como `branding_propio` nace en `false`, ningún
+programa lo tiene activado y **ninguna tarjeta cambió de aspecto**. El lado de escritura (9-11) es
+lo que lo haría usable.
+
+Faltan: **6 y 7** (clase de Google por programa), **9** (escritura + `sello_meta`), **10**
+(propagación a los teléfonos), **11** (UI), **12** (verificación manual).
+
+**Ojo con la 6 y la 7:** son las que crean clases PERMANENTES en el emisor de Google. La API no
+tiene `delete`. El diseño las acota a los tres campos que Google realmente usa, pero es una puerta
+que no se cierra. La prueba del ciclo encender→apagar→reencender es obligatoria: sin ella, un
+segundo `insert` sobre una clase existente rompe en producción.
+
+**Verificado contra la API real:** un `LoyaltyObject` SÍ se puede mover de clase con `patch`, y las
+clases nuevas nacen `approved` (no `UNDER_REVIEW`) porque el emisor ya está aprobado. Costo: la
+clase `<emisor>.prueba_mover_clase_2026_07_30` quedó para siempre.
+
+## Pendiente que necesita al usuario
+
+- Confirmar en un **iPhone** que la campaña se lee en la pantalla de bloqueo (es el canal donde el
+  texto del dueño SÍ aparece).
+- Confirmar el **geopush en Android** ahora que las ubicaciones están en el objeto. Requiere
+  "Permitir siempre" + ubicación precisa, y el interruptor de pases cercanos POR PASE (los pases ya
+  guardados no se inscriben solos).
+- `curl -i https://www.cardly-sv.site/api/cron/inactividad` → debe dar `401`, no `500`.
+- **El cupón no tiene campo de valor.** Solo vigencia; qué ofrece el cupón vive en el texto del pase
+  y el sistema no lo entiende. Decisión de producto pendiente.
+- **`/comercio/notificaciones` dice "N tarjetas alcanzadas"** — ya corregido para contar solo
+  quienes tienen el pase instalado.
+
+## Specs listos sin implementar
+
+- `docs/superpowers/specs/2026-07-30-estado-tarjetas-design.md` — eliminar/archivar/anular/anonimizar
+  clientes. Revisado, con 3 bloqueantes ya corregidos. **Sin plan todavía.**
+- `docs/superpowers/plans/2026-07-30-editor-cartel-qr.md` — QR imprimibles. Plan escrito, nunca
+  implementado.
