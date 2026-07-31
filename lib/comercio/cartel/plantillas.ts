@@ -82,11 +82,56 @@ async function plantillaCentrado(datos: DatosCartel, formato: FormatoCartel): Pr
 </svg>`;
 }
 
-// El dispatcher completo se termina en la Tarea 7 (agrega 'split' y 'foto'); esta tarea lo deja
-// andando SOLO para 'centrado' para poder probarlo de punta a punta ya mismo.
-export async function construirCartelSvg(datos: DatosCartel, formato: FormatoCartel): Promise<string> {
-  if (datos.plantilla === 'centrado') return plantillaCentrado(datos, formato);
-  throw new Error(`Plantilla "${datos.plantilla}" todavía no implementada (Tarea 6/7 de este plan).`);
+async function plantillaSplit(datos: DatosCartel, formato: FormatoCartel): Promise<string> {
+  const dim = DIMENSIONES_CARTEL[formato];
+  const w = dim.viewBox.ancho;
+  const h = dim.viewBox.alto;
+
+  if (formato === 'mostrador') {
+    const anchoFranja = w * 0.32;
+    const logoLado = anchoFranja * 0.5;
+    const qrLado = (w - anchoFranja) * 0.55;
+    const qrX = anchoFranja + (w - anchoFranja - qrLado) / 2;
+    const qrY = h / 2 - qrLado * 0.62;
+    const qrSvg = await construirQrSvg(datos.urlRegistro, qrLado);
+    const centroDerecha = anchoFranja + (w - anchoFranja) / 2;
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">
+  <rect width="${w}" height="${h}" fill="#ffffff"/>
+  <rect width="${anchoFranja}" height="${h}" fill="${datos.colorFondo}"/>
+  ${logoSvg(datos, anchoFranja / 2 - logoLado / 2, h * 0.08, logoLado)}
+  <text x="${anchoFranja / 2}" y="${h * 0.08 + logoLado + h * 0.04}" text-anchor="middle" font-family="sans-serif" font-size="${h * 0.028}" font-weight="700" fill="${datos.colorTexto}">${escaparXml(datos.nombreComercio)}</text>
+  ${tarjetaBlancaConQr(qrSvg, qrX, qrY, qrLado)}
+  <text x="${centroDerecha}" y="${qrY + qrLado * 1.24 + h * 0.05}" text-anchor="middle" font-family="sans-serif" font-size="${h * 0.024}" font-weight="600" fill="${datos.colorLabel}">${escaparXml(datos.textoCta)}</text>
+  ${datos.textoTeaser ? `<text x="${centroDerecha}" y="${qrY + qrLado * 1.24 + h * 0.09}" text-anchor="middle" font-family="sans-serif" font-size="${h * 0.02}" fill="${datos.colorTexto}">${escaparXml(datos.textoTeaser)}</text>` : ''}
+</svg>`;
+  }
+
+  // Sticker: franja arriba/abajo en vez de lateral — un cuadrado angosto no le deja aire a una
+  // franja lateral (validado con el usuario en el companion de brainstorming).
+  const altoFranja = h * 0.34;
+  const logoLado = altoFranja * 0.42;
+  const qrLado = w * 0.42;
+  const qrX = w / 2 - qrLado / 2;
+  const qrY = altoFranja + h * 0.08;
+  const qrSvg = await construirQrSvg(datos.urlRegistro, qrLado);
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">
+  <rect width="${w}" height="${h}" fill="#ffffff"/>
+  <rect width="${w}" height="${altoFranja}" fill="${datos.colorFondo}"/>
+  ${logoSvg(datos, w * 0.08, altoFranja / 2 - logoLado / 2, logoLado)}
+  <text x="${w * 0.08 + logoLado + w * 0.04}" y="${altoFranja / 2 + logoLado * 0.13}" text-anchor="start" font-family="sans-serif" font-size="${h * 0.032}" font-weight="700" fill="${datos.colorTexto}">${escaparXml(datos.nombreComercio)}</text>
+  ${tarjetaBlancaConQr(qrSvg, qrX, qrY, qrLado)}
+  <text x="${w / 2}" y="${qrY + qrLado * 1.24 + h * 0.045}" text-anchor="middle" font-family="sans-serif" font-size="${h * 0.026}" font-weight="600" fill="${datos.colorLabel}">${escaparXml(datos.textoCta)}</text>
+</svg>`;
 }
 
-export { plantillaCentrado, construirQrSvg, tarjetaBlancaConQr, logoSvg };
+// El dispatcher completo se termina en la Tarea 7 (agrega 'foto'); esta tarea lo deja andando para
+// 'centrado' y 'split'.
+export async function construirCartelSvg(datos: DatosCartel, formato: FormatoCartel): Promise<string> {
+  if (datos.plantilla === 'centrado') return plantillaCentrado(datos, formato);
+  if (datos.plantilla === 'split') return plantillaSplit(datos, formato);
+  throw new Error(`Plantilla "${datos.plantilla}" todavía no implementada (Tarea 7 de este plan).`);
+}
+
+export { plantillaCentrado, plantillaSplit, construirQrSvg, tarjetaBlancaConQr, logoSvg };

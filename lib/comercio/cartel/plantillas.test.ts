@@ -88,3 +88,30 @@ describe('construirCartelSvg — plantilla centrado', () => {
     expect(svg.match(/xmlns="http:\/\/www\.w3\.org\/2000\/svg"/g)?.length).toBe(2);
   });
 });
+
+describe('construirCartelSvg — plantilla split', () => {
+  const datos: DatosCartel = { ...DATOS_BASE, plantilla: 'split' };
+
+  it('en mostrador, la franja de color es LATERAL (ancho de franja < alto del viewBox)', async () => {
+    const svg = await construirCartelSvg(datos, 'mostrador');
+    // La franja lateral es el primer <rect> de color de marca (no #ffffff) con height=viewBox alto.
+    expect(svg).toMatch(/<rect width="\d+(\.\d+)?" height="567\.57" fill="#3b2a1e"/);
+    // Lo de arriba también matchearía una franja de ancho completo (`width="400"`), que ya no sería
+    // lateral: sin esta segunda aserción la prueba no protege lo que su nombre promete (mutación
+    // corrida y confirmada).
+    expect(svg).not.toMatch(/<rect width="400" height="567\.57" fill="#3b2a1e"/);
+  });
+
+  it('en sticker, la franja de color es SUPERIOR (ancho de franja == viewBox ancho)', async () => {
+    const svg = await construirCartelSvg(datos, 'sticker');
+    expect(svg).toMatch(/<rect width="400" height="\d+(\.\d+)?" fill="#3b2a1e"/);
+  });
+
+  it('produce SVG válido y con el QR embebido en los dos formatos', async () => {
+    for (const formato of ['sticker', 'mostrador'] as const) {
+      const svg = await construirCartelSvg(datos, formato);
+      expect(svg.trim().startsWith('<svg')).toBe(true);
+      expect(svg.match(/xmlns="http:\/\/www\.w3\.org\/2000\/svg"/g)?.length).toBe(2);
+    }
+  });
+});
