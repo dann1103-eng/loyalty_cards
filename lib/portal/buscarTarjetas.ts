@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { normalizarTelefono } from '../clientes/normalizarTelefono';
 import { historialParaCliente, type MovimientoPortal } from './historialCliente';
+import { brandingEfectivo } from '../comercio/brandingEfectivo';
 
 export interface RecompensaPortal {
   nombre: string;
@@ -85,7 +86,7 @@ export async function buscarTarjetasPorTelefono(
     // programas_tarjeta trae el tipo y la meta REALES (0024); las columnas homónimas de comercios
     // quedaron legadas. Sin este join, el portal le muestra al cliente su tarjeta de cupón como si
     // fuera de sellos — el mismo bug que tenían el pase de Apple y el objeto de Google.
-    .select('id, puntos_actuales, programas_tarjeta(tipo_tarjeta, sello_meta), comercios(id, nombre, color_fondo, color_texto, color_label, tipo_tarjeta, sello_meta)')
+    .select('id, puntos_actuales, programas_tarjeta(tipo_tarjeta, sello_meta, branding_propio, color_fondo, color_texto, color_label), comercios(id, nombre, color_fondo, color_texto, color_label, tipo_tarjeta, sello_meta)')
     .eq('cliente_id', cliente.id);
 
   if (errorTarjetas) {
@@ -140,12 +141,34 @@ export async function buscarTarjetasPorTelefono(
     const p = t.programas_tarjeta;
     const tipoTarjeta = p ? p.tipo_tarjeta : c.tipo_tarjeta;
     const selloMeta = p ? p.sello_meta : c.sello_meta;
+    // Los colores SÍ heredan campo por campo (0027), a diferencia de tipo/meta. El portal solo
+    // muestra los tres colores, así que se piden solo esos: las imágenes no se usan acá.
+    const marca = brandingEfectivo(
+      {
+        colorFondo: c.color_fondo,
+        colorTexto: c.color_texto,
+        colorLabel: c.color_label,
+        logoUrl: null,
+        heroUrl: null,
+        stripUrl: null,
+        selloIconoUrl: null,
+        difuminadoFranja: 'medio',
+      },
+      p
+        ? {
+            brandingPropio: p.branding_propio,
+            colorFondo: p.color_fondo,
+            colorTexto: p.color_texto,
+            colorLabel: p.color_label,
+          }
+        : null,
+    );
     return {
       tarjetaId: t.id,
       comercioNombre: c.nombre,
-      colorFondo: c.color_fondo,
-      colorTexto: c.color_texto,
-      colorLabel: c.color_label,
+      colorFondo: marca.colorFondo,
+      colorTexto: marca.colorTexto,
+      colorLabel: marca.colorLabel,
       tipoTarjeta,
       puntosActuales: t.puntos_actuales,
       selloMeta,
