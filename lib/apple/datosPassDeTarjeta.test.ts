@@ -164,4 +164,30 @@ describe('datosPassDeTarjeta — reverso', () => {
 
     expect(resultado!.datos.reverso.find((c) => c.key === 'aviso')).toBeUndefined();
   }, 30_000);
+
+  // El tipo y su configuración viven en el PROGRAMA desde la 0024 ("Configuración por tipo, mudada
+  // desde comercios" — ver types.ts). comercios.tipo_tarjeta y comercios.sello_meta quedaron como
+  // columnas LEGADAS. Hasta el 2026-07-30 el pase leía las legadas, así que la tarjeta de un
+  // programa secundario se le instalaba al cliente dibujada como el tipo del COMERCIO: un programa
+  // de cupón en un comercio de sellos se veía como tarjeta de sellos, con su grilla y su "3 de 8".
+  // El escáner, en cambio, siempre leyó bien el tipo del programa (resolverProgramaDeTarjeta) — la
+  // tarjeta se OPERABA como cupón y se DIBUJABA como sellos.
+  it('el pase usa el tipo y la meta del PROGRAMA, no las columnas legadas del comercio', async () => {
+    const serial = await crearEscenario([]);
+    const { error: eComercio } = await supabase
+      .from('comercios')
+      .update({ tipo_tarjeta: 'sellos', sello_meta: 8 })
+      .eq('id', creados!.comercioId);
+    if (eComercio) throw new Error(`no se pudo preparar el comercio: ${eComercio.message}`);
+    const { error: ePrograma } = await supabase
+      .from('programas_tarjeta')
+      .update({ tipo_tarjeta: 'cupon', sello_meta: null, cupon_vigencia_dias: 30 })
+      .eq('id', creados!.programaId);
+    if (ePrograma) throw new Error(`no se pudo preparar el programa: ${ePrograma.message}`);
+
+    const resultado = await datosPassDeTarjeta(supabase, serial);
+
+    expect(resultado!.datos.tipoTarjeta).toBe('cupon');
+    expect(resultado!.datos.selloMeta).toBeNull();
+  }, 30_000);
 });

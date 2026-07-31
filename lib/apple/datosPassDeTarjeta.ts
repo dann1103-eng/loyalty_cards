@@ -17,13 +17,31 @@ export async function datosPassDeTarjeta(
 
   // clientes(nombre) para el campo de la tarjeta: el pass muestra a QUIÉN pertenece, igual que una
   // tarjeta de socio física. Sin join no habría forma de saberlo desde acá.
+  // programas_tarjeta NO es opcional: desde la 0024 el tipo y su configuración viven en el PROGRAMA
+  // y comercios.tipo_tarjeta/sello_meta quedaron LEGADAS. Sin este join, la tarjeta de un programa
+  // secundario se dibujaba con el tipo del comercio — un cupón se le instalaba al cliente como
+  // tarjeta de sellos mientras el escáner la operaba como cupón.
   const { data: tarjeta } = await supabase
     .from('tarjetas')
-    .select('*, comercios(*), clientes(nombre)')
+    .select('*, comercios(*), clientes(nombre), programas_tarjeta(tipo_tarjeta, sello_meta)')
     .eq('apple_serial_number', serialNumber)
     .maybeSingle();
 
   if (!tarjeta || !tarjeta.comercios || !tarjeta.apple_auth_token) return null;
+
+  // Fallback a las columnas legadas solo si el join no trajo programa (no debería: programa_id es
+  // NOT NULL desde la 0024). Se avisa por consola en vez de degradar en silencio: un pase dibujado
+  // con el tipo equivocado es exactamente el bug que este join vino a cerrar.
+  //
+  // El condicional cuelga del PROGRAMA entero, no de cada campo: con `?? comercio.sello_meta`, un
+  // programa de cupón (sello_meta null LEGÍTIMAMENTE) heredaría la meta de sellos del comercio y
+  // el pase volvería a dibujar una grilla. `null` acá es un valor válido, no un valor ausente.
+  const programa = tarjeta.programas_tarjeta;
+  if (!programa) {
+    console.error(`[apple] la tarjeta ${tarjeta.id} no tiene programa; se usa el tipo legado del comercio`);
+  }
+  const tipoTarjeta = programa ? programa.tipo_tarjeta : tarjeta.comercios.tipo_tarjeta;
+  const selloMeta = programa ? programa.sello_meta : tarjeta.comercios.sello_meta;
 
   // Reglas y recompensas para la sección automática del reverso. BEST-EFFORT: si fallan, el pass
   // sale SIN esa sección en vez de no salir. Un cliente con un reverso incompleto está
@@ -83,8 +101,8 @@ export async function datosPassDeTarjeta(
       colorFondo: tarjeta.comercios.color_fondo ?? 'rgb(35, 24, 18)',
       colorTexto: tarjeta.comercios.color_texto ?? 'rgb(255, 255, 255)',
       colorLabel: tarjeta.comercios.color_label ?? 'rgb(255, 255, 255)',
-      tipoTarjeta: tarjeta.comercios.tipo_tarjeta,
-      selloMeta: tarjeta.comercios.sello_meta,
+      tipoTarjeta,
+      selloMeta,
       stripUrl: tarjeta.comercios.strip_url,
       selloIconoUrl: tarjeta.comercios.sello_icono_url,
       heroUrl: tarjeta.comercios.hero_url,
@@ -94,8 +112,8 @@ export async function datosPassDeTarjeta(
       // una recompensa que el dueño ya cambió es una promesa incumplida frente al cliente final.
       reverso: construirReverso({
         nombreComercio: tarjeta.comercios.nombre,
-        tipoTarjeta: tarjeta.comercios.tipo_tarjeta,
-        selloMeta: tarjeta.comercios.sello_meta,
+        tipoTarjeta,
+        selloMeta,
         mostrarComoFunciona: tarjeta.comercios.mostrar_como_funciona,
         terminosUso: tarjeta.comercios.terminos_uso,
         redInstagram: tarjeta.comercios.red_instagram,

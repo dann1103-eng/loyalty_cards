@@ -17,7 +17,11 @@ export async function syncObjetoTarjeta(
 ): Promise<ResultadoSyncObjeto> {
   const { data: tarjeta, error } = await supabase
     .from('tarjetas')
-    .select('qr_token, puntos_actuales, google_object_id, comercio_id, comercios(google_class_id, tipo_tarjeta, sello_meta, color_fondo, color_label, sello_icono_url, hero_url, strip_url, difuminado_franja)')
+    // programas_tarjeta trae el tipo y la meta REALES: desde la 0024 viven en el programa y las
+    // columnas homónimas de comercios quedaron legadas. Sin este join, la tarjeta de un programa
+    // secundario se sincronizaba a Google con el tipo del COMERCIO — la misma falla que tenía el
+    // lado de Apple (ver datosPassDeTarjeta.ts).
+    .select('qr_token, puntos_actuales, google_object_id, comercio_id, programas_tarjeta(tipo_tarjeta, sello_meta), comercios(google_class_id, tipo_tarjeta, sello_meta, color_fondo, color_label, sello_icono_url, hero_url, strip_url, difuminado_franja)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
@@ -29,6 +33,15 @@ export async function syncObjetoTarjeta(
     return { ok: false, error: 'El comercio no tiene Google Wallet habilitado.' };
   }
 
+  // Cuelga del PROGRAMA entero, no de cada campo: con `??`, un programa de cupón (sello_meta null
+  // legítimamente) heredaría la meta del comercio y volvería a dibujarse como grilla de sellos.
+  const programa = tarjeta.programas_tarjeta;
+  if (!programa) {
+    console.error(`[google] la tarjeta ${tarjetaId} no tiene programa; se usa el tipo legado del comercio`);
+  }
+  const tipoTarjeta = programa ? programa.tipo_tarjeta : tarjeta.comercios.tipo_tarjeta;
+  const selloMeta = programa ? programa.sello_meta : tarjeta.comercios.sello_meta;
+
   try {
     const objectId = tarjeta.google_object_id ?? idObjetoGoogle(issuerId(), tarjetaId);
     // Google pide las ubicaciones en la clase Y en el objeto (ver construirRecursos.ts). Es una
@@ -38,14 +51,14 @@ export async function syncObjetoTarjeta(
     const cuerpo = construirObjeto(objectId, tarjeta.comercios.google_class_id, {
       qrToken: tarjeta.qr_token,
       puntosActuales: tarjeta.puntos_actuales,
-      tipoTarjeta: tarjeta.comercios.tipo_tarjeta,
-      selloMeta: tarjeta.comercios.sello_meta,
+      tipoTarjeta,
+      selloMeta,
       ubicaciones,
       heroImageUrl: urlHeroTarjeta(
         tarjetaId,
         versionHero({
           puntos: tarjeta.puntos_actuales,
-          selloMeta: tarjeta.comercios.sello_meta,
+          selloMeta,
           colorFondo: tarjeta.comercios.color_fondo,
           colorLabel: tarjeta.comercios.color_label,
           selloIconoUrl: tarjeta.comercios.sello_icono_url,
