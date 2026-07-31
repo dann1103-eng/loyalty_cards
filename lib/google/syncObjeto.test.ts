@@ -140,4 +140,49 @@ describe('syncObjetoTarjeta', () => {
     const llamada = insertMock.mock.calls[0][0];
     expect(llamada.requestBody.classId).toBe('issuer-test.comercio_correcto');
   });
+
+  // Branding por programa (0027): si el programa tiene su propia LoyaltyClass, el objeto tiene que
+  // colgar de ESA y no de la del comercio. Es lo que hace que el color propio se vea en Android —
+  // Google guarda logo y colores en la CLASE, no en el objeto.
+  it('si el programa tiene clase propia, el objeto cuelga de ESA clase', async () => {
+    const t = await crearTarjeta({ googleClassId: 'issuer-test.comercio_base' });
+    await supabase
+      .from('programas_tarjeta')
+      .update({
+        branding_propio: true,
+        color_fondo: 'rgb(255,0,0)',
+        google_class_id: 'issuer-test.programa_propia',
+      })
+      .eq('id', t.programaId);
+
+    const res = await syncObjetoTarjeta(supabase, t.tarjetaId);
+
+    expect(res.ok).toBe(true);
+    expect(insertMock.mock.calls[0][0].requestBody.classId).toBe('issuer-test.programa_propia');
+  });
+
+  it('sin clase propia del programa, sigue colgando de la del comercio', async () => {
+    // El camino de la enorme mayoría de los programas: no se creó ninguna clase y todo hereda.
+    const t = await crearTarjeta({ googleClassId: 'issuer-test.comercio_base' });
+
+    await syncObjetoTarjeta(supabase, t.tarjetaId);
+
+    expect(insertMock.mock.calls[0][0].requestBody.classId).toBe('issuer-test.comercio_base');
+  });
+
+  it('la guarda de "Google Wallet habilitado" sigue colgando del COMERCIO, no del programa', async () => {
+    // Sin google_class_id del COMERCIO no hay Google Wallet para nadie de ese negocio, tenga el
+    // programa la clase que tenga. Si esta guarda mirara el programa, un comercio sin Wallet
+    // habilitado empezaría a emitir objetos sueltos colgando de una clase de programa.
+    const t = await crearTarjeta({ googleClassId: null });
+    await supabase
+      .from('programas_tarjeta')
+      .update({ branding_propio: true, google_class_id: 'issuer-test.programa_propia' })
+      .eq('id', t.programaId);
+
+    const res = await syncObjetoTarjeta(supabase, t.tarjetaId);
+
+    expect(res.ok).toBe(false);
+    expect(insertMock).not.toHaveBeenCalled();
+  });
 });

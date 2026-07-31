@@ -5,9 +5,11 @@ import { credencialesServicio, issuerId } from './walletClient';
 import { idObjetoGoogle } from './ids';
 import { construirClase, construirObjeto } from './construirRecursos';
 import { syncClaseComercio } from './syncClase';
+import { syncClasePrograma } from './syncClasePrograma';
 import { syncObjetoTarjeta } from './syncObjeto';
 import { urlHeroTarjeta, versionHero } from './heroUrl';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
+import { brandingEfectivo } from '../comercio/brandingEfectivo';
 
 // Payload con la clase y el objeto EMBEBIDOS (no solo su id): mismo patrón exacto de
 // google-wallet/rest-samples/nodejs/demo-loyalty.js, verificado 2026-07-20. La documentación
@@ -25,7 +27,7 @@ export async function generarLinkGuardar(
     // procesar el JWT, ese cuerpo PISABA al que syncObjetoTarjeta acababa de escribir bien unas
     // líneas más abajo. O sea que el camino "Agregar a Google Wallet" reintroducía en silencio el
     // bug que el resto del sistema ya tenía arreglado.
-    .select('comercio_id, qr_token, puntos_actuales, programas_tarjeta(tipo_tarjeta, sello_meta), comercios(nombre, color_fondo, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, google_class_id, tipo_tarjeta, sello_meta)')
+    .select('comercio_id, qr_token, puntos_actuales, programas_tarjeta(id, tipo_tarjeta, sello_meta, google_class_id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja), comercios(nombre, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, google_class_id, tipo_tarjeta, sello_meta)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
@@ -52,6 +54,16 @@ export async function generarLinkGuardar(
     if (!resClase.ok) return null;
     classId = resClase.classId;
   }
+  // Si el programa tiene (o necesita) su propia clase, esa es la que va en el JWT. Se sincroniza
+  // ANTES de armarlo para que exista del lado de Google cuando el usuario toque el botón.
+  //
+  // Es crítico que el JWT lleve la clase CORRECTA: Google hace upsert por id al procesarlo, así que
+  // un cuerpo con la clase equivocada pisa lo que syncObjetoTarjeta acaba de escribir bien. Esa
+  // fue exactamente la falla del 2026-07-30 con el tipo de tarjeta (commit 998bcae).
+  if (programa) {
+    const resProg = await syncClasePrograma(supabase, tarjeta.comercio_id, programa.id);
+    if (resProg.ok && resProg.classId) classId = resProg.classId;
+  }
   await syncObjetoTarjeta(supabase, tarjetaId);
 
   const objectId = idObjetoGoogle(issuerId(), tarjetaId);
@@ -61,11 +73,43 @@ export async function generarLinkGuardar(
   // clientes que estrenan la tarjeta por este camino.
   const ubicaciones = await listarUbicacionesGeopush(supabase, tarjeta.comercio_id);
 
+  // El branding EFECTIVO, no el del comercio: si el programa tiene marca propia, la clase que
+  // viaja en el JWT tiene que llevarla o Google la pisa con la del comercio al hacer upsert.
+  const cm = tarjeta.comercios;
+  const marca = brandingEfectivo(
+    {
+      colorFondo: cm.color_fondo,
+      colorTexto: cm.color_texto,
+      colorLabel: cm.color_label,
+      logoUrl: cm.logo_url,
+      heroUrl: cm.hero_url,
+      stripUrl: cm.strip_url,
+      selloIconoUrl: cm.sello_icono_url,
+      difuminadoFranja: cm.difuminado_franja,
+    },
+    programa
+      ? {
+          brandingPropio: programa.branding_propio,
+          colorFondo: programa.color_fondo,
+          colorTexto: programa.color_texto,
+          colorLabel: programa.color_label,
+          logoUrl: programa.logo_url,
+          heroUrl: programa.hero_url,
+          stripUrl: programa.strip_url,
+          selloIconoUrl: programa.sello_icono_url,
+          difuminadoFranja: programa.difuminado_franja ?? undefined,
+        }
+      : null,
+  );
+
+  // La guarda de arriba ya garantizó que el comercio tiene logo, y brandingEfectivo hereda ese
+  // valor cuando el programa no define uno propio — así que acá nunca es null. El `??` final es
+  // solo para que el tipo lo refleje.
   const clase = construirClase(classId, {
-    nombre: tarjeta.comercios.nombre,
-    colorFondo: tarjeta.comercios.color_fondo,
-    logoUrl: tarjeta.comercios.logo_url,
-    heroUrl: tarjeta.comercios.hero_url,
+    nombre: cm.nombre,
+    colorFondo: marca.colorFondo,
+    logoUrl: marca.logoUrl ?? tarjeta.comercios.logo_url,
+    heroUrl: marca.heroUrl,
     ubicaciones,
   });
   const objeto = construirObjeto(objectId, classId, {
@@ -77,15 +121,19 @@ export async function generarLinkGuardar(
     ubicaciones,
     heroImageUrl: urlHeroTarjeta(
       tarjetaId,
+      // El hash del cache-busting tiene que salir del branding EFECTIVO, el mismo que usa
+      // /api/tarjetas/<id>/hero.png para DIBUJAR. Si divergen, la URL cambia, Google re-descarga y
+      // recibe la imagen de siempre: cache-busting perfecto entregando lo incorrecto, sin un solo
+      // error. Es el riesgo que el spec de branding por programa marca como el peor del sistema.
       versionHero({
         puntos: tarjeta.puntos_actuales,
         selloMeta,
-        colorFondo: tarjeta.comercios.color_fondo,
-        colorLabel: tarjeta.comercios.color_label,
-        selloIconoUrl: tarjeta.comercios.sello_icono_url,
-        heroUrl: tarjeta.comercios.hero_url,
-        stripUrl: tarjeta.comercios.strip_url,
-        difuminadoFranja: tarjeta.comercios.difuminado_franja,
+        colorFondo: marca.colorFondo,
+        colorLabel: marca.colorLabel,
+        selloIconoUrl: marca.selloIconoUrl,
+        heroUrl: marca.heroUrl,
+        stripUrl: marca.stripUrl,
+        difuminadoFranja: marca.difuminadoFranja,
       }),
     ),
   });

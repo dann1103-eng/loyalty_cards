@@ -5,6 +5,7 @@ import { idObjetoGoogle } from './ids';
 import { construirObjeto } from './construirRecursos';
 import { urlHeroTarjeta, versionHero } from './heroUrl';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
+import { brandingEfectivo } from '../comercio/brandingEfectivo';
 
 export type ResultadoSyncObjeto = { ok: true; objectId: string } | { ok: false; error: string };
 
@@ -21,7 +22,7 @@ export async function syncObjetoTarjeta(
     // columnas homónimas de comercios quedaron legadas. Sin este join, la tarjeta de un programa
     // secundario se sincronizaba a Google con el tipo del COMERCIO — la misma falla que tenía el
     // lado de Apple (ver datosPassDeTarjeta.ts).
-    .select('qr_token, puntos_actuales, google_object_id, comercio_id, programas_tarjeta(tipo_tarjeta, sello_meta), comercios(google_class_id, tipo_tarjeta, sello_meta, color_fondo, color_label, sello_icono_url, hero_url, strip_url, difuminado_franja)')
+    .select('qr_token, puntos_actuales, google_object_id, comercio_id, programas_tarjeta(tipo_tarjeta, sello_meta, google_class_id, branding_propio, color_fondo, color_label, hero_url, strip_url, sello_icono_url, difuminado_franja), comercios(google_class_id, tipo_tarjeta, sello_meta, color_fondo, color_label, sello_icono_url, hero_url, strip_url, difuminado_franja)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
@@ -42,13 +43,50 @@ export async function syncObjetoTarjeta(
   const tipoTarjeta = programa ? programa.tipo_tarjeta : tarjeta.comercios.tipo_tarjeta;
   const selloMeta = programa ? programa.sello_meta : tarjeta.comercios.sello_meta;
 
+  // El branding EFECTIVO alimenta el hash del cache-busting, y tiene que ser EL MISMO que usa
+  // /api/tarjetas/<id>/hero.png para dibujar. Si divergen, la URL cambia, Google re-descarga y
+  // recibe la imagen de siempre — cache-busting perfecto entregando lo incorrecto, sin errores.
+  const cm = tarjeta.comercios;
+  const marca = brandingEfectivo(
+    {
+      colorFondo: cm.color_fondo,
+      colorTexto: cm.color_label, // el objeto no usa color_texto; se pasa algo válido y se ignora
+      colorLabel: cm.color_label,
+      logoUrl: null,
+      heroUrl: cm.hero_url,
+      stripUrl: cm.strip_url,
+      selloIconoUrl: cm.sello_icono_url,
+      difuminadoFranja: cm.difuminado_franja,
+    },
+    programa
+      ? {
+          brandingPropio: programa.branding_propio,
+          colorFondo: programa.color_fondo,
+          colorLabel: programa.color_label,
+          heroUrl: programa.hero_url,
+          stripUrl: programa.strip_url,
+          selloIconoUrl: programa.sello_icono_url,
+          difuminadoFranja: programa.difuminado_franja ?? undefined,
+        }
+      : null,
+  );
+
   try {
     const objectId = tarjeta.google_object_id ?? idObjetoGoogle(issuerId(), tarjetaId);
     // Google pide las ubicaciones en la clase Y en el objeto (ver construirRecursos.ts). Es una
     // consulta extra en cada sync, igual que la que ya hace syncClaseComercio, y devuelve [] ante
     // un error: un fallo acá deja el objeto sin geopush, no sin objeto.
     const ubicaciones = await listarUbicacionesGeopush(supabase, tarjeta.comercio_id);
-    const cuerpo = construirObjeto(objectId, tarjeta.comercios.google_class_id, {
+    // El objeto cuelga de la clase del PROGRAMA si tiene una propia (branding por programa, 0027);
+    // si no, de la del comercio. Google guarda logo y colores en la CLASE, así que este `??` es lo
+    // que hace que el color propio de un programa se vea en Android.
+    //
+    // OJO: la guarda de "Google Wallet habilitado" de más arriba sigue mirando el COMERCIO a
+    // propósito. Sin clase del comercio no hay Wallet para nadie de ese negocio, tenga el programa
+    // la clase que tenga — si esa guarda mirara el programa, un comercio sin Wallet habilitado
+    // empezaría a emitir objetos sueltos.
+    const classId = programa?.google_class_id ?? tarjeta.comercios.google_class_id;
+    const cuerpo = construirObjeto(objectId, classId, {
       qrToken: tarjeta.qr_token,
       puntosActuales: tarjeta.puntos_actuales,
       tipoTarjeta,
@@ -59,12 +97,12 @@ export async function syncObjetoTarjeta(
         versionHero({
           puntos: tarjeta.puntos_actuales,
           selloMeta,
-          colorFondo: tarjeta.comercios.color_fondo,
-          colorLabel: tarjeta.comercios.color_label,
-          selloIconoUrl: tarjeta.comercios.sello_icono_url,
-          heroUrl: tarjeta.comercios.hero_url,
-          stripUrl: tarjeta.comercios.strip_url,
-          difuminadoFranja: tarjeta.comercios.difuminado_franja,
+          colorFondo: marca.colorFondo,
+          colorLabel: marca.colorLabel,
+          selloIconoUrl: marca.selloIconoUrl,
+          heroUrl: marca.heroUrl,
+          stripUrl: marca.stripUrl,
+          difuminadoFranja: marca.difuminadoFranja,
         }),
       ),
     });
