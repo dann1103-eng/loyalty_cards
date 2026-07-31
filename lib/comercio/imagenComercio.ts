@@ -54,3 +54,22 @@ export function rutaImagenComercio(comercioId: string, campo: string, ext: strin
 export function rutaImagenRecompensa(comercioId: string, recompensaId: string, ext: string): string {
   return `${comercioId}/recompensas/${recompensaId}.${ext}`;
 }
+
+// Ruta de una imagen de branding de UN PROGRAMA (migración 0027). Mismo bucket, mismo límite de
+// 2 MB y los mismos tres formatos que las dos de arriba.
+//
+// El programaId va en el path y no es opcional: la subida usa `upsert: true`, así que si esta ruta
+// coincidiera con la de rutaImagenComercio, subirle el logo al programa secundario PISARÍA el logo
+// del comercio — el dueño vería desaparecer la marca de su negocio sin un solo error. Hay una
+// prueba dedicada a que las dos rutas nunca coincidan.
+//
+// El comercioId sigue siendo la carpeta raíz, igual que en las otras dos: viene del gate y nunca
+// del formulario, así que conocer el id de un programa ajeno no permite escribir en otra carpeta.
+export function rutaImagenPrograma(
+  comercioId: string,
+  programaId: string,
+  campo: string,
+  ext: string,
+): string {
+  return `${comercioId}/programas/${programaId}/${campo}.${ext}`;
+}
