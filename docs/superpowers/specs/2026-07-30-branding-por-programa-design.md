@@ -94,11 +94,20 @@ existentes tras migrar. Sin CHECK de colores, igual que en `comercios` — la va
 
 ## Riesgos y pendientes para el plan
 
-- **Migrar los objetos de un programa a su clase nueva.** `LoyaltyObject.classId` se puede cambiar
-  con un `patch`, pero hay que verificarlo contra la API real antes de darlo por hecho — si Google
-  no permite mover un objeto entre clases, el diseño necesita otra salida (por ejemplo, que el
-  branding propio solo aplique a tarjetas emitidas de ahí en adelante). **Es el mayor riesgo abierto
-  y va como primer paso verificable del plan, no como supuesto.**
+- **Migrar los objetos de un programa a su clase nueva. ES EL MAYOR RIESGO ABIERTO y va como primer
+  paso verificable del plan, no como supuesto.** Lo que sí se pudo confirmar leyendo los tipos
+  instalados (`node_modules/googleapis/.../walletobjects/v1.d.ts:916`): la documentación de
+  `LoyaltyObject.classId` **no** lo marca como inmutable, lo cual es alentador pero no es prueba.
+
+  Y ahí mismo aparece una condición que el diseño tiene que respetar sí o sí: la clase destino
+  *"must already exist, and **must be approved**"*. Nuestro `construirClase` crea toda clase con
+  `reviewStatus: 'UNDER_REVIEW'` (`lib/google/construirRecursos.ts:38`). O sea que una clase nueva
+  por programa **podría no aceptar objetos hasta estar aprobada**, y la aprobación no depende de
+  nosotros. Si es así, el branding propio solo podría aplicarse a las tarjetas emitidas después de
+  que la clase quede aprobada, y el plan necesita decidir qué se le muestra al dueño mientras tanto.
+
+  Salida alternativa si mover objetos resulta imposible: que el branding propio aplique únicamente
+  a tarjetas nuevas, y que la UI lo diga.
 - **`syncClaseComercio` deja de ser una sola llamada por comercio.** Un cambio de branding del
   comercio tiene que propagarse a las clases de todos los programas que heredan ese campo.
 - **Cobertura mínima:** que un programa sin branding propio herede TODO; que uno con branding
