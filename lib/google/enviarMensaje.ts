@@ -21,20 +21,35 @@ import { walletClient } from './walletClient';
 //
 // Best-effort a propósito, mismo criterio que notificarCambioTarjeta: un fallo de Google Wallet
 // nunca debe tumbar el flujo que lo llama.
+export interface ResultadoMensajeGoogle {
+  // La llamada a la API salió bien.
+  ok: boolean;
+  // ALGUIEN tiene de verdad el pase guardado en su teléfono. Es un dato DISTINTO de `ok`: un
+  // LoyaltyObject existe desde que nosotros lo creamos, así que el addmessage devuelve éxito aunque
+  // nadie lo haya guardado nunca y el mensaje no llegue a ningún lado. Sin esta distinción el dueño
+  // ve "6 tarjetas alcanzadas" cuando el pase lo tienen 2 personas (caso real, 2026-07-30).
+  tieneUsuarios: boolean;
+}
+
 export async function enviarMensajeGoogle(
   objectId: string,
   header: string,
   body: string,
-): Promise<boolean> {
+): Promise<ResultadoMensajeGoogle> {
   try {
     const client = walletClient();
-    await client.loyaltyobject.addmessage({
+    // La respuesta trae el objeto ya actualizado en `resource`, así que hasUsers sale de acá sin
+    // pagar una llamada extra por tarjeta.
+    const res = await client.loyaltyobject.addmessage({
       resourceId: objectId,
       requestBody: { message: { header, body, messageType: 'TEXT_AND_NOTIFY' } },
     });
-    return true;
+    // `=== true` a propósito: hasUsers lo pone la plataforma y es opcional en el tipo. Ante un
+    // undefined preferimos NO contar la tarjeta — todo el punto de este dato es dejar de inflar el
+    // número que ve el dueño, así que ante la duda va para abajo, nunca para arriba.
+    return { ok: true, tieneUsuarios: res.data.resource?.hasUsers === true };
   } catch (err) {
     console.error('[google] no se pudo mandar el mensaje:', err);
-    return false;
+    return { ok: false, tieneUsuarios: false };
   }
 }

@@ -75,12 +75,16 @@ export async function enviarMensajeTarjeta(
     if ((count ?? 0) < 3) {
       // Fallback a 'Cardly SV' solo si el join no trajo nombre (no debería pasar: comercio_id es
       // NOT NULL). Vale más un header genérico que un mensaje sin mandar.
-      const exito = await enviarMensajeGoogle(
+      const res = await enviarMensajeGoogle(
         tarjeta.google_object_id,
         tarjeta.comercios?.nombre ?? 'Cardly SV',
         mensaje,
       );
-      if (exito) {
+      // Cuenta como enviada solo si la llamada salió bien Y alguien tiene el pase guardado. El
+      // objeto existe desde que lo creamos, así que sin `tieneUsuarios` una tarjeta que nadie
+      // instaló sumaba al "N tarjetas alcanzadas" que ve el dueño. Mismo criterio que Apple, que
+      // ya exigía al menos un dispositivo registrado.
+      if (res.ok && res.tieneUsuarios) {
         enviadoGoogle = true;
         await supabase.from('notificaciones_enviadas').insert({
           tarjeta_id: tarjetaId,

@@ -20,18 +20,20 @@ vi.mock('./walletClient', () => ({
 }));
 
 beforeEach(() => {
-  addmessageMock.mockReset().mockResolvedValue({});
+  // La API devuelve el objeto YA ACTUALIZADO en `resource`; de ahí sale hasUsers sin pagar una
+  // llamada extra. Por defecto, alguien tiene el pase guardado.
+  addmessageMock.mockReset().mockResolvedValue({ data: { resource: { hasUsers: true } } });
 });
 
 describe('enviarMensajeGoogle', () => {
-  it('manda el mensaje al objeto indicado con messageType TEXT_AND_NOTIFY y devuelve true', async () => {
+  it('manda el mensaje al objeto indicado con messageType TEXT_AND_NOTIFY', async () => {
     const resultado = await enviarMensajeGoogle(
       'issuer-test.tarjeta_x',
       'Cardly SV',
       'Mensaje de prueba automatizada',
     );
 
-    expect(resultado).toBe(true);
+    expect(resultado).toEqual({ ok: true, tieneUsuarios: true });
     expect(addmessageMock).toHaveBeenCalledOnce();
     const llamada = addmessageMock.mock.calls[0][0];
     expect(llamada.resourceId).toBe('issuer-test.tarjeta_x');
@@ -49,11 +51,32 @@ describe('enviarMensajeGoogle', () => {
     });
   });
 
-  it('un objectId inexistente (o cualquier fallo de Google) devuelve false, no lanza', async () => {
+  it('un objectId inexistente (o cualquier fallo de Google) devuelve ok:false, no lanza', async () => {
     addmessageMock.mockRejectedValueOnce(new Error('objeto no encontrado'));
 
     const resultado = await enviarMensajeGoogle('id-que-no-existe-12345', 'Cardly SV', 'Prueba');
 
-    expect(resultado).toBe(false);
+    expect(resultado).toEqual({ ok: false, tieneUsuarios: false });
+  });
+
+  // La distinción que motivó todo este retorno: la llamada SALE BIEN pero el mensaje no llega a
+  // ningún teléfono, porque el LoyaltyObject existe desde que nosotros lo creamos y nadie lo
+  // guardó. En producción, el 2026-07-30, 4 de 6 tarjetas estaban así y el dueño veía "6 alcanzadas".
+  it('objeto sin usuarios: ok es true (la API respondió), pero tieneUsuarios es false', async () => {
+    addmessageMock.mockResolvedValueOnce({ data: { resource: { hasUsers: false } } });
+
+    const resultado = await enviarMensajeGoogle('issuer-test.nadie_lo_guardo', 'Cardly SV', 'Prueba');
+
+    expect(resultado).toEqual({ ok: true, tieneUsuarios: false });
+  });
+
+  it('si Google omite hasUsers, NO se cuenta la tarjeta', async () => {
+    // hasUsers es opcional en el tipo (lo pone la plataforma). Ante la duda el número va para
+    // abajo: el objetivo de este dato es dejar de inflar lo que ve el dueño.
+    addmessageMock.mockResolvedValueOnce({ data: { resource: {} } });
+
+    const resultado = await enviarMensajeGoogle('issuer-test.sin_dato', 'Cardly SV', 'Prueba');
+
+    expect(resultado).toEqual({ ok: true, tieneUsuarios: false });
   });
 });

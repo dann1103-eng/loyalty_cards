@@ -35,7 +35,7 @@ const tarjetasCreadas: string[] = [];
 const difusionesCreadas: string[] = [];
 
 beforeEach(() => {
-  enviarMensajeGoogleMock.mockReset().mockResolvedValue(true);
+  enviarMensajeGoogleMock.mockReset().mockResolvedValue({ ok: true, tieneUsuarios: true });
 });
 
 afterEach(async () => {
@@ -127,6 +127,31 @@ describe('enviarMensajeTarjeta', () => {
       'Farmacias ABC',
       'Promo del mes',
     );
+  });
+
+  // El conteo que ve el dueño ("6 tarjetas alcanzadas") tiene que ser gente que RECIBIÓ algo, no
+  // llamadas a la API que salieron bien. Un LoyaltyObject existe desde que se lo crea, aunque nadie
+  // haya guardado el pase: el addmessage devuelve éxito igual y no llega a ningún teléfono. El
+  // 2026-07-30, de 6 tarjetas "alcanzadas" en producción solo 2 personas tenían el pase instalado.
+  // Apple ya lo hacía bien (mira apple_push_registrations); esto empareja el lado de Google.
+  it('un objeto de Google SIN usuarios no cuenta como alcanzada ni deja fila de auditoría', async () => {
+    const comercioId = await entorno.crearComercio();
+    const { id: tarjetaId } = await entorno.crearTarjeta(comercioId);
+    tarjetasCreadas.push(tarjetaId);
+    await supabase.from('tarjetas').update({ google_object_id: 'issuer.obj_sin_usuarios' }).eq('id', tarjetaId);
+    // La llamada SALE BIEN; simplemente nadie guardó el pase.
+    enviarMensajeGoogleMock.mockResolvedValue({ ok: true, tieneUsuarios: false });
+
+    const resultado = await enviarMensajeTarjeta(supabase, tarjetaId, 'Hola', '2026-12-31', 'campana');
+
+    expect(resultado.enviadoGoogle).toBe(false);
+    // Y no se audita: una fila acá diría que a alguien le llegó algo que nadie recibió.
+    const { count } = await supabase
+      .from('notificaciones_enviadas')
+      .select('id', { count: 'exact', head: true })
+      .eq('tarjeta_id', tarjetaId)
+      .eq('canal', 'google');
+    expect(count).toBe(0);
   });
 
   it('el filtro del candado es por canal=google: 3 notificaciones canal=apple NO cuentan', async () => {
