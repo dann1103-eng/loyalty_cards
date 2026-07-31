@@ -94,20 +94,26 @@ existentes tras migrar. Sin CHECK de colores, igual que en `comercios` — la va
 
 ## Riesgos y pendientes para el plan
 
-- **Migrar los objetos de un programa a su clase nueva. ES EL MAYOR RIESGO ABIERTO y va como primer
-  paso verificable del plan, no como supuesto.** Lo que sí se pudo confirmar leyendo los tipos
-  instalados (`node_modules/googleapis/.../walletobjects/v1.d.ts:916`): la documentación de
-  `LoyaltyObject.classId` **no** lo marca como inmutable, lo cual es alentador pero no es prueba.
+- **Migrar los objetos a la clase nueva: VERIFICADO CONTRA LA API REAL el 2026-07-30, funciona.**
+  Era el mayor riesgo abierto del diseño y quedó cerrado con una prueba, no con un supuesto.
 
-  Y ahí mismo aparece una condición que el diseño tiene que respetar sí o sí: la clase destino
-  *"must already exist, and **must be approved**"*. Nuestro `construirClase` crea toda clase con
-  `reviewStatus: 'UNDER_REVIEW'` (`lib/google/construirRecursos.ts:38`). O sea que una clase nueva
-  por programa **podría no aceptar objetos hasta estar aprobada**, y la aprobación no depende de
-  nosotros. Si es así, el branding propio solo podría aplicarse a las tarjetas emitidas después de
-  que la clase quede aprobada, y el plan necesita decidir qué se le muestra al dueño mientras tanto.
+  Qué se hizo: se creó una clase real en el emisor de producción con `reviewStatus: 'UNDER_REVIEW'`
+  (tal como la crea `construirClase`), se movió un `LoyaltyObject` existente —elegido con
+  `hasUsers === false`, para no tocar ningún pase instalado en un teléfono— con
+  `loyaltyobject.patch({ classId })`, se confirmó releyendo el objeto que el `classId` cambió de
+  verdad, y se lo devolvió a su clase original.
 
-  Salida alternativa si mover objetos resulta imposible: que el branding propio aplique únicamente
-  a tarjetas nuevas, y que la UI lo diga.
+  Dos resultados, y el segundo no lo esperaba:
+  1. **Un objeto SÍ se puede mover de clase con `patch`.** `classId` no es inmutable.
+  2. **Google devolvió la clase recién creada como `approved`, no como `UNDER_REVIEW`.** Con el
+     emisor ya aprobado, las clases nuevas nacen aprobadas, así que la condición *"must be
+     approved"* que exige la doc de `classId` se cumple sola. El bloqueo que este spec temía **no
+     existe**, y la salida alternativa ("branding propio solo para tarjetas nuevas") queda
+     descartada por innecesaria.
+
+  Costo permanente de la verificación: la clase `<emisor>.prueba_mover_clase_2026_07_30`
+  (`programName: "Verificacion tecnica"`) queda para siempre en el emisor — las clases de Google no
+  se borran. Autorizado explícitamente por el dueño tras advertírselo.
 - **`syncClaseComercio` deja de ser una sola llamada por comercio.** Un cambio de branding del
   comercio tiene que propagarse a las clases de todos los programas que heredan ese campo.
 - **Cobertura mínima:** que un programa sin branding propio herede TODO; que uno con branding
