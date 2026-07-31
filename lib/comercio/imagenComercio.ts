@@ -73,3 +73,11 @@ export function rutaImagenPrograma(
 ): string {
   return `${comercioId}/programas/${programaId}/${campo}.${ext}`;
 }
+
+// Ruta del logo PROPIO de un cartel (cuando el comercio decide no heredar el logo de su marca para
+// este cartel puntual). Mismo bucket, misma validación de 2MB/png-jpg-webp que el resto — solo
+// cambia el path. Un comercio tiene UN logo de cartel por programa (nunca dos), así que basta con el
+// comercioId + el programaId, igual que rutaImagenRecompensa usa comercioId + recompensaId.
+export function rutaImagenCartel(comercioId: string, programaId: string, ext: string): string {
+  return `${comercioId}/carteles/${programaId}.${ext}`;
+}
