@@ -231,4 +231,79 @@ describe('datosPassDeTarjeta — reverso', () => {
 
     expect(resultado!.datos.colorFondo).toBe('rgb(10, 10, 10)');
   }, 30_000);
+
+  // Reverso por programa (migración 0029). Mismas dos mitades que la prueba de branding de arriba,
+  // y por el mismo motivo: una que solo mirara los términos propios pasaría igual si el código
+  // ignorara la herencia y dejara las redes del comercio afuera de la tarjeta del cupón.
+  it('el pase usa el reverso del PROGRAMA en lo que define, y hereda el resto del comercio', async () => {
+    const serial = await crearEscenario([]);
+    const { error: eComercio } = await supabase
+      .from('comercios')
+      .update({
+        terminos_uso: 'Términos del negocio.',
+        red_instagram: 'https://instagram.com/negocio',
+      })
+      .eq('id', creados!.comercioId);
+    if (eComercio) throw new Error(`no se pudo preparar el comercio: ${eComercio.message}`);
+    const { error: ePrograma } = await supabase
+      .from('programas_tarjeta')
+      .update({ reverso_propio: true, terminos_uso: 'El cupón vence a los 30 días.' })
+      .eq('id', creados!.programaId);
+    if (ePrograma) throw new Error(`no se pudo preparar el programa: ${ePrograma.message}`);
+
+    const resultado = await datosPassDeTarjeta(supabase, serial);
+    const campos = resultado!.datos.reverso;
+
+    expect(
+      campos.find((c) => c.key === 'terminos')!.value,
+      'los términos propios del programa tienen que pisar',
+    ).toBe('El cupón vence a los 30 días.');
+    expect(
+      campos.find((c) => c.key === 'instagram'),
+      'lo que el programa NO define se hereda del comercio',
+    ).toBeDefined();
+  }, 30_000);
+
+  it('con reverso_propio APAGADO el pase hereda todo, aunque el programa tenga texto cargado', async () => {
+    const serial = await crearEscenario([]);
+    await supabase
+      .from('comercios')
+      .update({ terminos_uso: 'Términos del negocio.' })
+      .eq('id', creados!.comercioId);
+    const { error } = await supabase
+      .from('programas_tarjeta')
+      .update({ reverso_propio: false, terminos_uso: 'El cupón vence a los 30 días.' })
+      .eq('id', creados!.programaId);
+    if (error) throw new Error(`no se pudo preparar el programa: ${error.message}`);
+
+    const resultado = await datosPassDeTarjeta(supabase, serial);
+
+    expect(resultado!.datos.reverso.find((c) => c.key === 'terminos')!.value).toBe(
+      'Términos del negocio.',
+    );
+  }, 30_000);
+
+  // `false` en el programa NO es "no lo definí": es "en esta tarjeta no quiero la sección". Con un
+  // `||` en la herencia se lo comería el true del comercio y el cupón mostraría la sección
+  // automática que el dueño apagó — con las reglas y los premios del programa de sellos.
+  it('mostrar_como_funciona en false apaga la sección SOLO en esa tarjeta, con el comercio en true', async () => {
+    const serial = await crearEscenario([10]);
+    const { error: eComercio } = await supabase
+      .from('comercios')
+      .update({ mostrar_como_funciona: true })
+      .eq('id', creados!.comercioId);
+    if (eComercio) throw new Error(`no se pudo preparar el comercio: ${eComercio.message}`);
+    const { error: ePrograma } = await supabase
+      .from('programas_tarjeta')
+      .update({ reverso_propio: true, mostrar_como_funciona: false })
+      .eq('id', creados!.programaId);
+    if (ePrograma) throw new Error(`no se pudo preparar el programa: ${ePrograma.message}`);
+
+    const resultado = await datosPassDeTarjeta(supabase, serial);
+
+    expect(
+      resultado!.datos.reverso.find((c) => c.key === 'como_funciona'),
+      'el programa la apagó: no puede aparecer aunque el comercio la tenga encendida',
+    ).toBeUndefined();
+  }, 30_000);
 });

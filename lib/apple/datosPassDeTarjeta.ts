@@ -3,7 +3,7 @@ import type { Database } from '../supabase/types';
 import type { DatosPass } from './generatePass';
 import { construirReverso, resolverAviso } from './construirReverso';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
-import { brandingEfectivo } from '../comercio/brandingEfectivo';
+import { brandingEfectivo, reversoEfectivo } from '../comercio/brandingEfectivo';
 
 export async function datosPassDeTarjeta(
   supabase: SupabaseClient<Database>,
@@ -25,7 +25,7 @@ export async function datosPassDeTarjeta(
   const { data: tarjeta } = await supabase
     .from('tarjetas')
     .select(
-      '*, comercios(*), clientes(nombre), programas_tarjeta(tipo_tarjeta, sello_meta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja)',
+      '*, comercios(*), clientes(nombre), programas_tarjeta(tipo_tarjeta, sello_meta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, reverso_propio, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona)',
     )
     .eq('apple_serial_number', serialNumber)
     .maybeSingle();
@@ -75,6 +75,36 @@ export async function datosPassDeTarjeta(
           // undefined activa el `??` de brandingEfectivo y hereda; null lo activaría igual, pero
           // el tipo pide undefined para no prometer un string que no está.
           difuminadoFranja: programa.difuminado_franja ?? undefined,
+        }
+      : null,
+  );
+
+  // Reverso por programa (0029), exactamente el mismo criterio que el branding de arriba: herencia
+  // campo por campo, con el interruptor `reverso_propio` mandando sobre los campos. Sin esto, las
+  // dos tarjetas del mismo negocio comparten un único dorso y el cupón de campaña no puede decir
+  // cuándo vence.
+  const dorso = reversoEfectivo(
+    {
+      terminosUso: c.terminos_uso,
+      redInstagram: c.red_instagram,
+      redFacebook: c.red_facebook,
+      redWhatsapp: c.red_whatsapp,
+      sitioWeb: c.sitio_web,
+      mostrarComoFunciona: c.mostrar_como_funciona,
+    },
+    programa
+      ? {
+          reversoPropio: programa.reverso_propio,
+          terminosUso: programa.terminos_uso,
+          redInstagram: programa.red_instagram,
+          redFacebook: programa.red_facebook,
+          redWhatsapp: programa.red_whatsapp,
+          sitioWeb: programa.sitio_web,
+          // Acá se pasa el null TAL CUAL, sin `?? undefined`: en esta columna null significa
+          // "heredá" y el tipo ReversoPrograma ya lo admite. Convertirlo a `false` —que es lo que
+          // haría un `?? false` copiado del branding— apagaría la sección automática en todas las
+          // tarjetas de un programa que nunca la tocó.
+          mostrarComoFunciona: programa.mostrar_como_funciona,
         }
       : null,
   );
@@ -150,12 +180,12 @@ export async function datosPassDeTarjeta(
         nombreComercio: tarjeta.comercios.nombre,
         tipoTarjeta,
         selloMeta,
-        mostrarComoFunciona: tarjeta.comercios.mostrar_como_funciona,
-        terminosUso: tarjeta.comercios.terminos_uso,
-        redInstagram: tarjeta.comercios.red_instagram,
-        redFacebook: tarjeta.comercios.red_facebook,
-        redWhatsapp: tarjeta.comercios.red_whatsapp,
-        sitioWeb: tarjeta.comercios.sitio_web,
+        mostrarComoFunciona: dorso.mostrarComoFunciona,
+        terminosUso: dorso.terminosUso,
+        redInstagram: dorso.redInstagram,
+        redFacebook: dorso.redFacebook,
+        redWhatsapp: dorso.redWhatsapp,
+        sitioWeb: dorso.sitioWeb,
         // `?? []` es la mitad del best-effort: con error, `data` viene null y la sección automática
         // simplemente no se emite.
         reglas: reglas.data ?? [],
