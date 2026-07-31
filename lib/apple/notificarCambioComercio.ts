@@ -14,10 +14,33 @@ export async function notificarCambioComercio(
   supabase: SupabaseClient<Database>,
   comercioId: string,
 ): Promise<void> {
-  const { data: tarjetas, error } = await supabase
-    .from('tarjetas')
-    .select('id')
-    .eq('comercio_id', comercioId);
+  await notificar(supabase, comercioId, null);
+}
+
+// Igual que la de arriba, pero solo los passes de UN programa: lo que necesita el branding por
+// programa (migración 0027). Sin este push, el dueño le cambia la marca a su cupón y NINGÚN iPhone
+// que ya lo tenga instalado se entera — Wallet solo re-descarga el .pkpass cuando recibe uno.
+//
+// Acotado al programa a propósito: un push al programa que no cambió hace que ese cliente descargue
+// de nuevo un pase idéntico. Y el comercioId no es redundante: el programaId viaja en el formulario
+// del dueño, el comercioId viene del gate.
+export async function notificarCambioPrograma(
+  supabase: SupabaseClient<Database>,
+  comercioId: string,
+  programaId: string,
+): Promise<void> {
+  await notificar(supabase, comercioId, programaId);
+}
+
+async function notificar(
+  supabase: SupabaseClient<Database>,
+  comercioId: string,
+  programaId: string | null,
+): Promise<void> {
+  let consulta = supabase.from('tarjetas').select('id').eq('comercio_id', comercioId);
+  if (programaId) consulta = consulta.eq('programa_id', programaId);
+
+  const { data: tarjetas, error } = await consulta;
 
   if (error) {
     console.error('[apple] no se pudieron listar las tarjetas para notificar:', error);

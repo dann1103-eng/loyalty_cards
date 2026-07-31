@@ -163,6 +163,13 @@ export async function accionGuardarGeopush(
   await notificarCambioComercio(supabase, comercioId);
   // Google guarda las ubicaciones en la CLASE, o sea una sola llamada para todos los clientes.
   await syncClaseComercio(supabase, comercioId);
+  // PENDIENTE (Task 6 del plan de branding por programa): cuando un programa pueda tener su PROPIA
+  // LoyaltyClass, esta línea deja de alcanzar. Las ubicaciones del geopush viven en la clase
+  // (construirRecursos.ts), así que los clientes de un programa con clase propia se quedarían con
+  // las coordenadas viejas — pierden el aviso por cercanía en silencio. Hoy no hace falta y no se
+  // deja código muerto: NADA escribe programas_tarjeta.google_class_id todavía (verificado con
+  // grep el 2026-07-31), así que no existe ninguna clase de programa que actualizar. La tarea que
+  // cree esas clases tiene que sumar acá el recorrido de los programas con google_class_id.
 
   revalidatePath('/comercio/sucursales');
   return { ok: true };

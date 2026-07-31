@@ -17,10 +17,34 @@ export async function syncObjetosComercio(
   supabase: SupabaseClient<Database>,
   comercioId: string,
 ): Promise<void> {
-  const { data: tarjetas, error } = await supabase
-    .from('tarjetas')
-    .select('id')
-    .eq('comercio_id', comercioId);
+  await resincronizar(supabase, comercioId, null);
+}
+
+// Igual que la de arriba, pero solo las tarjetas de UN programa: lo que necesita el branding por
+// programa (migración 0027). Acotarlo no es una optimización cosmética — cada tarjeta es una
+// llamada a la API de Google, y re-sincronizar el programa que NO cambió hace que Google
+// re-descargue una grilla idéntica para cada uno de esos clientes.
+//
+// El comercioId sigue siendo obligatorio y NO es redundante: el programaId viaja en el formulario
+// del dueño mientras el comercioId viene del gate. Sin el scope por comercio, un id de programa
+// ajeno dispararía escrituras sobre las tarjetas de otro negocio.
+export async function syncObjetosPrograma(
+  supabase: SupabaseClient<Database>,
+  comercioId: string,
+  programaId: string,
+): Promise<void> {
+  await resincronizar(supabase, comercioId, programaId);
+}
+
+async function resincronizar(
+  supabase: SupabaseClient<Database>,
+  comercioId: string,
+  programaId: string | null,
+): Promise<void> {
+  let consulta = supabase.from('tarjetas').select('id').eq('comercio_id', comercioId);
+  if (programaId) consulta = consulta.eq('programa_id', programaId);
+
+  const { data: tarjetas, error } = await consulta;
 
   if (error) {
     console.error('[google] no se pudieron listar las tarjetas para re-sincronizar:', error);
