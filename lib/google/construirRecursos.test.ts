@@ -55,11 +55,31 @@ describe('construirObjeto', () => {
     expect(obj.loyaltyPoints).toEqual({ label: 'Sellos', balance: { string: '3 de 8 sellos' } });
   });
 
-  it('sellos sin meta configurada (selloMeta null) cae al formato de puntos, no revienta', () => {
+  it('sellos sin meta configurada (selloMeta null) cae al entero pelado, no revienta', () => {
     const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
       qrToken: 'tok-3', puntosActuales: 5, tipoTarjeta: 'sellos', selloMeta: null, ubicaciones: [],
     });
-    expect(obj.loyaltyPoints).toEqual({ label: 'Puntos', balance: { int: 5 } });
+    // La etiqueta sigue siendo "Sellos" —es lo que la tarjeta ES— aunque no haya meta contra la
+    // cual compararse. Antes decía "Puntos", que le mentía al cliente sobre su propia tarjeta.
+    expect(obj.loyaltyPoints).toEqual({ label: 'Sellos', balance: { int: 5 } });
+  });
+
+  // El bug que motivó contadorPase: gift card y cashback guardan CENTAVOS en puntos_actuales, y
+  // esta función mandaba balance.int para todo lo que no fuera sellos. Un saldo de $25.00 llegaba
+  // a Google Wallet como "Puntos 2500".
+  it('gift card: el saldo va como dinero formateado, no como entero de centavos', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      qrToken: 'tok-7', puntosActuales: 2500, tipoTarjeta: 'gift_card', selloMeta: null, ubicaciones: [],
+    });
+    expect(obj.loyaltyPoints).toEqual({ label: 'Saldo', balance: { string: '$25.00' } });
+  });
+
+  it('cupón: NO lleva loyaltyPoints (Google rechaza null y "Puntos 0" no dice nada)', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      qrToken: 'tok-8', puntosActuales: 0, tipoTarjeta: 'cupon', selloMeta: null, ubicaciones: [],
+    });
+    expect(obj.loyaltyPoints).toBeUndefined();
+    expect('loyaltyPoints' in obj).toBe(false);
   });
 
   it('sellos con meta y con heroImageUrl: incluye heroImage a nivel de objeto (grilla por cliente)', () => {

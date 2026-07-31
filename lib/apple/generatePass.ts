@@ -4,6 +4,7 @@ import { requireEnv } from '@/lib/env';
 import { componerStrips, descargarImagen } from './stripPass';
 import { redimensionarLogo } from './imagenesPass';
 import type { CampoReverso } from './construirReverso';
+import { contadorPase } from '@/lib/tarjetas/contadorPase';
 import {
   MAXIMO_UBICACIONES_APPLE,
   LARGO_MAXIMO_MENSAJE_CERCANIA,
@@ -171,12 +172,23 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
       value: `${datos.puntos} de ${datos.selloMeta} sellos`,
     });
   } else {
-    pass.primaryFields.push({
-      key: 'puntos',
-      label: 'PUNTOS',
-      value: datos.puntos,
-      numberStyle: 'PKNumberStyleDecimal',
-    });
+    // contadorPase decide etiqueta y formato SEGÚN EL TIPO. Antes esta rama dibujaba todo como
+    // "PUNTOS <entero>", y como gift card y cashback guardan CENTAVOS en la misma columna, un saldo
+    // de $25.00 se veía "PUNTOS 2500". Devuelve null en los tipos sin contador (cupón, membresía,
+    // descuento): ahí el pase no lleva número, en vez de un "PUNTOS 0" que no dice nada.
+    const contador = contadorPase(datos.tipoTarjeta, datos.puntos, datos.selloMeta);
+    if (contador) {
+      pass.primaryFields.push({
+        key: 'puntos',
+        label: contador.etiqueta,
+        // Número pelado → va como number CON numberStyle, para que iOS le ponga los separadores de
+        // miles del teléfono. Valor ya formateado ("$25.00") → va como string y sin numberStyle:
+        // aplicárselo haría que iOS intente reformatear lo que ya está formateado.
+        ...(contador.numero !== null
+          ? { value: contador.numero, numberStyle: 'PKNumberStyleDecimal' as const }
+          : { value: contador.valor }),
+      });
+    }
   }
 
   // El TITULAR de la tarjeta, alineado a la derecha de la misma fila que el contador. Es el nombre

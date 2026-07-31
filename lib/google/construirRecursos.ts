@@ -1,5 +1,6 @@
 import type { walletobjects_v1 } from 'googleapis/build/src/apis/walletobjects/v1';
 import { rgbAHex } from './colorHex';
+import { contadorPase } from '../tarjetas/contadorPase';
 
 // Insumos mínimos para armar una LoyaltyClass: solo lo que la clase realmente usa (no el row
 // completo de `comercios`), para que estas funciones sean puras y fáciles de testear sin DB.
@@ -75,11 +76,22 @@ export interface TarjetaParaObjeto {
 // El texto ("7 de 10 sellos") queda SIEMPRE como loyaltyPoints, incluso con grilla visual: es lo
 // que se lee en la vista de lista de Wallet (donde no cabe la imagen) y el respaldo si la
 // composición de la grilla falla.
-function loyaltyPointsDe(t: TarjetaParaObjeto): walletobjects_v1.Schema$LoyaltyPoints {
-  if (t.tipoTarjeta === 'sellos' && t.selloMeta != null && t.selloMeta > 0) {
-    return { label: 'Sellos', balance: { string: `${t.puntosActuales} de ${t.selloMeta} sellos` } };
-  }
-  return { label: 'Puntos', balance: { int: t.puntosActuales } };
+function loyaltyPointsDe(t: TarjetaParaObjeto): walletobjects_v1.Schema$LoyaltyPoints | null {
+  // Misma fuente de verdad que el lado de Apple (lib/tarjetas/contadorPase.ts), para que las dos
+  // plataformas no puedan divergir en el número que el cliente lee de un vistazo. Antes esta
+  // función mandaba `balance.int` para todo lo que no fuera sellos, y como gift card y cashback
+  // guardan CENTAVOS, un saldo de $25.00 llegaba a Google Wallet como "Puntos 2500".
+  const contador = contadorPase(t.tipoTarjeta, t.puntosActuales, t.selloMeta);
+  if (!contador) return null;
+  // La etiqueta va capitalizada —"Saldo", no "SALDO"— porque en Google es una etiqueta de campo, no
+  // el encabezado en mayúsculas que usa Apple.
+  const etiqueta = contador.etiqueta.charAt(0) + contador.etiqueta.slice(1).toLowerCase();
+  // `int` cuando el contador es un número pelado, para que Google le ponga los separadores de miles
+  // del teléfono; `string` cuando el valor ya viene formateado ("$25.00", "3 de 8"), donde un int
+  // sería imposible o perdería la unidad.
+  if (contador.numero !== null) return { label: etiqueta, balance: { int: contador.numero } };
+  const valor = t.tipoTarjeta === 'sellos' ? `${contador.valor} sellos` : contador.valor;
+  return { label: etiqueta, balance: { string: valor } };
 }
 
 function esSellosConMeta(t: TarjetaParaObjeto): boolean {
@@ -91,12 +103,16 @@ export function construirObjeto(
   classId: string,
   tarjeta: TarjetaParaObjeto,
 ): walletobjects_v1.Schema$LoyaltyObject {
+  const puntos = loyaltyPointsDe(tarjeta);
   return {
     id: objectId,
     classId,
     state: 'ACTIVE',
     barcode: { type: 'QR_CODE', value: tarjeta.qrToken },
-    loyaltyPoints: loyaltyPointsDe(tarjeta),
+    // Se OMITE la clave si el tipo no tiene contador (cupón, membresía, descuento), en vez de
+    // mandar null: Google rechaza un loyaltyPoints nulo, y un "Puntos 0" no le diría nada al
+    // cliente. Mismo criterio que heroImage y merchantLocations acá abajo.
+    ...(puntos ? { loyaltyPoints: puntos } : {}),
     ...(esSellosConMeta(tarjeta) && tarjeta.heroImageUrl
       ? { heroImage: { sourceUri: { uri: tarjeta.heroImageUrl } } }
       : {}),
