@@ -111,6 +111,17 @@ export default async function PaginaProgramas() {
                       <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">download</span>
                       Descargar
                     </a>
+                    {/* El QR pelado sirve para pegarlo en un diseño propio; el cartel es la versión
+                        lista para imprimir y poner en la mesa, con el logo y los colores del
+                        programa ya puestos. */}
+                    <Link
+                      className="btn-borde"
+                      style={{ marginTop: 8, marginLeft: 8 }}
+                      href={`/comercio/programas/${programa.id}/cartel`}
+                    >
+                      <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">note_stack</span>
+                      Diseñar cartel
+                    </Link>
                   </div>
                 )}
               </div>
