@@ -126,12 +126,42 @@ async function plantillaSplit(datos: DatosCartel, formato: FormatoCartel): Promi
 </svg>`;
 }
 
-// El dispatcher completo se termina en la Tarea 7 (agrega 'foto'); esta tarea lo deja andando para
-// 'centrado' y 'split'.
+async function plantillaFoto(datos: DatosCartel, formato: FormatoCartel): Promise<string> {
+  const dim = DIMENSIONES_CARTEL[formato];
+  const w = dim.viewBox.ancho;
+  const h = dim.viewBox.alto;
+
+  const logoLado = w * 0.14;
+  const qrLado = w * 0.42;
+  const tarjetaAncho = w * 0.8;
+  const tarjetaAlto = qrLado * 1.5;
+  const tarjetaX = (w - tarjetaAncho) / 2;
+  const tarjetaY = h - tarjetaAlto - h * 0.06;
+  const qrX = w / 2 - qrLado / 2;
+  const qrY = tarjetaY + tarjetaAlto * 0.12;
+
+  const qrSvg = await construirQrSvg(datos.urlRegistro, qrLado);
+
+  // Sin fotoDataUri, cae a fondo sólido (spec §7: la UI no debería ofrecer esta plantilla sin
+  // hero_url, pero el renderizador no confía en que la UI lo respete siempre).
+  const fondo = datos.fotoDataUri
+    ? `<image href="${datos.fotoDataUri}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"/><rect width="${w}" height="${h}" fill="#000000" opacity="0.35"/>`
+    : `<rect width="${w}" height="${h}" fill="${datos.colorFondo}"/>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">
+  ${fondo}
+  ${logoSvg(datos, w * 0.06, h * 0.06, logoLado)}
+  <rect x="${tarjetaX}" y="${tarjetaY}" width="${tarjetaAncho}" height="${tarjetaAlto}" rx="${tarjetaAncho * 0.04}" fill="#ffffff"/>
+  <g transform="translate(${qrX}, ${qrY})">${qrSvg}</g>
+  <text x="${w / 2}" y="${qrY + qrLado * 1.22}" text-anchor="middle" font-family="sans-serif" font-size="${h * 0.026}" font-weight="600" fill="#1c1917">${escaparXml(datos.textoCta)}</text>
+</svg>`;
+}
+
 export async function construirCartelSvg(datos: DatosCartel, formato: FormatoCartel): Promise<string> {
   if (datos.plantilla === 'centrado') return plantillaCentrado(datos, formato);
   if (datos.plantilla === 'split') return plantillaSplit(datos, formato);
-  throw new Error(`Plantilla "${datos.plantilla}" todavía no implementada (Tarea 7 de este plan).`);
+  if (datos.plantilla === 'foto') return plantillaFoto(datos, formato);
+  throw new Error(`Plantilla "${String(datos.plantilla)}" desconocida.`);
 }
 
-export { plantillaCentrado, plantillaSplit, construirQrSvg, tarjetaBlancaConQr, logoSvg };
+export { plantillaCentrado, plantillaSplit, plantillaFoto, construirQrSvg, tarjetaBlancaConQr, logoSvg };

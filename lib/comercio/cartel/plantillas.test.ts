@@ -115,3 +115,40 @@ describe('construirCartelSvg — plantilla split', () => {
     }
   });
 });
+
+describe('construirCartelSvg — plantilla foto', () => {
+  it('sin fotoDataUri, cae a un fondo sólido en vez de romperse', async () => {
+    const datos: DatosCartel = { ...DATOS_BASE, plantilla: 'foto', fotoDataUri: null };
+    const svg = await construirCartelSvg(datos, 'sticker');
+    expect(svg).toContain(datos.colorFondo);
+    expect(svg).not.toContain('<image href="" ');
+    // Las dos aserciones de arriba sobreviven al mutante que emite `<image href="${null}">` igual:
+    // colorFondo sigue apareciendo como fill de la inicial, y el href dice "null", no "". Con este
+    // caso (sin foto Y sin logo) el cartel no debe tener NINGUNA <image>, y el fondo tiene que ser
+    // el rect sólido — eso sí es lo que la prueba promete (mutación corrida y confirmada).
+    expect(svg).not.toContain('<image');
+    expect(svg).toContain('<rect width="400" height="400" fill="#3b2a1e"/>');
+  });
+
+  it('con fotoDataUri, la usa como fondo de imagen', async () => {
+    const datos: DatosCartel = { ...DATOS_BASE, plantilla: 'foto', fotoDataUri: 'data:image/webp;base64,BBBB' };
+    const svg = await construirCartelSvg(datos, 'sticker');
+    expect(svg).toContain('<image href="data:image/webp;base64,BBBB"');
+  });
+
+  it('produce SVG válido y con el QR embebido en los dos formatos', async () => {
+    const datos: DatosCartel = { ...DATOS_BASE, plantilla: 'foto', fotoDataUri: 'data:image/webp;base64,BBBB' };
+    for (const formato of ['sticker', 'mostrador'] as const) {
+      const svg = await construirCartelSvg(datos, formato);
+      expect(svg.trim().startsWith('<svg')).toBe(true);
+      expect(svg.match(/xmlns="http:\/\/www\.w3\.org\/2000\/svg"/g)?.length).toBe(2);
+    }
+  });
+});
+
+describe('construirCartelSvg — plantilla desconocida', () => {
+  it('lanza un error legible en vez de devolver un SVG vacío', async () => {
+    const datos = { ...DATOS_BASE, plantilla: 'no-existe' } as unknown as DatosCartel;
+    await expect(construirCartelSvg(datos, 'sticker')).rejects.toThrow(/no implementada|Plantilla/);
+  });
+});
