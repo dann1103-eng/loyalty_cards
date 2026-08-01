@@ -64,9 +64,20 @@ async function plantillaCentrado(datos: DatosCartel, formato: FormatoCartel): Pr
   const logoLado = w * 0.18;
   const logoY = h * 0.1;
   const nombreY = logoY + logoLado + h * 0.045;
-  const qrLado = w * 0.5;
-  const qrX = cx - qrLado / 2;
   const qrY = nombreY + h * 0.06;
+
+  // El QR se dimensiona por el ANCHO, pero acotado por el alto que queda libre debajo. Sin ese
+  // tope, en un lienzo cuadrado (sticker 10×10 cm) la tarjeta del QR mide 1.24 × 0.5 × 400 = 248
+  // de alto, arranca en y=154, y empuja el CTA a y=422 y el teaser a y=440 — FUERA de un lienzo de
+  // 400. El dueño imprimía un adhesivo SIN la frase que le dice al cliente qué hacer, y nada
+  // fallaba: lo que cae fuera del viewBox simplemente no existe en el papel.
+  //
+  // El 0.865 reserva lo que va debajo del QR: el CTA (h*0.05), el teaser (h*0.045) y un respiro al
+  // pie. En formato mostrador el tope da ~244 y no muerde —ahí sigue mandando el 0.5 del ancho—,
+  // así que ese cartel se ve exactamente igual que antes de este arreglo.
+  const altoDisponible = (h * 0.865 - qrY) / 1.24;
+  const qrLado = Math.min(w * 0.5, altoDisponible);
+  const qrX = cx - qrLado / 2;
   const ctaY = qrY + qrLado * 1.24 + h * 0.05;
   const teaserY = ctaY + h * 0.045;
 

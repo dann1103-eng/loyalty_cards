@@ -152,3 +152,45 @@ describe('construirCartelSvg — plantilla desconocida', () => {
     await expect(construirCartelSvg(datos, 'sticker')).rejects.toThrow(/no implementada|Plantilla/);
   });
 });
+
+// TODO el contenido tiene que caber DENTRO del lienzo, en las SEIS combinaciones. No es prolijidad:
+// un cartel es para IMPRIMIRLO, y lo que cae fuera del viewBox no existe en el papel — sin error,
+// sin aviso, y sin que la vista previa lo delate si el navegador no recorta igual que el rasterizador.
+//
+// Nació de un bug real (2026-07-31): en `centrado` × `sticker` la tarjeta del QR terminaba en y=402
+// sobre un lienzo de 400, el "¡Escaneá y sumate!" caía en y=422 y el teaser en y=440. El dueño
+// habría impreso un adhesivo SIN la frase que le dice al cliente qué hacer. La causa era
+// `qrLado = w * 0.5`: en un lienzo cuadrado, la tarjeta se comía el 62% del alto.
+//
+// Se escribe genérica —recorre las seis combinaciones y mira TODA coordenada `y`— para que atrape
+// también la próxima plantilla que alguien agregue, no solo esta.
+describe('construirCartelSvg — nada se sale del lienzo', () => {
+  const PLANTILLAS = ['centrado', 'split', 'foto'] as const;
+  const FORMATOS = ['sticker', 'mostrador'] as const;
+
+  for (const plantilla of PLANTILLAS) {
+    for (const formato of FORMATOS) {
+      it(`${plantilla} × ${formato}: toda coordenada y cae dentro del alto del viewBox`, async () => {
+        const datos: DatosCartel = {
+          ...DATOS_BASE,
+          plantilla,
+          // CON teaser a propósito: es el elemento más bajo de la plantilla centrada, así que sin
+          // él la prueba dejaría pasar justo el caso que más se desborda.
+          textoTeaser: 'Tu 5to café gratis',
+          logoDataUri: 'data:image/png;base64,iVBORw0KGgo=',
+          fotoDataUri: plantilla === 'foto' ? 'data:image/png;base64,iVBORw0KGgo=' : null,
+        };
+        const svg = await construirCartelSvg(datos, formato);
+
+        const alto = Number(svg.match(/viewBox="0 0 [\d.]+ ([\d.]+)"/)![1]);
+        const ys = [...svg.matchAll(/\sy="([\d.]+)"/g)].map((m) => Number(m[1]));
+        const maximo = Math.max(...ys);
+
+        expect(
+          maximo,
+          `el elemento más bajo cae en y=${maximo} y el lienzo mide ${alto}: se imprimiría cortado`,
+        ).toBeLessThanOrEqual(alto);
+      });
+    }
+  }
+});
