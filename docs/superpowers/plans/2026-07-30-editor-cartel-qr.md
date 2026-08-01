@@ -1796,9 +1796,16 @@ construirCartelSvg({ nombreComercio: 'Test', plantilla: 'centrado', colorFondo: 
 "
 ```
 
-Expected: el ancho "sin density" ronda los ~283px y el "con density" ronda los ~1181px — confirma que
-la trampa es real y que el fix de `export.ts` la evita. Restaurar `{ density: 300 }` en
-`rasterizarCartelPng` (si se llegó a quitar para esta comprobación).
+Expected (MEDIDO 2026-07-31, no estimado): sin density el raster nativo es **283x283 px**; con
+`density: 300` es **4921x4921 px** — muy por encima del destino de 1181, no "a un par de píxeles de
+redondeo" como decía la versión anterior de esta línea. El motivo: libvips aplica la escala del
+density sobre un tamaño que librsvg ya resolvió desde los mm, así que entra dos veces.
+
+El fix del plan sigue siendo correcto igual —el `.resize()` REDUCE en vez de ampliar, que es lo que
+da nitidez—, y cuesta 18-48 ms y ~110 MB de RSS por cartel. Dato útil: el PNG borroso pesa MÁS
+(98 KB contra 58 KB), así que vigilar el peso del archivo no habría delatado nada.
+
+Restaurar `{ density: 300 }` en `rasterizarCartelPng` si se llegó a quitar para esta comprobación.
 
 - [ ] **Step 7: Typecheck y lint**
 
@@ -1850,11 +1857,16 @@ export type EstadoCartel = { error: string } | { ok: true } | undefined;
 // guardarConfiguracionPrograma/accionSubirFotoRecompensa: programaId llega de la URL del navegador y
 // no se confía en él sin verificar.
 //
-// Se usa SELECT-then-INSERT/UPDATE explícito en vez de `.upsert()` a propósito: un upsert que omite
-// `logo_url` del payload podría, dependiendo de cómo PostgREST arme el ON CONFLICT, tocar esa
-// columna sin que sea la intención — un UPDATE con una lista de columnas explícita es inequívoco: NO
-// toca logo_url pase lo que pase, así que un logo ya subido con accionSubirLogoCartel nunca se borra
-// al guardar colores/texto.
+// Se usa SELECT-then-INSERT/UPDATE explícito en vez de `.upsert()`. CORREGIDO 2026-07-31: la
+// justificación original —que un upsert "podría" pisar `logo_url`— se MIDIÓ contra la base real y
+// es falsa. Lo verificado:
+//   · `.upsert(payload)` a secas ROMPE el segundo guardado de cada cartel (el conflict target por
+//     defecto es la PK, que el payload no lleva → `duplicate key … disenos_cartel_programa_id_key`);
+//   · `.upsert(payload, { onConflict: 'programa_id' })` funciona y NO toca `logo_url`.
+// O sea que el upsert bien parametrizado sería correcto HOY. El motivo real de conservar el
+// SELECT-then-UPDATE es que qué columnas pisa un upsert depende de la FORMA del payload, no de algo
+// escrito: agregar una clave al objeto cambia el SET en silencio. Un UPDATE con lista explícita es
+// inequívoco, así que un logo subido con accionSubirLogoCartel nunca se borra al guardar colores.
 export async function accionGuardarCartel(
   programaId: string,
   _estadoPrevio: EstadoCartel,
