@@ -1222,16 +1222,17 @@ describe('combinarDatosCartel', () => {
   });
 
   it('fotoUrl SIEMPRE viene de comercios.hero_url — no existe override de foto', () => {
+    // CORREGIDO 2026-07-31: la primera versión de esta prueba pasaba `logo_url: null` y NO PROBABA
+    // NADA. Con el logo en null, la mutación `diseno?.logo_url ?? comercio.hero_url` colapsa al
+    // hero de todas formas y SOBREVIVE. Verificado con mutation-testing: con un logo no-nulo, muere.
     const r = combinarDatosCartel(COMERCIO, {
+      ...DISENO_SIN_OVERRIDES,
       plantilla: 'foto',
-      color_fondo: null,
-      color_texto: null,
-      color_label: null,
-      logo_url: null,
-      texto_cta: '¡Escaneá y sumate!',
-      texto_teaser: null,
+      logo_url: 'https://ejemplo.test/logo-cartel.webp',
     });
-    expect(r.fotoUrl).toBe('https://ejemplo.test/hero.webp');
+    expect(r.fotoUrl, 'la foto no puede leer la columna del logo').toBe(
+      'https://ejemplo.test/hero.webp',
+    );
   });
 
   it('un comercio SIN marca configurada cae en los defaults del sistema, no en null/undefined', () => {
