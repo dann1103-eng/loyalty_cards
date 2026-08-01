@@ -1197,6 +1197,18 @@ a {
   color: var(--texto-3);
 }
 
+/* vista previa del cartel/QR (editor de cartel).
+   El <svg> que devuelve construirCartelSvg trae width/height FÍSICOS en mm — y tienen que quedarse:
+   son lo que hace que librsvg lo rasterice al tamaño real del papel al exportar (ver el comentario
+   de `density` en lib/comercio/cartel/export.ts). En pantalla, en cambio, 100mm son ~378 px y el
+   cartel se desbordaría del panel; el viewBox ya lleva la proporción, así que alcanza con dejar que
+   mande el ancho del contenedor. */
+.cartel-preview svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 /* ---------- editor + preview sticky (C3) ----------
    minmax(0, …) en TODAS las pistas: con `1fr` a secas, una pista de grid no puede encogerse
    por debajo del min-content de su contenido (p. ej. la fila de subida de imagen con miniatura

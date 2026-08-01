@@ -9,6 +9,10 @@ import {
   type EstadoBranding,
 } from './actions';
 import { NIVELES_DIFUMINADO, stopsDifuminado, type NivelDifuminado } from '@/lib/apple/difuminadoFranja';
+// La BD guarda "rgb(r, g, b)"; el picker nativo habla hex. La traducción vive en lib/comercio/
+// colorHex.ts porque el editor de cartel necesita exactamente la misma: dos copias divergen sin que
+// nada avise, y el dueño vería un color distinto en cada pantalla.
+import { hexDesdeRgb, rgbDesdeTexto } from '@/lib/comercio/colorHex';
 
 const ETIQUETAS_DIFUMINADO: Record<NivelDifuminado, string> = {
   ninguno: 'Ninguno (corte seco)',
@@ -58,25 +62,6 @@ type Props = {
   /* Los formularios de subida (Server Actions aparte) se inyectan en la columna del editor. */
   subidas: ReactNode;
 };
-
-/* La BD guarda "rgb(r, g, b)"; el picker nativo habla hex. Convertimos en el cliente. */
-function hexDesdeRgb(rgb: string): string {
-  const m = rgb.match(/rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)/i);
-  if (!m) return /^#[0-9a-f]{6}$/i.test(rgb.trim()) ? rgb.trim() : '#131315';
-  const [r, g, b] = [m[1], m[2], m[3]].map((n) => Math.min(255, Number(n)));
-  return `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
-}
-
-function rgbDesdeTexto(valor: string): string | null {
-  const v = valor.trim();
-  if (/^rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)$/i.test(v)) return v;
-  const hex = v.match(/^#?([0-9a-f]{6})$/i);
-  if (hex) {
-    const n = parseInt(hex[1], 16);
-    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
-  }
-  return null;
-}
 
 const CAMPOS_COLOR = [
   ['color_fondo', 'Color de fondo'],
