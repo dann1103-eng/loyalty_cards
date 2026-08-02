@@ -2,10 +2,17 @@ import { describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import jsQR from 'jsqr';
 import { PDFDocument, PDFDict, PDFName, PDFNumber, PDFStream } from 'pdf-lib';
-import { construirCartelSvg } from './plantillas';
+import { construirCartelSvg as construirCartelSvgCon } from './plantillas';
+import { dibujarTextoConInter } from './textoInter';
+import { dibujarTextoConFuenteDelSistema } from './texto';
 import { rasterizarCartelPng, generarCartelPdf } from './export';
 import { DIMENSIONES_CARTEL } from './tipos';
-import type { DatosCartel } from './tipos';
+import type { DatosCartel, FormatoCartel } from './tipos';
+import {
+  rasterizarCartelSinFuentes,
+  rasterizarSvgConFuentes,
+  rasterizarSvgSinFuentes,
+} from '../../../test/fixtures/rasterizarSinFuentes';
 
 const DATOS: DatosCartel = {
   nombreComercio: 'Café Sol',
@@ -19,6 +26,12 @@ const DATOS: DatosCartel = {
   textoTeaser: null,
   urlRegistro: 'https://www.cardly-sv.site/registro/cafe-sol',
 };
+
+// Este archivo mide el PNG/PDF que se DESCARGA, así que arma el cartel exactamente como lo arma la
+// ruta de descarga: con el texto convertido a contornos. Nunca con el <text> de la vista previa —
+// `rasterizarCartelPng` lo rechaza, justamente para que no vuelva el bug de los cuadraditos.
+const construirCartelSvg = (datos: DatosCartel, formato: FormatoCartel) =>
+  construirCartelSvgCon(datos, formato, dibujarTextoConInter);
 
 // ── Helpers de píxeles ────────────────────────────────────────────────────────────────────────────
 // Todo lo que sigue mira el PNG RESULTANTE, no el SVG de entrada. Un cartel puede tener el `<image>`
@@ -49,14 +62,20 @@ async function contarMagenta(png: Buffer): Promise<number> {
 }
 
 // Un PNG cuadrado de un solo color, listo para pasarlo como data URI de logo o de foto de fondo.
-async function pngMagentaDataUri(lado = 120): Promise<string> {
+async function pngDeUnColor(color: { r: number; g: number; b: number }, lado = 120): Promise<string> {
   const png = await sharp({
-    create: { width: lado, height: lado, channels: 4, background: { r: 255, g: 0, b: 255, alpha: 1 } },
+    create: { width: lado, height: lado, channels: 4, background: { ...color, alpha: 1 } },
   })
     .png()
     .toBuffer();
   return `data:image/png;base64,${png.toString('base64')}`;
 }
+
+const pngMagentaDataUri = (lado = 120) => pngDeUnColor({ r: 255, g: 0, b: 255 }, lado);
+// Cian: un logo que el contador de magenta NO ve (r=0). Sirve para ocupar el hueco del logo y que
+// `logoSvg` no dibuje su círculo de respaldo, que se pinta con `colorLabel` — el mismo magenta con
+// el que se miden los textos.
+const pngCianDataUri = (lado = 120) => pngDeUnColor({ r: 0, g: 255, b: 255 }, lado);
 
 // Píxeles de gris INTERMEDIO (ni blanco ni negro): el rastro que deja el desenfoque. En un cartel
 // nítido los únicos grises intermedios son el antialias del borde de cada módulo del QR y de las
@@ -195,6 +214,121 @@ describe('rasterizarCartelPng', () => {
       .toBuffer({ resolveWithObject: true });
     const leido = jsQR(new Uint8ClampedArray(data), info.width, info.height);
     expect(leido?.data).toBe(DATOS.urlRegistro);
+  });
+});
+
+// ── El TEXTO, medido donde de verdad falla ────────────────────────────────────────────────────────
+// Bug de producción del 2026-08-02: el dueño imprimió el cartel y el nombre del negocio y la frase
+// del CTA salieron como CUADRADITOS VACÍOS, uno por letra. El logo (una imagen) se veía perfecto:
+// fallaba solo el texto. Causa: las plantillas pedían `font-family="sans-serif"` y el runtime
+// serverless de Vercel no tiene NINGUNA fuente instalada, así que librsvg dibujaba el glifo
+// "faltante" de cada carácter. Fallo mudo: el PNG se generaba, pesaba lo esperado, sin un error.
+//
+// Ninguna prueba de este archivo podía atraparlo, porque todas corren en una máquina CON fuentes.
+// Por eso estas rasterizan en un proceso hijo con fontconfig aislado (test/fixtures/
+// rasterizarSinFuentes.ts), que es la condición real de Vercel.
+//
+// El testigo vuelve a ser el magenta, como con el logo: el fondo (#3b2a1e) no se le acerca, el QR
+// es negro sobre blanco y el logo de estas pruebas es cian, así que TODO píxel magenta salió de una
+// letra.
+const DATOS_TEXTO_MAGENTA: DatosCartel = {
+  ...DATOS,
+  colorTexto: '#ff00ff',
+  colorLabel: '#ff00ff',
+  textoTeaser: 'Tu 5to café gratis',
+};
+
+describe('el texto del cartel SIN fuentes del sistema (la condición de Vercel)', () => {
+  // El control que le da sentido a todo el bloque: demuestra que el aislamiento aísla de verdad.
+  // Si fontconfig empezara a ignorar FONTCONFIG_FILE, el hijo tendría las fuentes de la máquina y
+  // las pruebas de abajo pasarían sin probar NADA. Es el mismo SVG, por el mismo camino, con la
+  // única diferencia del entorno.
+  it('el aislamiento aísla: el mismo <text> pierde casi toda su tinta sin fuentes', async () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="30mm" viewBox="0 0 400 120"><rect width="400" height="120" fill="#ffffff"/><text x="10" y="85" font-family="sans-serif" font-size="64" font-weight="700" fill="#ff00ff">Cafe Sol</text></svg>`;
+    const conFuentes = await rasterizarSvgConFuentes(svg, 1181, 354);
+    const sinFuentes = await rasterizarSvgSinFuentes(svg, 1181, 354);
+
+    const tintaCon = await contarMagenta(conFuentes);
+    const tintaSin = await contarMagenta(sinFuentes);
+
+    // Medido el 2026-08-02: 40.881 con las fuentes de Windows contra 2.128 aislado (19x). Esos 2.128
+    // son el CONTORNO de los ocho cuadraditos. El umbral relativo (un cuarto) no depende de qué
+    // fuente tenga la máquina que corra la suite.
+    expect(tintaCon).toBeGreaterThan(10000);
+    expect(
+      tintaSin,
+      `sin fuentes se dibujaron ${tintaSin} píxeles contra ${tintaCon} con fuentes: el aislamiento NO está aislando y las demás pruebas de este bloque no miden nada`,
+    ).toBeLessThan(tintaCon * 0.25);
+  });
+
+  // ESTA es la prueba del bug, y la única que sabe distinguir una letra de un cuadradito.
+  //
+  // Contar tinta NO alcanza, y conviene dejarlo escrito porque es contraintuitivo: medido el
+  // 2026-08-02 sobre este mismo cartel, los cuadraditos dejan 5.789 píxeles magenta y las letras de
+  // verdad 5.811 — un 0,4% de diferencia. Un umbral sobre esa cifra sería decoración. Lo que sí
+  // separa un caso del otro es de QUÉ depende el dibujo: el <text> roto cambia según las fuentes que
+  // tenga la máquina (5.789 aislado contra 4.688 con las de Windows, y hasta el sha del PNG cambia),
+  // mientras que un contorno no consulta al sistema de fuentes porque no lo necesita.
+  //
+  // Así que la aserción es la propiedad que de verdad queremos: el PNG que se imprime tiene que
+  // salir IDÉNTICO byte a byte con fuentes y sin ellas. Eso es exactamente "el cartel no depende de
+  // que el runtime tenga fuentes", que es lo que falló en Vercel. La prueba de arriba —el control de
+  // aislamiento— es la que garantiza que esta tenga dientes: si la máquina no tuviera fuentes, los
+  // dos lados serían cuadraditos idénticos y esta pasaría sin querer.
+  it('el PNG sale IDÉNTICO con fuentes y sin ninguna: el cartel impreso no depende del sistema', async () => {
+    const datos: DatosCartel = { ...DATOS_TEXTO_MAGENTA, logoDataUri: await pngCianDataUri() };
+    const { ancho, alto } = DIMENSIONES_CARTEL.sticker.px;
+    const svg = await construirCartelSvg(datos, 'sticker');
+
+    const sinFuentes = await rasterizarSvgSinFuentes(svg, ancho, alto);
+    const conFuentes = await rasterizarSvgConFuentes(svg, ancho, alto);
+
+    expect(
+      sinFuentes.equals(conFuentes),
+      'el mismo cartel se rasteriza distinto con fuentes que sin ellas: el texto está saliendo de una fuente del sistema, y en Vercel no hay ninguna — se imprimiría un cuadradito por letra',
+    ).toBe(true);
+  });
+
+  // Que el cartel sea reproducible no dice que tenga texto: un cartel SIN una sola letra también
+  // saldría idéntico con fuentes y sin ellas. Esto tapa ese agujero — hay tinta del color de los
+  // textos donde tiene que haberla — y el control de más abajo prueba que el contador no aprueba
+  // solo. Lo que esta prueba NO hace es distinguir letras de cuadraditos: ya quedó medido que las
+  // dos cosas dejan casi la misma tinta. De eso se encarga la prueba de arriba, no esta.
+  it('el NOMBRE y el CTA dejan tinta de verdad aunque no haya ni una fuente instalada', async () => {
+    const datos: DatosCartel = { ...DATOS_TEXTO_MAGENTA, logoDataUri: await pngCianDataUri() };
+    const png = await rasterizarCartelSinFuentes(datos, 'sticker');
+
+    // Medidos 5.811 píxeles el 2026-08-02 (nombre en 700, CTA en 600 y teaser en 400, sobre 1181px).
+    // Se exige la mitad: ni aprueba con el antialias de un par de trazos sueltos, ni se rompe si un
+    // ajuste de layout mueve o achica los textos.
+    const tinta = await contarMagenta(png);
+    expect(tinta, `solo ${tinta} píxeles de texto en el PNG del cartel`).toBeGreaterThan(2900);
+  });
+
+  // La otra mitad del arreglo: que sea IMPOSIBLE volver a mandar un <text> al rasterizador. La
+  // conversión a contornos se elige por parámetro, y un parámetro se puede pasar mal; este guardián
+  // convierte ese error en un 500 visible en vez de un cartel impreso en cuadraditos. Se ejercita
+  // con el dibujante de la vista previa, que es exactamente el que NO va por acá.
+  it('rasterizarCartelPng RECHAZA un SVG con <text> en vez de rasterizarlo en cuadraditos', async () => {
+    const svgConText = await construirCartelSvgCon(DATOS, 'sticker', dibujarTextoConFuenteDelSistema);
+    expect(svgConText).toContain('<text');
+    await expect(rasterizarCartelPng(svgConText, 'sticker')).rejects.toThrow(/todavía trae <text>/);
+    // El mensaje tiene que explicar QUÉ pasa, no solo que algo falló: quien lo lea en un log de
+    // Vercel dentro de un año necesita entender por qué un <text> es un problema.
+    await expect(rasterizarCartelPng(svgConText, 'sticker')).rejects.toThrow(/cuadradito por letra/);
+  });
+
+  // El control del contador, calcado del que acompaña a la prueba del logo: sin textos NO hay ni un
+  // píxel magenta. Si diera positivo, la prueba de arriba estaría aprobando sola.
+  it('sin textos, el PNG no tiene NI UN píxel magenta (el contador discrimina de verdad)', async () => {
+    const datos: DatosCartel = {
+      ...DATOS_TEXTO_MAGENTA,
+      logoDataUri: await pngCianDataUri(),
+      nombreComercio: '',
+      textoCta: '',
+      textoTeaser: null,
+    };
+    expect(await contarMagenta(await rasterizarCartelSinFuentes(datos, 'sticker'))).toBe(0);
   });
 });
 

@@ -3,6 +3,7 @@ import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { resolverDatosCartel } from '@/lib/comercio/cartel/resolverDatosCartel';
 import { construirCartelSvg } from '@/lib/comercio/cartel/plantillas';
+import { dibujarTextoConInter } from '@/lib/comercio/cartel/textoInter';
 import { rasterizarCartelPng, generarCartelPdf } from '@/lib/comercio/cartel/export';
 import { FORMATOS_CARTEL, type FormatoCartel } from '@/lib/comercio/cartel/tipos';
 
@@ -42,7 +43,10 @@ export async function GET(
   // en la pantalla del editor (Tarea 12), no un bloqueo de descarga.
   const { datos } = resuelto;
 
-  const svg = await construirCartelSvg(datos, formato);
+  // `dibujarTextoConInter` y no el <text> de la vista previa: acá el SVG lo rasteriza librsvg dentro
+  // de un lambda SIN NINGUNA fuente instalada, donde un <text> sale como un cuadradito por letra
+  // (bug del 2026-08-02). Los contornos no dependen del sistema de fuentes.
+  const svg = await construirCartelSvg(datos, formato, dibujarTextoConInter);
   const png = await rasterizarCartelPng(svg, formato);
 
   if (tipo === 'png') {

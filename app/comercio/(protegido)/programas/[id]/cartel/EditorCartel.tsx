@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from 'react';
 import { construirCartelSvg } from '@/lib/comercio/cartel/plantillas';
+import { dibujarTextoConFuenteDelSistema } from '@/lib/comercio/cartel/texto';
 import type { DatosCartel, FormatoCartel, PlantillaCartel } from '@/lib/comercio/cartel/tipos';
 import { PLANTILLAS_CARTEL, FORMATOS_CARTEL } from '@/lib/comercio/cartel/tipos';
 import { hexDesdeRgb, rgbDesdeTexto } from '@/lib/comercio/colorHex';
@@ -82,9 +83,13 @@ export default function EditorCartel({
   // fetch de red). DEBE ser useEffect y no useMemo: solo useEffect ejecuta la función de limpieza
   // que retorna — con useMemo, `vigente` nunca se pondría en false y una respuesta lenta y obsoleta
   // podría pisar una vista previa más nueva ante cambios rápidos de plantilla/color/formato.
+  //
+  // El texto va como <text> y NO convertido a contornos como en la descarga: acá corre el navegador,
+  // que sí tiene fuentes, y traerse `opentype.js` más el megabyte de Inter al bundle del cliente
+  // para dibujar una miniatura de 260 px sería cobrárselo al teléfono del dueño sin necesidad.
   useEffect(() => {
     let vigente = true;
-    construirCartelSvg(datosVivos, formato).then((svg) => {
+    construirCartelSvg(datosVivos, formato, dibujarTextoConFuenteDelSistema).then((svg) => {
       if (vigente) setPreviewSvg(svg);
     });
     return () => {

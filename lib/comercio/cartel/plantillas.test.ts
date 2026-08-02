@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { construirCartelSvg, escaparXml } from './plantillas';
-import type { DatosCartel } from './tipos';
+import { construirCartelSvg as construirCartelSvgCon, escaparXml } from './plantillas';
+import { dibujarTextoConFuenteDelSistema } from './texto';
+import { dibujarTextoConInter } from './textoInter';
+import type { DatosCartel, FormatoCartel } from './tipos';
+
+// Este archivo mira la ESTRUCTURA del SVG (lienzo, franjas, QR, logo, escapado), que es la misma con
+// cualquiera de los dos dibujantes de texto. Usa el de la vista previa porque deja el texto legible
+// en el markup y las aserciones dicen lo que quieren decir; el dibujante de contornos —el que corre
+// en producción— lo cubren export.test.ts (contando píxeles) y el último bloque de este archivo.
+const construirCartelSvg = (datos: DatosCartel, formato: FormatoCartel) =>
+  construirCartelSvgCon(datos, formato, dibujarTextoConFuenteDelSistema);
 
 const DATOS_BASE: DatosCartel = {
   nombreComercio: 'Café Sol',
@@ -151,6 +160,37 @@ describe('construirCartelSvg — plantilla desconocida', () => {
     const datos = { ...DATOS_BASE, plantilla: 'no-existe' } as unknown as DatosCartel;
     await expect(construirCartelSvg(datos, 'sticker')).rejects.toThrow(/no implementada|Plantilla/);
   });
+});
+
+// NINGUNA plantilla puede colar un <text> propio. `rasterizarCartelPng` tiene un guardián que lo
+// rechaza, pero solo se dispara sobre las combinaciones que alguien se acuerde de rasterizar en una
+// prueba — y export.test.ts rasteriza "centrado" y "foto", no las seis. Un <text> escrito a mano
+// dentro de plantillaSplit se vería perfecto en la vista previa del navegador y saldría en
+// cuadraditos recién al IMPRIMIRLO. Esto recorre las seis y no depende de que nadie se acuerde.
+describe('construirCartelSvg — ninguna plantilla emite <text> al imprimir', () => {
+  const PLANTILLAS = ['centrado', 'split', 'foto'] as const;
+  const FORMATOS = ['sticker', 'mostrador'] as const;
+
+  for (const plantilla of PLANTILLAS) {
+    for (const formato of FORMATOS) {
+      it(`${plantilla} × ${formato}: solo contornos`, async () => {
+        const datos: DatosCartel = {
+          ...DATOS_BASE,
+          plantilla,
+          textoTeaser: 'Tu 5to café gratis',
+          fotoDataUri: plantilla === 'foto' ? 'data:image/png;base64,iVBORw0KGgo=' : null,
+        };
+        // Sin logoDataUri a propósito: así se ejercita también la inicial del círculo de respaldo,
+        // que es el cuarto texto de las plantillas y el más fácil de olvidar.
+        const svg = await construirCartelSvgCon(datos, formato, dibujarTextoConInter);
+        expect(svg).not.toContain('<text');
+        // Y el texto SIGUE ahí: un `not.toContain('<text')` lo cumpliría también una plantilla que
+        // dejara de dibujar texto del todo. El CTA es el único que aparece en las seis (la plantilla
+        // "foto" no lleva el nombre del negocio, solo el logo y la frase).
+        expect(svg).toContain(`aria-label="${DATOS_BASE.textoCta}"`);
+      });
+    }
+  }
 });
 
 // TODO el contenido tiene que caber DENTRO del lienzo, en las SEIS combinaciones. No es prolijidad:

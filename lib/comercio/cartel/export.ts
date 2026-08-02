@@ -24,6 +24,18 @@ import { DIMENSIONES_CARTEL, type FormatoCartel } from './tipos';
 // el raster) y por eso no alcanzan solas.
 export async function rasterizarCartelPng(svg: string, formato: FormatoCartel): Promise<Buffer> {
   const dim = DIMENSIONES_CARTEL[formato];
+  // ⚠️ El guardián que impide que vuelva el bug del 2026-08-02. Un <text> se rasteriza acá con
+  // librsvg, y el runtime serverless de Vercel NO tiene ninguna fuente instalada: cada letra sale
+  // como el cuadradito del glifo faltante, sin error y con el archivo pesando lo esperado. El dueño
+  // solo se entera cuando lo IMPRIME. Todo texto tiene que llegar ya convertido a contornos
+  // (dibujarTextoConInter); el <text> de texto.ts es solo para la vista previa del navegador, que sí
+  // tiene fuentes. Preferimos un 500 visible a un cartel impreso ilegible.
+  if (/<text[\s>]/.test(svg)) {
+    throw new Error(
+      'El SVG del cartel todavía trae <text>: en Vercel no hay fuentes instaladas y se imprimiría un ' +
+        'cuadradito por letra. Armá el cartel con `dibujarTextoConInter` (lib/comercio/cartel/textoInter.ts).',
+    );
+  }
   return sharp(Buffer.from(svg), { density: 300 })
     .resize(dim.px.ancho, dim.px.alto)
     .png()

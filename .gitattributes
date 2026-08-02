@@ -1,0 +1,10 @@
+# Este repo se clona con core.autocrlf=true. Git decide solo si un archivo es texto mirando si tiene
+# bytes NUL en los primeros 8 KB, y con eso los .ttf le salen bien por casualidad — pero es una
+# heurística, no una garantía. Un solo LF convertido a CRLF dentro de una fuente la deja ilegible
+# para opentype.js, y el síntoma sería un 500 en la descarga del cartel SOLO en la máquina que hizo
+# ese checkout. Se declara explícito para que no dependa de adivinar.
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.pkpass binary

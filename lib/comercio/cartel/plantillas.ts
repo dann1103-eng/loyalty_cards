@@ -1,18 +1,10 @@
 import QRCode from 'qrcode';
 import { DIMENSIONES_CARTEL, type DatosCartel, type FormatoCartel } from './tipos';
+import { escaparXml, type DibujarTexto } from './texto';
 
-// Se escapan los 5 caracteres especiales de XML antes de interpolar CUALQUIER texto libre (nombre
-// del comercio, CTA, teaser) dentro del SVG — mismo requisito que ya estableció el spec del reverso
-// de la tarjeta (docs/superpowers/specs/2026-07-26-reverso-tarjeta-configurable-design.md §7.1) para
-// HTML. Sin esto, un nombre con "&" rompe el XML entero (pantalla en blanco en la vista previa).
-export function escaparXml(texto: string): string {
-  return texto
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
+// `escaparXml` vive en texto.ts (lo necesita cada dibujante para escapar el texto que le llega en
+// crudo), pero se sigue re-exportando desde acá: es parte de la superficie pública de las plantillas.
+export { escaparXml };
 
 // El QR SIEMPRE en negro puro sobre blanco puro, nunca con los colores de marca — decisión de
 // escaneabilidad (spec §4.2), no un descuido. `qrcode.toString` es la API pública y asíncrona (no
@@ -44,18 +36,36 @@ function tarjetaBlancaConQr(qrSvg: string, x: number, y: number, lado: number): 
 
 // Logo del comercio si existe; si no, un círculo con la inicial del nombre (spec §7: la plantilla no
 // debe romperse por falta de logo).
-function logoSvg(datos: DatosCartel, x: number, y: number, lado: number): string {
+function logoSvg(
+  datos: DatosCartel,
+  x: number,
+  y: number,
+  lado: number,
+  dibujarTexto: DibujarTexto,
+): string {
   if (datos.logoDataUri) {
     return `<image href="${datos.logoDataUri}" x="${x}" y="${y}" width="${lado}" height="${lado}" preserveAspectRatio="xMidYMid slice"/>`;
   }
-  const inicial = escaparXml(datos.nombreComercio.trim().charAt(0).toUpperCase() || '?');
+  const inicial = datos.nombreComercio.trim().charAt(0).toUpperCase() || '?';
   return [
     `<circle cx="${x + lado / 2}" cy="${y + lado / 2}" r="${lado / 2}" fill="${datos.colorLabel}"/>`,
-    `<text x="${x + lado / 2}" y="${y + lado / 2 + lado * 0.13}" text-anchor="middle" font-family="sans-serif" font-size="${lado * 0.55}" font-weight="700" fill="${datos.colorFondo}">${inicial}</text>`,
+    dibujarTexto({
+      texto: inicial,
+      x: x + lado / 2,
+      y: y + lado / 2 + lado * 0.13,
+      tamano: lado * 0.55,
+      peso: 700,
+      anclaje: 'centro',
+      color: datos.colorFondo,
+    }),
   ].join('');
 }
 
-async function plantillaCentrado(datos: DatosCartel, formato: FormatoCartel): Promise<string> {
+async function plantillaCentrado(
+  datos: DatosCartel,
+  formato: FormatoCartel,
+  dibujarTexto: DibujarTexto,
+): Promise<string> {
   const dim = DIMENSIONES_CARTEL[formato];
   const w = dim.viewBox.ancho;
   const h = dim.viewBox.alto;
@@ -85,15 +95,19 @@ async function plantillaCentrado(datos: DatosCartel, formato: FormatoCartel): Pr
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">
   <rect width="${w}" height="${h}" fill="${datos.colorFondo}"/>
-  ${logoSvg(datos, cx - logoLado / 2, logoY, logoLado)}
-  <text x="${cx}" y="${nombreY}" text-anchor="middle" font-family="sans-serif" font-size="${h * 0.032}" font-weight="700" fill="${datos.colorTexto}">${escaparXml(datos.nombreComercio)}</text>
+  ${logoSvg(datos, cx - logoLado / 2, logoY, logoLado, dibujarTexto)}
+  ${dibujarTexto({ texto: datos.nombreComercio, x: cx, y: nombreY, tamano: h * 0.032, peso: 700, anclaje: 'centro', color: datos.colorTexto })}
   ${tarjetaBlancaConQr(qrSvg, qrX, qrY, qrLado)}
-  <text x="${cx}" y="${ctaY}" text-anchor="middle" font-family="sans-serif" font-size="${h * 0.026}" font-weight="600" fill="${datos.colorLabel}">${escaparXml(datos.textoCta)}</text>
-  ${datos.textoTeaser ? `<text x="${cx}" y="${teaserY}" text-anchor="middle" font-family="sans-serif" font-size="${h * 0.022}" fill="${datos.colorTexto}">${escaparXml(datos.textoTeaser)}</text>` : ''}
+  ${dibujarTexto({ texto: datos.textoCta, x: cx, y: ctaY, tamano: h * 0.026, peso: 600, anclaje: 'centro', color: datos.colorLabel })}
+  ${datos.textoTeaser ? dibujarTexto({ texto: datos.textoTeaser, x: cx, y: teaserY, tamano: h * 0.022, peso: 400, anclaje: 'centro', color: datos.colorTexto }) : ''}
 </svg>`;
 }
 
-async function plantillaSplit(datos: DatosCartel, formato: FormatoCartel): Promise<string> {
+async function plantillaSplit(
+  datos: DatosCartel,
+  formato: FormatoCartel,
+  dibujarTexto: DibujarTexto,
+): Promise<string> {
   const dim = DIMENSIONES_CARTEL[formato];
   const w = dim.viewBox.ancho;
   const h = dim.viewBox.alto;
@@ -110,11 +124,11 @@ async function plantillaSplit(datos: DatosCartel, formato: FormatoCartel): Promi
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">
   <rect width="${w}" height="${h}" fill="#ffffff"/>
   <rect width="${anchoFranja}" height="${h}" fill="${datos.colorFondo}"/>
-  ${logoSvg(datos, anchoFranja / 2 - logoLado / 2, h * 0.08, logoLado)}
-  <text x="${anchoFranja / 2}" y="${h * 0.08 + logoLado + h * 0.04}" text-anchor="middle" font-family="sans-serif" font-size="${h * 0.028}" font-weight="700" fill="${datos.colorTexto}">${escaparXml(datos.nombreComercio)}</text>
+  ${logoSvg(datos, anchoFranja / 2 - logoLado / 2, h * 0.08, logoLado, dibujarTexto)}
+  ${dibujarTexto({ texto: datos.nombreComercio, x: anchoFranja / 2, y: h * 0.08 + logoLado + h * 0.04, tamano: h * 0.028, peso: 700, anclaje: 'centro', color: datos.colorTexto })}
   ${tarjetaBlancaConQr(qrSvg, qrX, qrY, qrLado)}
-  <text x="${centroDerecha}" y="${qrY + qrLado * 1.24 + h * 0.05}" text-anchor="middle" font-family="sans-serif" font-size="${h * 0.024}" font-weight="600" fill="${datos.colorLabel}">${escaparXml(datos.textoCta)}</text>
-  ${datos.textoTeaser ? `<text x="${centroDerecha}" y="${qrY + qrLado * 1.24 + h * 0.09}" text-anchor="middle" font-family="sans-serif" font-size="${h * 0.02}" fill="${datos.colorTexto}">${escaparXml(datos.textoTeaser)}</text>` : ''}
+  ${dibujarTexto({ texto: datos.textoCta, x: centroDerecha, y: qrY + qrLado * 1.24 + h * 0.05, tamano: h * 0.024, peso: 600, anclaje: 'centro', color: datos.colorLabel })}
+  ${datos.textoTeaser ? dibujarTexto({ texto: datos.textoTeaser, x: centroDerecha, y: qrY + qrLado * 1.24 + h * 0.09, tamano: h * 0.02, peso: 400, anclaje: 'centro', color: datos.colorTexto }) : ''}
 </svg>`;
   }
 
@@ -130,14 +144,18 @@ async function plantillaSplit(datos: DatosCartel, formato: FormatoCartel): Promi
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">
   <rect width="${w}" height="${h}" fill="#ffffff"/>
   <rect width="${w}" height="${altoFranja}" fill="${datos.colorFondo}"/>
-  ${logoSvg(datos, w * 0.08, altoFranja / 2 - logoLado / 2, logoLado)}
-  <text x="${w * 0.08 + logoLado + w * 0.04}" y="${altoFranja / 2 + logoLado * 0.13}" text-anchor="start" font-family="sans-serif" font-size="${h * 0.032}" font-weight="700" fill="${datos.colorTexto}">${escaparXml(datos.nombreComercio)}</text>
+  ${logoSvg(datos, w * 0.08, altoFranja / 2 - logoLado / 2, logoLado, dibujarTexto)}
+  ${dibujarTexto({ texto: datos.nombreComercio, x: w * 0.08 + logoLado + w * 0.04, y: altoFranja / 2 + logoLado * 0.13, tamano: h * 0.032, peso: 700, anclaje: 'inicio', color: datos.colorTexto })}
   ${tarjetaBlancaConQr(qrSvg, qrX, qrY, qrLado)}
-  <text x="${w / 2}" y="${qrY + qrLado * 1.24 + h * 0.045}" text-anchor="middle" font-family="sans-serif" font-size="${h * 0.026}" font-weight="600" fill="${datos.colorLabel}">${escaparXml(datos.textoCta)}</text>
+  ${dibujarTexto({ texto: datos.textoCta, x: w / 2, y: qrY + qrLado * 1.24 + h * 0.045, tamano: h * 0.026, peso: 600, anclaje: 'centro', color: datos.colorLabel })}
 </svg>`;
 }
 
-async function plantillaFoto(datos: DatosCartel, formato: FormatoCartel): Promise<string> {
+async function plantillaFoto(
+  datos: DatosCartel,
+  formato: FormatoCartel,
+  dibujarTexto: DibujarTexto,
+): Promise<string> {
   const dim = DIMENSIONES_CARTEL[formato];
   const w = dim.viewBox.ancho;
   const h = dim.viewBox.alto;
@@ -161,17 +179,23 @@ async function plantillaFoto(datos: DatosCartel, formato: FormatoCartel): Promis
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">
   ${fondo}
-  ${logoSvg(datos, w * 0.06, h * 0.06, logoLado)}
+  ${logoSvg(datos, w * 0.06, h * 0.06, logoLado, dibujarTexto)}
   <rect x="${tarjetaX}" y="${tarjetaY}" width="${tarjetaAncho}" height="${tarjetaAlto}" rx="${tarjetaAncho * 0.04}" fill="#ffffff"/>
   <g transform="translate(${qrX}, ${qrY})">${qrSvg}</g>
-  <text x="${w / 2}" y="${qrY + qrLado * 1.22}" text-anchor="middle" font-family="sans-serif" font-size="${h * 0.026}" font-weight="600" fill="#1c1917">${escaparXml(datos.textoCta)}</text>
+  ${dibujarTexto({ texto: datos.textoCta, x: w / 2, y: qrY + qrLado * 1.22, tamano: h * 0.026, peso: 600, anclaje: 'centro', color: '#1c1917' })}
 </svg>`;
 }
 
-export async function construirCartelSvg(datos: DatosCartel, formato: FormatoCartel): Promise<string> {
-  if (datos.plantilla === 'centrado') return plantillaCentrado(datos, formato);
-  if (datos.plantilla === 'split') return plantillaSplit(datos, formato);
-  if (datos.plantilla === 'foto') return plantillaFoto(datos, formato);
+// `dibujarTexto` NO tiene valor por defecto a propósito — ver el comentario largo de texto.ts. Un
+// default haría que el camino que se olvide de pasarlo imprima cuadraditos en silencio.
+export async function construirCartelSvg(
+  datos: DatosCartel,
+  formato: FormatoCartel,
+  dibujarTexto: DibujarTexto,
+): Promise<string> {
+  if (datos.plantilla === 'centrado') return plantillaCentrado(datos, formato, dibujarTexto);
+  if (datos.plantilla === 'split') return plantillaSplit(datos, formato, dibujarTexto);
+  if (datos.plantilla === 'foto') return plantillaFoto(datos, formato, dibujarTexto);
   throw new Error(`Plantilla "${String(datos.plantilla)}" desconocida.`);
 }
 
