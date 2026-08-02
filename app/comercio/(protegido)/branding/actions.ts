@@ -18,7 +18,8 @@ import {
 } from '@/lib/comercio/guardarReversoPrograma';
 import { notificarCambioComercio, notificarCambioPrograma } from '@/lib/apple/notificarCambioComercio';
 import { syncClaseComercio } from '@/lib/google/syncClase';
-import { syncObjetosComercio, syncObjetosPrograma } from '@/lib/google/syncComercio';
+import { syncObjetosComercio } from '@/lib/google/syncComercio';
+import { propagarMarcaPrograma } from '@/lib/comercio/propagarMarca';
 import {
   validarImagenSubida,
   extensionDeMime,
@@ -472,11 +473,4 @@ export async function accionQuitarImagenDePrograma(
 // en linkGuardar, cuando un cliente toca "guardar en Google Wallet". Una clase de Google no se
 // puede borrar (la API no tiene delete), así que crearla al guardar el formulario dejaría un recurso
 // permanente en el emisor por cada tarjeta que el dueño solo estaba probando.
-async function propagarMarcaPrograma(
-  supabase: ReturnType<typeof createServiceClient>,
-  comercioId: string,
-  programaId: string,
-): Promise<void> {
-  await notificarCambioPrograma(supabase, comercioId, programaId);
-  await syncObjetosPrograma(supabase, comercioId, programaId);
-}
+
