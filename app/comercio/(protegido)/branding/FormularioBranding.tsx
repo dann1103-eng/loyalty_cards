@@ -141,7 +141,17 @@ export default function FormularioBranding({
   const texto = rgbDesdeTexto(valores.color_texto) ?? respaldo.color_texto;
   const label = rgbDesdeTexto(valores.color_label) ?? respaldo.color_label;
 
-  const meta = Number(valores.sello_meta) > 0 ? Math.min(20, Number(valores.sello_meta)) : 10;
+  // La meta NO se inventa. Hasta el 2026-07-31 esta línea caía a `10` con el campo vacío, y la
+  // vista previa dibujaba una grilla completa de "7 de 10". Un comercio real (Barbiere Di Paolo)
+  // configuró su ícono de sellos, vio la grilla acá, y sus clientes recibieron una tarjeta con un
+  // "0" pelado y SIN grilla — porque el pase lee la meta REAL, que estaba en null. La pantalla le
+  // confirmó una configuración que no existía, que es lo contrario de para lo que sirve un preview.
+  //
+  // Los 7 sellos llenos SÍ son una demostración legítima: el progreso varía por cliente y el dueño
+  // necesita ver cómo se llena la grilla. Pero la META es configuración suya, y sin ella acá tiene
+  // que verse exactamente lo mismo que va a ver el cliente.
+  const metaConfigurada = Number(valores.sello_meta) > 0 ? Math.min(20, Number(valores.sello_meta)) : null;
+  const meta = metaConfigurada ?? 0;
   const llenos = Math.min(7, meta);
   // Misma función que usa el pass real (lib/apple/stripPass.tsx): el preview y el pass NUNCA
   // pueden mostrar un difuminado distinto para el mismo nivel elegido.
@@ -206,7 +216,17 @@ export default function FormularioBranding({
                 )}
               </>
             )}
-            {esSellos ? (
+            {esSellos && metaConfigurada === null ? (
+              // Sin meta configurada NO hay grilla, ni acá ni en el pase real: generatePass exige
+              // `selloMeta > 0` para dibujarla. Antes esta rama no existía y se dibujaba una grilla
+              // inventada de 10; ahora se muestra lo mismo que verá el cliente, y se dice por qué.
+              <div style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px' }}>
+                <p style={{ fontSize: '0.78rem', textAlign: 'center', opacity: 0.75, margin: 0 }}>
+                  Poné la meta de sellos abajo para que aparezca la grilla. Sin ella, tus clientes
+                  ven solo un contador.
+                </p>
+              </div>
+            ) : esSellos ? (
               <div style={{ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                 {[0, 1].slice(0, meta > 6 ? 2 : 1).map((f) => {
                   const porFila = Math.ceil(meta / (meta > 6 ? 2 : 1));
@@ -268,7 +288,9 @@ export default function FormularioBranding({
               {esSellos ? 'Sellos' : 'Puntos'}
             </div>
             <div style={{ fontSize: '1.7rem', lineHeight: 1.2 }}>
-              {esSellos ? `${llenos} de ${meta}` : '0'}
+              {/* Sin meta, el pase muestra el entero pelado (ver contadorPase): "0", no "0 de 10".
+                  Reproducirlo acá es lo que evita que el dueño crea que su tarjeta ya cuenta. */}
+              {esSellos && metaConfigurada !== null ? `${llenos} de ${meta}` : '0'}
             </div>
           </div>
 
