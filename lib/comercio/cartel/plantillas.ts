@@ -23,11 +23,26 @@ async function construirQrSvg(url: string, lado: number): Promise<string> {
   return `<svg x="0" y="0" width="${lado}" height="${lado}">${svg}</svg>`;
 }
 
+// Margen blanco alrededor del QR, como fracción de su lado.
+const MARGEN_TARJETA_QR = 0.12;
+
+// Lado TOTAL de la tarjeta blanca: el QR más su margen a cada lado. Existe como función exportada
+// porque centrar la tarjeta exige esta medida y NO el lado del QR — usar el del QR la corre todo el
+// margen hacia la derecha. Es el bug que el dueño reportó el 2026-07-31: 18.6 unidades de desvío
+// sobre un lienzo de 400 (4.6% del ancho), visible a simple vista, y estaba en las TRES plantillas
+// que centran el QR.
+export function ladoTarjetaQr(ladoQr: number): number {
+  return ladoQr * (1 + MARGEN_TARJETA_QR * 2);
+}
+
 // Tarjeta blanca detrás del QR (mejora el contraste de escaneo sobre cualquier color de fondo) más
 // un margen proporcional al lado del QR. `qrSvg` debe haberse construido con el MISMO `lado`.
+//
+// `x`/`y` son la esquina superior izquierda de la TARJETA, no del QR. Para centrarla horizontalmente
+// hay que restar la mitad de `ladoTarjetaQr(lado)`, nunca la mitad de `lado`.
 function tarjetaBlancaConQr(qrSvg: string, x: number, y: number, lado: number): string {
-  const margen = lado * 0.12;
-  const ladoTarjeta = lado + margen * 2;
+  const margen = lado * MARGEN_TARJETA_QR;
+  const ladoTarjeta = ladoTarjetaQr(lado);
   return [
     `<rect x="${x}" y="${y}" width="${ladoTarjeta}" height="${ladoTarjeta}" rx="${ladoTarjeta * 0.08}" fill="#ffffff"/>`,
     `<g transform="translate(${x + margen}, ${y + margen})">${qrSvg}</g>`,
@@ -87,7 +102,9 @@ async function plantillaCentrado(
   // así que ese cartel se ve exactamente igual que antes de este arreglo.
   const altoDisponible = (h * 0.865 - qrY) / 1.24;
   const qrLado = Math.min(w * 0.5, altoDisponible);
-  const qrX = cx - qrLado / 2;
+  // La mitad de la TARJETA, no del QR: con `qrLado / 2` el margen izquierdo corre todo el bloque
+  // hacia la derecha (ver ladoTarjetaQr).
+  const qrX = cx - ladoTarjetaQr(qrLado) / 2;
   const ctaY = qrY + qrLado * 1.24 + h * 0.05;
   const teaserY = ctaY + h * 0.045;
 
@@ -116,7 +133,8 @@ async function plantillaSplit(
     const anchoFranja = w * 0.32;
     const logoLado = anchoFranja * 0.5;
     const qrLado = (w - anchoFranja) * 0.55;
-    const qrX = anchoFranja + (w - anchoFranja - qrLado) / 2;
+    // Centrado en la mitad DERECHA (a la derecha de la franja), midiendo la tarjeta completa.
+    const qrX = anchoFranja + (w - anchoFranja - ladoTarjetaQr(qrLado)) / 2;
     const qrY = h / 2 - qrLado * 0.62;
     const qrSvg = await construirQrSvg(datos.urlRegistro, qrLado);
     const centroDerecha = anchoFranja + (w - anchoFranja) / 2;
@@ -137,7 +155,7 @@ async function plantillaSplit(
   const altoFranja = h * 0.34;
   const logoLado = altoFranja * 0.42;
   const qrLado = w * 0.42;
-  const qrX = w / 2 - qrLado / 2;
+  const qrX = w / 2 - ladoTarjetaQr(qrLado) / 2;
   const qrY = altoFranja + h * 0.08;
   const qrSvg = await construirQrSvg(datos.urlRegistro, qrLado);
 
@@ -166,6 +184,9 @@ async function plantillaFoto(
   const tarjetaAlto = qrLado * 1.5;
   const tarjetaX = (w - tarjetaAncho) / 2;
   const tarjetaY = h - tarjetaAlto - h * 0.06;
+  // Acá SÍ es media medida del QR y no de `ladoTarjetaQr`: esta plantilla no usa
+  // tarjetaBlancaConQr — dibuja su propia tarjeta (más ancha que alta, con espacio para el CTA
+  // adentro) y `qrX` posiciona el QR pelado dentro de ella.
   const qrX = w / 2 - qrLado / 2;
   const qrY = tarjetaY + tarjetaAlto * 0.12;
 

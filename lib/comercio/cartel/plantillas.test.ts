@@ -234,3 +234,72 @@ describe('construirCartelSvg — nada se sale del lienzo', () => {
     }
   }
 });
+
+// En las plantillas que centran el QR, lo que tiene que quedar centrado es la TARJETA BLANCA, no el
+// QR de adentro. La tarjeta mide `qrLado + 2*margen`, así que posicionarla en la coordenada
+// calculada para el QR la corre TODO el margen hacia la derecha.
+//
+// Bug real reportado por el dueño (2026-07-31): el QR se veía corrido en el cartel. Medido: 18.6
+// unidades sobre un lienzo de 400 — un 4.6% del ancho, perfectamente visible a simple vista. Fue el
+// segundo reporte del mismo síntoma; la primera vez lo atribuí a las fuentes faltantes, que sí era
+// otro bug pero no este.
+describe('construirCartelSvg — la tarjeta del QR queda CENTRADA', () => {
+  for (const formato of ['sticker', 'mostrador'] as const) {
+    it(`centrado × ${formato}: el centro de la tarjeta blanca coincide con el del lienzo`, async () => {
+      const svg = await construirCartelSvg(DATOS_BASE, formato);
+      const ancho = Number(svg.match(/viewBox="0 0 ([\d.]+)/)![1]);
+
+      // La tarjeta blanca es el <rect> con fill #ffffff que tiene rx (esquinas redondeadas): el
+      // fondo del cartel no lleva rx, así que no se confunden.
+      const tarjeta = svg.match(/<rect x="([\d.]+)" y="[\d.]+" width="([\d.]+)"[^>]*rx="[\d.]+" fill="#ffffff"\/>/);
+      expect(tarjeta, 'no se encontró la tarjeta blanca del QR en el SVG').not.toBeNull();
+
+      const x = Number(tarjeta![1]);
+      const anchoTarjeta = Number(tarjeta![2]);
+      const centroTarjeta = x + anchoTarjeta / 2;
+
+      expect(
+        centroTarjeta,
+        `la tarjeta del QR está centrada en ${centroTarjeta} y el lienzo en ${ancho / 2}`,
+      ).toBeCloseTo(ancho / 2, 1);
+    });
+  }
+
+  it('split × sticker: el QR también queda centrado', async () => {
+    const svg = await construirCartelSvg({ ...DATOS_BASE, plantilla: 'split' }, 'sticker');
+    const ancho = Number(svg.match(/viewBox="0 0 ([\d.]+)/)![1]);
+    const tarjeta = svg.match(/<rect x="([\d.]+)" y="[\d.]+" width="([\d.]+)"[^>]*rx="[\d.]+" fill="#ffffff"\/>/);
+    const centroTarjeta = Number(tarjeta![1]) + Number(tarjeta![2]) / 2;
+    expect(centroTarjeta).toBeCloseTo(ancho / 2, 1);
+  });
+
+  // Estas miden el QR MISMO y no su tarjeta, y por eso cubren también la plantilla "foto", que es la
+  // única que NO usa tarjetaBlancaConQr: dibuja su propia tarjeta (ancha, con lugar para el CTA
+  // adentro) y posiciona el QR pelado. Al arreglar el centrado de las otras tres se le aplicó de
+  // rebote la misma fórmula y quedó corrida; las pruebas de la tarjeta blanca no lo vieron, porque
+  // ahí la tarjeta ancha SÍ está centrada aunque el QR de adentro no lo esté.
+  const CENTRADOS_EN_EL_LIENZO = [
+    { plantilla: 'centrado', formato: 'sticker' },
+    { plantilla: 'centrado', formato: 'mostrador' },
+    { plantilla: 'split', formato: 'sticker' },
+    { plantilla: 'foto', formato: 'sticker' },
+    { plantilla: 'foto', formato: 'mostrador' },
+  ] as const;
+
+  for (const { plantilla, formato } of CENTRADOS_EN_EL_LIENZO) {
+    it(`${plantilla} × ${formato}: el QR mismo queda centrado en el lienzo`, async () => {
+      const svg = await construirCartelSvg({ ...DATOS_BASE, plantilla }, formato);
+      const ancho = Number(svg.match(/viewBox="0 0 ([\d.]+)/)![1]);
+
+      // El QR es el <svg> anidado que arma construirQrSvg, dentro de su <g transform="translate…">.
+      const qr = svg.match(/<g transform="translate\(([\d.-]+), [\d.-]+\)"><svg x="0" y="0" width="([\d.]+)"/);
+      expect(qr, 'no se encontró el QR anidado en el SVG').not.toBeNull();
+
+      const centroQr = Number(qr![1]) + Number(qr![2]) / 2;
+      expect(centroQr, `el QR está centrado en ${centroQr} y el lienzo en ${ancho / 2}`).toBeCloseTo(
+        ancho / 2,
+        1,
+      );
+    });
+  }
+});
