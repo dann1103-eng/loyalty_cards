@@ -1,4 +1,5 @@
 // Tipos y dimensiones del cartel/QR (migración 0028). Puro — sin Supabase, sin fetch, sin DOM.
+import type { ElementoCartel } from './elementos';
 
 export const PLANTILLAS_CARTEL = ['centrado', 'split', 'foto'] as const;
 export type PlantillaCartel = (typeof PLANTILLAS_CARTEL)[number];
@@ -24,6 +25,9 @@ export interface DatosCartel {
   textoCta: string;
   textoTeaser: string | null;
   urlRegistro: string;
+  // Textos y franjas EXTRA que el dueño puso por coordenada (migración 0030). Llegan YA saneados:
+  // acá adentro solo hay elementos dibujables — ver sanearElementos en elementos.ts.
+  elementos: ElementoCartel[];
 }
 
 interface DimensionCartel {

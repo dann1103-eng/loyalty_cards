@@ -29,6 +29,7 @@ const DISENO_SIN_OVERRIDES: FilaDisenoCartel = {
   logo_url: null,
   texto_cta: '¡Escaneá y sumate!',
   texto_teaser: null,
+  elementos: [],
 };
 
 describe('combinarDatosCartel', () => {
@@ -44,6 +45,7 @@ describe('combinarDatosCartel', () => {
       fotoUrl: 'https://ejemplo.test/hero.webp',
       textoCta: '¡Escaneá y sumate!',
       textoTeaser: null,
+      elementos: [],
     });
   });
 
@@ -62,6 +64,7 @@ describe('combinarDatosCartel', () => {
       logo_url: 'https://ejemplo.test/logo-cartel.webp',
       texto_cta: 'Sumate al club',
       texto_teaser: 'Tu 5to café gratis',
+      elementos: [],
     });
     expect(r.plantilla).toBe('split');
     expect(r.colorFondo).toBe('#000000');
@@ -178,5 +181,58 @@ describe('combinarDatosCartel', () => {
     const r = combinarDatosCartel(comercioCorrupto, null);
     expect(r.colorFondo).toBe('rgb(19, 19, 21)');
     expect(r.fotoUrl).toBeNull();
+  });
+});
+
+describe('combinarDatosCartel — la frase propuesta depende del TIPO de tarjeta', () => {
+  // Antes de esto, las ocho tarjetas nacían con el mismo "¡Escaneá y sumate!", que no le dice al
+  // cliente qué gana. El cartel es lo único que ve alguien que todavía no es cliente.
+  it('sin diseño guardado, propone la frase del tipo', () => {
+    expect(combinarDatosCartel(COMERCIO, null, 'sellos').textoCta).toBe('Acumulá sellos y ganá');
+    expect(combinarDatosCartel(COMERCIO, null, 'cashback').textoCta).toBe(
+      'Acumulá saldo con tus compras',
+    );
+  });
+
+  // La prueba que fija la PRECEDENCIA. Es una sugerencia, no una regla: si el dueño escribió su
+  // propia frase, la sugerencia no puede pisársela — sería reescribirle el cartel al guardar.
+  it('una frase ya guardada GANA sobre la sugerencia del tipo', () => {
+    const r = combinarDatosCartel(
+      COMERCIO,
+      { ...DISENO_SIN_OVERRIDES, texto_cta: 'Mi frase de siempre' },
+      'sellos',
+    );
+    expect(r.textoCta).toBe('Mi frase de siempre');
+  });
+
+  it('sin tipo, sigue saliendo el genérico de antes (ningún llamador viejo cambia)', () => {
+    expect(combinarDatosCartel(COMERCIO, null).textoCta).toBe('¡Escaneá y sumate!');
+    expect(combinarDatosCartel(COMERCIO, null, null).textoCta).toBe('¡Escaneá y sumate!');
+  });
+});
+
+describe('combinarDatosCartel — elementos libres', () => {
+  it('sin fila de diseño, la lista viene vacía', () => {
+    expect(combinarDatosCartel(COMERCIO, null).elementos).toEqual([]);
+  });
+
+  it('pasa los elementos guardados ya saneados', () => {
+    const franja = { tipo: 'franja', x: 0, y: 80, ancho: 100, alto: 10, color: 'rgb(1, 2, 3)', radio: 0 };
+    const r = combinarDatosCartel(COMERCIO, { ...DISENO_SIN_OVERRIDES, elementos: [franja] });
+    expect(r.elementos).toEqual([franja]);
+  });
+
+  // La columna es jsonb: adentro puede haber CUALQUIER cosa, y de acá sale un color que se
+  // interpola crudo en el SVG. El saneo tiene que pasar por este camino, no solo por el módulo.
+  it('la basura de la columna NO llega al cartel', () => {
+    const r = combinarDatosCartel(COMERCIO, {
+      ...DISENO_SIN_OVERRIDES,
+      elementos: [{ tipo: 'franja', x: 0, y: 0, ancho: 10, alto: 10, radio: 0, color: '"><script>' }],
+    });
+    expect(r.elementos).toEqual([]);
+  });
+
+  it('una columna que no es una lista se trata como sin elementos', () => {
+    expect(combinarDatosCartel(COMERCIO, { ...DISENO_SIN_OVERRIDES, elementos: null }).elementos).toEqual([]);
   });
 });

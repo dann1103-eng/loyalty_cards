@@ -1,4 +1,6 @@
 import { esPlantillaCartel, type PlantillaCartel } from './tipos';
+import { ctaSugerido } from './ctaSugerido';
+import { sanearElementos, type ElementoCartel } from './elementos';
 
 // Defaults del sistema cuando el comercio JAMÁS configuró su marca — mismos literales que ya usan
 // app/comercio/(protegido)/branding/page.tsx (para precargar su formulario) y
@@ -7,7 +9,6 @@ import { esPlantillaCartel, type PlantillaCartel } from './tipos';
 const COLOR_FONDO_DEFECTO = 'rgb(19, 19, 21)';
 const COLOR_TEXTO_DEFECTO = 'rgb(245, 245, 240)';
 const COLOR_LABEL_DEFECTO = 'rgb(255, 157, 66)';
-const TEXTO_CTA_DEFECTO = '¡Escaneá y sumate!';
 
 export interface ComercioParaCartel {
   nombre: string;
@@ -26,6 +27,8 @@ export interface FilaDisenoCartel {
   logo_url: string | null;
   texto_cta: string;
   texto_teaser: string | null;
+  // Crudo desde jsonb: acá adentro puede haber CUALQUIER cosa. Lo filtra sanearElementos.
+  elementos: unknown;
 }
 
 export interface DatosCartelResueltos {
@@ -38,6 +41,7 @@ export interface DatosCartelResueltos {
   fotoUrl: string | null;
   textoCta: string;
   textoTeaser: string | null;
+  elementos: ElementoCartel[];
 }
 
 // "En blanco" es una AUSENCIA, no una decisión: normaliza `''`/`'   '`/`undefined` a null para que
@@ -72,9 +76,14 @@ function valorConfigurado(valor: string | null | undefined): string | null {
 //     marca)", o sea que el null ES el pedido de heredar.
 // No existe un "este cartel no lleva logo": si algún día hace falta, va en su propia columna
 // booleana. Reinterpretar el null sería exactamente el bug de sello_meta, al revés.
+// `tipoTarjeta` decide la frase que se PROPONE cuando el cartel todavía no tiene una guardada: una
+// tarjeta de sellos nace diciendo "Acumulá sellos y ganá" y una de cashback "Acumulá saldo con tus
+// compras", en vez de que las ocho digan el mismo "¡Escaneá y sumate!" que no cuenta qué gana el
+// cliente. Es opcional para no romper a ningún llamador viejo: sin tipo, sale el genérico de antes.
 export function combinarDatosCartel(
   comercio: ComercioParaCartel,
   diseno: FilaDisenoCartel | null,
+  tipoTarjeta?: string | null,
 ): DatosCartelResueltos {
   return {
     // Sin normalizar a propósito: `comercios.nombre` es NOT NULL y validado al guardar, y no hay
@@ -97,8 +106,13 @@ export function combinarDatosCartel(
       COLOR_LABEL_DEFECTO,
     logoUrl: valorConfigurado(diseno?.logo_url) ?? valorConfigurado(comercio.logo_url),
     fotoUrl: valorConfigurado(comercio.hero_url),
-    textoCta: valorConfigurado(diseno?.texto_cta) ?? TEXTO_CTA_DEFECTO,
+    // OJO con el orden: la sugerencia por tipo es solo el DEFAULT. Un cartel ya guardado gana
+    // siempre — incluso si lo que guardó es el genérico, porque eso fue una decisión del dueño.
+    textoCta: valorConfigurado(diseno?.texto_cta) ?? ctaSugerido(tipoTarjeta),
     // `comercios` no tiene teaser: acá null es "sin segunda línea", no "heredá" — no hay de dónde.
     textoTeaser: valorConfigurado(diseno?.texto_teaser),
+    // Sin diseño guardado no hay extras: no hay nada de dónde heredarlos (`comercios` no tiene
+    // elementos), y una lista vacía es exactamente el cartel de siempre.
+    elementos: sanearElementos(diseno?.elementos),
   };
 }

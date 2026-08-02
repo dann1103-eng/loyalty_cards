@@ -25,6 +25,7 @@ const DATOS: DatosCartel = {
   textoCta: '¡Escaneá y sumate!',
   textoTeaser: null,
   urlRegistro: 'https://www.cardly-sv.site/registro/cafe-sol',
+  elementos: [],
 };
 
 // Este archivo mide el PNG/PDF que se DESCARGA, así que arma el cartel exactamente como lo arma la

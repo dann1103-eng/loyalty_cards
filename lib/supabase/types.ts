@@ -16,6 +16,7 @@
 //   - supabase/migrations/0013_reverso_tarjeta.sql (columnas del reverso del pass en comercios)
 //   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
 //   - supabase/migrations/0028_disenos_cartel.sql (tabla disenos_cartel: cartel/QR imprimible por programa)
+//   - supabase/migrations/0030_elementos_cartel.sql (columna elementos jsonb en disenos_cartel)
 //   - supabase/migrations/0029_reverso_por_programa.sql (reverso por programa en programas_tarjeta)
 //   - supabase/migrations/0027_branding_por_programa.sql (branding por programa en programas_tarjeta)
 //   - supabase/migrations/0026_notificaciones_push.sql (tablas difusiones y notificaciones_enviadas; tarjetas.aviso_texto/aviso_hasta/aviso_inactividad_enviado_en; comercios.aviso_inactividad_activo/dias/mensaje)
@@ -37,6 +38,12 @@
 // Convenciones de transcripción: uuid/text -> string, integer/numeric -> number,
 // boolean -> boolean, timestamptz -> string. Columna nullable -> `| null` en Row y opcional
 // en Insert. Columna con default en la BD -> opcional en Insert.
+
+// jsonb. Deliberadamente ANCHO: la base no promete ninguna forma adentro de un jsonb, y tiparlo
+// como la estructura que esperamos haría que el compilador avale un `.map()` sobre algo que puede
+// ser un número, un string o null. Quien lo lee está OBLIGADO a estrechar (ver sanearElementos en
+// lib/comercio/cartel/elementos.ts) — que es justamente el punto.
+export type Json = string | number | boolean | null | Json[] | { [clave: string]: Json };
 
 export type Database = {
   public: {
@@ -1079,6 +1086,11 @@ export type Database = {
           logo_url: string | null;
           texto_cta: string;
           texto_teaser: string | null;
+          // Textos y franjas EXTRA puestos por coordenada (migración 0030). `Json` y no un tipo
+          // propio a propósito: la columna es jsonb y adentro puede haber cualquier cosa. Quien la
+          // lee la pasa SIEMPRE por sanearElementos (lib/comercio/cartel/elementos.ts) antes de
+          // dibujar nada — tiparla acá como ElementoCartel[] sería una promesa que la base no hace.
+          elementos: Json;
           created_at: string;
           updated_at: string;
         };
@@ -1093,6 +1105,7 @@ export type Database = {
           logo_url?: string | null;
           texto_cta?: string;
           texto_teaser?: string | null;
+          elementos?: Json;
           created_at?: string;
           updated_at?: string;
         };
@@ -1107,6 +1120,7 @@ export type Database = {
           logo_url?: string | null;
           texto_cta?: string;
           texto_teaser?: string | null;
+          elementos?: Json;
           created_at?: string;
           updated_at?: string;
         };

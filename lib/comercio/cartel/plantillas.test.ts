@@ -22,6 +22,7 @@ const DATOS_BASE: DatosCartel = {
   textoCta: '¡Escaneá y sumate!',
   textoTeaser: null,
   urlRegistro: 'https://www.cardly-sv.site/registro/cafe-sol',
+  elementos: [],
 };
 
 describe('escaparXml', () => {
@@ -302,4 +303,60 @@ describe('construirCartelSvg — la tarjeta del QR queda CENTRADA', () => {
       );
     });
   }
+});
+
+describe('construirCartelSvg — elementos libres (migración 0030)', () => {
+  const FRANJA = {
+    tipo: 'franja' as const,
+    x: 0,
+    y: 80,
+    ancho: 100,
+    alto: 10,
+    color: 'rgb(12, 200, 34)',
+    radio: 0,
+  };
+  const TEXTO = {
+    tipo: 'texto' as const,
+    texto: 'Promo de julio',
+    x: 50,
+    y: 95,
+    tamano: 4,
+    color: 'rgb(255, 255, 255)',
+    peso: 700 as const,
+  };
+
+  // El invariante que protege el QR: una franja se dibuja ANTES que la tarjeta blanca, así que por
+  // más que el dueño la ponga justo encima del código, la tarjeta la tapa y el QR sigue escaneando.
+  // Al revés se imprimirían 500 stickers preciosos que ningún teléfono lee.
+  for (const plantilla of ['centrado', 'split', 'foto'] as const) {
+    it(`${plantilla}: la franja se dibuja DEBAJO de la tarjeta blanca del QR`, async () => {
+      const svg = await construirCartelSvg({ ...DATOS_BASE, plantilla, elementos: [FRANJA] }, 'sticker');
+      const posFranja = svg.indexOf('fill="rgb(12, 200, 34)"');
+      const posTarjeta = svg.search(/<rect x="[\d.]+" y="[\d.]+" width="[\d.]+"[^>]*rx="[\d.]+" fill="#ffffff"\/>/);
+      expect(posFranja, 'no se dibujó la franja').toBeGreaterThan(-1);
+      expect(posTarjeta, 'no se encontró la tarjeta blanca').toBeGreaterThan(-1);
+      expect(posFranja).toBeLessThan(posTarjeta);
+    });
+
+    it(`${plantilla}: el texto extra se dibuja ENCIMA del CTA de la plantilla`, async () => {
+      const svg = await construirCartelSvg({ ...DATOS_BASE, plantilla, elementos: [TEXTO] }, 'sticker');
+      expect(svg.indexOf('Promo de julio')).toBeGreaterThan(svg.indexOf('¡Escaneá y sumate!'));
+    });
+  }
+
+  it('sin elementos, el SVG es EXACTAMENTE el de antes de la 0030', async () => {
+    const sinCampo = await construirCartelSvg(DATOS_BASE, 'mostrador');
+    const conListaVacia = await construirCartelSvg({ ...DATOS_BASE, elementos: [] }, 'mostrador');
+    expect(conListaVacia).toBe(sinCampo);
+  });
+
+  // La 0030 nace con '[]' para toda fila existente, así que ESTE es el caso de todos los carteles
+  // que ya están diseñados: ni un píxel se les mueve.
+  it('los porcentajes se resuelven contra el lienzo de CADA formato', async () => {
+    const sticker = await construirCartelSvg({ ...DATOS_BASE, elementos: [FRANJA] }, 'sticker');
+    const mostrador = await construirCartelSvg({ ...DATOS_BASE, elementos: [FRANJA] }, 'mostrador');
+    // y=80% → 320 en el sticker (alto 400) y 454.06 en el mostrador (alto 567.57).
+    expect(sticker).toContain('y="320.00"');
+    expect(mostrador).toContain('y="454.06"');
+  });
 });

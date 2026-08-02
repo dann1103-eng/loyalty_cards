@@ -1,6 +1,7 @@
 import QRCode from 'qrcode';
 import { DIMENSIONES_CARTEL, type DatosCartel, type FormatoCartel } from './tipos';
 import { escaparXml, type DibujarTexto } from './texto';
+import { dibujarFranjas, dibujarTextosExtra } from './elementos';
 
 // `escaparXml` vive en texto.ts (lo necesita cada dibujante para escapar el texto que le llega en
 // crudo), pero se sigue re-exportando desde acá: es parte de la superficie pública de las plantillas.
@@ -112,11 +113,13 @@ async function plantillaCentrado(
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">
   <rect width="${w}" height="${h}" fill="${datos.colorFondo}"/>
+  ${dibujarFranjas(datos.elementos, w, h)}
   ${logoSvg(datos, cx - logoLado / 2, logoY, logoLado, dibujarTexto)}
   ${dibujarTexto({ texto: datos.nombreComercio, x: cx, y: nombreY, tamano: h * 0.032, peso: 700, anclaje: 'centro', color: datos.colorTexto })}
   ${tarjetaBlancaConQr(qrSvg, qrX, qrY, qrLado)}
   ${dibujarTexto({ texto: datos.textoCta, x: cx, y: ctaY, tamano: h * 0.026, peso: 600, anclaje: 'centro', color: datos.colorLabel })}
   ${datos.textoTeaser ? dibujarTexto({ texto: datos.textoTeaser, x: cx, y: teaserY, tamano: h * 0.022, peso: 400, anclaje: 'centro', color: datos.colorTexto }) : ''}
+  ${dibujarTextosExtra(datos.elementos, w, h, dibujarTexto)}
 </svg>`;
 }
 
@@ -142,11 +145,13 @@ async function plantillaSplit(
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">
   <rect width="${w}" height="${h}" fill="#ffffff"/>
   <rect width="${anchoFranja}" height="${h}" fill="${datos.colorFondo}"/>
+  ${dibujarFranjas(datos.elementos, w, h)}
   ${logoSvg(datos, anchoFranja / 2 - logoLado / 2, h * 0.08, logoLado, dibujarTexto)}
   ${dibujarTexto({ texto: datos.nombreComercio, x: anchoFranja / 2, y: h * 0.08 + logoLado + h * 0.04, tamano: h * 0.028, peso: 700, anclaje: 'centro', color: datos.colorTexto })}
   ${tarjetaBlancaConQr(qrSvg, qrX, qrY, qrLado)}
   ${dibujarTexto({ texto: datos.textoCta, x: centroDerecha, y: qrY + qrLado * 1.24 + h * 0.05, tamano: h * 0.024, peso: 600, anclaje: 'centro', color: datos.colorLabel })}
   ${datos.textoTeaser ? dibujarTexto({ texto: datos.textoTeaser, x: centroDerecha, y: qrY + qrLado * 1.24 + h * 0.09, tamano: h * 0.02, peso: 400, anclaje: 'centro', color: datos.colorTexto }) : ''}
+  ${dibujarTextosExtra(datos.elementos, w, h, dibujarTexto)}
 </svg>`;
   }
 
@@ -162,10 +167,12 @@ async function plantillaSplit(
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">
   <rect width="${w}" height="${h}" fill="#ffffff"/>
   <rect width="${w}" height="${altoFranja}" fill="${datos.colorFondo}"/>
+  ${dibujarFranjas(datos.elementos, w, h)}
   ${logoSvg(datos, w * 0.08, altoFranja / 2 - logoLado / 2, logoLado, dibujarTexto)}
   ${dibujarTexto({ texto: datos.nombreComercio, x: w * 0.08 + logoLado + w * 0.04, y: altoFranja / 2 + logoLado * 0.13, tamano: h * 0.032, peso: 700, anclaje: 'inicio', color: datos.colorTexto })}
   ${tarjetaBlancaConQr(qrSvg, qrX, qrY, qrLado)}
   ${dibujarTexto({ texto: datos.textoCta, x: w / 2, y: qrY + qrLado * 1.24 + h * 0.045, tamano: h * 0.026, peso: 600, anclaje: 'centro', color: datos.colorLabel })}
+  ${dibujarTextosExtra(datos.elementos, w, h, dibujarTexto)}
 </svg>`;
 }
 
@@ -200,10 +207,12 @@ async function plantillaFoto(
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">
   ${fondo}
+  ${dibujarFranjas(datos.elementos, w, h)}
   ${logoSvg(datos, w * 0.06, h * 0.06, logoLado, dibujarTexto)}
   <rect x="${tarjetaX}" y="${tarjetaY}" width="${tarjetaAncho}" height="${tarjetaAlto}" rx="${tarjetaAncho * 0.04}" fill="#ffffff"/>
   <g transform="translate(${qrX}, ${qrY})">${qrSvg}</g>
   ${dibujarTexto({ texto: datos.textoCta, x: w / 2, y: qrY + qrLado * 1.22, tamano: h * 0.026, peso: 600, anclaje: 'centro', color: '#1c1917' })}
+  ${dibujarTextosExtra(datos.elementos, w, h, dibujarTexto)}
 </svg>`;
 }
 

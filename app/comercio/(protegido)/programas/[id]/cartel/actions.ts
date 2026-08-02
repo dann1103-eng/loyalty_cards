@@ -10,6 +10,7 @@ import {
   rutaImagenCartel,
 } from '@/lib/comercio/imagenComercio';
 import { esPlantillaCartel } from '@/lib/comercio/cartel/tipos';
+import { sanearElementos, type ElementoCartel } from '@/lib/comercio/cartel/elementos';
 
 const BUCKET_IMAGENES = 'comercio-imagenes';
 
@@ -60,6 +61,23 @@ export async function accionGuardarCartel(
   const colorTexto = personalizar ? String(formData.get('color_texto') ?? '').trim() || null : null;
   const colorLabel = personalizar ? String(formData.get('color_label') ?? '').trim() || null : null;
 
+  // Los elementos libres viajan como UN campo JSON y no como inputs sueltos: son una lista de largo
+  // variable con forma distinta según el tipo, y reconstruirla desde `elemento_3_ancho` sería
+  // inventar un protocolo propio con más superficie de bug que un JSON.parse envuelto.
+  //
+  // Se sanea ACÁ, del lado del servidor, y NO se guarda lo que vino: el navegador es un cliente
+  // hostil por definición. `sanearElementos` es el mismo filtro que corre al leer, así que lo que
+  // se guarda es exactamente lo que se va a poder dibujar — nada de basura durmiendo en la columna.
+  let elementos: ElementoCartel[];
+  try {
+    elementos = sanearElementos(JSON.parse(String(formData.get('elementos') ?? '[]')));
+  } catch {
+    // Un JSON roto es un bug del cliente, no del dueño: se guarda el cartel SIN extras en vez de
+    // rechazar el guardado entero y perderle los colores y el texto que sí escribió.
+    console.error('[comercio] llegó un JSON de elementos ilegible; se guarda el cartel sin extras');
+    elementos = [];
+  }
+
   const campos = {
     plantilla,
     color_fondo: colorFondo,
@@ -67,6 +85,7 @@ export async function accionGuardarCartel(
     color_label: colorLabel,
     texto_cta: textoCta,
     texto_teaser: textoTeaser,
+    elementos,
   };
 
   const { data: existente } = await supabase

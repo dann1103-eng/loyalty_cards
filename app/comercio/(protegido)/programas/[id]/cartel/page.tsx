@@ -23,7 +23,7 @@ export default async function PaginaCartel({
   // y las dos se tratan igual: 404, sin distinguir cuál para no filtrar si un id ajeno existe.
   const resuelto = await resolverDatosCartel(supabase, comercioId, programaId);
   if (!resuelto) notFound();
-  const { datos, programaActivo, marcaEfectiva } = resuelto;
+  const { datos, programaActivo, marcaEfectiva, tipoTarjeta } = resuelto;
 
   // Qué colores tiene GUARDADOS este cartel: es lo único que dice si el dueño ya personalizó (los
   // colores de `datos` no sirven para eso — un override puede coincidir con la marca). Se lee acá y
@@ -69,6 +69,7 @@ export default async function PaginaCartel({
           disenoGuardado?.color_label != null
         }
         tieneLogoPropio={disenoGuardado?.logo_url != null}
+        tipoTarjeta={tipoTarjeta}
       />
     </main>
   );

@@ -37,6 +37,10 @@ export interface CartelResuelto {
   // volver a SU marca, no a la del negocio. Se devuelve desde acá porque ya está calculada: cuesta
   // cero consultas extra y evita que la pantalla la recalcule mal por su cuenta.
   marcaEfectiva: { colorFondo: string; colorTexto: string; colorLabel: string };
+  // El tipo del PROGRAMA. No forma parte de DatosCartel porque construirCartelSvg no lo necesita —
+  // para cuando el cartel se dibuja, el tipo ya se convirtió en la frase del CTA. Lo usa la pantalla
+  // para ofrecer "usar la frase sugerida" después de que el dueño la editó.
+  tipoTarjeta: string;
 }
 
 // Punto de entrada único para leer todo lo que necesita el cartel de un programa. El chequeo de
@@ -63,14 +67,14 @@ export async function resolverDatosCartel(
       supabase
         .from('programas_tarjeta')
         .select(
-          'slug, es_principal, activo, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja',
+          'slug, es_principal, activo, tipo_tarjeta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja',
         )
         .eq('id', programaId)
         .eq('comercio_id', comercioId)
         .maybeSingle(),
       supabase
         .from('disenos_cartel')
-        .select('plantilla, color_fondo, color_texto, color_label, logo_url, texto_cta, texto_teaser')
+        .select('plantilla, color_fondo, color_texto, color_label, logo_url, texto_cta, texto_teaser, elementos')
         .eq('programa_id', programaId)
         .maybeSingle(),
     ]);
@@ -136,12 +140,15 @@ export async function resolverDatosCartel(
     logo_url: marca.logoUrl,
     hero_url: marca.heroUrl,
   };
-  const combinados = combinarDatosCartel(marcaParaCartel, eDiseno ? null : diseno);
+  // `tipo_tarjeta` sale del PROGRAMA y no de `comercios`: son columnas distintas que pueden
+  // divergir (el panel de FM cambia la del comercio sin propagarla), y el cartel imprime el QR de
+  // ESTE programa. Solo decide la frase que se PROPONE cuando todavía no hay una guardada.
+  const combinados = combinarDatosCartel(marcaParaCartel, eDiseno ? null : diseno, programa.tipo_tarjeta);
   // La misma combinación pero SIN el diseño guardado: es la marca a la que vuelve el toggle de la
   // pantalla. Se saca de combinarDatosCartel y no de `marca` directo para que aplique sus mismos
   // defaults del sistema — así el toggle no puede ofrecer un color distinto del que dibujaría el
   // cartel de un comercio que nunca configuró su marca.
-  const sinOverrides = combinarDatosCartel(marcaParaCartel, null);
+  const sinOverrides = combinarDatosCartel(marcaParaCartel, null, programa.tipo_tarjeta);
 
   const [logoDataUri, fotoDataUri] = await Promise.all([
     aDataUri(combinados.logoUrl),
@@ -160,8 +167,10 @@ export async function resolverDatosCartel(
       textoCta: combinados.textoCta,
       textoTeaser: combinados.textoTeaser,
       urlRegistro,
+      elementos: combinados.elementos,
     },
     programaActivo: programa.activo,
+    tipoTarjeta: programa.tipo_tarjeta,
     marcaEfectiva: {
       colorFondo: sinOverrides.colorFondo,
       colorTexto: sinOverrides.colorTexto,

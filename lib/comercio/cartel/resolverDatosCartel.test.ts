@@ -93,7 +93,10 @@ describe('resolverDatosCartel', () => {
     expect(r!.datos.colorFondo).toBe('rgb(59, 42, 30)');
     expect(r!.datos.colorTexto).toBe('rgb(245, 237, 224)');
     expect(r!.datos.colorLabel).toBe('rgb(232, 185, 120)');
-    expect(r!.datos.textoCta).toBe('¡Escaneá y sumate!');
+    // La frase la PROPONE el tipo del programa (migración 0030): el comercio del fixture nace en
+    // 'puntos'. Antes acá decía el genérico '¡Escaneá y sumate!', que es el que sigue saliendo
+    // cuando el tipo no se conoce — ver combinarDatos.test.ts.
+    expect(r!.datos.textoCta).toBe('Acumulá puntos y ganá premios');
     expect(r!.datos.textoTeaser).toBeNull();
     // El principal NO lleva su slug en la URL (es el QR "del comercio"). Se compara la RUTA
     // completa, no un `toContain('/registro/')` ni un `endsWith(...)` booleano: lo primero deja
@@ -244,5 +247,24 @@ describe('resolverDatosCartel', () => {
     // estado para que la UI muestre el aviso de que ese QR ya no registra clientes.
     expect(inactivo, 'un programa desactivado se sigue pudiendo resolver').not.toBeNull();
     expect(inactivo!.programaActivo).toBe(false);
+  });
+  // Integración de la sugerencia por tipo: prueba que el tipo sale del PROGRAMA y no de la columna
+  // homónima de `comercios`. Las dos existen y pueden divergir (el panel de FM cambia la del
+  // comercio sin propagarla), y el cartel imprime el QR de ESTE programa.
+  it('la frase propuesta sale del tipo del PROGRAMA, no del comercio', async () => {
+    const { comercioId } = await armarComercio({ tipo_tarjeta: 'puntos' });
+    const creado = await crearPrograma(supabase, comercioId, {
+      nombre: 'Cashback del super',
+      tipoTarjeta: 'cashback',
+      cashbackPorcentaje: 5,
+      multipassVisitas: null,
+      membresiaDias: null,
+      cuponVigenciaDias: null,
+    });
+    expect(creado.ok, 'el programa de prueba tiene que haberse creado').toBe(true);
+
+    const r = await resolverDatosCartel(supabase, comercioId, (creado as { id: string }).id);
+
+    expect(r!.datos.textoCta).toBe('Acumulá saldo con tus compras');
   });
 });

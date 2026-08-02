@@ -41,7 +41,7 @@ function formulario(campos: Record<string, string>): FormData {
 async function leerDiseno(programaId: string) {
   const { data } = await supabase
     .from('disenos_cartel')
-    .select('plantilla, color_fondo, color_texto, color_label, logo_url, texto_cta, texto_teaser')
+    .select('plantilla, color_fondo, color_texto, color_label, logo_url, texto_cta, texto_teaser, elementos')
     .eq('programa_id', programaId)
     .maybeSingle();
   return data;
@@ -365,5 +365,86 @@ describe('accionQuitarLogoCartel', () => {
     expect(fila?.logo_url, 'el logo del cartel ajeno sigue intacto').toBe(
       'https://ejemplo.test/logo-del-cartel.png',
     );
+  });
+});
+
+describe('accionGuardarCartel — elementos libres (migración 0030)', () => {
+  const FRANJA = { tipo: 'franja', x: 0, y: 80, ancho: 100, alto: 10, color: 'rgb(1, 2, 3)', radio: 4 };
+  const TEXTO = { tipo: 'texto', texto: 'Promo', x: 50, y: 90, tamano: 4, color: 'rgb(9, 8, 7)', peso: 700 };
+
+  const base = { plantilla: 'centrado', texto_cta: '¡Escaneá y sumate!' };
+
+  it('guarda la lista de elementos tal como la mandó la pantalla', async () => {
+    const { comercioId, programaId } = await armarComercio();
+    sesion.comercioId = comercioId;
+    const { accionGuardarCartel } = await import('./actions');
+
+    await accionGuardarCartel(
+      programaId,
+      undefined,
+      formulario({ ...base, elementos: JSON.stringify([FRANJA, TEXTO]) }),
+    );
+
+    expect((await leerDiseno(programaId))?.elementos).toEqual([FRANJA, TEXTO]);
+  });
+
+  // LA prueba de seguridad de esta acción: el navegador es un cliente hostil y este color termina
+  // interpolado crudo dentro de un atributo fill de un SVG que el servidor rasteriza. Que la
+  // pantalla nunca mande esto es irrelevante — la pantalla no es lo que hace la petición.
+  it('lo que no se puede dibujar NO llega a la base', async () => {
+    const { comercioId, programaId } = await armarComercio();
+    sesion.comercioId = comercioId;
+    const { accionGuardarCartel } = await import('./actions');
+
+    await accionGuardarCartel(
+      programaId,
+      undefined,
+      formulario({
+        ...base,
+        elementos: JSON.stringify([{ ...FRANJA, color: '"/><script>alert(1)</script>' }, TEXTO]),
+      }),
+    );
+
+    expect((await leerDiseno(programaId))?.elementos).toEqual([TEXTO]);
+  });
+
+  // Un JSON roto es un bug del cliente, no del dueño: perderle los colores y el texto que sí
+  // escribió por culpa de eso sería castigarlo por un error ajeno.
+  it('un JSON ilegible guarda el cartel SIN extras, no falla el guardado entero', async () => {
+    const { comercioId, programaId } = await armarComercio();
+    sesion.comercioId = comercioId;
+    const { accionGuardarCartel } = await import('./actions');
+
+    const r = await accionGuardarCartel(
+      programaId,
+      undefined,
+      formulario({ ...base, texto_cta: 'Mi frase', elementos: '{esto no es json' }),
+    );
+
+    expect(r).toEqual({ ok: true });
+    const guardado = await leerDiseno(programaId);
+    expect(guardado?.texto_cta, 'el resto del cartel sí se guardó').toBe('Mi frase');
+    expect(guardado?.elementos).toEqual([]);
+  });
+
+  it('sin el campo, la lista queda vacía (un formulario viejo no rompe nada)', async () => {
+    const { comercioId, programaId } = await armarComercio();
+    sesion.comercioId = comercioId;
+    const { accionGuardarCartel } = await import('./actions');
+
+    await accionGuardarCartel(programaId, undefined, formulario(base));
+
+    expect((await leerDiseno(programaId))?.elementos).toEqual([]);
+  });
+
+  it('guardar de nuevo con la lista vacía BORRA los extras que había', async () => {
+    const { comercioId, programaId } = await armarComercio();
+    sesion.comercioId = comercioId;
+    const { accionGuardarCartel } = await import('./actions');
+
+    await accionGuardarCartel(programaId, undefined, formulario({ ...base, elementos: JSON.stringify([FRANJA]) }));
+    await accionGuardarCartel(programaId, undefined, formulario({ ...base, elementos: '[]' }));
+
+    expect((await leerDiseno(programaId))?.elementos).toEqual([]);
   });
 });
