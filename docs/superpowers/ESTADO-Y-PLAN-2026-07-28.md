@@ -450,3 +450,101 @@ Quedó viejo tras el rediseño de la pantalla de Marca (branding por programa). 
   garantiza; falta la prueba con papel y teléfono).
 - Confirmar en un **iPhone** que la campaña se lee en la pantalla de bloqueo.
 - `curl -i https://www.cardly-sv.site/api/cron/inactividad` → debe dar `401`, no `500`.
+
+---
+
+# Sesión del 2026-08-07 — los ocho tipos de tarjeta, de verdad funcionales
+
+> Corrige el pendiente **#1** de la sección anterior (ya no aplica: los lectores del panel del dueño
+> y del panel de FM leen del programa) y cierra el hueco de **Descuento por nivel**.
+> Migración **0031 APLICADA y verificada** (`scripts/verificar-0031.ts`). Suite: **985 verdes en 98
+> archivos**.
+
+## El hallazgo: la 0024 mudó la configuración de tabla y los motores no se enteraron
+
+La migración 0024 mudó `sello_meta`, `cashback_porcentaje`, `multipass_visitas`, `membresia_dias` y
+`cupon_vigencia_dias` de `comercios` a `programas_tarjeta`, e hizo el backfill. Desde entonces la
+pantalla que edita esos números es **Programas**, y escribe SOLO en `programas_tarjeta`. **Nadie
+volvió a escribir las columnas de `comercios`** — pero tres motores seguían leyéndolas.
+
+Para cualquier comercio dado de alta DESPUÉS de la 0024 esas columnas son `null` para siempre. O sea:
+
+| Tipo | Qué pasaba en producción |
+|---|---|
+| **Prepago** | "Vender paquete" siempre fallaba: *"Todavía no configuraste cuántas visitas trae el paquete. Andá a **Reglas**"* — y Reglas ya no tiene ese campo. |
+| **Cashback** | "Acreditar cashback" siempre fallaba, con el mismo mensaje y el mismo callejón sin salida. |
+| **Membresía** | "Renovar" siempre fallaba: el RPC leía `comercios.membresia_dias`. |
+| **Cupón** | `cupon_vigencia_dias` **nunca se aplicó a nada**: `registrarCliente` no escribía `vigencia_hasta`, y `usar_cupon_atomico` deja pasar el null. Una campaña de 7 días era canjeable para siempre. |
+| **Descuento** | `crearNivel`/`eliminarNivel` existían **sin ninguna pantalla que los llamara**: sin umbrales, todos los clientes quedaban en "Sin descuento todavía" para siempre. |
+| **Gift card / cashback** | El portal del cliente y las dos pantallas de Clientes mostraban **$25.00 como "2500 puntos"**, y cupón/membresía/descuento como "0 puntos". |
+
+### Por qué la suite estaba en verde con todo eso roto
+
+**El fixture de tests copia la configuración del comercio al programa** (`entornoComercio.ts`:
+`crearComercio({ multipass_visitas: 10 })` espeja al principal). Quedaba en las DOS tablas, así que
+daba igual cuál leyera el motor. Las pruebas medían la columna legada y pasaban.
+
+La prueba honesta vive en **`lib/tarjetas/tiposFuncionales.test.ts`**: carga la configuración por el
+camino de producción (`crearPrograma`, la misma función de la pantalla) y **deja el comercio con sus
+columnas vacías**. Arrancó con 6 de 6 en rojo. **Regla para el futuro: si una prueba de un motor
+configura el comercio, no está probando lo que vive el dueño.**
+
+## Qué se arregló
+
+- `venderPaquete` y `acreditarCashback` leen del **programa de la tarjeta** (`resolverProgramaDeTarjeta`).
+- `registrarCliente` emite el cupón **con su fecha** (`vencimientoInicialCupon` + `hoyEnZona`, en la
+  zona del comercio). Se fija AL EMITIR y no se recalcula: cambiar el plazo no le acorta el cupón a
+  quien ya lo tiene.
+- **Se retiró `formatearSaldo`** (`lib/portal/buscarTarjetas.ts`). No se arregló su cuerpo a
+  propósito: el defecto estaba en su **firma** —sin la fecha ni el acumulado no hay forma de
+  describir cupón, membresía ni descuento—, así que arreglarlo habría dejado la trampa armada para
+  el próximo llamador. Sus cuatro consumidores pasan por `describirFila`
+  (**`lib/tarjetas/estadoTarjeta.ts`**, módulo nuevo), que viaja junto a `COLUMNAS_ESTADO`: pedir la
+  función sin las columnas deja de ser posible.
+- **Pantalla de niveles de descuento** (`programas/NivelesDescuento.tsx` + dos server actions). Los
+  niveles siguen siendo **del comercio** (`niveles_descuento.comercio_id`, 0018) — decisión
+  explícita del usuario: sin migración, y el tope de 2 programas activos hace que compartir la
+  escalera entre dos programas de descuento no se dé en la práctica. Por eso `descuento` sigue fuera
+  del desplegable de "programa nuevo".
+- **`sello_meta` y el tipo se leen del programa** en escáner, las dos pantallas de Clientes, el panel
+  del dueño y el panel de FM. En Marca, la decisión de mostrar "Meta de sellos" ahora sale del
+  programa **principal** — la misma fila que escribe `guardarBranding`. Eso cierra el pendiente #1:
+  leer y escribir ya no pueden discrepar.
+- `Programa` ganó `selloMeta` (`lib/comercio/programas.ts`), que es lo que hizo posible lo anterior.
+
+## Lo que NO es obvio y hay que recordar
+
+1. **La zona horaria del comercio es parte de la corrección, no un detalle.** El escáner comparaba
+   la vigencia contra `new Date().toISOString()` (UTC) mientras `usar_cupon_atomico` usa la zona del
+   comercio: a las 7 de la tarde en El Salvador la pantalla decía "Venció" y el RPC lo seguía
+   aceptando. El cajero le decía que no a un cliente al que el sistema le decía que sí.
+2. **La 0031 cambia el CUERPO del RPC, no su firma.** Agregar un `p_dias` habría creado un overload
+   ambiguo (42725) — el mismo tropiezo que documentó `acreditar_puntos_atomico` en la 0015. Con la
+   firma intacta se aplica ANTES del deploy sin romper el código vivo. Y los días se leen ADENTRO
+   del RPC para no reabrir la carrera que cerró la 0019: la fecha se sigue calculando dentro del
+   propio `UPDATE`.
+3. **`vencimientoInicialCupon` usa `hoy + días`, no `hoy + días - 1`.** Es la misma convención que
+   ya usaba `renovar_membresia_atomico` (`greatest(vigencia_hasta, hoy) + v_dias`), y el día de
+   gracia cae a favor del cliente — igual criterio que el redondeo del cashback.
+4. **Mutation-testing corrido: 5 mutaciones, las 5 matan su prueba por el motivo correcto.** La más
+   valiosa es la del portal: sacándole `vigencia_hasta` al `select`, un cupón vencido pasa a leerse
+   **"Disponible"**. Una prueba unitaria del formateador habría seguido en verde — el defecto nunca
+   estuvo en el formateador sino en la consulta.
+5. **La 0031 trajo su propia prueba de mutación, sin escribirla.** La prueba de membresía estuvo en
+   rojo mientras la migración no se aplicó y pasó a verde con ella, **sin que cambiara una línea de
+   TypeScript**: la base sin migrar ERA la mutación, y la mató. `verificar-0031.ts` prueba además la
+   otra mitad (sin días en el programa → `membresia_sin_configurar`), sin la cual la primera podría
+   estar pasando por cualquier motivo.
+
+## Lo que sigue pendiente acá
+
+- **QA manual del usuario, un tipo por vez:** crear un programa de cada tipo, registrar una tarjeta
+  y correr su operación desde el escáner real. Es lo único que no cubre la suite: las pruebas llaman
+  a los motores directo, no a través de la pantalla.
+- **La migración de contracción** que retira `comercios.tipo_tarjeta` y su configuración sigue
+  pendiente. Ya no es urgente —nadie las lee para decidir nada— pero mientras existan invitan a que
+  alguien las vuelva a leer.
+- **`descuento` sigue fuera del desplegable de "programa nuevo"** (`FormularioNuevoPrograma.tsx`), y
+  es coherente: sus niveles son del COMERCIO, así que dos programas de descuento compartirían la
+  escalera. Un comercio llega al tipo por el panel de FM (su programa principal espeja el tipo), y
+  ahí la pantalla nueva de niveles ya lo hace usable de punta a punta.

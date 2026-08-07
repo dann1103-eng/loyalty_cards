@@ -33,6 +33,23 @@ El usuario (Daniel, socio de FM Communications, El Salvador) programa esto él m
   el QR. La regla: antes de aplicar el mismo cambio a N sitios, verificá que los N consuman de veras
   lo que estás corrigiendo, y hacé que la prueba mida **la cosa que le importa al usuario** (el QR),
   no un intermediario.
+- **Un fixture que espeja una columna legada vuelve DECORATIVA toda la suite que cuelga de él.**
+  El 2026-08-07: la 0024 mudó la configuración por tipo de `comercios` a `programas_tarjeta`, pero
+  `venderPaquete`, `acreditarCashback` y `renovar_membresia_atomico` siguieron leyendo la columna
+  vieja — que ya nadie escribe. Prepago, cashback y membresía estaban MUERTOS en producción y las
+  977 pruebas seguían verdes, porque `test/fixtures/entornoComercio.ts` copia la config del comercio
+  al programa: quedaba en las dos tablas y daba igual cuál se leyera. **Regla: si una prueba de un
+  motor configura el COMERCIO, no está probando lo que vive el dueño.** Cargá la configuración por
+  el camino de producción (la misma función que llama la pantalla) y dejá la tabla legada vacía —
+  así se escribió `lib/tarjetas/tiposFuncionales.test.ts`, que arrancó 6 de 6 en rojo.
+- **Cuando una firma no puede expresar el caso, arreglale la FIRMA — o retirala.** `formatearSaldo`
+  (`tipo, puntos, selloMeta`) trataba como puntos a los seis tipos que no son puntos ni sellos: una
+  gift card de $25.00 decía "2500 puntos". Sin la fecha de vigencia ni el acumulado no había forma
+  de describir cupón, membresía ni descuento, así que arreglarle el cuerpo habría dejado la trampa
+  armada para el próximo llamador. Se retiró y sus consumidores pasaron por `describirFila`, que
+  viaja junto a `COLUMNAS_ESTADO` (`lib/tarjetas/estadoTarjeta.ts`): pedir la función sin las
+  columnas dejó de ser posible. Corolario para las pruebas: el defecto vivía en la CONSULTA, no en
+  el formateador — probá el recorrido (`buscarTarjetasPorTelefono`), no la función pura.
 - **No hay pruebas de componentes en este repo** (cero `.test.tsx`, `environment: 'node'`). Para una
   interfaz nueva: sacá la aritmética a un módulo puro, probala con mutación (así se hizo con
   `lib/comercio/cartel/arrastre.ts`), y verificá el pegamento con el DOM **midiendo en el navegador**
