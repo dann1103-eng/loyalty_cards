@@ -6,6 +6,8 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { TIPOS_TARJETA } from '@/lib/comercios/guardarComercio';
 import { reporteSucursales } from '@/lib/reportes/reportes';
 import { listarProgramas } from '@/lib/comercio/programas';
+import { primerosPasos } from '@/lib/comercio/primerosPasos';
+import PrimerosPasos from './PrimerosPasos';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,6 +49,10 @@ export default async function PaginaPanel() {
   // del comercio (0024): son las que de verdad rigen las tarjetas que el dueño tiene entregadas.
   const programas = await listarProgramas(supabase, comercioId);
   const principal = (programas ?? []).find((p) => p.esPrincipal) ?? null;
+
+  // El tutorial. Solo para el DUEÑO: el cajero no puede tocar marca, reglas ni recompensas, así que
+  // una lista de pasos que no puede completar sería una lista de reproches.
+  const pasos = esOwner ? await primerosPasos(supabase, comercioId) : null;
 
   // Métricas reales: cuántos clientes tienen tarjeta y cuánto saldo circulante hay.
   const { data: tarjetas, count } = await supabase
@@ -91,6 +97,11 @@ export default async function PaginaPanel() {
           Así va tu programa de lealtad hoy.
         </p>
       </section>
+
+      {/* El tutorial va ANTES que las métricas y solo mientras falte algún paso: un negocio recién
+          dado de alta tiene todo en cero, y dos tarjetas grandes diciendo "0 clientes" no le dicen
+          qué hacer. Se esconde solo cuando los cuatro están hechos. */}
+      {pasos && <PrimerosPasos pasos={pasos} />}
 
       {/* Métricas apiladas (C2): texto oscuro SOLO aquí, sobre acento claro, por contraste. */}
       <section className="metric-pila reveal d2">
