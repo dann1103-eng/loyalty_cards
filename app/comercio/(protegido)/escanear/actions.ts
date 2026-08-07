@@ -8,11 +8,10 @@ import { quitarPuntos } from '@/lib/comercio/ajuste';
 import { resolverSucursalDeAccion } from '@/lib/comercio/atribucionEscaner';
 import { sucursalPerteneceAComercio } from '@/lib/comercio/sucursales';
 import { resolverProgramaDeTarjeta } from '@/lib/comercio/programas';
-import { formatearSaldo } from '@/lib/portal/buscarTarjetas';
 import { notificarCambioTarjeta } from '@/lib/apple/notificarCambioTarjeta';
 import { syncObjetoTarjeta } from '@/lib/google/syncObjeto';
 import { tipoOPuntos, describirSaldo, centavosDesdeTexto, nivelParaAcumulado, type AccionPrincipal } from '@/lib/tarjetas/tipos';
-import { usarCupon, renovarMembresia } from '@/lib/tarjetas/vigencia';
+import { usarCupon, renovarMembresia, hoyEnZona } from '@/lib/tarjetas/vigencia';
 import { usarVisita, venderPaquete } from '@/lib/tarjetas/prepago';
 import { acreditarCashback, cargarGiftCard, consumirSaldo } from '@/lib/tarjetas/dinero';
 import { registrarCompra, listarNiveles } from '@/lib/tarjetas/descuento';
@@ -82,14 +81,13 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
   const tarjeta = await buscarTarjetaPorToken(supabase, comercioId, qrToken);
   if (!tarjeta) return { encontrado: false };
 
-  // El tipo y la config (cashback%, visitas del paquete, …) salen del PROGRAMA de la tarjeta desde
-  // la migración 0024, no del comercio — un comercio puede tener varios programas de tipos
-  // distintos a la vez. sello_meta y pedir_monto_compra siguen siendo del comercio: el primero lo
-  // edita Marca, que todavía trabaja a nivel comercio (el dibujo del pase se migra en una tanda
-  // aparte — ver docs/superpowers/specs/2026-07-29-programas-de-tarjeta-design.md); el segundo es
-  // una perilla antifraude (Tanda 1) que es política del comercio, no del programa.
+  // El tipo, la config (cashback%, visitas del paquete, …) y la META DE SELLOS salen del PROGRAMA
+  // de la tarjeta desde la migración 0024, no del comercio — un comercio puede tener varios
+  // programas de tipos distintos a la vez, y la meta es justamente lo que dibuja la grilla del pase.
+  // `pedir_monto_compra` SÍ sigue siendo del comercio: es una perilla antifraude (Tanda 1) y es
+  // política del local, no del programa.
   const [{ data: comercio }, programa, { data: estado }, { data: recompensas }] = await Promise.all([
-    supabase.from('comercios').select('sello_meta, pedir_monto_compra').eq('id', comercioId).maybeSingle(),
+    supabase.from('comercios').select('pedir_monto_compra, zona_horaria').eq('id', comercioId).maybeSingle(),
     resolverProgramaDeTarjeta(supabase, comercioId, tarjeta.tarjetaId),
     // Estado propio de los tipos con vigencia o con nivel. Se lee acá y no en buscarTarjetaPorToken
     // para no cargar de columnas el camino que usan los tipos con contador.
@@ -108,7 +106,11 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
     porcentajeDescuento = nivelParaAcumulado(Number(estado?.acumulado_centavos ?? 0), niveles);
   }
 
-  const hoyIso = new Date().toISOString().slice(0, 10);
+  // La zona del COMERCIO, no la del servidor. Vercel corre en UTC: a las 7 de la tarde en El
+  // Salvador ya es el dia siguiente en UTC, asi que un cupon que vence HOY se leeria "Vencio" en
+  // esta pantalla mientras usar_cupon_atomico —que si usa la zona del comercio— lo sigue aceptando.
+  // El cajero le diria al cliente que no y el sistema habria dicho que si.
+  const hoyIso = hoyEnZona(comercio?.zona_horaria ?? null);
 
   return {
     encontrado: true,
@@ -116,13 +118,13 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
     nombreCliente: tarjeta.nombreCliente,
     telefono: tarjeta.telefono,
     puntosActuales: tarjeta.puntosActuales,
-    // describirSaldo y no formatearSaldo: es EL único lugar que sabe que un 1250 puede ser "$12.50"
+    // describirSaldo y no el entero pelado: es EL único lugar que sabe que un 1250 puede ser "$12.50"
     // o "1250 puntos" según el tipo.
     saldoTexto: describirSaldo(
       {
         tipo: tipo.valor,
         contador: tarjeta.puntosActuales,
-        selloMeta: comercio?.sello_meta ?? null,
+        selloMeta: programa?.selloMeta ?? null,
         vigenciaHasta: estado?.vigencia_hasta ?? null,
         usadoEn: estado?.usado_en ?? null,
         porcentajeDescuento,
@@ -151,15 +153,6 @@ export type RespuestaOperacion =
   // `bloqueoLimite` viaja hasta el cliente para que el escáner distinga "una perilla antifraude
   // frenó esto" (⇒ ofrecerle al dueño el panel de autorización) de "algo salió mal" (⇒ error rojo).
   | { ok: false; error: string; bloqueoLimite?: boolean };
-
-async function saldoTextoDe(comercioId: string, tarjetaId: string, puntos: number): Promise<string> {
-  const supabase = createServiceClient();
-  const [{ data: comercio }, programa] = await Promise.all([
-    supabase.from('comercios').select('sello_meta').eq('id', comercioId).maybeSingle(),
-    resolverProgramaDeTarjeta(supabase, comercioId, tarjetaId),
-  ]);
-  return formatearSaldo(programa?.tipoTarjeta ?? 'puntos', puntos, comercio?.sello_meta ?? null);
-}
 
 // Solo los campos del gate que necesita la atribución (evita atar el helper al shape completo).
 type SesionAtribucion = { rol: string; sucursalId: string | null; comercioId: string };
@@ -213,7 +206,7 @@ export async function accionAcreditar(
   return {
     ok: true,
     puntosActuales: res.puntosActuales,
-    saldoTexto: await saldoTextoDe(sesion.comercioId, tarjetaId, res.puntosActuales),
+    saldoTexto: await saldoTextoActual(sesion.comercioId, tarjetaId),
     mensaje: delta === 1 ? 'Sello agregado.' : `${delta} puntos agregados.`,
   };
 }
@@ -256,7 +249,7 @@ export async function accionAcreditarForzado(
   return {
     ok: true,
     puntosActuales: res.puntosActuales,
-    saldoTexto: await saldoTextoDe(sesion.comercioId, tarjetaId, res.puntosActuales),
+    saldoTexto: await saldoTextoActual(sesion.comercioId, tarjetaId),
     mensaje: 'Autorizado y acreditado. Queda registrado en el historial del cliente.',
   };
 }
@@ -292,7 +285,7 @@ export async function accionQuitar(
   return {
     ok: true,
     puntosActuales: res.puntosActuales,
-    saldoTexto: await saldoTextoDe(sesion.comercioId, tarjetaId, res.puntosActuales),
+    saldoTexto: await saldoTextoActual(sesion.comercioId, tarjetaId),
     mensaje: cantidad === 1 ? 'Se quitó 1. Queda registrado.' : `Se quitaron ${cantidad}. Queda registrado.`,
   };
 }
@@ -322,7 +315,7 @@ export async function accionCanjear(
   return {
     ok: true,
     puntosActuales: res.puntosActuales,
-    saldoTexto: await saldoTextoDe(sesion.comercioId, tarjetaId, res.puntosActuales),
+    saldoTexto: await saldoTextoActual(sesion.comercioId, tarjetaId),
     mensaje: `Canjeado: ${res.nombreRecompensa}. Entregá el premio al cliente.`,
   };
 }
@@ -333,7 +326,7 @@ export async function accionCanjear(
 async function saldoTextoActual(comercioId: string, tarjetaId: string): Promise<string> {
   const supabase = createServiceClient();
   const [{ data: comercio }, programa, { data: t }] = await Promise.all([
-    supabase.from('comercios').select('sello_meta').eq('id', comercioId).maybeSingle(),
+    supabase.from('comercios').select('zona_horaria').eq('id', comercioId).maybeSingle(),
     resolverProgramaDeTarjeta(supabase, comercioId, tarjetaId),
     supabase
       .from('tarjetas')
@@ -353,12 +346,12 @@ async function saldoTextoActual(comercioId: string, tarjetaId: string): Promise<
     {
       tipo: tipo.valor,
       contador: t?.puntos_actuales ?? 0,
-      selloMeta: comercio?.sello_meta ?? null,
+      selloMeta: programa?.selloMeta ?? null,
       vigenciaHasta: t?.vigencia_hasta ?? null,
       usadoEn: t?.usado_en ?? null,
       porcentajeDescuento: porcentaje,
     },
-    new Date().toISOString().slice(0, 10),
+    hoyEnZona(comercio?.zona_horaria ?? null),
   );
 }
 

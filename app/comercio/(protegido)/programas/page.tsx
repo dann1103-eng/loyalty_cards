@@ -5,9 +5,11 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { listarProgramas, MAXIMO_PROGRAMAS_ACTIVOS } from '@/lib/comercio/programas';
 import { urlRegistroPrograma } from '@/lib/comercio/urlRegistroPrograma';
 import { tipoOPuntos } from '@/lib/tarjetas/tipos';
+import { listarNiveles } from '@/lib/tarjetas/descuento';
 import AvisoComercioActivo from '../AvisoComercioActivo';
 import FormularioNuevoPrograma from './FormularioNuevoPrograma';
 import FormularioConfiguracionPrograma from './FormularioConfiguracionPrograma';
+import NivelesDescuento from './NivelesDescuento';
 import BotonDesactivarPrograma from './BotonDesactivarPrograma';
 
 export const dynamic = 'force-dynamic';
@@ -23,6 +25,11 @@ export default async function PaginaProgramas() {
     supabase.from('comercios').select('slug').eq('id', comercioId).maybeSingle(),
     listarProgramas(supabase, comercioId, { soloActivos: false }),
   ]);
+
+  // Los niveles son del COMERCIO (0018), así que se leen una sola vez y solo si hay un programa de
+  // descuento: casi ningún comercio usa el tipo y sería una consulta al pedo en el resto.
+  const hayDescuento = (programas ?? []).some((p) => p.tipoTarjeta === 'descuento' && p.activo);
+  const niveles = hayDescuento ? ((await listarNiveles(supabase, comercioId)) ?? []) : [];
 
   // QR de cada programa activo. Uno desactivado no lleva QR: resolverProgramaPorSlug exige
   // activo=true, así que registrar un cliente con ese código ya no funciona — mostrarlo invitaría
@@ -79,6 +86,10 @@ export default async function PaginaProgramas() {
                 </div>
 
                 {programa.activo && <FormularioConfiguracionPrograma programa={programa} />}
+
+                {/* El descuento no se configura con un campo suelto sino con una escalera de
+                    umbrales, así que tiene su propia sección en vez de una fila del formulario. */}
+                {programa.activo && tipo.valor === 'descuento' && <NivelesDescuento niveles={niveles} />}
 
                 {/* El diseño se edita en Marca, con la vista previa en vivo al lado. Solo para
                     programas activos: darle diseño propio a uno desactivado no se ve en ningún

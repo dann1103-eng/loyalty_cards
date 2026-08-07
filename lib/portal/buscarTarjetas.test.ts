@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createServiceClient } from '../supabase/server';
-import { buscarTarjetasPorTelefono, formatearSaldo } from './buscarTarjetas';
+import { buscarTarjetasPorTelefono } from './buscarTarjetas';
 
 const supabase = createServiceClient();
 const comerciosDePrueba: string[] = [];
@@ -119,17 +119,11 @@ async function crearClienteConTarjeta(comercioId: string, puntos: number): Promi
   return telefono;
 }
 
-describe('formatearSaldo', () => {
-  it('formatea puntos con singular y plural', () => {
-    expect(formatearSaldo('puntos', 1, null)).toBe('1 punto');
-    expect(formatearSaldo('puntos', 7, null)).toBe('7 puntos');
-  });
-
-  it('formatea sellos como "N de M sellos", y sin meta como "N sellos"', () => {
-    expect(formatearSaldo('sellos', 7, 10)).toBe('7 de 10 sellos');
-    expect(formatearSaldo('sellos', 3, null)).toBe('3 sellos');
-  });
-});
+// Acá vivían dos pruebas de `formatearSaldo`, la función local que solo sabía de puntos y sellos.
+// Se retiró: trataba a los otros seis tipos como puntos y le mostraba "2500 puntos" a un cliente
+// con una gift card de $25.00. El portal ahora usa `describirSaldo` vía `describirFila`, que está
+// probado tipo por tipo en lib/tarjetas/tipos.test.ts, y el recorrido completo —que la consulta
+// traiga las columnas que ese formateador necesita— en lib/tarjetas/tiposFuncionales.test.ts.
 
 describe('buscarTarjetasPorTelefono', () => {
   it('devuelve encontrado:false para un teléfono bien formado pero no registrado', async () => {

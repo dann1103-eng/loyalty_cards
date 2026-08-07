@@ -89,8 +89,17 @@ export default async function PaginaBranding({
     : [null, null];
   const marca = marcasPrograma?.find((m) => m.programaId === seleccionado?.id) ?? null;
 
-  const esSellos = seleccionado
-    ? tipoOPuntos(seleccionado.tipoTarjeta).valor === 'sellos'
+  // Sin tarjeta elegida se está diseñando EL NEGOCIO, y eso escribe la meta en el programa PRINCIPAL
+  // (guardarBranding.ts). Así que el tipo tiene que salir del principal, NO de `comercios.tipo_tarjeta`
+  // —columna legada desde la 0024—: si el panel de FM le cambiaba el tipo al comercio sin propagarlo,
+  // esta pantalla escondía el campo "Meta de sellos", el formulario mandaba sello_meta vacío y el
+  // siguiente guardado le BORRABA la meta al principal. La grilla de sellos desaparecía de todos los
+  // pases sin que nadie hubiera tocado nada. Ahora la decisión de mostrar el campo y el destino del
+  // guardado leen la misma fila.
+  const principal = activos.find((p) => p.esPrincipal) ?? null;
+  const programaDeReferencia = seleccionado ?? principal;
+  const esSellos = programaDeReferencia
+    ? tipoOPuntos(programaDeReferencia.tipoTarjeta).valor === 'sellos'
     : c.tipo_tarjeta === 'sellos';
   const nombreTarjeta = seleccionado ? seleccionado.nombre : c.nombre;
 
@@ -208,7 +217,15 @@ export default async function PaginaBranding({
               }
             : {
                 ...marcaComercio,
-                sello_meta: c.sello_meta != null ? String(c.sello_meta) : '',
+                // Del programa PRINCIPAL y no de `comercios.sello_meta`: es la fila que guardarBranding
+                // escribe y la que lee el pase. Mostrar la del comercio dejaba al dueño editando un
+                // número que no era el que estaba en sus tarjetas.
+                sello_meta:
+                  principal?.selloMeta != null
+                    ? String(principal.selloMeta)
+                    : c.sello_meta != null
+                      ? String(c.sello_meta)
+                      : '',
               }
         }
         heredado={seleccionado ? marcaComercio : null}

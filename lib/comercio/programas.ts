@@ -25,6 +25,11 @@ export interface Programa {
   tipoTarjeta: string;
   esPrincipal: boolean;
   activo: boolean;
+  // La meta de sellos vive en el PROGRAMA desde la 0024 y es lo que dibuja la grilla del pase. Viaja
+  // acá —y no solo en el módulo de branding— porque las pantallas del dueño (escáner, Clientes,
+  // Marca) la necesitan junto al tipo, y leerla de `comercios.sello_meta` mientras `guardarBranding`
+  // la escribe en el programa es exactamente cómo se le borraba la meta al principal.
+  selloMeta: number | null;
   cashbackPorcentaje: number | null;
   multipassVisitas: number | null;
   membresiaDias: number | null;
@@ -51,7 +56,7 @@ export type ResultadoPrograma = { ok: true; id: string } | { ok: false; error: s
 export type ResultadoAccion = { ok: true } | { ok: false; error: string };
 
 const CAMPOS_PROGRAMA =
-  'id, nombre, slug, tipo_tarjeta, es_principal, activo, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias';
+  'id, nombre, slug, tipo_tarjeta, es_principal, activo, sello_meta, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias';
 
 type FilaPrograma = {
   id: string;
@@ -60,6 +65,7 @@ type FilaPrograma = {
   tipo_tarjeta: string;
   es_principal: boolean;
   activo: boolean;
+  sello_meta: number | null;
   cashback_porcentaje: number | string | null;
   multipass_visitas: number | null;
   membresia_dias: number | null;
@@ -74,6 +80,7 @@ function filaAPrograma(fila: FilaPrograma): Programa {
     tipoTarjeta: fila.tipo_tarjeta,
     esPrincipal: fila.es_principal,
     activo: fila.activo,
+    selloMeta: fila.sello_meta,
     // numeric de Postgres puede llegar como string según el driver: se normaliza acá para que nadie
     // más tenga que acordarse.
     cashbackPorcentaje: fila.cashback_porcentaje === null ? null : Number(fila.cashback_porcentaje),

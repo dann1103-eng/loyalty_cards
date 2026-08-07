@@ -2,6 +2,10 @@ import Link from 'next/link';
 import QRCode from 'qrcode';
 import { verifyFmAdmin } from '@/lib/fm/verifyFmAdmin';
 import { createServiceClient } from '@/lib/supabase/server';
+import { listarProgramas } from '@/lib/comercio/programas';
+import { describirFila } from '@/lib/tarjetas/estadoTarjeta';
+import { hoyEnZona } from '@/lib/tarjetas/vigencia';
+import { listarNiveles } from '@/lib/tarjetas/descuento';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +22,7 @@ export default async function PaginaClientesComercio({
   const supabase = createServiceClient();
   const { data: comercio } = await supabase
     .from('comercios')
-    .select('nombre, slug, tipo_tarjeta, sello_meta')
+    .select('nombre, slug, zona_horaria')
     .eq('id', id)
     .maybeSingle();
 
@@ -30,17 +34,32 @@ export default async function PaginaClientesComercio({
     );
   }
 
-  const { data: tarjetas, error } = await supabase
-    .from('tarjetas')
-    .select('id, qr_token, puntos_actuales, created_at, clientes(nombre, telefono)')
-    .eq('comercio_id', id)
-    .order('created_at', { ascending: false });
+  // El tipo y la meta salen del PROGRAMA de cada tarjeta (0024), no de las columnas legadas del
+  // comercio: un comercio con dos programas tiene clientes de tipos distintos en esta misma lista, y
+  // con las columnas viejas una gift card de $25.00 se leía "2500 puntos" también acá.
+  const [programas, { data: tarjetas, error }] = await Promise.all([
+    listarProgramas(supabase, id, { soloActivos: false }),
+    supabase
+      .from('tarjetas')
+      .select(
+        'id, qr_token, puntos_actuales, vigencia_hasta, usado_en, acumulado_centavos, created_at, programa_id, clientes(nombre, telefono)',
+      )
+      .eq('comercio_id', id)
+      .order('created_at', { ascending: false }),
+  ]);
 
   if (error) console.error('[fm] falló la consulta de clientes del comercio:', error);
 
-  const esSellos = comercio.tipo_tarjeta === 'sellos';
-  const saldoTexto = (puntos: number) =>
-    esSellos && comercio.sello_meta ? `${puntos} de ${comercio.sello_meta} sellos` : `${puntos} puntos`;
+  const programaPorId = new Map((programas ?? []).map((p) => [p.id, p]));
+  const niveles = (programas ?? []).some((p) => p.tipoTarjeta === 'descuento')
+    ? ((await listarNiveles(supabase, id)) ?? [])
+    : [];
+  const hoyIso = hoyEnZona(comercio.zona_horaria);
+
+  const saldoTexto = (t: Parameters<typeof describirFila>[0] & { programa_id: string }) => {
+    const p = programaPorId.get(t.programa_id);
+    return describirFila(t, p?.tipoTarjeta ?? 'puntos', p?.selloMeta ?? null, niveles, hoyIso);
+  };
 
   const conQr = await Promise.all(
     (tarjetas ?? []).map(async (t) => ({
@@ -94,7 +113,7 @@ export default async function PaginaClientesComercio({
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div className="admin-fila-nombre dato-mono" style={{ fontSize: '0.95rem' }}>
-                    {saldoTexto(t.puntos_actuales)}
+                    {saldoTexto(t)}
                   </div>
                   <div className="admin-fila-slug">ver QR</div>
                 </div>

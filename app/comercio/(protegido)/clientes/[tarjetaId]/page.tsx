@@ -2,7 +2,10 @@ import Link from 'next/link';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { historialTarjeta, etiquetaClase } from '@/lib/comercio/historial';
-import { formatearSaldo } from '@/lib/portal/buscarTarjetas';
+import { resolverProgramaDeTarjeta } from '@/lib/comercio/programas';
+import { describirFila } from '@/lib/tarjetas/estadoTarjeta';
+import { hoyEnZona } from '@/lib/tarjetas/vigencia';
+import { listarNiveles } from '@/lib/tarjetas/descuento';
 import { ZONA_HORARIA_DEFAULT } from '@/lib/comercio/zonasHorarias';
 
 export const dynamic = 'force-dynamic';
@@ -27,14 +30,16 @@ export default async function PaginaFichaCliente({
   // Scopeada por comercio_id: conocer el id de una tarjeta ajena no da acceso a su historial.
   const { data: tarjeta } = await supabase
     .from('tarjetas')
-    .select('id, puntos_actuales, qr_token, clientes(nombre, telefono)')
+    // Las tres columnas de estado van SIEMPRE: sin ellas esta ficha decía "0 puntos" en cupón,
+    // membresía y descuento. Ver lib/tarjetas/estadoTarjeta.ts.
+    .select('id, puntos_actuales, vigencia_hasta, usado_en, acumulado_centavos, qr_token, clientes(nombre, telefono)')
     .eq('id', tarjetaId)
     .eq('comercio_id', comercioId)
     .maybeSingle();
 
   const { data: comercio } = await supabase
     .from('comercios')
-    .select('tipo_tarjeta, sello_meta, zona_horaria')
+    .select('zona_horaria')
     .eq('id', comercioId)
     .maybeSingle();
 
@@ -61,11 +66,21 @@ export default async function PaginaFichaCliente({
     timeStyle: 'short',
   });
 
-  const esSellos = comercio?.tipo_tarjeta === 'sellos';
-  const saldoTexto = formatearSaldo(
-    comercio?.tipo_tarjeta ?? 'puntos',
-    tarjeta.puntos_actuales,
-    comercio?.sello_meta ?? null,
+  // El tipo sale del PROGRAMA de ESTA tarjeta, no de comercios.tipo_tarjeta (columna legada desde la
+  // 0024). Un comercio de sellos con un segundo programa de cupón mostraba la ficha del cupón como
+  // si fuera de sellos: "0 puntos" arriba y "/8" en cada movimiento del historial.
+  const programa = await resolverProgramaDeTarjeta(supabase, comercioId, tarjetaId);
+  const tipoTarjeta = programa?.tipoTarjeta ?? 'puntos';
+  const niveles = tipoTarjeta === 'descuento' ? ((await listarNiveles(supabase, comercioId)) ?? []) : [];
+
+  const selloMeta = programa?.selloMeta ?? null;
+  const esSellos = tipoTarjeta === 'sellos';
+  const saldoTexto = describirFila(
+    tarjeta,
+    tipoTarjeta,
+    selloMeta,
+    niveles,
+    hoyEnZona(comercio?.zona_horaria ?? null),
   );
 
   return (
@@ -159,7 +174,7 @@ export default async function PaginaFichaCliente({
                   </div>
                   <div className="admin-fila-slug dato-mono">
                     queda {m.saldoResultante}
-                    {esSellos && comercio?.sello_meta ? `/${comercio.sello_meta}` : ''}
+                    {esSellos && selloMeta ? `/${selloMeta}` : ''}
                   </div>
                 </div>
               </div>

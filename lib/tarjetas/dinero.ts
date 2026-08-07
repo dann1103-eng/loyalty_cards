@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { acreditarPuntos, type OpcionesAcreditar } from '../comercio/acreditar';
+import { resolverProgramaDeTarjeta } from '../comercio/programas';
 import { formatearCentavos } from './tipos';
 
 // Gift card y cashback: los dos tipos cuyo contador son CENTAVOS (ver el encabezado de tipos.ts).
@@ -38,17 +39,15 @@ export async function acreditarCashback(
     return { ok: false, error: 'Escribí el monto de la compra para calcular el cashback.' };
   }
 
-  const { data: comercio } = await supabase
-    .from('comercios')
-    .select('cashback_porcentaje')
-    .eq('id', comercioId)
-    .maybeSingle();
-
-  const porcentaje = comercio?.cashback_porcentaje ?? null;
+  // Del PROGRAMA de la tarjeta, NUNCA de comercios.cashback_porcentaje: esa columna quedó legada
+  // con la 0024 y hoy no la escribe nadie (la edita Programas, que guarda en programas_tarjeta).
+  // Misma historia que venderPaquete — ver el comentario en lib/tarjetas/prepago.ts.
+  const programa = await resolverProgramaDeTarjeta(supabase, comercioId, tarjetaId);
+  const porcentaje = programa?.cashbackPorcentaje ?? null;
   if (!porcentaje || porcentaje <= 0) {
     return {
       ok: false,
-      error: 'Todavía no configuraste el porcentaje de cashback. Andá a Reglas y ponelo.',
+      error: 'Todavía no configuraste el porcentaje de cashback. Andá a Programas y ponelo.',
     };
   }
 

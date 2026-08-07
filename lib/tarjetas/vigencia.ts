@@ -13,6 +13,47 @@ export interface OpcionesVigencia {
   cajeroUsuarioId?: string | null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// La vigencia con la que NACE un cupón
+// ─────────────────────────────────────────────────────────────────────────────
+// La 0018 lo definió así: `cupon_vigencia_dias` es "cuántos días vale DESDE QUE EL CLIENTE SE
+// REGISTRA". Nunca se había cableado: hasta este arreglo, `tarjetas.vigencia_hasta` quedaba en null
+// en el alta y `usar_cupon_atomico` deja pasar `vigencia_hasta is null` — o sea que una campaña de
+// 7 días era canjeable para siempre, y el número que el dueño escribía en Programas no hacía nada.
+//
+// Se fija AL EMITIR y no se recalcula nunca más: si el dueño cambia el plazo, las tarjetas ya
+// entregadas conservan la fecha con la que se prometieron. Un cupón que se acorta después de
+// entregado es una promesa rota al cliente que ya lo tiene.
+
+// AAAA-MM-DD + N días. Aritmética en UTC a propósito: el servidor de Vercel corre en UTC y la
+// máquina del dueño no, y `new Date('2026-08-07')` interpretado en huso local puede caer un día
+// antes. Acá no hay instantes, solo días de calendario.
+export function sumarDias(fechaIso: string, dias: number): string {
+  const [anio, mes, dia] = fechaIso.slice(0, 10).split('-').map(Number);
+  const base = new Date(Date.UTC(anio, mes - 1, dia));
+  base.setUTCDate(base.getUTCDate() + dias);
+  return base.toISOString().slice(0, 10);
+}
+
+// Qué fecha le toca a un cupón que se emite hoy. `null` (sin plazo configurado) ⇒ null, que es
+// "no vence nunca" y es una decisión válida del dueño.
+//
+// `hoy + dias` y no `hoy + dias - 1`: es la MISMA convención que ya usa renovar_membresia_atomico
+// (`greatest(vigencia_hasta, hoy) + v_dias`), y el día de gracia cae a favor del cliente — igual
+// criterio que el redondeo del cashback.
+export function vencimientoInicialCupon(hoyIso: string, dias: number | null): string | null {
+  if (dias === null || !Number.isInteger(dias) || dias <= 0) return null;
+  return sumarDias(hoyIso, dias);
+}
+
+// El "hoy" del comercio, no el del servidor. Un cupón emitido a las 7 de la tarde en El Salvador
+// ya es del día siguiente en UTC, y esa diferencia le regalaría o le quitaría un día entero.
+export function hoyEnZona(zonaHoraria: string | null): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: zonaHoraria || 'America/El_Salvador',
+  }).format(new Date());
+}
+
 export type ResultadoVigencia =
   | { ok: true; fecha: string | null; mensaje: string }
   | { ok: false; error: string };
@@ -97,9 +138,11 @@ export async function renovarMembresia(
   if (fila.estado === 'membresia_sin_configurar') {
     // Explícito a propósito: si el cajero cobra y después ve que la tarjeta no se movió, el
     // problema pasa a ser del cliente. Mejor frenarlo antes con el motivo real.
+    // "Programas" y no "Reglas": el campo se mudó de pantalla con la 0024 y el mensaje viejo mandaba
+    // al dueño a buscar algo que ahí ya no está.
     return {
       ok: false,
-      error: 'Todavía no configuraste cuántos días dura la membresía. Andá a Reglas y ponelo.',
+      error: 'Todavía no configuraste cuántos días dura la membresía. Andá a Programas y ponelo.',
     };
   }
   if (fila.estado === 'tarjeta_no_encontrada') {

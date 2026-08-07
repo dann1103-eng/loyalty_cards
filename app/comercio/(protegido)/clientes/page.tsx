@@ -3,7 +3,9 @@ import QRCode from 'qrcode';
 import { verifyComercioAcceso } from '@/lib/comercio/verifyComercioAcceso';
 import { createServiceClient } from '@/lib/supabase/server';
 import { listarProgramas } from '@/lib/comercio/programas';
-import { formatearSaldo } from '@/lib/portal/buscarTarjetas';
+import { describirFila, type NivelDeDescuento } from '@/lib/tarjetas/estadoTarjeta';
+import { hoyEnZona } from '@/lib/tarjetas/vigencia';
+import { listarNiveles } from '@/lib/tarjetas/descuento';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,19 +33,31 @@ export default async function PaginaClientes({
   const busqueda = (q ?? '').trim();
 
   const supabase = createServiceClient();
-  // sello_meta sigue siendo del comercio (lo edita Marca, no el programa — ver la nota en el
-  // escáner). El tipo, en cambio, sale del programa de CADA tarjeta desde la 0024: un comercio con
-  // más de un programa activo puede tener clientes de tipos distintos en la misma lista.
+  // El tipo Y la meta salen del programa de CADA tarjeta desde la 0024: un comercio con más de un
+  // programa activo puede tener clientes de tipos distintos —y con metas distintas— en la misma
+  // lista. Del comercio queda solo la zona horaria, que sí es del local.
   const [{ data: comercio }, programas, { data: tarjetas, error }] = await Promise.all([
-    supabase.from('comercios').select('sello_meta').eq('id', comercioId).maybeSingle(),
+    supabase.from('comercios').select('zona_horaria').eq('id', comercioId).maybeSingle(),
     listarProgramas(supabase, comercioId, { soloActivos: false }),
     supabase
+      // vigencia_hasta / usado_en / acumulado_centavos: sin ellas, esta lista le decía "0 puntos" al
+      // dueño en toda tarjeta de cupón, membresía o descuento — los tres tipos cuyo estado no es un
+      // número. Ver lib/tarjetas/estadoTarjeta.ts.
       .from('tarjetas')
-      .select('id, qr_token, puntos_actuales, created_at, programa_id, clientes(nombre, telefono)')
+      .select(
+        'id, qr_token, puntos_actuales, vigencia_hasta, usado_en, acumulado_centavos, created_at, programa_id, clientes(nombre, telefono)',
+      )
       .eq('comercio_id', comercioId)
       .order('created_at', { ascending: false }),
   ]);
-  const tipoPorPrograma = new Map((programas ?? []).map((p) => [p.id, p.tipoTarjeta]));
+  const programaPorId = new Map((programas ?? []).map((p) => [p.id, p]));
+
+  // Los niveles solo hacen falta si el comercio tiene un programa de descuento; casi ninguno lo usa.
+  let niveles: NivelDeDescuento[] = [];
+  if ((programas ?? []).some((p) => p.tipoTarjeta === 'descuento')) {
+    niveles = (await listarNiveles(supabase, comercioId)) ?? [];
+  }
+  const hoyIso = hoyEnZona(comercio?.zona_horaria ?? null);
 
   if (error) console.error('[comercio] falló la consulta de clientes:', error);
 
@@ -59,8 +73,10 @@ export default async function PaginaClientes({
     filtradas.map(async (t) => ({ ...t, qrDataUrl: await qrDeTarjeta(t.qr_token) })),
   );
 
-  const saldoTexto = (t: { puntos_actuales: number; programa_id: string }) =>
-    formatearSaldo(tipoPorPrograma.get(t.programa_id) ?? 'puntos', t.puntos_actuales, comercio?.sello_meta ?? null);
+  const saldoTexto = (t: Parameters<typeof describirFila>[0] & { programa_id: string }) => {
+    const p = programaPorId.get(t.programa_id);
+    return describirFila(t, p?.tipoTarjeta ?? 'puntos', p?.selloMeta ?? null, niveles, hoyIso);
+  };
 
   return (
     <main className="admin-main" style={{ maxWidth: 640 }}>

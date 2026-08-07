@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { acreditarPuntos, type OpcionesAcreditar } from '../comercio/acreditar';
+import { resolverProgramaDeTarjeta } from '../comercio/programas';
 
 // Prepago: el cliente compra un paquete de visitas y las va usando.
 //
@@ -70,19 +71,19 @@ export async function venderPaquete(
   tarjetaId: string,
   opciones?: OpcionesAcreditar,
 ): Promise<ResultadoPaquete> {
-  const { data: comercio } = await supabase
-    .from('comercios')
-    .select('multipass_visitas')
-    .eq('id', comercioId)
-    .maybeSingle();
-
-  const visitas = comercio?.multipass_visitas ?? null;
+  // Del PROGRAMA de la tarjeta, NUNCA de comercios.multipass_visitas. Esa columna quedó legada con
+  // la migración 0024 y hoy no la escribe nadie: la pantalla que edita este número es Programas, y
+  // guarda en programas_tarjeta. Leyendo la vieja, un comercio dado de alta después de la 0024 la
+  // tiene en null para siempre y vender un paquete SIEMPRE fallaba con "todavía no configuraste" —
+  // mandando además al dueño a Reglas, que ya no tiene ese campo. Ver lib/tarjetas/tiposFuncionales.test.ts.
+  const programa = await resolverProgramaDeTarjeta(supabase, comercioId, tarjetaId);
+  const visitas = programa?.multipassVisitas ?? null;
   if (!visitas || visitas <= 0) {
     // Explícito antes de cobrar: si el cajero cobra el paquete y después ve que la tarjeta no se
     // movió, el problema pasa a ser del cliente.
     return {
       ok: false,
-      error: 'Todavía no configuraste cuántas visitas trae el paquete. Andá a Reglas y ponelo.',
+      error: 'Todavía no configuraste cuántas visitas trae el paquete. Andá a Programas y ponelo.',
     };
   }
 

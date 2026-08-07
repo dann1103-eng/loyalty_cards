@@ -3,6 +3,9 @@ import type { Database } from '../supabase/types';
 import { normalizarTelefono } from '../clientes/normalizarTelefono';
 import { historialParaCliente, type MovimientoPortal } from './historialCliente';
 import { brandingEfectivo } from '../comercio/brandingEfectivo';
+import { describirFila, type NivelDeDescuento } from '../tarjetas/estadoTarjeta';
+import { hoyEnZona } from '../tarjetas/vigencia';
+import { listarNiveles } from '../tarjetas/descuento';
 
 export interface RecompensaPortal {
   nombre: string;
@@ -34,14 +37,14 @@ export interface ResultadoConsulta {
 }
 
 // El saldo se muestra como TEXTO en un solo lugar (spec §2, y §4.2 de la Fase 3: sin grilla
-// visual). Sellos: "N de M sellos" (o "N sellos" si el comercio no fijó meta). Puntos y cualquier
-// otro tipo: "N punto(s)".
-export function formatearSaldo(tipoTarjeta: string, puntos: number, selloMeta: number | null): string {
-  if (tipoTarjeta === 'sellos') {
-    return selloMeta != null ? `${puntos} de ${selloMeta} sellos` : `${puntos} sellos`;
-  }
-  return `${puntos} ${puntos === 1 ? 'punto' : 'puntos'}`;
-}
+// visual). Ese "un solo lugar" es `describirSaldo` (lib/tarjetas/tipos.ts), al que se llega por
+// `describirFila`.
+//
+// Acá vivía `formatearSaldo(tipo, puntos, selloMeta)`, que solo sabía de sellos y puntos y trataba
+// a los otros SEIS tipos como puntos: una gift card de $25.00 le decía "2500 puntos" al cliente, y
+// un cupón vencido, "0 puntos". Se retiró en vez de arreglarse porque el defecto estaba en su
+// FIRMA —sin la fecha de vigencia ni el acumulado no hay forma de describir cupón, membresía ni
+// descuento—, así que arreglarle el cuerpo habría dejado la trampa armada para el próximo llamador.
 
 // Busca al cliente por teléfono y arma sus tarjetas con el comercio (nombre, colores, tipo, saldo)
 // y las recompensas ACTIVAS de cada comercio. Solo lectura. Usa createServiceClient() (lo pasa el
@@ -86,7 +89,10 @@ export async function buscarTarjetasPorTelefono(
     // programas_tarjeta trae el tipo y la meta REALES (0024); las columnas homónimas de comercios
     // quedaron legadas. Sin este join, el portal le muestra al cliente su tarjeta de cupón como si
     // fuera de sellos — el mismo bug que tenían el pase de Apple y el objeto de Google.
-    .select('id, puntos_actuales, programas_tarjeta(tipo_tarjeta, sello_meta, branding_propio, color_fondo, color_texto, color_label), comercios(id, nombre, color_fondo, color_texto, color_label, tipo_tarjeta, sello_meta)')
+    // vigencia_hasta, usado_en y acumulado_centavos NO son opcionales: sin ellos, describirFila no
+    // puede distinguir un cupón vigente de uno vencido ni resolver el nivel de descuento, y el
+    // cliente vería "0 puntos" en los tres tipos que no tienen contador.
+    .select('id, puntos_actuales, vigencia_hasta, usado_en, acumulado_centavos, programas_tarjeta(tipo_tarjeta, sello_meta, branding_propio, color_fondo, color_texto, color_label), comercios(id, nombre, color_fondo, color_texto, color_label, tipo_tarjeta, sello_meta, zona_horaria)')
     .eq('cliente_id', cliente.id);
 
   if (errorTarjetas) {
@@ -135,11 +141,29 @@ export async function buscarTarjetasPorTelefono(
     ),
   );
 
+  // El tipo de cada tarjeta cuelga del PROGRAMA entero, con las columnas del comercio como fallback
+  // legado. Se resuelve una vez acá porque lo necesitan las dos cosas de abajo: saber a qué
+  // comercios pedirles los niveles, y describir el saldo.
+  const tipoDe = (t: (typeof filas)[number]) =>
+    t.programas_tarjeta ? t.programas_tarjeta.tipo_tarjeta : t.comercios!.tipo_tarjeta;
+
+  // Niveles de descuento, SOLO de los comercios que tengan una tarjeta de ese tipo: es una consulta
+  // por comercio y casi ninguno usa el tipo. Sin ellos, el portal le diría "Sin descuento todavía"
+  // a un cliente que sí llegó a un nivel.
+  const nivelesPorComercio = new Map<string, NivelDeDescuento[]>();
+  await Promise.all(
+    [...new Set(filas.filter((t) => tipoDe(t) === 'descuento').map((t) => t.comercios!.id))].map(
+      async (id) => {
+        nivelesPorComercio.set(id, (await listarNiveles(supabase, id)) ?? []);
+      },
+    ),
+  );
+
   const resultado: TarjetaPortal[] = filas.map((t) => {
     const c = t.comercios!;
     // Cuelga del PROGRAMA entero, no de cada campo (ver datosPassDeTarjeta.ts).
     const p = t.programas_tarjeta;
-    const tipoTarjeta = p ? p.tipo_tarjeta : c.tipo_tarjeta;
+    const tipoTarjeta = tipoDe(t);
     const selloMeta = p ? p.sello_meta : c.sello_meta;
     // Los colores SÍ heredan campo por campo (0027), a diferencia de tipo/meta. El portal solo
     // muestra los tres colores, así que se piden solo esos: las imágenes no se usan acá.
@@ -172,7 +196,15 @@ export async function buscarTarjetasPorTelefono(
       tipoTarjeta,
       puntosActuales: t.puntos_actuales,
       selloMeta,
-      saldoTexto: formatearSaldo(tipoTarjeta, t.puntos_actuales, selloMeta),
+      // La zona del COMERCIO y no la del servidor: "vence el 30" tiene que significar el 30 completo
+      // en el local, y en UTC un cupón moriría a las 6 de la tarde del día anterior.
+      saldoTexto: describirFila(
+        t,
+        tipoTarjeta,
+        selloMeta,
+        nivelesPorComercio.get(c.id) ?? [],
+        hoyEnZona(c.zona_horaria),
+      ),
       recompensas: recompensasPorComercio.get(c.id) ?? [],
       movimientos: movimientosPorTarjeta.get(t.id) ?? [],
     };

@@ -5,6 +5,7 @@ import { urlRegistroPrograma } from '@/lib/comercio/urlRegistroPrograma';
 import { createServiceClient } from '@/lib/supabase/server';
 import { TIPOS_TARJETA } from '@/lib/comercios/guardarComercio';
 import { reporteSucursales } from '@/lib/reportes/reportes';
+import { listarProgramas } from '@/lib/comercio/programas';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,9 +39,14 @@ export default async function PaginaPanel() {
   const supabase = createServiceClient();
   const { data: comercio } = await supabase
     .from('comercios')
-    .select('nombre, slug, tipo_tarjeta, sello_meta')
+    .select('nombre, slug, tipo_tarjeta')
     .eq('id', comercioId)
     .maybeSingle();
+
+  // El tipo y la meta que se anuncian acá salen del programa PRINCIPAL, no de las columnas legadas
+  // del comercio (0024): son las que de verdad rigen las tarjetas que el dueño tiene entregadas.
+  const programas = await listarProgramas(supabase, comercioId);
+  const principal = (programas ?? []).find((p) => p.esPrincipal) ?? null;
 
   // Métricas reales: cuántos clientes tienen tarjeta y cuánto saldo circulante hay.
   const { data: tarjetas, count } = await supabase
@@ -65,8 +71,9 @@ export default async function PaginaPanel() {
     };
   }
 
-  const tipo = TIPOS_TARJETA.find((t) => t.valor === comercio?.tipo_tarjeta);
-  const esSellos = comercio?.tipo_tarjeta === 'sellos';
+  const tipoValor = principal?.tipoTarjeta ?? comercio?.tipo_tarjeta;
+  const tipo = TIPOS_TARJETA.find((t) => t.valor === tipoValor);
+  const esSellos = tipoValor === 'sellos';
 
   // QR de registro: los clientes lo escanean en el local y crean su tarjeta.
   const urlRegistro = comercio?.slug
@@ -141,11 +148,11 @@ export default async function PaginaPanel() {
           <span className="pastilla pastilla-activo">Activo</span>
         </div>
         <p className="titulo-seccion" style={{ marginBottom: 4 }}>Tipo de tarjeta</p>
-        <p style={{ fontWeight: 600 }}>{tipo?.etiqueta ?? comercio?.tipo_tarjeta}</p>
+        <p style={{ fontWeight: 600 }}>{tipo?.etiqueta ?? tipoValor}</p>
         {tipo && (
           <p style={{ color: 'var(--texto-2)', fontSize: '0.9rem', marginTop: 4 }}>
             {tipo.descripcion}
-            {esSellos && comercio?.sello_meta ? ` Meta actual: ${comercio.sello_meta} sellos.` : ''}
+            {esSellos && principal?.selloMeta ? ` Meta actual: ${principal.selloMeta} sellos.` : ''}
           </p>
         )}
       </section>
