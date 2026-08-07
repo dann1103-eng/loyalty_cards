@@ -440,10 +440,14 @@ Quedó viejo tras el rediseño de la pantalla de Marca (branding por programa). 
 ### 4. Specs y planes escritos sin implementar
 - `specs/2026-07-30-estado-tarjetas-design.md` — eliminar/archivar/anular/anonimizar clientes.
   Revisado, 3 bloqueantes corregidos, **sin plan todavía**.
-- Del plan de tandas: **Tanda 2** (selector de país en el registro, exportar clientes a CSV — la
-  imagen por premio YA se implementó, `recompensas.foto_url` está viva) y **Tanda 4** (autogestión
-  de plan sin pasarela). Fuera de alcance permanente: Stripe (no acepta negocios de El Salvador) y
-  N1co (espera la personería jurídica).
+- ~~Del plan de tandas: **Tanda 2**~~ → **YA ESTABA HECHA**, verificado el 2026-08-07. Las tres
+  cosas existen y funcionan: la imagen por premio (`recompensas.foto_url`), el **selector de país**
+  (`lib/clientes/paises.ts` — 18 países con sus largos nacionales válidos, cableado en el registro,
+  el portal y las dos rutas de API, con 15 pruebas que cubren hasta los países que comparten código
+  de marcado) y **exportar clientes a CSV** (`/comercio/clientes/exportar`). Este documento decía
+  que estaban pendientes: estaba desactualizado.
+- Queda **Tanda 4** (autogestión de plan sin pasarela). Fuera de alcance permanente: Stripe (no
+  acepta negocios de El Salvador) y N1co (espera la personería jurídica).
 
 ### 5. QA manual que necesita al usuario
 - Que una **franja puesta encima del QR** no impida escanear el cartel impreso (el diseño lo
