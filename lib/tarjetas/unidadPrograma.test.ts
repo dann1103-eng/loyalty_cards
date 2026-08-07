@@ -12,10 +12,11 @@ import { unidadPrograma, unidadPara, describirCosto } from './unidadPrograma';
 
 describe('unidadPrograma', () => {
   it('cada tipo con contador entero tiene su propia palabra', () => {
-    expect(unidadPrograma('puntos')).toEqual({ singular: 'punto', plural: 'puntos' });
-    expect(unidadPrograma('sellos')).toEqual({ singular: 'sello', plural: 'sellos' });
+    expect(unidadPrograma('puntos')).toEqual({ singular: 'punto', plural: 'puntos', articulo: 'Los' });
+    expect(unidadPrograma('sellos')).toEqual({ singular: 'sello', plural: 'sellos', articulo: 'Los' });
     // La razón de ser del módulo: prepago cuenta VISITAS, no puntos.
-    expect(unidadPrograma('prepago')).toEqual({ singular: 'visita', plural: 'visitas' });
+        // 'visitas' es femenino: el articulo viaja con la palabra para que ningun texto escriba 'Los visitas'.
+    expect(unidadPrograma('prepago')).toEqual({ singular: 'visita', plural: 'visitas', articulo: 'Las' });
   });
 
   it('los tipos cuyo contador es DINERO no tienen unidad contable', () => {
@@ -35,7 +36,7 @@ describe('unidadPrograma', () => {
   it('un tipo desconocido se degrada a puntos, no revienta', () => {
     // Misma política que tipoOPuntos: una fila vieja o un valor escrito a mano no debe dejar una
     // pantalla sin dibujar.
-    expect(unidadPrograma('lo-que-sea')).toEqual({ singular: 'punto', plural: 'puntos' });
+    expect(unidadPrograma('lo-que-sea')).toEqual({ singular: 'punto', plural: 'puntos', articulo: 'Los' });
   });
 
   it('TODO tipo del catálogo tiene una respuesta definida', () => {

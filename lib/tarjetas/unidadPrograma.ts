@@ -19,6 +19,11 @@ import { tipoOPuntos, formatearCentavos } from './tipos';
 export interface Unidad {
   singular: string;
   plural: string;
+  // El artículo definido plural que le corresponde. Vive acá porque el género es una propiedad de
+  // la PALABRA, no de quien la usa: sin esto, cada texto que arme una frase con la unidad tiene que
+  // acordarse de que "visitas" es femenino, y el que se olvide escribe "Los visitas" en la tarjeta
+  // de un cliente. La unidad novena que se agregue trae su artículo de fábrica.
+  articulo: 'Los' | 'Las';
 }
 
 // Solo los tipos cuyo contador son ENTEROS tienen una unidad que nombrar. Los demás devuelven null
@@ -29,10 +34,10 @@ export interface Unidad {
 //     nivel, y "0 puntos" no significa nada para el cliente.
 // El null obliga al llamador a resolverlo bien en vez de recibir una palabra inventada.
 const UNIDADES: Record<string, Unidad> = {
-  puntos: { singular: 'punto', plural: 'puntos' },
-  sellos: { singular: 'sello', plural: 'sellos' },
+  puntos: { singular: 'punto', plural: 'puntos', articulo: 'Los' },
+  sellos: { singular: 'sello', plural: 'sellos', articulo: 'Los' },
   // La razón de ser del módulo: prepago cuenta VISITAS.
-  prepago: { singular: 'visita', plural: 'visitas' },
+  prepago: { singular: 'visita', plural: 'visitas', articulo: 'Las' },
 };
 
 export function unidadPrograma(tipoTarjeta: string): Unidad | null {

@@ -261,9 +261,11 @@ export default async function PaginaBranding({
           lo mismo que ya vive acá —cómo se ve y qué dice tu tarjeta— y el nav inferior no tiene
           espacio para otra entrada. Las columnas nulas entran como '' porque los campos son
           controlados: un value={null} le pide a React cambiar de no-controlado a controlado. */}
+      {/* `tipoTarjeta` y no un booleano `esSellos`: el borrador de términos cambia para los OCHO
+          tipos, no solo entre sellos y "todo lo demás" — ver lib/comercio/borradorTerminos.ts. */}
       <FormularioReverso
         nombreComercio={c.nombre}
-        esSellos={esSellos}
+        tipoTarjeta={programaDeReferencia?.tipoTarjeta ?? c.tipo_tarjeta ?? 'puntos'}
         programaId={seleccionado?.id ?? null}
         nombreTarjeta={nombreTarjeta}
         inicial={

@@ -8,6 +8,7 @@ import {
   accionUsarReversoDelNegocio,
   type EstadoBranding,
 } from './actions';
+import { borradorTerminos } from '@/lib/comercio/borradorTerminos';
 
 type ClaveEnlace = 'red_instagram' | 'red_facebook' | 'red_whatsapp' | 'sitio_web';
 type ClaveTexto = ClaveEnlace | 'terminos_uso';
@@ -22,7 +23,7 @@ type TextosReverso = {
 
 type Props = {
   nombreComercio: string;
-  esSellos: boolean;
+  tipoTarjeta: string;
   /* null = reverso del NEGOCIO (el que heredan todas las tarjetas). Con id, el de esa tarjeta. */
   programaId: string | null;
   nombreTarjeta: string;
@@ -53,20 +54,11 @@ const CAMPOS_ENLACE: { campo: ClaveEnlace; etiqueta: string; ejemplo: string; ay
   { campo: 'sitio_web', etiqueta: 'Sitio web', ejemplo: 'https://tunegocio.com' },
 ];
 
-/* Texto literal del spec §8.2. Vive acá tal cual y no "a criterio del implementador" porque es texto
-   cuasi-legal que termina en la tarjeta de cada cliente. Deliberadamente NO repite cómo se ganan
-   {unidad} ni qué se canjea: de eso ya se encarga la sección automática, y duplicarlo es justo lo
-   que se desactualiza. */
-function borradorTerminos(unidad: string, comercio: string): string {
-  return [
-    `1. Los ${unidad} no tienen valor monetario y no se canjean por efectivo.`,
-    `2. Los ${unidad} no vencen.`,
-    '3. La tarjeta es personal: no se transfiere ni se combina con otras.',
-    '4. Las recompensas están sujetas a disponibilidad.',
-    '5. No acumulable con otras promociones.',
-    `6. ${comercio} puede modificar o terminar el programa avisando en el local.`,
-  ].join('\n');
-}
+/* El borrador de terminos VIVE en lib/comercio/borradorTerminos.ts, con su prueba: es texto
+   cuasi-legal que termina en la tarjeta de cada cliente y cambia segun el tipo de programa. Aca
+   habia una copia con 'esSellos ? sellos : puntos' adentro, que a un comercio de gift card le
+   proponia escribir "Los puntos no tienen valor monetario" -falso, el saldo ES plata- y a uno de
+   cupon "no vencen", cuando vence por diseno. */
 
 /* El tri-estado del <select>, de ida. La conversión de vuelta (formulario → base) vive en
    lib/comercio/guardarReversoPrograma.ts, que es donde se puede probar. */
@@ -77,7 +69,7 @@ function valorSeccion(mostrar: boolean | null): string {
 
 export default function FormularioReverso({
   nombreComercio,
-  esSellos,
+  tipoTarjeta,
   programaId,
   nombreTarjeta,
   inicial,
@@ -126,7 +118,7 @@ export default function FormularioReverso({
     (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setValores((v) => ({ ...v, [campo]: e.target.value }));
 
-  const unidad = esSellos ? 'sellos' : 'puntos';
+
 
   // El borrador se inserta con un BOTÓN y NUNCA como defaultValue del textarea (spec §8.1):
   // precargado, el dueño que solo venía a cargar su Instagram aprieta Guardar, el borrador viaja en
@@ -141,7 +133,7 @@ export default function FormularioReverso({
     ) {
       return;
     }
-    setValores((v) => ({ ...v, terminos_uso: borradorTerminos(unidad, nombreComercio) }));
+    setValores((v) => ({ ...v, terminos_uso: borradorTerminos(tipoTarjeta, nombreComercio) }));
   };
 
   // globals.css estiliza `.field input` y `.field select`, pero no tiene regla para textarea y este
