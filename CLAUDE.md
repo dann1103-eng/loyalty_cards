@@ -3,7 +3,8 @@
 # FM Lealtad — acuerdos de trabajo del proyecto
 
 **Estado y plan para continuar:** leé `docs/superpowers/ESTADO-Y-PLAN-2026-07-28.md` al empezar —
-dice qué está hecho, qué falta y en qué orden. Los planes viven en `docs/superpowers/plans/`.
+dice qué está hecho, qué falta y en qué orden (la última sección es la más reciente; el nombre del
+archivo quedó con la fecha del día que nació). Los planes viven en `docs/superpowers/plans/`.
 
 El usuario (Daniel, socio de FM Communications, El Salvador) programa esto él mismo con Claude Code y
 **codifica en español** — comentarios e identificadores en español, siempre.
@@ -24,6 +25,21 @@ El usuario (Daniel, socio de FM Communications, El Salvador) programa esto él m
   en la sesión del 2026-07-25 (un `Glob` con falso negativo, un comentario de mutation-testing que
   ya no describía qué prueba atrapaba la mutación) — en ambos casos la verificación directa fue lo
   que evitó aplicar una corrección mal fundada o dejar pasar una mala.
+- **Un reemplazo "en todos los sitios de llamada" asume que todos hacen lo mismo, y casi nunca es
+  cierto.** El 2026-08-02, arreglar el centrado del QR (la tarjeta blanca mide el QR más su margen,
+  no el QR) se aplicó por `grep` a los cuatro `qrX` de `plantillas.ts` — pero `plantillaFoto` NO usa
+  `tarjetaBlancaConQr`: dibuja su propia tarjeta y ahí `qrX` posiciona el QR pelado. Quedó
+  descentrada, y las pruebas siguieron verdes porque medían la TARJETA (que sí estaba centrada) y no
+  el QR. La regla: antes de aplicar el mismo cambio a N sitios, verificá que los N consuman de veras
+  lo que estás corrigiendo, y hacé que la prueba mida **la cosa que le importa al usuario** (el QR),
+  no un intermediario.
+- **No hay pruebas de componentes en este repo** (cero `.test.tsx`, `environment: 'node'`). Para una
+  interfaz nueva: sacá la aritmética a un módulo puro, probala con mutación (así se hizo con
+  `lib/comercio/cartel/arrastre.ts`), y verificá el pegamento con el DOM **midiendo en el navegador**
+  — una página suelta en `public/` con el mismo markup y CSS, y `getBoundingClientRect` /
+  `elementsFromPoint` vía `javascript_tool`. No es ceremonia: así se encontró que la manija de una
+  franja sepultaba la de un texto agregado antes, cosa que ningún razonamiento había anticipado.
+  Borrá la página de `public/` al terminar.
 - **Los subagentes arrancan en un git worktree de infraestructura de la sesión, ajeno a este
   proyecto** (rama `claude/<random>`, historia de otra feature). No es un error del subagente ni
   algo que "arreglar" — es el entorno de la sesión. Todo dispatch de subagente que toque este repo
@@ -44,6 +60,19 @@ El usuario (Daniel, socio de FM Communications, El Salvador) programa esto él m
   `lib/comercios/cuentas.ts` son la ÚNICA defensa del resto.
 - **`clientes.telefono` se guarda SIEMPRE canónico** (`normalizarTelefono` → `+503…`). Toda búsqueda por
   teléfono DEBE normalizar primero (en try/catch) o nunca matchea.
+- **Una columna aditiva que entra al payload de escritura rompe TODO el guardado, no solo lo nuevo.**
+  Agregar `elementos` al `update`/`insert` del cartel (0030) hizo que sin la migración fallaran
+  también los colores y los textos que ya funcionaban. Por eso: **migración primero, deploy después**,
+  siempre; y no pushees mientras la suite esté roja "solo por la migración" — esa suite roja es la
+  medida exacta de lo que se rompería en producción.
+- **Columna `jsonb` → `type` y no `interface` en TypeScript.** TS le da índice implícito a un alias de
+  tipo pero no a una interfaz, así que una interfaz no es asignable a `Json` aunque estructuralmente
+  lo sea, y guardarla exigiría un `as unknown as Json` — un cast que apaga al compilador justo en el
+  borde donde se escribe a la base (ver `lib/comercio/cartel/elementos.ts`).
+- **Lo que sale de un `jsonb` es dato hostil.** El CHECK barato de la base (que sea lista, acotada) no
+  alcanza: la defensa real es una función de saneo en TS que corre **al leer Y al guardar**, y que
+  DESCARTA el elemento ilegible en vez de arreglarlo. Inventarle un color a algo que se interpola
+  crudo dentro de un SVG es la vía de inyección.
 
 ## Next.js (esta versión tiene cambios de ruptura — ver AGENTS.md)
 - `app/admin/layout.tsx` y `app/comercio/layout.tsx` **NUNCA deben existir** — un route group no saca una
@@ -53,6 +82,11 @@ El usuario (Daniel, socio de FM Communications, El Salvador) programa esto él m
   FUERA de cualquier try/catch, o desactivás el gate.
 - **No inicies dev server** en subagentes (deja el puerto 3000 secuestrado). Verificación visual: el
   controlador con las herramientas de navegador, o el usuario.
+- **`preview_start` levanta el dev server en el WORKTREE de la sesión, no en el checkout principal.**
+  O sea: sirve el código de la rama `claude/<random>`, sin ninguno de los cambios que acabás de
+  hacer, y un archivo puesto en el `public/` del checkout principal da 404. Si necesitás servir algo
+  para verificar, copialo al `public/` DEL WORKTREE. Y no confíes en esa vista previa para revisar
+  una pantalla que acabás de tocar: no es tu código el que corre.
 
 ## Wallets (Apple + Google)
 - **El dominio de producción es `www.cardly-sv.site`.** NUNCA pongas un redirect entre el apex

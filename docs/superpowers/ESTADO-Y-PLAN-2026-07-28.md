@@ -371,3 +371,82 @@ clase `<emisor>.prueba_mover_clase_2026_07_30` quedó para siempre.
   clientes. Revisado, con 3 bloqueantes ya corregidos. **Sin plan todavía.**
 - `docs/superpowers/plans/2026-07-30-editor-cartel-qr.md` — QR imprimibles. Plan escrito, nunca
   implementado.
+
+---
+
+# Sesión del 2026-08-02 al 08-07 — cartel/QR imprimible, y qué queda
+
+> Corrige la sección anterior: el plan `2026-07-30-editor-cartel-qr.md` **sí se implementó** y está
+> en producción. Suite: **977 verdes en 97 archivos** (eran 415 cuando nació este documento).
+
+## En producción
+
+**Editor de cartel/QR por programa** (`/comercio/programas/<id>/cartel`, migración 0028). Tres
+plantillas × dos formatos (sticker 10×10 cm, mostrador A5), vista previa en vivo con la MISMA
+función que exporta, y descarga en PNG a 300 dpi y PDF.
+
+Lo que no es obvio y costó encontrar:
+- **El texto se convierte a CONTORNOS al exportar** (`textoInter.ts`). El runtime de Vercel no tiene
+  ninguna fuente y `@font-face` NO funciona en librsvg 2.61.2 — está medido contando píxeles con
+  cuatro MIME distintos, no supuesto. Un `<text>` ahí sale como un cuadradito por letra, sin error.
+  Por eso `construirCartelSvg` exige el dibujante como parámetro obligatorio: un default volvería a
+  los cuadraditos en silencio.
+- **`opentype.js` 2.0.0 está roto**; el repo está clavado en 1.3.4.
+- El QR estaba **descentrado un 4.6% del ancho** en las tres plantillas que lo centran: la tarjeta
+  blanca mide el QR más un margen del 12% a cada lado, y se restaba medio lado del QR. Arreglado con
+  `ladoTarjetaQr()`. Ver la regla nueva en CLAUDE.md sobre reemplazos "en todos los sitios".
+
+**Elementos libres del cartel** (migración 0030): hasta 12 textos y franjas de color por coordenada,
+en PORCENTAJES del lienzo (el formato se elige AL DESCARGAR, después de colocarlos). Se arrastran
+sobre la vista previa o se mueven con deslizadores y flechas. Las franjas se dibujan DEBAJO de la
+tarjeta blanca del QR: una franja no puede matar el código, pase lo que pase.
+
+**Frase del cartel por tipo de tarjeta** (`ctaSugerido.ts`): sellos → "Acumulá sellos y ganá",
+cashback → "Acumulá saldo con tus compras", y así los ocho. Es solo el valor inicial; una frase ya
+guardada gana siempre. El tipo sale del PROGRAMA, no de `comercios`.
+
+**Otras correcciones de producción de estas sesiones:** geopush en Android; `TEXT_AND_NOTIFY` en
+Google (`TEXT` devolvía éxito y no notificaba a nadie); `merchantLocations` en el objeto además de
+la clase; conteo honesto de "tarjetas alcanzadas" (usaba éxitos de API, ahora `hasUsers`); 519
+objetos huérfanos limpiados; branding y reverso POR PROGRAMA (0027/0029), con clase de Google propia
+y creación perezosa; y la vista previa de Marca que inventaba una meta de sellos inexistente.
+
+## PENDIENTES — lo que sigue
+
+### 1. Contracción de `comercios.tipo_tarjeta` — es un bug vivo, no solo deuda
+La 0024 movió el tipo a `programas_tarjeta`, pero la columna vieja sigue existiendo Y siendo leída
+(`lib/apple/datosPassDeTarjeta.ts`, `lib/google/syncObjeto.ts`, `lib/google/linkGuardar.ts`,
+`lib/comercio/programas.ts`, `app/admin/(protegido)/comercios/[id]/clientes/page.tsx`).
+
+El daño concreto, verificado en el código: `app/comercio/(protegido)/branding/page.tsx:94` decide
+`esSellos` con `c.tipo_tarjeta` cuando no hay programa seleccionado, mientras `guardarBranding.ts:83`
+escribe `sello_meta` en el **programa principal**. Si el panel de FM cambia el tipo del comercio sin
+propagarlo, Marca esconde el campo de meta y **el siguiente guardado le borra la meta al principal**
+— la grilla de sellos desaparece de los pases sin que nadie toque nada.
+
+Orden sugerido: propagar/leer siempre del programa en esos cinco lugares, y recién después la
+migración de contracción que retira la columna.
+
+### 2. `e2e/owner-branding.spec.ts` está desactualizado
+Quedó viejo tras el rediseño de la pantalla de Marca (branding por programa). No corre en `npm test`
+(Vitest excluye `e2e/**`), así que no rompe nada — pero tampoco protege nada.
+
+### 3. Decisiones de producto que el usuario tiene que tomar
+- **El cupón no tiene campo de valor.** Solo vigencia; qué ofrece vive en el texto del pase y el
+  sistema no lo entiende. No hay columna `cupon_valor` — verificado.
+- **Ergonomía del arrastre en el cartel:** el punto de agarre de un texto mide 32 px y la vista
+  previa 260. Si en el teléfono se siente incómodo, los dos son un número.
+
+### 4. Specs y planes escritos sin implementar
+- `specs/2026-07-30-estado-tarjetas-design.md` — eliminar/archivar/anular/anonimizar clientes.
+  Revisado, 3 bloqueantes corregidos, **sin plan todavía**.
+- Del plan de tandas: **Tanda 2** (selector de país en el registro, exportar clientes a CSV — la
+  imagen por premio YA se implementó, `recompensas.foto_url` está viva) y **Tanda 4** (autogestión
+  de plan sin pasarela). Fuera de alcance permanente: Stripe (no acepta negocios de El Salvador) y
+  N1co (espera la personería jurídica).
+
+### 5. QA manual que necesita al usuario
+- Que una **franja puesta encima del QR** no impida escanear el cartel impreso (el diseño lo
+  garantiza; falta la prueba con papel y teléfono).
+- Confirmar en un **iPhone** que la campaña se lee en la pantalla de bloqueo.
+- `curl -i https://www.cardly-sv.site/api/cron/inactividad` → debe dar `401`, no `500`.
