@@ -161,6 +161,68 @@ export async function crearComercio(
 // passes ya emitidos, cuyo código de barras es tarjetas.qr_token, no el slug. Por eso el
 // formulario de la Tarea 9 debe pedir confirmación explícita al cambiar el slug de un comercio
 // que ya existe.
+// Lleva el tipo que eligió FM al programa PRINCIPAL, que es el que rige de verdad desde la 0024.
+//
+// ══ POR QUÉ SE NIEGA CUANDO YA HAY TARJETAS ══
+// `tarjetas.puntos_actuales` es un contador universal cuyo SIGNIFICADO depende del tipo: en sellos
+// son sellos, en gift card y cashback son CENTAVOS. Cambiarle el tipo a un programa con tarjetas
+// vivas convierte el saldo de cada cliente en otra cosa sin tocar un solo número — los $12.50 de
+// alguien pasan a ser 1250 sellos. Por eso `guardarConfiguracionPrograma` tampoco deja cambiar el
+// tipo, y acá se sostiene la misma regla en vez de abrirle una puerta lateral desde el panel de FM.
+//
+// Un comercio SIN tarjetas emitidas sí puede cambiar de tipo: no hay ningún saldo que reinterpretar,
+// y es el caso real (FM lo dio de alta con el tipo equivocado y lo corrige antes de entregarlo).
+async function propagarTipoAlProgramaPrincipal(
+  supabase: SupabaseClient<Database>,
+  comercioId: string,
+  tipoTarjeta: string,
+): Promise<ResultadoGuardar> {
+  const { data: principal, error: eLeer } = await supabase
+    .from('programas_tarjeta')
+    .select('id, tipo_tarjeta')
+    .eq('comercio_id', comercioId)
+    .eq('es_principal', true)
+    .maybeSingle();
+  if (eLeer) {
+    // Falla CERRADO: sin saber qué tiene el programa no se puede decidir si el cambio es seguro.
+    console.error('[fm] no se pudo leer el programa principal para propagar el tipo:', eLeer);
+    return { ok: false, error: 'No se pudo actualizar el comercio.' };
+  }
+  // Comercio legado sin programa principal (no debería existir desde la 0025): no hay nada que
+  // propagar y no se le niega el resto de la edición por eso.
+  if (!principal) return { ok: true, id: comercioId };
+  if (principal.tipo_tarjeta === tipoTarjeta) return { ok: true, id: comercioId };
+
+  const { count, error: eContar } = await supabase
+    .from('tarjetas')
+    .select('id', { count: 'exact', head: true })
+    .eq('programa_id', principal.id);
+  if (eContar) {
+    console.error('[fm] no se pudo contar las tarjetas del programa principal:', eContar);
+    return { ok: false, error: 'No se pudo actualizar el comercio.' };
+  }
+  const emitidas = count ?? 0;
+  if (emitidas > 0) {
+    return {
+      ok: false,
+      error:
+        `No se puede cambiar el tipo: el programa principal ya tiene ${emitidas} ` +
+        `${emitidas === 1 ? 'tarjeta' : 'tarjetas'} de clientes, y el saldo de cada una significa ` +
+        'otra cosa según el tipo. Creá un programa nuevo con el tipo que querés.',
+    };
+  }
+
+  const { error } = await supabase
+    .from('programas_tarjeta')
+    .update({ tipo_tarjeta: tipoTarjeta })
+    .eq('id', principal.id);
+  if (error) {
+    console.error('[fm] no se pudo propagar el tipo al programa principal:', error);
+    return { ok: false, error: 'No se pudo actualizar el comercio.' };
+  }
+  return { ok: true, id: comercioId };
+}
+
 export async function actualizarComercio(
   supabase: SupabaseClient<Database>,
   id: string,
@@ -201,6 +263,17 @@ export async function actualizarComercio(
     });
     if (!limite.ok) return { ok: false, error: limite.error };
   }
+
+  // ── El tipo de tarjeta tiene que llegar al PROGRAMA, o el guardado miente ────────────────────
+  // Desde la 0024, el tipo que rige de verdad —el que dibuja el pase, el que el escáner usa para
+  // elegir la operación, el que leen los reportes— vive en `programas_tarjeta`. Esta función
+  // escribía SOLO la columna de `comercios`, así que FM cambiaba el tipo, veía el valor nuevo
+  // guardado, y para el comercio no cambiaba absolutamente nada.
+  //
+  // Se verifica ANTES del update del comercio: si el cambio no se puede propagar, tampoco se
+  // escribe la columna legada, y así las dos tablas no quedan diciendo cosas distintas.
+  const cambio = await propagarTipoAlProgramaPrincipal(supabase, id, limpios.tipo_tarjeta);
+  if (!cambio.ok) return cambio;
 
   const { error } = await supabase
     .from('comercios')

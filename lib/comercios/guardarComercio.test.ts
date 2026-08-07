@@ -301,6 +301,65 @@ describe('actualizarComercio', () => {
   });
 });
 
+describe('el tipo de tarjeta que edita FM llega al PROGRAMA', () => {
+  // Desde la 0024 el tipo que rige de verdad —el que dibuja el pase, el que el escáner usa para
+  // elegir la operación y el que los reportes leen— vive en `programas_tarjeta`, no en `comercios`.
+  //
+  // `actualizarComercio` escribía SOLO la columna del comercio. O sea que FM cambiaba el tipo en su
+  // panel, veía el tipo nuevo guardado, y para el comercio no cambiaba absolutamente nada. Un
+  // "guardado" que miente y que nadie tiene cómo diagnosticar.
+
+  it('propaga el tipo nuevo al programa principal', async () => {
+    const slug = `test-tipo-propaga-${Date.now()}`;
+    const datos = await datosValidos(slug);
+    const creado = await crearComercio(supabase, datos);
+    if (!creado.ok) throw new Error('el setup falló');
+
+    const res = await actualizarComercio(supabase, creado.id, { ...datos, tipo_tarjeta: 'sellos' });
+
+    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    const { data: principal } = await supabase
+      .from('programas_tarjeta')
+      .select('tipo_tarjeta')
+      .eq('comercio_id', creado.id)
+      .eq('es_principal', true)
+      .single();
+    expect(principal!.tipo_tarjeta, 'el tipo se guardó en comercios pero no llegó al programa').toBe('sellos');
+  });
+
+  it('NO cambia el tipo de un programa que ya tiene tarjetas emitidas', async () => {
+    // La otra mitad, y es la que importa: `puntos_actuales` es un contador universal cuyo
+    // significado depende del tipo. Cambiar de 'cashback' a 'sellos' con tarjetas vivas convierte
+    // los centavos de cada cliente en sellos — $12.50 pasa a ser 1250 sellos. Por eso
+    // guardarConfiguracionPrograma tampoco deja cambiar el tipo, y acá se respeta lo mismo.
+    const slug = `test-tipo-con-tarjetas-${Date.now()}`;
+    const datos = await datosValidos(slug);
+    const creado = await crearComercio(supabase, { ...datos, tipo_tarjeta: 'cashback' });
+    if (!creado.ok) throw new Error('el setup falló');
+
+    const { data: principal } = await supabase
+      .from('programas_tarjeta').select('id').eq('comercio_id', creado.id).eq('es_principal', true).single();
+    const { data: cliente } = await supabase
+      .from('clientes')
+      .insert({ nombre: 'Cliente Test', telefono: `+503${String(Date.now()).slice(-8)}` })
+      .select('id').single();
+    clientesDePrueba.push(cliente!.id);
+    const { data: tarjeta } = await supabase
+      .from('tarjetas')
+      .insert({ cliente_id: cliente!.id, comercio_id: creado.id, programa_id: principal!.id, puntos_actuales: 1250 })
+      .select('id').single();
+    tarjetasDePrueba.push(tarjeta!.id);
+
+    const res = await actualizarComercio(supabase, creado.id, { ...datos, tipo_tarjeta: 'sellos' });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain('tarjeta');
+    const { data: despues } = await supabase
+      .from('programas_tarjeta').select('tipo_tarjeta').eq('id', principal!.id).single();
+    expect(despues!.tipo_tarjeta, 'le cambió el tipo a un programa con saldos vivos').toBe('cashback');
+  });
+});
+
 describe('sucursal principal en el alta (0012)', () => {
   it('mover un comercio a otra cuenta NO cuenta su principal (gemelo del de asignarComercioACuenta)', async () => {
     // actualizarComercio tiene SU PROPIO conteo de sucursales propias — el .eq('es_principal',
