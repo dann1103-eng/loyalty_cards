@@ -5,6 +5,8 @@ import { reporteCajeros } from '@/lib/reportes/reportes';
 import { resolverRangoFechas, rangoUltimosDias } from '@/lib/reportes/rangoFechas';
 import { ZONA_HORARIA_DEFAULT, etiquetaZonaHoraria } from '@/lib/comercio/zonasHorarias';
 import { listarCajeros } from '@/lib/comercio/cajeros';
+import { listarProgramas } from '@/lib/comercio/programas';
+import { unidadPrograma, describirCosto } from '@/lib/tarjetas/unidadPrograma';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,11 +29,20 @@ export default async function PaginaReporteCajeros({
 
   const { data: comercio } = await supabase
     .from('comercios')
-    .select('tipo_tarjeta, zona_horaria, pedir_monto_compra')
+    .select('zona_horaria, pedir_monto_compra')
     .eq('id', comercioId)
     .maybeSingle();
   const zona = comercio?.zona_horaria ?? ZONA_HORARIA_DEFAULT;
-  const esSellos = comercio?.tipo_tarjeta === 'sellos';
+
+  // El tipo sale del programa PRINCIPAL, no de `comercios.tipo_tarjeta` (legada desde la 0024).
+  //
+  // Y no es cosmetico: `puntos_otorgados` es el MISMO contador universal que puntos_actuales, asi
+  // que en un comercio de cashback o gift card son CENTAVOS. Diciendo "1250 puntos" sobre $12.50, la
+  // pantalla que existe para detectar a un cajero que regala cosas le muestra al dueno un numero en
+  // la unidad equivocada — justo donde tiene que juzgar si algo esta mal.
+  const programas = await listarProgramas(supabase, comercioId);
+  const tipoPrincipal = (programas ?? []).find((p) => p.esPrincipal)?.tipoTarjeta ?? 'puntos';
+  const unidad = unidadPrograma(tipoPrincipal);
 
   // Sin filtro explícito, los últimos 30 días en la zona del comercio.
   const pedido = resolverRangoFechas(desdeCrudo, hastaCrudo);
@@ -52,7 +63,6 @@ export default async function PaginaReporteCajeros({
 
   const totalForzadas = (filas ?? []).reduce((suma, f) => suma + f.forzadas, 0);
   const totalAjustes = (filas ?? []).reduce((suma, f) => suma + f.ajustes, 0);
-  const unidad = esSellos ? 'sellos' : 'puntos';
 
   return (
     <main className="admin-main" style={{ maxWidth: 900 }}>
@@ -111,18 +121,22 @@ export default async function PaginaReporteCajeros({
                     </div>
                     <div className="admin-fila-slug">
                       <span className="dato-mono">{f.acreditaciones}</span> acreditaciones ·{' '}
-                      <span className="dato-mono">{f.puntos_otorgados}</span> {unidad} ·{' '}
+                      <span className="dato-mono">{describirCosto(tipoPrincipal, f.puntos_otorgados)}</span> ·{' '}
                       <span className="dato-mono">{f.clientes_unicos}</span> clientes ·{' '}
                       <span className="dato-mono">{f.canjes}</span> canjes
                     </div>
                     {comercio?.pedir_monto_compra && (
                       <div className="admin-fila-slug">
                         Vendió <span className="dato-mono">${Number(f.monto_total).toFixed(2)}</span>
-                        {f.puntos_otorgados > 0 && (
+                        {/* "cuánto vendió por cada sello" solo tiene sentido donde la unidad es una
+                            COSA que se cuenta. En cashback y gift card el contador son centavos, y
+                            dividir dólares vendidos entre centavos devueltos da un número que no
+                            significa nada — peor que no mostrarlo, porque parece un dato. */}
+                        {unidad && f.puntos_otorgados > 0 && (
                           <>
                             {' '}· <span className="dato-mono">
                               ${(Number(f.monto_total) / f.puntos_otorgados).toFixed(2)}
-                            </span> por {esSellos ? 'sello' : 'punto'}
+                            </span> por {unidad.singular}
                           </>
                         )}
                       </div>

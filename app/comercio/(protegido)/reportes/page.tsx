@@ -9,6 +9,8 @@ import {
   type FilaReporteSucursal,
 } from '@/lib/reportes/reportes';
 import { sumarTendencias, fusionarTopClientes, resolverFiltrosReportes } from '@/lib/reportes/agregados';
+import { listarProgramas } from '@/lib/comercio/programas';
+import { describirCosto } from '@/lib/tarjetas/unidadPrograma';
 
 export const dynamic = 'force-dynamic';
 
@@ -110,6 +112,19 @@ export default async function PaginaReportes({
     ? datos[0].sucursales.filter((f) => f.sucursal_id === sucursalFiltrada.id)
     : datos.flatMap((d) => d.sucursales);
   const totalVisitas = filasVisibles.reduce((suma, f) => suma + f.acreditaciones, 0);
+
+  // El tipo de CADA comercio del alcance, no uno solo: esta pantalla agrega el conglomerado del
+  // dueno y cada negocio puede tener un tipo distinto. Se usa para decir los acumulados en la unidad
+  // correcta — en cashback y gift card el contador son CENTAVOS, y un "1250 pts" sobre $12.50 le
+  // hace leer mal su negocio.
+  const tipoPorComercio = new Map<string, string>(
+    await Promise.all(
+      alcance.map(async (c): Promise<[string, string]> => {
+        const suyos = await listarProgramas(supabase, c.comercioId);
+        return [c.comercioId, (suyos ?? []).find((p) => p.esPrincipal)?.tipoTarjeta ?? 'puntos'];
+      }),
+    ),
+  );
   const totalPremios = filasVisibles.reduce((suma, f) => suma + f.canjes, 0);
 
   const tendencia = sucursalFiltrada ? [] : sumarTendencias(datos.map((d) => d.tendencia));
@@ -201,7 +216,7 @@ export default async function PaginaReportes({
           </div>
           <div>
             <div className="metric-valor">{totalVisitas}</div>
-            <div className="metric-sub">sellos/puntos otorgados</div>
+            <div className="metric-sub">veces que le sumaste a un cliente</div>
           </div>
         </div>
         <div className="metric-carta menta">
@@ -335,7 +350,7 @@ export default async function PaginaReportes({
                         </div>
                       </div>
                     </div>
-                    <span className="admin-fila-slug dato-mono">{c.puntos_totales} pts</span>
+                    <span className="admin-fila-slug dato-mono">{describirCosto(tipoPorComercio.get(c.comercio_id) ?? 'puntos', c.puntos_totales)}</span>
                   </div>
                 ))}
               </div>
