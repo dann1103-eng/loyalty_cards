@@ -58,8 +58,9 @@ entidad. Eso desbloquea hoy la mayor parte del pedido en vez de dejarlo todo esp
 - **B — Tutorial guiado en el panel. ✅ HECHA.** Ver abajo.
 - **C — Simplificación de interfaces** (la vara: una persona de 50 años, sin ayuda). ✅ HECHA — las
   cinco pantallas (reglas, recompensas, sucursales, escáner y marca). Ver abajo.
-- **D — Puntos por delivery.** Es DISEÑO antes que código: hay que elegir entre QR impreso en el
-  ticket del POS, QR en impresora térmica aparte, y alta por teléfono. Ver abajo.
+- **D — Puntos por delivery.** Spec escrito: `specs/2026-08-07-puntos-por-delivery-design.md`.
+  Resultado del diseño: **son DOS features, no una**, y la barata cubre la mayoría de los pedidos.
+  Ver el resumen abajo.
 - **Continuo:** cacería de bugs en los tipos de tarjeta (lo de la sesión anterior sigue vivo).
 
 ### A — Alta self-service (hecha)
@@ -162,7 +163,41 @@ Lo que cambió para el dueño:
    Rehecha verificando el contenido con `grep` antes de correr, mató su prueba. Una mutación que no
    se aplicó se lee EXACTAMENTE igual que una prueba floja, y lleva a la conclusión opuesta.
 
-## D — Puntos por delivery: el problema real antes de elegir solución
+## D — Puntos por delivery: lo que resolvió el diseño
+
+> Detalle completo en `specs/2026-08-07-puntos-por-delivery-design.md`. Acá va solo la conclusión.
+
+**El hueco real, verificado en el código:** `registrarCliente` tiene UN solo llamador,
+`app/api/registro/route.ts`. O sea que **un comercio no puede darle una tarjeta a alguien que no está
+parado enfrente**. A quien ya la tiene sí puede acreditarle; al cliente nuevo de delivery, no.
+
+**La pregunta que ordena todo: ¿el comercio sabe quién compró?** Las tres opciones que se venían
+barajando mezclaban dos problemas distintos, y separarlos muestra que el QR solo hace falta en uno:
+
+- Pedido por llamada, WhatsApp, app propia, o app de delivery que comparte el número → **sabe el
+  teléfono**. Alcanza una pantalla de alta + acreditación por teléfono. **Sin migración.**
+- App de delivery que NO comparte el número → **el cliente es anónimo**. Recién ahí hace falta un
+  código al portador.
+
+**Y el correo no reemplaza al QR** por la misma razón que hace difícil el caso: si no sabe quién
+compró, tampoco sabe a qué correo mandarlo.
+
+**El hallazgo bloqueante sigue en pie y determina el esquema de v2:** un QR con un punto ya asignado
+es dinero al portador. Un solo uso garantizado por el `where usado_en is null` del propio UPDATE (no
+por un `if` previo), vencimiento en horas, código impredecible, y la acreditación por
+`acreditarPuntos` para heredar los topes antifraude. Lo que el diseño NO puede evitar —que lo
+reclame la persona equivocada— hay que decírselo al dueño en la pantalla donde los genera.
+
+### Un hallazgo que salió de verificar el diseño antes de construirlo
+
+`/api/tarjetas/<id>/pass.pkpass` responde **404 sin `apple_serial_number`**, y ese init vivía en
+`app/api/registro/route.ts` — el único llamador de `registrarCliente`. Mientras hubo un solo camino
+de alta no se notó; el camino nuevo del panel habría emitido **tarjetas imposibles de instalar**, y
+el dueño no habría tenido cómo diagnosticarlo. Se mudó DENTRO de `registrarCliente`, con su prueba y
+su mutación. Es el tercer caso del mismo patrón en estas sesiones —después de `sello_meta` y de la
+vigencia del cupón—: **un paso imprescindible que vive en quien llama en vez de en lo llamado**.
+
+## Apéndice: las tres opciones tal como se plantearon
 
 El pedido: que el cliente que compra por domicilio acumule su punto sin que el comercio tenga que
 hacerlo a mano. Las opciones y lo que cada una cuesta de verdad:
