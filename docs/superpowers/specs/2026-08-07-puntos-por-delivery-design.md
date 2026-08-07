@@ -131,9 +131,21 @@ significado depende del tipo — la lección de `formatearSaldo` y de `unidadPro
 - **Códigos con valor variable según el monto del pedido.** Requiere que el POS mande el monto, o sea
   integración. En v2 el dueño elige el valor al generar.
 
-## 8. Qué medir antes de construir v2
+## 8. DECISIÓN (2026-08-07): v2 NO se construye
 
-v1 es barato y cubre la mayoría. **v2 tiene un costo permanente** (una tabla más, un camino de
-acreditación más, y una superficie de fraude nueva que no se puede cerrar del todo). Antes de
-construirlo conviene saber si algún comercio real lo pide, y para qué app de delivery — porque si esa
-app comparte el teléfono, v1 ya lo resolvía.
+Daniel lo zanjó el mismo día: **no hay ningún comercio real pidiendo acreditar a distancia**, y su
+lectura es que muy pocos lo van a pedir más allá de lo que ya existe — otorgar en vivo, con el
+cliente presente.
+
+Así que **v1 se construyó y v2 queda diseñado sin implementar**. Es la decisión correcta y conviene
+que quede escrita, porque el costo de v2 no es el de escribirlo: es una tabla más, un camino de
+acreditación más, y **una superficie de fraude nueva que el diseño acota pero no cierra** (un código
+al portador es, por definición, de quien lo tiene). Abrir eso sin un usuario que lo pida es pagar un
+riesgo permanente por una función que nadie usa.
+
+**Si algún día un comercio lo pide, lo primero que hay que preguntarle es POR QUÉ APP entran sus
+pedidos.** Si esa app le comparte el teléfono del cliente —y la mayoría lo hace— v1 ya lo resolvía y
+no hace falta construir nada. El QR solo se justifica con una app que oculte al comprador.
+
+Este documento queda entonces como diseño listo para retomar: el esquema de §6 y las cinco
+propiedades de seguridad de §4 no hay que volver a pensarlas.

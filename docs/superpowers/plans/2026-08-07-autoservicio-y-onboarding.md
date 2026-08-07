@@ -58,9 +58,10 @@ entidad. Eso desbloquea hoy la mayor parte del pedido en vez de dejarlo todo esp
 - **B — Tutorial guiado en el panel. ✅ HECHA.** Ver abajo.
 - **C — Simplificación de interfaces** (la vara: una persona de 50 años, sin ayuda). ✅ HECHA — las
   cinco pantallas (reglas, recompensas, sucursales, escáner y marca). Ver abajo.
-- **D — Puntos por delivery.** Spec escrito: `specs/2026-08-07-puntos-por-delivery-design.md`.
-  Resultado del diseño: **son DOS features, no una**, y la barata cubre la mayoría de los pedidos.
-  Ver el resumen abajo.
+- **D — Puntos por delivery.** Spec: `specs/2026-08-07-puntos-por-delivery-design.md`. Resultado del
+  diseño: **son DOS features, no una**. **v1 HECHA** (`/comercio/clientes/agregar`: alta y
+  acreditación por teléfono, sin migración). **v2 (QR al portador) NO se construye** — decisión de
+  Daniel del 2026-08-07: ningún comercio lo está pidiendo. Ver el resumen abajo.
 - **Continuo:** cacería de bugs en los tipos de tarjeta (lo de la sesión anterior sigue vivo).
 
 ### A — Alta self-service (hecha)
