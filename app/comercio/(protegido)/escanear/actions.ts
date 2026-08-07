@@ -12,6 +12,7 @@ import { notificarCambioTarjeta } from '@/lib/apple/notificarCambioTarjeta';
 import { syncObjetoTarjeta } from '@/lib/google/syncObjeto';
 import { tipoOPuntos, describirSaldo, centavosDesdeTexto, nivelParaAcumulado, type AccionPrincipal } from '@/lib/tarjetas/tipos';
 import { usarCupon, renovarMembresia, hoyEnZona } from '@/lib/tarjetas/vigencia';
+import { unidadPrograma, describirCosto, type Unidad } from '@/lib/tarjetas/unidadPrograma';
 import { usarVisita, venderPaquete } from '@/lib/tarjetas/prepago';
 import { acreditarCashback, cargarGiftCard, consumirSaldo } from '@/lib/tarjetas/dinero';
 import { registrarCompra, listarNiveles } from '@/lib/tarjetas/descuento';
@@ -20,6 +21,7 @@ export interface RecompensaEscaner {
   id: string;
   nombre: string;
   costoPuntos: number;
+  costoTexto: string;
   // Foto del premio: ayuda al cajero a identificar qué entregar sin leer el nombre, que en un
   // mostrador con cola es la diferencia entre dos segundos y diez.
   fotoUrl: string | null;
@@ -32,7 +34,11 @@ export interface ResultadoEscaneo {
   telefono?: string | null;
   puntosActuales?: number;
   saldoTexto?: string;
-  esSellos?: boolean;
+  // Como se llama lo que cuenta ESTE programa. Reemplaza al viejo `esSellos`, que obligaba a cada
+  // texto del componente a hacer `esSellos ? sellos : puntos` — y por eso el cajero de un prepago
+  // leia "Corregir: quitar puntos" cuando estaba quitando una VISITA. null = este tipo no cuenta
+  // enteros (dinero o sin contador), y entonces no hay nada que corregir a mano.
+  unidad?: Unidad | null;
   recompensas?: RecompensaEscaner[];
   // Si el comercio activó pedir_monto_compra, el escáner muestra el campo de monto (Tanda 1).
   pedirMontoCompra?: boolean;
@@ -137,11 +143,14 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
     etiquetaSecundaria: ETIQUETA_SECUNDARIA[tipo.valor] ?? null,
     requiereMonto: tipo.requiereMonto,
     tieneContador: tipo.contador !== 'ninguno',
-    esSellos: tipo.valor === 'sellos',
+    unidad: unidadPrograma(tipo.valor),
     recompensas: (recompensas ?? []).map((r) => ({
       id: r.id,
       nombre: r.nombre,
       costoPuntos: r.costo_puntos,
+      // Ya formateado del lado del SERVIDOR, donde se conoce el tipo: "8 sellos", "$2.50", o vacio
+      // en los tipos sin contador. Antes el componente escribia "puntos" a mano.
+      costoTexto: describirCosto(tipo.valor, r.costo_puntos),
       fotoUrl: r.foto_url,
     })),
     pedirMontoCompra: comercio?.pedir_monto_compra ?? false,

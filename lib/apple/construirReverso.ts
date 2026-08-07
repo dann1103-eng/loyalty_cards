@@ -1,6 +1,5 @@
 import { EMISOR_CARDLY } from './emisorCardly';
-import { unidadPara } from '../tarjetas/unidadPrograma';
-import { tipoOPuntos, formatearCentavos } from '../tarjetas/tipos';
+import { unidadPara, describirCosto } from '../tarjetas/unidadPrograma';
 
 // Arma los campos del REVERSO del pass (los backFields que ve el cliente al tocar la "i").
 //
@@ -132,21 +131,6 @@ export function resolverAviso(
   return hasta.slice(0, 10) >= hoyIso.slice(0, 10) ? texto : null;
 }
 
-// Qué dice el costo de un premio, según lo que cuente el programa. `costo_puntos` es el mismo
-// entero que descuenta canjearRecompensa de `puntos_actuales`, y ese contador significa cosas
-// distintas por tipo (ver el encabezado de lib/tarjetas/tipos.ts):
-//   - entero   → "8 sellos" / "8 puntos" / "8 visitas"
-//   - centavos → es DINERO: "$0.08", no "8 puntos"
-//   - ninguno  → no hay contador del que descontar, así que el premio se nombra SIN precio en vez
-//                de inventar uno. Decir "8 puntos" en una tarjeta de cupón es prometer una moneda
-//                que no existe.
-function costoDeRecompensa(tipoTarjeta: string, costo: number): string {
-  const u = unidadPara(tipoTarjeta, costo);
-  if (u) return ` — ${costo} ${u}`;
-  if (tipoOPuntos(tipoTarjeta).contador === 'centavos') return ` — ${formatearCentavos(costo)}`;
-  return '';
-}
-
 // Las líneas de "Cómo funciona", en el orden del spec §4: por_visita, por_monto, meta de sellos y
 // después las recompensas. Devuelve [] cuando no hay nada que decir.
 function lineasComoFunciona(datos: DatosReverso): string[] {
@@ -186,7 +170,8 @@ function lineasComoFunciona(datos: DatosReverso): string[] {
   }
 
   for (const recompensa of datos.recompensas) {
-    lineas.push(`• ${recompensa.nombre}${costoDeRecompensa(datos.tipoTarjeta, recompensa.costo_puntos)}`);
+    const costo = describirCosto(datos.tipoTarjeta, recompensa.costo_puntos);
+    lineas.push(costo ? `• ${recompensa.nombre} — ${costo}` : `• ${recompensa.nombre}`);
     // La descripción va en la línea siguiente: son las palabras del propio dueño.
     if (hayTexto(recompensa.descripcion)) lineas.push(recompensa.descripcion);
   }

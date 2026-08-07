@@ -12,6 +12,7 @@ import {
   type ResultadoEscaneo,
 } from './actions';
 import { LARGO_MAXIMO_MOTIVO } from '@/lib/comercio/motivo';
+import { describirCosto } from '@/lib/tarjetas/unidadPrograma';
 
 type Modo = 'camara' | 'sin-camara' | 'buscando' | 'resultado';
 
@@ -489,21 +490,28 @@ export default function Escaner({
           el momento. Queda auditado con su nombre, su hora y su motivo. Solo resta: sumar de más
           sería una puerta trasera al tope diario. */}
       {/* Corregir solo aparece donde hay un contador: en cupon, membresia y descuento no hay
-          numero que quitar. */}
+          numero que quitar.
+          El `?? 'saldo'` NO es defensivo por las dudas: los UNICOS tipos que tienen contador pero
+          no tienen unidad contable son los de dinero (gift card y cashback), y ahi lo que se quita
+          es saldo. Sin ese fallback el boton decia "Corregir: quitar " en seco. */}
       {resultado.tieneContador && (
       <section style={{ marginTop: 18 }}>
         {!mostrarCorregir ? (
           <button className="btn-borde" style={{ width: '100%' }} onClick={() => setMostrarCorregir(true)}>
             <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">undo</span>
-            Corregir: quitar {resultado.esSellos ? 'sellos' : 'puntos'}
+            Corregir: quitar {resultado.unidad?.plural ?? 'saldo'}
           </button>
         ) : (
           <div className="panel" style={{ marginTop: 0 }}>
             <p className="titulo-seccion" style={{ marginTop: 0 }}>
-              Quitar {resultado.esSellos ? 'sellos' : 'puntos'}
+              Quitar {resultado.unidad?.plural ?? 'saldo'}
             </p>
             <div className="field">
-              <label htmlFor="cantidad-quitar">Cuántos quitar</label>
+              {/* En dinero el campo son CENTAVOS: quitarPuntos resta del mismo contador entero, asi
+                  que "cuantos" ahi significa centavos. Se dice, en vez de dejar al cajero adivinar. */}
+              <label htmlFor="cantidad-quitar">
+                {resultado.unidad ? 'Cuántos quitar' : 'Cuántos centavos quitar'}
+              </label>
               <input
                 id="cantidad-quitar"
                 type="number"
@@ -584,8 +592,12 @@ export default function Escaner({
                     <div style={{ minWidth: 0 }}>
                     <div className="admin-fila-nombre">{r.nombre}</div>
                     <div className="admin-fila-slug">
-                      <span className="dato-mono">{r.costoPuntos}</span> {resultado.esSellos ? 'sellos' : 'puntos'}
-                      {!alcanza && ` · le faltan ${r.costoPuntos - puntos}`}
+                      <span className="dato-mono">{r.costoTexto}</span>
+                      {/* Lo que falta se dice en la MISMA moneda del programa: en una gift card,
+                          `costoPuntos - puntos` son centavos y mostrarlo crudo le diría al cajero
+                          "le faltan 250" cuando le faltan $2.50. describirCosto es puro (solo
+                          depende del catálogo), así que se puede usar del lado del cliente. */}
+                      {!alcanza && ` · le faltan ${describirCosto(resultado.tipoTarjeta ?? 'puntos', r.costoPuntos - puntos)}`}
                     </div>
                     </div>
                   </div>

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TIPOS } from './tipos';
-import { unidadPrograma, unidadPara } from './unidadPrograma';
+import { unidadPrograma, unidadPara, describirCosto } from './unidadPrograma';
 
 // Cómo se LLAMA lo que cuenta un programa. Existe porque la respuesta estaba escrita dos veces y
 // las dos veces mal: `unidad()` en lib/apple/construirReverso.ts y las etiquetas a mano de las
@@ -66,5 +66,27 @@ describe('unidadPara', () => {
   it('devuelve null donde no hay unidad que nombrar', () => {
     expect(unidadPara('gift_card', 1)).toBeNull();
     expect(unidadPara('cupon', 1)).toBeNull();
+  });
+});
+
+describe('describirCosto', () => {
+  it('cuenta en la unidad del programa', () => {
+    expect(describirCosto('sellos', 8)).toBe('8 sellos');
+    expect(describirCosto('sellos', 1)).toBe('1 sello');
+    expect(describirCosto('prepago', 3)).toBe('3 visitas');
+  });
+
+  it('los tipos de dinero se leen en dolares', () => {
+    // 250 en la columna son $2.50, no 250 de nada. Es el bug de origen visto desde el otro lado.
+    expect(describirCosto('gift_card', 250)).toBe('$2.50');
+    expect(describirCosto('cashback', 1250)).toBe('$12.50');
+  });
+
+  it('los tipos sin contador no llevan precio', () => {
+    // Vacio y no "0": el premio se nombra a secas. Poner un numero seria prometer una moneda que
+    // ese programa no tiene.
+    expect(describirCosto('cupon', 10)).toBe('');
+    expect(describirCosto('membresia', 10)).toBe('');
+    expect(describirCosto('descuento', 10)).toBe('');
   });
 });

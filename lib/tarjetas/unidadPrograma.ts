@@ -1,4 +1,4 @@
-import { tipoOPuntos } from './tipos';
+import { tipoOPuntos, formatearCentavos } from './tipos';
 
 // Cómo se LLAMA lo que cuenta un programa: sellos, puntos o visitas.
 //
@@ -49,4 +49,22 @@ export function unidadPara(tipoTarjeta: string, cantidad: number): string | null
   const unidad = unidadPrograma(tipoTarjeta);
   if (!unidad) return null;
   return cantidad === 1 ? unidad.singular : unidad.plural;
+}
+
+// Cuánto cuesta un premio, dicho en la moneda del programa. `recompensas.costo_puntos` es el entero
+// que canjearRecompensa descuenta de `puntos_actuales`, y ese contador significa cosas distintas
+// según el tipo (ver el encabezado de tipos.ts):
+//
+//   entero   → "8 sellos" / "8 puntos" / "8 visitas"
+//   centavos → es DINERO: "$0.08". Decir "8 puntos" sobre un saldo en dólares es el bug de origen.
+//   ninguno  → cadena VACÍA: no hay contador del que descontar, así que el premio se nombra sin
+//              precio en vez de prometer una moneda que no existe.
+//
+// Vive acá y no en cada pantalla porque lo necesitan el reverso del pase (que lee el cliente) y el
+// escáner (que lee el cajero), y dos copias de esta decisión ya divergieron una vez.
+export function describirCosto(tipoTarjeta: string, costo: number): string {
+  const u = unidadPara(tipoTarjeta, costo);
+  if (u) return `${costo} ${u}`;
+  if (tipoOPuntos(tipoTarjeta).contador === 'centavos') return formatearCentavos(costo);
+  return '';
 }
