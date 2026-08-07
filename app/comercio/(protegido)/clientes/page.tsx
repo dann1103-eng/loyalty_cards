@@ -86,6 +86,13 @@ export default async function PaginaClientes({
           <p className="lede" style={{ marginTop: 6, fontSize: '0.92rem' }}>
             <span className="dato-mono">{tarjetas?.length ?? 0}</span> con tu tarjeta en su billetera.
           </p>
+          {/* Para el cliente que pidió a domicilio: nunca estuvo en el local, así que nadie pudo
+              escanearle el QR. Va también para el CAJERO, que es quien suele atender el teléfono. */}
+          <Link className="btn-borde" style={{ marginTop: 10 }} href="/comercio/clientes/agregar">
+            <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">person_add</span>
+            Agregar un cliente por teléfono
+          </Link>
+
           {/* Solo al dueño: la ruta tiene gate de owner y exportar la base del negocio no es tarea
               del cajero.
 
