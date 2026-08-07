@@ -56,8 +56,8 @@ entidad. Eso desbloquea hoy la mayor parte del pedido en vez de dejarlo todo esp
 
 - **A — Alta self-service. ✅ HECHA.** Ver abajo.
 - **B — Tutorial guiado en el panel. ✅ HECHA.** Ver abajo.
-- **C — Simplificación de interfaces** (la vara: una persona de 50 años, sin ayuda). EN CURSO —
-  primera tanda hecha, ver abajo.
+- **C — Simplificación de interfaces** (la vara: una persona de 50 años, sin ayuda). ✅ HECHA — las
+  cinco pantallas (reglas, recompensas, sucursales, escáner y marca). Ver abajo.
 - **D — Puntos por delivery.** Es DISEÑO antes que código: hay que elegir entre QR impreso en el
   ticket del POS, QR en impresora térmica aparte, y alta por teléfono. Ver abajo.
 - **Continuo:** cacería de bugs en los tipos de tarjeta (lo de la sesión anterior sigue vivo).
@@ -137,9 +137,30 @@ Lo que cambió para el dueño:
   cashback, cupón, membresía, descuento): antes se cargaba algo que después nadie leía.
 - **Recompensas**: "Costo en puntos" → *"¿Cuántos sellos cuesta?"*, y la lista deja de decir "puntos".
 
-Pendiente de esta fase: `/comercio/sucursales` le muestra a una cuenta Starter recién creada
-"Alcanzaste el límite de tu plan" como PRIMERA cosa, y manda a escribir a soporte en vez de enlazar
-a `/comercio/plan`, que ya existe.
+- **Sucursales**: a una cuenta Starter recién creada, lo PRIMERO que le aparecía era "Alcanzaste el
+  límite de tu plan… escribinos a soporte". Arrancaba con un reproche y una dirección de correo en
+  vez de un camino. Ahora se dice en positivo y con botón a `/comercio/plan`, que ya existe.
+- **Escáner** (lo que lee el CAJERO en el mostrador): con prepago decía "Corregir: quitar puntos"
+  cuando estaba quitando una VISITA; con gift card mostraba el premio a "250 puntos" cuando cuesta
+  $2.50, y "le faltan 150" en vez de "$1.50". El payload del servidor dejó de mandar el booleano
+  `esSellos` —que era la causa: obligaba a repetir la decisión en cada texto— y manda la unidad.
+- **Marca**: el botón "Usar un borrador sugerido" escribe términos que van TAL CUAL a la tarjeta de
+  cada cliente, y tenía el mismo `esSellos ? 'sellos' : 'puntos'` adentro. A un comercio de gift card
+  le proponía escribir *"Los puntos no tienen valor monetario"* —falso, el saldo ES el producto— y a
+  uno de cupón *"no vencen"*, cuando vence por diseño. Ahora vive en
+  `lib/comercio/borradorTerminos.ts`, con las dos primeras líneas por tipo y una prueba que recorre
+  los ocho verificando que **nunca se promete algo que el tipo no puede cumplir**.
+
+**Dos cosas que conviene recordar de esta fase:**
+
+1. **El artículo gramatical viaja CON la palabra.** Se había resuelto con un regex sobre el texto ya
+   armado (`replace(/^Los (visitas)/, 'Las $1')`) — conocimiento disperso que el próximo llamador
+   repite o se olvida. Ahora `Unidad` lleva su `articulo`, así que la unidad novena que se agregue
+   no puede producir "Los visitas" en la tarjeta de un cliente.
+2. **Una mutación que "sobrevive" primero hay que confirmarla en el ARCHIVO.** Una de las de esta
+   tanda pasó en verde y era mentira: el escapado del shell hizo que el reemplazo nunca se aplicara.
+   Rehecha verificando el contenido con `grep` antes de correr, mató su prueba. Una mutación que no
+   se aplicó se lee EXACTAMENTE igual que una prueba floja, y lleva a la conclusión opuesta.
 
 ## D — Puntos por delivery: el problema real antes de elegir solución
 
