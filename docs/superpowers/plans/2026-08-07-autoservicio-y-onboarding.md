@@ -56,7 +56,8 @@ entidad. Eso desbloquea hoy la mayor parte del pedido en vez de dejarlo todo esp
 
 - **A — Alta self-service. ✅ HECHA.** Ver abajo.
 - **B — Tutorial guiado en el panel. ✅ HECHA.** Ver abajo.
-- **C — Simplificación de interfaces** (la vara: una persona de 50 años, sin ayuda). SIGUIENTE.
+- **C — Simplificación de interfaces** (la vara: una persona de 50 años, sin ayuda). EN CURSO —
+  primera tanda hecha, ver abajo.
 - **D — Puntos por delivery.** Es DISEÑO antes que código: hay que elegir entre QR impreso en el
   ticket del POS, QR en impresora térmica aparte, y alta por teléfono. Ver abajo.
 - **Continuo:** cacería de bugs en los tipos de tarjeta (lo de la sesión anterior sigue vivo).
@@ -103,6 +104,42 @@ cajero no puede completar ninguno de los cuatro pasos.
 iniciada → panel con "0 de 4" → se carga un premio → recarga → "1 de 4", el paso hecho con su tilde,
 sin ser enlace, y la línea guía apuntando al siguiente. Las cuentas de prueba se borraron de la base
 real (cero huérfanos).
+
+### C — Simplificación de interfaces (primera tanda)
+
+La auditoría se hizo **en el navegador**, dando de alta una cuenta por el flujo nuevo y recorriendo
+las pantallas como un dueño que las ve por primera vez. El hallazgo que unió todo no era de
+redacción sino un BUG: varias pantallas decían **"puntos"** aunque el programa fuera de sellos.
+
+Y peor: `lib/apple/construirReverso.ts` tenía su propio `unidad()` con el mismo defecto
+(`tipo === 'sellos' ? 'sellos' : 'puntos'`), así que **un cliente con gift card leía "Ganás 1 punto
+por cada visita" en el reverso de su propia tarjeta**, y uno de prepago veía sus visitas descritas
+como puntos. Es el mismo defecto que `formatearSaldo`: una función cuya firma no podía expresar el
+caso, escrita dos veces.
+
+Se creó `lib/tarjetas/unidadPrograma.ts`, que **deriva la palabra del campo `contador` del catálogo**
+(`tipos.ts`) en vez de tener una lista propia. Devuelve `null` donde no hay unidad que nombrar —
+dinero (se formatea con `formatearCentavos`) o sin contador (no hay nada que contar) — y ese null
+obliga al llamador a resolverlo bien en vez de recibir una palabra inventada. Hay una prueba que
+recorre `TIPOS` y falla si un tipo nuevo se cuela sin decidir cómo se llama su unidad: así nació
+este bug.
+
+Lo que cambió para el dueño:
+
+- **Reglas**: "Valor (puntos por visita, o puntos por cada $1 de compra)" metía los dos significados
+  en un solo texto porque el campo es compartido. Ahora la etiqueta cambia con el tipo elegido y usa
+  la palabra de SU programa: *"¿Cuántos sellos por cada $1 de compra?"*. Verificado en el navegador
+  que el cambio del `<select>` la actualiza de verdad.
+- **Reglas** además leía el tipo de `comercios.tipo_tarjeta` (columna legada): un comercio al que FM
+  le cambió el tipo sin propagarlo veía el formulario antifraude equivocado. Ahora sale del programa
+  principal.
+- **Reglas** ya no muestra el formulario en los tipos donde estas reglas no aplican (gift card,
+  cashback, cupón, membresía, descuento): antes se cargaba algo que después nadie leía.
+- **Recompensas**: "Costo en puntos" → *"¿Cuántos sellos cuesta?"*, y la lista deja de decir "puntos".
+
+Pendiente de esta fase: `/comercio/sucursales` le muestra a una cuenta Starter recién creada
+"Alcanzaste el límite de tu plan" como PRIMERA cosa, y manda a escribir a soporte en vez de enlazar
+a `/comercio/plan`, que ya existe.
 
 ## D — Puntos por delivery: el problema real antes de elegir solución
 
