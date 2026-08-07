@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { PAISES, PAIS_DEFAULT, buscarPaisPorClave } from '@/lib/clientes/paises';
 import type { ResultadoConsulta, TarjetaPortal } from '@/lib/portal/buscarTarjetas';
+import { describirCosto } from '@/lib/tarjetas/unidadPrograma';
 
 function CaraTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
   // Usa los colores reales del comercio (como el pass). Fallback al fondo oscuro del sistema v2
@@ -58,9 +59,12 @@ function DetalleTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
                   {falta <= 0 ? (
                     <span className="portal-canjeable">Ya puedes canjearla</span>
                   ) : (
-                    <span className="portal-falta">Te faltan {falta}</span>
+                    <span className="portal-falta">Te faltan {describirCosto(tarjeta.tipoTarjeta, falta)}</span>
                   )}
-                  <span className="portal-costo">{r.costoPuntos} pts</span>
+                  {/* En la moneda de SU programa. Decia "{costo} pts" a todos: a alguien con una
+                      gift card le mostraba "250 pts" sobre un premio que cuesta $2.50, y a alguien
+                      de prepago sus visitas llamadas puntos. Lo lee el CLIENTE FINAL. */}
+                  <span className="portal-costo">{describirCosto(tarjeta.tipoTarjeta, r.costoPuntos)}</span>
                 </div>
               </div>
             );
