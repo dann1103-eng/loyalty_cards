@@ -36,9 +36,13 @@ import { TIPOS } from '@/lib/tarjetas/tipos';
 // en el kit: los íconos de línea de las franjas y el garabato de "Pasate al club".
 //
 // Ver DESIGN.md § Página pública para la paleta, la tipografía y el detalle de qué se sustituyó a
-// propósito respecto del mockup: sin contadores de piloto inventados, sin teléfono ni redes falsas
-// en el pie, y todo botón apunta al formulario real de #demo (no a un alta instantánea que no
-// existe).
+// propósito respecto del mockup: sin contadores de piloto inventados y sin teléfono ni redes falsas
+// en el pie.
+//
+// Desde el 2026-08-07 los botones principales llevan al ALTA REAL (/registro-comercio) y ya no al
+// formulario de interés: el alta self-service existe. #demo se conserva como segunda opción para
+// quien prefiere que se la muestren antes de registrarse — sigue escribiendo en `prospectos`.
+// Cada plan de la tabla de precios entra al alta con SU plan ya elegido (?plan=<id>).
 
 const TITULO = `${MARCA.nombre} — Tarjetas de lealtad digitales para tu negocio`;
 const DESCRIPCION =
@@ -317,9 +321,9 @@ export default function Inicio() {
             </a>
             {/* En INGLÉS a propósito, igual que el logo: "You in?" es la firma de la marca, no una
                 frase traducible. El resto del copy sigue en español con voseo. */}
-            <a className={estilos.botonCabecera} href="#demo">
+            <Link className={estilos.botonCabecera} href="/registro-comercio">
               You in?
-            </a>
+            </Link>
           </nav>
         </div>
       </header>
@@ -359,11 +363,12 @@ export default function Inicio() {
                 Sellos, puntos, cashback o lo que decidas: tus clientes lo llevan en la billetera
                 del teléfono, y vos ponés el límite de cuánto dar y a quién.
               </p>
-              <a className={estilos.botonHero} href="#demo">
-                Agendá tu demo gratis
-              </a>
+              <Link className={estilos.botonHero} href="/registro-comercio">
+                Creá tu cuenta
+              </Link>
               <p className={estilos.heroNota}>
-                Te la mostramos con tus colores y tu logo, sin compromiso.
+                Sin tarjeta de crédito y sin instalar nada. ¿Preferís que te la mostremos primero?{' '}
+                <a href="#demo">Agendá tu demo</a>.
               </p>
             </div>
           </div>
@@ -546,13 +551,13 @@ export default function Inicio() {
                       <li key={caracteristica}>{caracteristica}</li>
                     ))}
                   </ul>
-                  <a
+                  <Link
                     className={plan.destacado ? estilos.botonHero : estilos.botonHeroContorno}
-                    href="#demo"
+                    href={`/registro-comercio?plan=${plan.id}`}
                   >
                     {plan.cta}
                     <IconoFlecha style={{ width: 16, height: 16, marginLeft: 6 }} />
-                  </a>
+                  </Link>
                 </div>
               ))}
             </div>
