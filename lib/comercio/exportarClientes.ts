@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
+import { listarProgramas } from './programas';
+import { describirCosto } from '../tarjetas/unidadPrograma';
 
 // Exportación de la base de clientes del comercio a CSV. "Tus datos son tuyos" es algo que la
 // competencia vende explícitamente y que acá no existía.
@@ -11,7 +13,15 @@ import type { Database } from '../supabase/types';
 export interface FilaExportacion {
   nombre: string;
   telefono: string;
-  saldo: number;
+  // A cuál de las tarjetas del comercio pertenece la fila. Sin esta columna, en un comercio con dos
+  // programas activos la fila de alguien con 8 sellos y la de alguien con $8.00 se ven identicas.
+  tarjeta: string;
+  // YA FORMATEADO en la unidad de ese programa: "8 sellos", "$12.50", "3 visitas". Es un string y
+  // no un numero A PROPOSITO — `puntos_actuales` es un contador universal cuyo significado depende
+  // del tipo, y exportar 1250 bajo una columna llamada "Saldo" no es ambiguo: es falso por un
+  // factor de cien. Mezclar unidades en una columna hace que sumarla no signifique nada de todas
+  // formas, asi que la claridad no cuesta aritmetica.
+  saldo: string;
   visitas: number;
   alta: string;
 }
@@ -45,10 +55,12 @@ export function escaparCelda(valor: string | number | null | undefined): string 
 }
 
 export function generarCsv(filas: FilaExportacion[]): string {
-  const encabezado = ['Nombre', 'Teléfono', 'Saldo', 'Visitas', 'Cliente desde'];
+  const encabezado = ['Nombre', 'Teléfono', 'Tarjeta', 'Saldo', 'Visitas', 'Cliente desde'];
   const lineas = [
     encabezado.map(escaparCelda).join(','),
-    ...filas.map((f) => [f.nombre, f.telefono, f.saldo, f.visitas, f.alta].map(escaparCelda).join(',')),
+    ...filas.map((f) =>
+      [f.nombre, f.telefono, f.tarjeta, f.saldo, f.visitas, f.alta].map(escaparCelda).join(','),
+    ),
   ];
   // CRLF, no LF: es lo que dice RFC 4180 y lo que Excel en Windows espera.
   return lineas.join('\r\n');
@@ -64,7 +76,7 @@ export async function filasParaExportar(
 ): Promise<FilaExportacion[] | null> {
   const { data: tarjetas, error } = await supabase
     .from('tarjetas')
-    .select('puntos_actuales, created_at, cliente_id, clientes(nombre, telefono)')
+    .select('puntos_actuales, created_at, cliente_id, programa_id, clientes(nombre, telefono)')
     .eq('comercio_id', comercioId)
     .order('created_at');
 
@@ -83,15 +95,25 @@ export async function filasParaExportar(
   });
   const visitasPorCliente = new Map((top ?? []).map((f) => [f.cliente_id, f.visitas]));
 
+  // El nombre y el TIPO de cada programa: el tipo es lo que decide en que unidad se lee el saldo.
+  // `soloActivos: false` porque una tarjeta emitida en un programa que despues se desactivo sigue
+  // existiendo, y su duenno tiene derecho a verla en su export.
+  const programas = await listarProgramas(supabase, comercioId, { soloActivos: false });
+  const programaPorId = new Map((programas ?? []).map((p) => [p.id, p]));
+
   return (tarjetas ?? [])
     .filter((t) => t.clientes)
-    .map((t) => ({
+    .map((t) => {
+      const programa = programaPorId.get(t.programa_id);
+      return {
       nombre: t.clientes!.nombre,
       telefono: t.clientes!.telefono,
-      saldo: t.puntos_actuales,
+      tarjeta: programa?.nombre ?? '',
+      saldo: describirCosto(programa?.tipoTarjeta ?? 'puntos', t.puntos_actuales),
       visitas: visitasPorCliente.get(t.cliente_id) ?? 0,
       // Solo la fecha, sin hora: es un dato de negocio, no forense. El historial por cliente ya
       // cubre el detalle con hora.
       alta: t.created_at.slice(0, 10),
-    }));
+      };
+    });
 }
