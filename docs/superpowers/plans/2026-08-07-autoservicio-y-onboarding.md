@@ -198,6 +198,35 @@ el dueño no habría tenido cómo diagnosticarlo. Se mudó DENTRO de `registrarC
 su mutación. Es el tercer caso del mismo patrón en estas sesiones —después de `sello_meta` y de la
 vigencia del cupón—: **un paso imprescindible que vive en quien llama en vez de en lo llamado**.
 
+## Cacería de bugs en los ocho tipos — segunda barrida (2026-08-07)
+
+Después de las cinco pantallas del panel, se barrió el código que no se había revisado: reportes,
+portal del cliente, panel de FM, `lib/google/`, `lib/apple/generatePass.ts` y los caminos de
+notificaciones. Seis hallazgos más, todos del mismo par de patrones.
+
+| Dónde | Qué pasaba |
+|---|---|
+| Reporte por cajero | "1250 puntos" donde eran **$12.50**. Es la pantalla que existe para detectar a un cajero que regala cosas: con la unidad mal, el dueño no puede juzgar el número justo donde tiene que hacerlo. Además leía `comercios.tipo_tarjeta`. |
+| Reporte por cajero | El ratio "$X por punto" dividía dólares vendidos entre centavos devueltos. Un número que no significa nada pero **parece un dato**. |
+| Reporte principal | "sellos/puntos otorgados" debajo de un valor que son **acreditaciones**. Si le das 3 sellos de una, acreditaciones es 1 y sellos otorgados es 3 — dos cantidades distintas bajo la misma etiqueta, y esto no depende del tipo. |
+| Reporte principal | El top de clientes agrega el CONGLOMERADO del dueño y cada comercio suyo puede tener otro tipo: ahora se resuelve por comercio con el `comercio_id` que ya trae cada fila. |
+| Portal del cliente | "250 pts" sobre un premio que cuesta **$2.50**. Lo lee el cliente final. |
+| Panel de FM | **Cambiar el tipo de tarjeta no hacía nada.** `actualizarComercio` escribía solo la columna legada de `comercios` y nunca el programa, que es el que rige desde la 0024. Un guardado que miente. |
+
+El de FM es el más interesante porque **empeoró al arreglar lo demás**: mientras los lectores usaban
+la columna legada, el cambio de FM "funcionaba" (mal, divergiendo del pase). Al pasar todos los
+lectores al programa, quedó como no-op. La propagación se **niega si el programa ya tiene tarjetas
+emitidas**: `puntos_actuales` es un contador universal y cambiar de cashback a sellos convertiría los
+$12.50 de un cliente en 1250 sellos sin tocar un número. Misma regla que ya sostiene
+`guardarConfiguracionPrograma`.
+
+### Lo que se dejó SIN tocar, a propósito
+
+`lib/google/construirRecursos.ts` arma el saldo de sellos como `"3 de 8 sellos"` bajo la etiqueta
+`"Sellos"`, o sea redundante — y distinto de Apple, que muestra `SELLOS / 3 de 8`. **No se cambió**:
+es lo que el cliente ve dentro de su Google Wallet y no se puede verificar sin un teléfono real.
+Queda para el QA manual, junto con el resto de lo que necesita un dispositivo.
+
 ## Apéndice: las tres opciones tal como se plantearon
 
 El pedido: que el cliente que compra por domicilio acumule su punto sin que el comercio tenga que
