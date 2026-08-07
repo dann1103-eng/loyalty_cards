@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'node:crypto';
 import { createServiceClient } from '@/lib/supabase/server';
 import { registrarCliente } from '@/lib/clientes/registrarCliente';
 import { normalizarTelefono } from '@/lib/clientes/normalizarTelefono';
@@ -66,22 +65,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Programa no encontrado' }, { status: 404 });
   }
 
+  // El init de Apple (serial + auth token) ya NO va acá: se mudó DENTRO de registrarCliente. Vivía
+  // en esta ruta, que era su único llamador, y por eso cualquier camino de alta nuevo habría
+  // emitido tarjetas imposibles de instalar — /api/tarjetas/<id>/pass.pkpass responde 404 sin el
+  // serial. Ver el comentario de `inicializarApple` en lib/clientes/registrarCliente.ts.
   const resultado = await registrarCliente(supabase, comercio.id, programa.id, nombreLimpio, telefonoCanonico);
-
-  // Init de Apple SIEMPRE (no solo cuando la tarjeta es nueva) y con chequeo de error.
-  // El guard .is('apple_serial_number', null) hace que una tarjeta ya inicializada
-  // matchee 0 filas (no-op: nunca pisa un token ya emitido — seguro ante concurrencia,
-  // el WHERE se re-evalúa tras el commit de un escritor concurrente), y una tarjeta que
-  // quedó a medias por un fallo anterior se auto-repara en el siguiente registro.
-  const authToken = crypto.randomBytes(16).toString('hex');
-  const { error: initError } = await supabase
-    .from('tarjetas')
-    .update({ apple_auth_token: authToken, apple_serial_number: resultado.tarjetaId })
-    .eq('id', resultado.tarjetaId)
-    .is('apple_serial_number', null);
-  if (initError) {
-    return NextResponse.json({ error: 'Error al preparar la tarjeta' }, { status: 500 });
-  }
 
   // Google Wallet, best-effort (nunca bloquea el registro): la clase del comercio se crea la
   // primera vez que hace falta (aquí, en su primer cliente) o ya existe de un guardado de

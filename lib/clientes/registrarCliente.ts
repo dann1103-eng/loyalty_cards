@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { hoyEnZona, vencimientoInicialCupon } from '../tarjetas/vigencia';
@@ -43,6 +44,40 @@ async function vigenciaInicial(
     .maybeSingle();
 
   return vencimientoInicialCupon(hoyEnZona(comercio?.zona_horaria ?? null), programa.cupon_vigencia_dias);
+}
+
+// Deja la tarjeta EMITIBLE como pase de Apple. Sin `apple_serial_number`, la ruta
+// /api/tarjetas/<id>/pass.pkpass responde 404: el cliente encuentra su tarjeta en el portal pero el
+// botón de agregarla a la billetera no hace nada.
+//
+// Vivía en `app/api/registro/route.ts`, o sea en el ÚNICO llamador. Mientras hubo uno solo no se
+// notó — pero cualquier camino de alta nuevo (dar de alta a un cliente de delivery desde el panel,
+// por ejemplo) habría emitido tarjetas imposibles de instalar, y el dueño no tendría cómo
+// diagnosticarlo. Es el mismo patrón que ya apareció con `sello_meta` y con la vigencia del cupón:
+// un paso imprescindible que vive en quien llama en vez de en lo llamado.
+//
+// El guard `.is('apple_serial_number', null)` hace dos cosas: es idempotente (una tarjeta ya
+// inicializada matchea 0 filas y NUNCA se le pisa un token ya emitido, lo que sería seguro incluso
+// ante concurrencia porque el WHERE se re-evalúa tras el commit del otro escritor) y auto-repara una
+// tarjeta que quedó a medias por un fallo anterior.
+//
+// BEST-EFFORT: un fallo acá no cancela el alta. El cliente prefiere tener su tarjeta y reintentar la
+// instalación —el próximo registro la repara— antes que quedarse sin tarjeta.
+async function inicializarApple(
+  supabase: SupabaseClient<Database>,
+  tarjetaId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('tarjetas')
+    .update({
+      apple_auth_token: crypto.randomBytes(16).toString('hex'),
+      apple_serial_number: tarjetaId,
+    })
+    .eq('id', tarjetaId)
+    .is('apple_serial_number', null);
+  if (error) {
+    console.error('[registro] la tarjeta quedó sin poder emitirse como pase:', tarjetaId, error);
+  }
 }
 
 // Semántica de `nombre`: si el cliente ya existe (búsqueda por teléfono), su nombre NO se
@@ -108,6 +143,7 @@ export async function registrarCliente(
   if (buscarTarjetaError) throw buscarTarjetaError;
 
   if (tarjetaExistente) {
+    await inicializarApple(supabase, tarjetaExistente.id);
     return {
       clienteId,
       tarjetaId: tarjetaExistente.id,
@@ -149,6 +185,7 @@ export async function registrarCliente(
       .maybeSingle();
     if (relecturaTarjetaError) throw relecturaTarjetaError;
     if (!tarjetaGanadora) throw crearTarjetaError;
+    await inicializarApple(supabase, tarjetaGanadora.id);
     return {
       clienteId,
       tarjetaId: tarjetaGanadora.id,
@@ -157,6 +194,8 @@ export async function registrarCliente(
       esNuevaTarjeta: false,
     };
   }
+
+  await inicializarApple(supabase, nuevaTarjeta.id);
 
   return {
     clienteId,

@@ -144,4 +144,29 @@ describe('registrarCliente', () => {
     expect(otraVezPrincipal.tarjetaId).toBe(enPrincipal.tarjetaId);
     expect(otraVezPrincipal.esNuevaTarjeta).toBe(false);
   });
+
+  it('la tarjeta nace INSTALABLE: con serial y token de Apple', async () => {
+    // Sin estos dos campos, /api/tarjetas/<id>/pass.pkpass devuelve 404 y el cliente encuentra su
+    // tarjeta en el portal pero el boton de agregarla a la billetera no hace nada.
+    //
+    // Vivian en app/api/registro/route.ts, o sea en el UNICO llamador. Mientras hubo uno solo no se
+    // noto; en cuanto el panel del comercio puede dar de alta a un cliente de delivery, ese camino
+    // habria emitido tarjetas imposibles de instalar. Es el mismo patron que ya aparecio con
+    // sello_meta y con la vigencia del cupon: un paso imprescindible que vive en el caller.
+    const { comercioId, programaId } = await crearComercioDePrueba(`test-instalable-${Date.now()}`);
+    ids = { comercioId };
+    const telefono = `+503-test-inst-${Date.now()}`;
+    telefonosDePrueba.push(telefono);
+
+    const res = await registrarCliente(supabase, comercioId, programaId, 'Cliente Prueba', telefono);
+
+    const { data } = await supabase
+      .from('tarjetas')
+      .select('apple_serial_number, apple_auth_token')
+      .eq('id', res.tarjetaId)
+      .single();
+
+    expect(data!.apple_serial_number, 'sin serial, el pase no se puede emitir').toBe(res.tarjetaId);
+    expect(data!.apple_auth_token, 'sin token, el pase no se puede autenticar').toBeTruthy();
+  });
 });
