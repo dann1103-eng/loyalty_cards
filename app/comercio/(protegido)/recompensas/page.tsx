@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { TIPOS_RECOMPENSA } from '@/lib/comercio/recompensas';
+import { listarProgramas } from '@/lib/comercio/programas';
+import { unidadPrograma } from '@/lib/tarjetas/unidadPrograma';
 import FormularioRecompensa from './FormularioRecompensa';
 import BotonDesactivarRecompensa from './BotonDesactivarRecompensa';
 import FotoRecompensa from './FotoRecompensa';
@@ -13,6 +15,14 @@ export default async function PaginaRecompensas() {
   const { comercioId } = await verifyComercioOwner();
 
   const supabase = createServiceClient();
+
+  // La UNIDAD con la que se paga un premio sale del programa principal, no de una palabra fija.
+  // Antes decia "Costo en puntos" y "8 puntos" a TODO comercio, incluido uno de sellos: el dueno
+  // cargaba su premio leyendo una moneda que su propio programa no usa.
+  const programas = await listarProgramas(supabase, comercioId);
+  const principal = (programas ?? []).find((p) => p.esPrincipal) ?? null;
+  const unidad = unidadPrograma(principal?.tipoTarjeta ?? 'puntos');
+
   const { data: recompensas, error } = await supabase
     .from('recompensas')
     .select('id, nombre, descripcion, costo_puntos, tipo, foto_url')
@@ -34,7 +44,7 @@ export default async function PaginaRecompensas() {
       <AvisoComercioActivo />
 
       <div className="reveal d2">
-        <FormularioRecompensa />
+        <FormularioRecompensa unidad={unidad} />
       </div>
 
       <div className="admin-lista reveal d3" style={{ marginTop: 22 }}>
@@ -57,7 +67,7 @@ export default async function PaginaRecompensas() {
                   <div style={{ minWidth: 0 }}>
                     <div className="admin-fila-nombre">{r.nombre}</div>
                     <div className="admin-fila-slug">
-                      <span className="dato-mono">{r.costo_puntos}</span> puntos · {etiquetaTipo(r.tipo)}
+                      <span className="dato-mono">{r.costo_puntos}</span> {unidad?.plural ?? ''} · {etiquetaTipo(r.tipo)}
                       {r.descripcion ? ` · ${r.descripcion}` : ''}
                     </div>
                   </div>

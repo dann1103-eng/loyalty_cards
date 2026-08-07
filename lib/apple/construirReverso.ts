@@ -1,4 +1,6 @@
 import { EMISOR_CARDLY } from './emisorCardly';
+import { unidadPara } from '../tarjetas/unidadPrograma';
+import { tipoOPuntos, formatearCentavos } from '../tarjetas/tipos';
 
 // Arma los campos del REVERSO del pass (los backFields que ve el cliente al tocar la "i").
 //
@@ -62,13 +64,11 @@ export function escaparHtml(texto: string): string {
     .replaceAll("'", '&#39;');
 }
 
-// 'sellos' → sello/sellos; cualquier otro tipo de tarjeta → punto/puntos. Singular SOLO cuando la
-// cantidad es exactamente 1 (0.5 y 2 son plural), tanto en las líneas de reglas como en las de
-// recompensas.
-function unidad(tipoTarjeta: string, cantidad: number): string {
-  if (tipoTarjeta === 'sellos') return cantidad === 1 ? 'sello' : 'sellos';
-  return cantidad === 1 ? 'punto' : 'puntos';
-}
+// Acá vivía un `unidad()` propio que hacía `tipo === 'sellos' ? 'sellos' : 'puntos'`, o sea que los
+// otros SEIS tipos se llamaban "puntos" en el reverso de la tarjeta del cliente: alguien con una
+// gift card leía "Ganás 1 punto por cada visita", y alguien de prepago veía sus visitas descritas
+// como puntos. Se reemplazó por `unidadPara` (lib/tarjetas/unidadPrograma.ts), que deriva la palabra
+// del catálogo y devuelve null donde no hay unidad que nombrar — ver el encabezado de ese módulo.
 
 // `Number()` antes de `String()` colapsa los ceros de relleno de un numeric de Postgres: '1.00' → 1
 // → "1", y 0.50 → "0.5". El tipo dice number, pero el paso por Number() también cubre el caso de
@@ -132,14 +132,36 @@ export function resolverAviso(
   return hasta.slice(0, 10) >= hoyIso.slice(0, 10) ? texto : null;
 }
 
+// Qué dice el costo de un premio, según lo que cuente el programa. `costo_puntos` es el mismo
+// entero que descuenta canjearRecompensa de `puntos_actuales`, y ese contador significa cosas
+// distintas por tipo (ver el encabezado de lib/tarjetas/tipos.ts):
+//   - entero   → "8 sellos" / "8 puntos" / "8 visitas"
+//   - centavos → es DINERO: "$0.08", no "8 puntos"
+//   - ninguno  → no hay contador del que descontar, así que el premio se nombra SIN precio en vez
+//                de inventar uno. Decir "8 puntos" en una tarjeta de cupón es prometer una moneda
+//                que no existe.
+function costoDeRecompensa(tipoTarjeta: string, costo: number): string {
+  const u = unidadPara(tipoTarjeta, costo);
+  if (u) return ` — ${costo} ${u}`;
+  if (tipoOPuntos(tipoTarjeta).contador === 'centavos') return ` — ${formatearCentavos(costo)}`;
+  return '';
+}
+
 // Las líneas de "Cómo funciona", en el orden del spec §4: por_visita, por_monto, meta de sellos y
 // después las recompensas. Devuelve [] cuando no hay nada que decir.
 function lineasComoFunciona(datos: DatosReverso): string[] {
   const lineas: string[] = [];
 
+  // Las reglas de `reglas_puntos` describen cuántos sellos/puntos/visitas se ganan, así que SOLO
+  // tienen sentido en los tipos que cuentan enteros. En una gift card o un cashback el número que
+  // sube son centavos —lo que se gana ahí lo define el porcentaje del programa, no estas reglas— y
+  // en cupón/membresía/descuento no hay contador. Antes se imprimían igual, con la palabra
+  // "puntos" pegada: "Ganás 1 punto por cada visita" en la tarjeta de alguien con saldo en dólares.
+  // Ahora esas líneas simplemente no se emiten, que es lo honesto.
   const porVisita = reglaVigenteDeTipo(datos.reglas, 'por_visita');
   if (porVisita) {
-    lineas.push(`Ganás ${formatearValor(porVisita.valor)} ${unidad(datos.tipoTarjeta, porVisita.valor)} por cada visita.`);
+    const u = unidadPara(datos.tipoTarjeta, porVisita.valor);
+    if (u) lineas.push(`Ganás ${formatearValor(porVisita.valor)} ${u} por cada visita.`);
   }
 
   const porMonto = reglaVigenteDeTipo(datos.reglas, 'por_monto');
@@ -147,7 +169,8 @@ function lineasComoFunciona(datos: DatosReverso): string[] {
     // "por cada $1 de compra" sale de la etiqueta del formulario que llena el dueño
     // (FormularioRegla.tsx). El sistema NO calcula nada: las reglas son declarativas (el cajero
     // digita el delta a mano), así que esa etiqueta es la ÚNICA fuente de verdad del significado.
-    lineas.push(`Ganás ${formatearValor(porMonto.valor)} ${unidad(datos.tipoTarjeta, porMonto.valor)} por cada $1 de compra.`);
+    const u = unidadPara(datos.tipoTarjeta, porMonto.valor);
+    if (u) lineas.push(`Ganás ${formatearValor(porMonto.valor)} ${u} por cada $1 de compra.`);
   }
 
   // La meta es un COMPLEMENTO de las otras líneas, nunca un motivo para emitir la sección:
@@ -159,11 +182,11 @@ function lineasComoFunciona(datos: DatosReverso): string[] {
   // Y si algún día se cayera ese CHECK, "Completá tus 0 sellos." sería una línea absurda en la
   // tarjeta de un cliente.
   if (datos.tipoTarjeta === 'sellos' && datos.selloMeta !== null && datos.selloMeta > 0 && lineas.length > 0) {
-    lineas.push(`Completá tus ${datos.selloMeta} ${unidad(datos.tipoTarjeta, datos.selloMeta)}.`);
+    lineas.push(`Completá tus ${datos.selloMeta} ${unidadPara('sellos', datos.selloMeta)}.`);
   }
 
   for (const recompensa of datos.recompensas) {
-    lineas.push(`• ${recompensa.nombre} — ${recompensa.costo_puntos} ${unidad(datos.tipoTarjeta, recompensa.costo_puntos)}`);
+    lineas.push(`• ${recompensa.nombre}${costoDeRecompensa(datos.tipoTarjeta, recompensa.costo_puntos)}`);
     // La descripción va en la línea siguiente: son las palabras del propio dueño.
     if (hayTexto(recompensa.descripcion)) lineas.push(recompensa.descripcion);
   }

@@ -3,8 +3,13 @@
 import { useActionState } from 'react';
 import { accionCrearRecompensa, type EstadoRecompensa } from './actions';
 import { TIPOS_RECOMPENSA } from '@/lib/comercio/recompensas';
+import type { Unidad } from '@/lib/tarjetas/unidadPrograma';
 
-export default function FormularioRecompensa() {
+// `unidad` es null en los tipos que no cuentan enteros (gift card, cashback, cupón, membresía,
+// descuento). En esos casos el formulario dice "Costo" a secas en vez de inventar una palabra: el
+// número sigue siendo el que descuenta canjearRecompensa, pero nombrarlo "puntos" sería mentirle al
+// dueño sobre qué le va a cobrar a su cliente.
+export default function FormularioRecompensa({ unidad }: { unidad: Unidad | null }) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoRecompensa, FormData>(
     accionCrearRecompensa,
     undefined,
@@ -21,7 +26,9 @@ export default function FormularioRecompensa() {
         <input id="descripcion" name="descripcion" />
       </div>
       <div className="field">
-        <label htmlFor="costo_puntos">Costo en puntos</label>
+        <label htmlFor="costo_puntos">
+          {unidad ? `¿Cuántos ${unidad.plural} cuesta?` : 'Costo'}
+        </label>
         <input id="costo_puntos" name="costo_puntos" type="number" min="1" step="1" required />
       </div>
       <div className="field">

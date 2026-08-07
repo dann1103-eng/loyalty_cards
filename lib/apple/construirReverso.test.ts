@@ -423,3 +423,65 @@ describe('resolverAviso', () => {
     expect(resolverAviso('Volvé pronto', '2026-07-28', '2026-07-29')).toBeNull();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// La unidad del programa en el reverso (2026-08-07)
+// ─────────────────────────────────────────────────────────────────────────────
+// Hasta acá, `unidad()` hacía `tipo === 'sellos' ? 'sellos' : 'puntos'`, así que los otros SEIS
+// tipos se llamaban "puntos" en la tarjeta del CLIENTE FINAL. Estas pruebas fijan que ya no.
+describe('la unidad que ve el cliente corresponde a su tipo de tarjeta', () => {
+  function comoFuncionaDe(datos: DatosReverso): string {
+    const campo = construirReverso(datos).find((c) => c.key === 'como_funciona');
+    return campo?.value ?? '';
+  }
+
+  it('prepago cuenta VISITAS, no puntos', () => {
+    const texto = comoFuncionaDe({
+      ...datosCompletos(),
+      tipoTarjeta: 'prepago',
+      reglas: [{ tipo: 'por_visita', valor: 2, activa_desde: '2026-01-01T00:00:00Z' }],
+    });
+
+    expect(texto).toContain('2 visitas');
+    expect(texto).not.toContain('puntos');
+  });
+
+  it('una gift card NO dice "puntos": su contador es dinero', () => {
+    // El bug de origen, del lado del cliente: alguien con saldo en dólares leía "Ganás 2 puntos por
+    // cada visita" en el reverso de su propia tarjeta.
+    const texto = comoFuncionaDe({
+      ...datosCompletos(),
+      tipoTarjeta: 'gift_card',
+      reglas: [{ tipo: 'por_visita', valor: 2, activa_desde: '2026-01-01T00:00:00Z' }],
+      recompensas: [{ nombre: 'Café gratis', descripcion: null, costo_puntos: 250 }],
+    });
+
+    expect(texto).not.toContain('puntos');
+    // El costo del premio se lee como plata, que es lo que de verdad se descuenta.
+    expect(texto).toContain('$2.50');
+  });
+
+  it('un cupón nombra el premio SIN precio: no hay contador del que descontar', () => {
+    const texto = comoFuncionaDe({
+      ...datosCompletos(),
+      tipoTarjeta: 'cupon',
+      reglas: [],
+      recompensas: [{ nombre: 'Postre gratis', descripcion: null, costo_puntos: 10 }],
+    });
+
+    expect(texto).toContain('Postre gratis');
+    expect(texto).not.toContain('10 puntos');
+    expect(texto).not.toContain('$');
+  });
+
+  it('sellos y puntos siguen diciendo lo de siempre', () => {
+    // La otra mitad: si el arreglo hubiera roto los dos tipos que SÍ funcionaban, esto lo atrapa.
+    const sellos = comoFuncionaDe({ ...datosCompletos(), tipoTarjeta: 'sellos' });
+    expect(sellos).toContain('2 sellos');
+    expect(sellos).toContain('Café gratis — 10 sellos');
+
+    const puntos = comoFuncionaDe({ ...datosCompletos(), tipoTarjeta: 'puntos' });
+    expect(puntos).toContain('2 puntos');
+    expect(puntos).toContain('Café gratis — 10 puntos');
+  });
+});

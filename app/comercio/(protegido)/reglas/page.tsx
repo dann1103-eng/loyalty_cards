@@ -9,6 +9,8 @@ import BotonEliminarRegla from './BotonEliminarRegla';
 import AvisoComercioActivo from '../AvisoComercioActivo';
 import { leerControles } from '@/lib/comercio/controlesAcreditacion';
 import { leerConfiguracionAvisoInactividad } from '@/lib/comercio/avisoInactividad';
+import { listarProgramas } from '@/lib/comercio/programas';
+import { unidadPrograma } from '@/lib/tarjetas/unidadPrograma';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,11 +29,13 @@ export default async function PaginaReglas() {
   // Escanear (ver lib/comercio/navegacion.ts).
   const controles = await leerControles(supabase, comercioId);
   const avisoInactividad = await leerConfiguracionAvisoInactividad(supabase, comercioId);
-  const { data: comercio } = await supabase
-    .from('comercios')
-    .select('tipo_tarjeta')
-    .eq('id', comercioId)
-    .maybeSingle();
+  // El tipo sale del programa PRINCIPAL, no de comercios.tipo_tarjeta (columna legada desde la
+  // 0024). Con la columna vieja, un comercio al que FM le cambió el tipo sin propagarlo veía el
+  // formulario antifraude equivocado: los campos de "puntos" en un programa de sellos, o al revés.
+  const programas = await listarProgramas(supabase, comercioId);
+  const principal = (programas ?? []).find((p) => p.esPrincipal) ?? null;
+  const tipoPrincipal = principal?.tipoTarjeta ?? 'puntos';
+  const unidad = unidadPrograma(tipoPrincipal);
 
   if (error) console.error('[comercio] falló la consulta de reglas:', error);
 
@@ -46,9 +50,22 @@ export default async function PaginaReglas() {
 
       <AvisoComercioActivo />
 
-      <div className="reveal d2">
-        <FormularioRegla />
-      </div>
+      {/* Estas reglas describen cuántos sellos/puntos/visitas gana el cliente, así que SOLO aplican
+          a los tipos que cuentan enteros. En una gift card o un cashback lo que sube son centavos
+          (y lo define el porcentaje del programa, no esto), y en cupón/membresía/descuento no hay
+          contador. Antes el formulario se mostraba igual y lo que se cargaba ahí no lo leía nadie:
+          el reverso del pase ya no imprime esas líneas para esos tipos. */}
+      {unidad ? (
+        <div className="reveal d2">
+          <FormularioRegla unidad={unidad} />
+        </div>
+      ) : (
+        <p className="admin-vacio">
+          Tu tarjeta no se gana con sellos ni con puntos, así que no necesita estas reglas. Lo que
+          define cuánto gana tu cliente está en{' '}
+          <Link href="/comercio/programas">Programas de tarjeta</Link>.
+        </p>
+      )}
 
       {/* La configuración por tipo (cashback%, visitas del paquete, …) vivía acá (migración 0018)
           hasta que la 0024 la mudó a cada programa: un comercio puede tener varios tipos a la vez,
@@ -72,7 +89,7 @@ export default async function PaginaReglas() {
         {controles ? (
           <FormularioControles
             controles={controles}
-            esDePuntos={(comercio?.tipo_tarjeta ?? 'puntos') === 'puntos'}
+            esDePuntos={tipoPrincipal === 'puntos'}
           />
         ) : (
           <p className="admin-error" role="alert">

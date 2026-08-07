@@ -34,7 +34,11 @@ export default async function PaginaSucursales({
   if (comercio?.cuenta_id) {
     const cupo = await cupoDeCuenta(supabase, comercio.cuenta_id);
     if (cupo.ok && cupo.limite !== null && cupo.usadas >= cupo.limite) {
-      avisoCupo = `Alcanzaste el límite de tu plan (${cupo.limite} ${cupo.limite === 1 ? 'local' : 'locales'}). Escribinos a soporte@cardly-sv.site para ampliarlo.`;
+      // Se dice en positivo y con la salida a mano. Antes decía "Alcanzaste el límite… escribinos
+      // a soporte", que a una cuenta Starter recién creada le aparece como PRIMERA cosa al abrir
+      // esta pantalla: arranca con un reproche y una dirección de correo en vez de un camino. Y
+      // desde que /comercio/plan existe, mandar a escribir un correo es mandarlo al lugar más lento.
+      avisoCupo = `Tu plan incluye ${cupo.limite} ${cupo.limite === 1 ? 'local' : 'locales'} y ya lo estás usando. Para abrir otro, ampliá tu plan.`;
     }
   }
 
@@ -49,7 +53,13 @@ export default async function PaginaSucursales({
 
       <div className="reveal d2">
         {avisoCupo ? (
-          <p className="admin-vacio">{avisoCupo}</p>
+          <div className="panel" style={{ marginTop: 0 }}>
+            <p className="nota" style={{ marginTop: 0 }}>{avisoCupo}</p>
+            <Link className="btn-borde" href="/comercio/plan" style={{ marginTop: 10 }}>
+              <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">workspace_premium</span>
+              Ver mi plan
+            </Link>
+          </div>
         ) : (
           <ModalAgregarLocal
             nombreComercio={nombre}
