@@ -14,6 +14,12 @@ import {
   type ElementoCartel,
 } from '@/lib/comercio/cartel/elementos';
 import {
+  desfaseDeAgarre,
+  posicionArrastrada,
+  moverConTeclado,
+  type Punto,
+} from '@/lib/comercio/cartel/arrastre';
+import {
   accionGuardarCartel,
   accionSubirLogoCartel,
   accionQuitarLogoCartel,
@@ -104,6 +110,11 @@ export default function EditorCartel({
   const [previewSvg, setPreviewSvg] = useState<string>('');
 
   const inputLogoRef = useRef<HTMLInputElement>(null);
+  // El contenedor de la vista previa: se mide en cada movimiento del puntero (y no una vez) porque
+  // su ancho cambia al rotar el teléfono, al abrir el teclado o al cambiar de formato, y una medida
+  // vieja desalinea el arrastre sin que nada falle.
+  const lienzoRef = useRef<HTMLDivElement>(null);
+  const [arrastre, setArrastre] = useState<{ indice: number; desfase: Punto } | null>(null);
 
   // Al apagar la personalización, los inputs vuelven a la marca actual — NUNCA a un valor guardado
   // escondido (spec §6.3). Al prenderla, arrancan de lo que ya se ve (que en ese momento coincide
@@ -180,6 +191,54 @@ export default function EditorCartel({
     setElementos((previos) => previos.filter((_, i) => i !== indice));
   }
 
+  // --- arrastrar los agregados sobre la vista previa -------------------------------------------
+  // La aritmética vive en lib/comercio/cartel/arrastre.ts (pura y con pruebas); acá queda solo el
+  // pegamento con el DOM: medir la caja, capturar el puntero y escribir el estado.
+  //
+  // Eventos de PUNTERO y no de ratón: es el único juego que cubre dedo, lápiz y ratón con el mismo
+  // código, y `setPointerCapture` es lo que hace que el arrastre siga funcionando cuando el dedo se
+  // sale del recuadro — sin eso, mover rápido suelta el elemento a mitad de camino.
+  function alAgarrar(evento: React.PointerEvent<HTMLButtonElement>, indice: number) {
+    const caja = lienzoRef.current?.getBoundingClientRect();
+    if (!caja) return;
+    evento.currentTarget.setPointerCapture(evento.pointerId);
+    const elemento = elementos[indice];
+    setArrastre({
+      indice,
+      desfase: desfaseDeAgarre({ x: evento.clientX, y: evento.clientY }, caja, elemento),
+    });
+  }
+
+  function alMoverPuntero(evento: React.PointerEvent<HTMLButtonElement>) {
+    if (!arrastre) return;
+    const caja = lienzoRef.current?.getBoundingClientRect();
+    if (!caja) return;
+    const elemento = elementos[arrastre.indice];
+    if (!elemento) return;
+    actualizarElemento(
+      arrastre.indice,
+      posicionArrastrada({ x: evento.clientX, y: evento.clientY }, caja, arrastre.desfase, elemento),
+    );
+  }
+
+  function alSoltar(evento: React.PointerEvent<HTMLButtonElement>) {
+    if (evento.currentTarget.hasPointerCapture(evento.pointerId)) {
+      evento.currentTarget.releasePointerCapture(evento.pointerId);
+    }
+    setArrastre(null);
+  }
+
+  function alTeclearSobreManija(evento: React.KeyboardEvent<HTMLButtonElement>, indice: number) {
+    const elemento = elementos[indice];
+    if (!elemento) return;
+    const movido = moverConTeclado(elemento, evento.key, evento.shiftKey);
+    // Solo se cancela el evento cuando la tecla ERA una flecha: tragarse todas dejaría a Tab sin
+    // poder salir de la manija, y quien navega con teclado quedaría atrapado en la vista previa.
+    if (!movido) return;
+    evento.preventDefault();
+    actualizarElemento(indice, movido);
+  }
+
   // Los nuevos nacen en el centro y con la escala de un texto de cartel: puestos en 0,0 quedarían
   // pegados al borde superior izquierdo, donde en dos de las tres plantillas hay logo encima y el
   // dueño creería que no se agregó nada.
@@ -200,6 +259,23 @@ export default function EditorCartel({
   }
 
   const frasePropuesta = ctaSugerido(tipoTarjeta);
+
+  // Las manijas se PINTAN en el mismo orden que el dibujo: franjas primero, textos después (o sea,
+  // los textos por encima). No es cosmético — sin esto, agregar una franja grande después de un
+  // texto sepulta la manija del texto, que es un <button> del tamaño de la franja, y ese texto se
+  // vuelve imposible de agarrar. Se detectó midiendo con elementsFromPoint sobre la vista previa
+  // real, no razonándolo.
+  //
+  // El índice que viaja es el de la lista ORIGINAL: es el que usan actualizarElemento y el número
+  // que ve el dueño, así que el orden de pintado no puede tocarlo. `.entries()` es justamente lo que
+  // lo conserva al reordenar.
+  const manijasOrdenadas = useMemo(
+    () =>
+      [...elementos.entries()].sort(
+        ([, a], [, b]) => (a.tipo === 'franja' ? 0 : 1) - (b.tipo === 'franja' ? 0 : 1),
+      ),
+    [elementos],
+  );
 
   // "Foto de fondo" sin foto produciría un cartel con fondo liso (spec §7): plantillaFoto() cae a un
   // color sólido, pero ofrecerla igual sería prometer algo que no se va a ver.
@@ -225,15 +301,66 @@ export default function EditorCartel({
 
         {previewSvg && (
           <div style={{ display: 'flex', justifyContent: 'center' }}>
-            {/* El SVG lo construye construirCartelSvg, que escapa TODO texto libre con escaparXml
-                (ver plantillas.ts): no hay markup del dueño llegando acá sin pasar por ahí.
-                `cartel-preview` es lo que lo achica a la caja (el SVG trae su tamaño en mm). */}
-            <div
-              className="cartel-preview"
-              style={{ maxWidth: 260, width: '100%' }}
-              dangerouslySetInnerHTML={{ __html: previewSvg }}
-            />
+            {/* El ref va en el CONTENEDOR y no en el SVG: `cartel-preview svg` ocupa el 100% del
+                ancho con height auto, así que las dos cajas coinciden, y medir el contenedor no
+                obliga a buscar el nodo del SVG dentro de un innerHTML. */}
+            <div ref={lienzoRef} className="cartel-lienzo" style={{ maxWidth: 260, width: '100%' }}>
+              {/* El SVG lo construye construirCartelSvg, que escapa TODO texto libre con escaparXml
+                  (ver plantillas.ts): no hay markup del dueño llegando acá sin pasar por ahí.
+                  `cartel-preview` es lo que lo achica a la caja (el SVG trae su tamaño en mm). */}
+              <div className="cartel-preview" dangerouslySetInnerHTML={{ __html: previewSvg }} />
+
+              {elementos.length > 0 && (
+                <div className="cartel-capa-manijas">
+                  {manijasOrdenadas.map(([indice, elemento]) => {
+                    const arrastrandoEste = arrastre?.indice === indice;
+                    // Una franja se agarra por TODA su superficie —es lo que uno espera de un
+                    // bloque de color— y un texto por un punto sobre su ancla: un texto no tiene
+                    // caja conocida de este lado (el ancho real lo sabe la fuente, no el DOM).
+                    const estilo =
+                      elemento.tipo === 'franja'
+                        ? {
+                            left: `${elemento.x}%`,
+                            top: `${elemento.y}%`,
+                            width: `${elemento.ancho}%`,
+                            height: `${elemento.alto}%`,
+                          }
+                        : { left: `${elemento.x}%`, top: `${elemento.y}%` };
+
+                    return (
+                      <button
+                        key={indice}
+                        type="button"
+                        className={
+                          elemento.tipo === 'franja'
+                            ? 'cartel-manija'
+                            : 'cartel-manija cartel-manija-punto'
+                        }
+                        style={estilo}
+                        data-arrastrando={arrastrandoEste ? 'si' : 'no'}
+                        aria-label={`Mover ${elemento.tipo === 'texto' ? `el texto "${elemento.texto}"` : 'la franja'} (${indice + 1} de ${elementos.length}). Arrastralo, o movelo con las flechas.`}
+                        onPointerDown={(e) => alAgarrar(e, indice)}
+                        onPointerMove={alMoverPuntero}
+                        onPointerUp={alSoltar}
+                        onPointerCancel={alSoltar}
+                        onKeyDown={(e) => alTeclearSobreManija(e, indice)}
+                      >
+                        <span className="cartel-manija-numero" aria-hidden="true">
+                          {indice + 1}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
+        )}
+        {elementos.length > 0 && (
+          <p className="admin-fila-slug" style={{ textAlign: 'center', marginTop: 10 }}>
+            Arrastrá los recuadros para acomodarlos. Con el teclado: Tab para elegir uno y las
+            flechas para moverlo (con Shift va más rápido).
+          </p>
         )}
       </section>
 

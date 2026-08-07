@@ -1209,6 +1209,77 @@ a {
   height: auto;
 }
 
+/* ---------- manijas para arrastrar los agregados sobre la vista previa ----------
+   La capa va por ENCIMA del SVG y con pointer-events: none, así que no intercepta nada salvo en las
+   manijas mismas: sin eso, un rectángulo invisible taparía el cartel entero.
+
+   Se apoya en que `.cartel-preview svg` ocupa el 100% del contenedor con height:auto — la caja del
+   contenedor y la del SVG son exactamente la misma, y por eso un `inset: 0` alcanza para que los
+   porcentajes de acá coincidan con los del viewBox. Si algún día el SVG dejara de llenar su
+   contenedor, las manijas se desalinearían del dibujo sin que nada fallara. */
+.cartel-lienzo {
+  position: relative;
+}
+
+.cartel-capa-manijas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* touch-action: none en cada manija: sin esto, en el teléfono el primer movimiento del dedo se lo
+   lleva el scroll de la página y el elemento no se mueve nunca. */
+.cartel-manija {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+  padding: 0;
+  background: none;
+  border: 2px dashed rgba(255, 255, 255, 0.9);
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55);
+}
+
+.cartel-manija:hover {
+  border-color: rgb(255, 157, 66);
+}
+
+.cartel-manija:focus-visible {
+  outline: 3px solid rgb(255, 157, 66);
+  outline-offset: 2px;
+}
+
+.cartel-manija[data-arrastrando='si'] {
+  cursor: grabbing;
+  border-color: rgb(255, 157, 66);
+  border-style: solid;
+}
+
+/* La manija de un TEXTO no tiene tamaño propio (un texto no es una caja): es un punto de agarre
+   sobre su ancla, con 32 px de lado para que se pueda tocar con el dedo. */
+.cartel-manija-punto {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+}
+
+.cartel-manija-numero {
+  position: absolute;
+  top: -9px;
+  left: -9px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #131315;
+  color: #f5f5f0;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  font-weight: 700;
+}
+
 /* ---------- editor + preview sticky (C3) ----------
    minmax(0, …) en TODAS las pistas: con `1fr` a secas, una pista de grid no puede encogerse
    por debajo del min-content de su contenido (p. ej. la fila de subida de imagen con miniatura
