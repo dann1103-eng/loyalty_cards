@@ -242,3 +242,81 @@ export async function resolverSolicitud(
 
   return { ok: true };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Autogestión: el dueño sube de plan sin esperar a FM
+// ─────────────────────────────────────────────────────────────────────────────
+// Hasta acá TODO cambio de plan pasaba por la bandeja de FM. Eso significa que un comercio que
+// llega a su tope un sábado a las nueve de la noche —justo cuando quiere abrir otro local y pagar
+// más— queda bloqueado hasta que alguien vea su solicitud.
+//
+// ══ POR QUÉ SOLO SUBIR ══
+// Subir es el dueño pidiendo MÁS capacidad y aceptando pagar MÁS: no hay nada que negociar y
+// hacerlo esperar solo cuesta plata de los dos lados. Bajar es lo contrario, y ahí FM tiene un
+// interés legítimo en la conversación (entender por qué se va, ofrecerle algo). Por eso bajar sigue
+// pasando por `solicitarCambioPlan` y esta función lo rechaza nombrando el camino.
+//
+// ══ SIN PASARELA, Y ESO ESTÁ BIEN ══
+// El cobro no cambia: el monto de la cuenta se actualiza y FM factura como siempre. El pago online
+// depende de una entidad legal que todavía no existe (ver lib/comercios/cobros.ts), y atar la
+// autogestión a esa espera sería dejar bloqueado al cliente por un trámite ajeno a él.
+
+// Cuánto vale un plan según el catálogo, para poder ordenarlos. Una cuenta SIN plan vale -1: desde
+// ahí cualquier plano del catálogo es "subir".
+function escalonDe(plan: string | null): number {
+  const i = PLANES.findIndex((p) => p.valor === plan);
+  return i < 0 ? -1 : i;
+}
+
+export async function subirPlanPorElDueno(
+  supabase: SupabaseClient<Database>,
+  cuentaId: string,
+  planDestino: string,
+): Promise<ResultadoSolicitud> {
+  const destino = PLANES.find((p) => p.valor === planDestino);
+  if (!destino) return { ok: false, error: 'Ese plan no existe.' };
+
+  const { data: cuenta, error: eLeer } = await supabase
+    .from('cuentas_comercio')
+    .select('plan, limite_negocios')
+    .eq('id', cuentaId)
+    .maybeSingle();
+  if (eLeer) {
+    console.error('[plan] no se pudo leer la cuenta para subir de plan:', eLeer);
+    return { ok: false, error: 'No se pudo cambiar tu plan.' };
+  }
+  if (!cuenta) return { ok: false, error: 'No se pudo leer tu cuenta.' };
+
+  if (cuenta.plan === destino.valor) return { ok: false, error: 'Ya estás en ese plan.' };
+
+  if (escalonDe(destino.valor) < escalonDe(cuenta.plan)) {
+    return {
+      ok: false,
+      error: 'Para bajar de plan mandanos una solicitud desde esta misma pantalla y lo vemos con vos.',
+    };
+  }
+
+  // El límite NUNCA baja al subir de plan. `limite_negocios` es un DEFAULT sugerido por plan y FM lo
+  // ajusta por cuenta en tratos negociados (decisión cerrada del proyecto): a un Starter con cupo 5
+  // negociado, aplicarle el sugerido de Growth —que es 2— le quitaría capacidad justo cuando acaba
+  // de aceptar pagar más. Gana el mayor, y `null` (sin tope, Pro) le gana a cualquier número.
+  const limiteNuevo =
+    destino.limiteSugerido === null
+      ? null
+      : Math.max(destino.limiteSugerido, cuenta.limite_negocios ?? 0);
+
+  const { error } = await supabase
+    .from('cuentas_comercio')
+    .update({
+      plan: destino.valor,
+      licencia_monto_mensual: destino.montoMensual,
+      limite_negocios: limiteNuevo,
+    })
+    .eq('id', cuentaId);
+
+  if (error) {
+    console.error('[plan] no se pudo subir el plan:', error);
+    return { ok: false, error: 'No se pudo cambiar tu plan.' };
+  }
+  return { ok: true };
+}

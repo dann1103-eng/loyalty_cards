@@ -5,6 +5,7 @@ import { resumenPlan, etiquetaDePlan } from '@/lib/comercios/planCuenta';
 import { listarCobros } from '@/lib/comercios/cobros';
 import { PLANES } from '@/lib/comercios/cuentas';
 import FormularioSolicitud from './FormularioSolicitud';
+import BotonesSubirPlan from './BotonesSubirPlan';
 import { cuentaDelComercio } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -107,6 +108,15 @@ export default async function PaginaPlan() {
           </p>
         )}
       </section>
+
+      {/* Subir es INMEDIATO y va primero: es lo que el dueño viene a hacer cuando llega acá
+          bloqueado por su tope. Se oculta mientras hay una solicitud pendiente para no dejarlo con
+          dos caminos abiertos a la vez sobre lo mismo. */}
+      {!resumen.solicitudPendiente && (
+        <div className="reveal d3" style={{ marginTop: 18 }}>
+          <BotonesSubirPlan planActual={resumen.plan} />
+        </div>
+      )}
 
       {resumen.solicitudPendiente ? (
         <section className="panel reveal d3" style={{ marginTop: 18, borderColor: 'var(--acento)' }}>

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
-import { solicitarCambioPlan } from '@/lib/comercios/planCuenta';
+import { solicitarCambioPlan, subirPlanPorElDueno } from '@/lib/comercios/planCuenta';
 
 export type EstadoSolicitudPlan = { error: string } | { ok: true } | undefined;
 
@@ -37,5 +37,31 @@ export async function accionSolicitarPlan(
   if (!res.ok) return { error: res.error };
 
   revalidatePath('/comercio/plan');
+  return { ok: true };
+}
+
+// Subir de plan AL INSTANTE, sin pasar por la bandeja de FM. Bajar sigue siendo una solicitud, y la
+// capa de datos lo rechaza nombrando ese camino (ver subirPlanPorElDueno).
+//
+// La cuenta se deriva del comercio del gate igual que arriba: nunca del formulario.
+export async function accionSubirPlan(
+  _estadoPrevio: EstadoSolicitudPlan,
+  formData: FormData,
+): Promise<EstadoSolicitudPlan> {
+  const { comercioId } = await verifyComercioOwner();
+
+  const cuentaId = await cuentaDelComercio(comercioId);
+  if (!cuentaId) return { error: 'Tu comercio todavía no está asociado a una cuenta.' };
+
+  const res = await subirPlanPorElDueno(
+    createServiceClient(),
+    cuentaId,
+    String(formData.get('plan') ?? ''),
+  );
+  if (!res.ok) return { error: res.error };
+
+  // El cupo del plan lo leen varias pantallas (sucursales, el modal de agregar local): sin esto, el
+  // dueño sube de plan y sigue viendo "alcanzaste el límite" hasta que recargue a mano.
+  revalidatePath('/comercio', 'layout');
   return { ok: true };
 }

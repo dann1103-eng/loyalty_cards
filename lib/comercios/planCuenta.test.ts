@@ -5,6 +5,7 @@ import {
   solicitarCambioPlan,
   listarSolicitudes,
   resolverSolicitud,
+  subirPlanPorElDueno,
   etiquetaDePlan,
   SIN_PLAN,
   ETIQUETA_SIN_PLAN,
@@ -224,5 +225,89 @@ describe('resolverSolicitud', () => {
     const segunda = await resolverSolicitud(supabase, id, false, '');
     expect(segunda.ok).toBe(false);
     if (!segunda.ok) expect(segunda.error).toBe('Esa solicitud ya fue resuelta.');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Autogestión de plan (Tanda 4)
+// ─────────────────────────────────────────────────────────────────────────────
+// Hasta acá, TODO cambio de plan pasaba por FM: el dueño pedía y alguien aprobaba a mano. Eso
+// significa que un comercio que llega a su tope un sábado a las 9 de la noche —justo cuando quiere
+// abrir otro local y pagar más— queda bloqueado hasta que alguien vea la solicitud.
+//
+// La asimetría que ordena el diseño: SUBIR es el dueño pidiendo más capacidad y aceptando pagar
+// más, así que se aplica solo. BAJAR sigue siendo una solicitud, porque ahí FM tiene un interés
+// legítimo en la conversación.
+describe('subirPlanPorElDueno', () => {
+  async function planDe(cuentaId: string) {
+    const { data } = await supabase
+      .from('cuentas_comercio')
+      .select('plan, licencia_monto_mensual, limite_negocios')
+      .eq('id', cuentaId)
+      .single();
+    return data!;
+  }
+
+  it('subir de Starter a Growth se aplica al instante', async () => {
+    const cuentaId = await crearCuenta({ plan: 'starter', licencia_monto_mensual: 29, limite_negocios: 1 });
+
+    const res = await subirPlanPorElDueno(supabase, cuentaId, 'growth');
+
+    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    const cuenta = await planDe(cuentaId);
+    expect(cuenta.plan).toBe('growth');
+    expect(Number(cuenta.licencia_monto_mensual)).toBe(49);
+    expect(cuenta.limite_negocios).toBe(2);
+  });
+
+  it('BAJAR no se autogestiona: se rechaza indicando que va por solicitud', async () => {
+    // Es la mitad que protege el negocio. Si bajar fuera instantáneo, la conversación de retención
+    // no existiría nunca.
+    const cuentaId = await crearCuenta({ plan: 'growth', licencia_monto_mensual: 49, limite_negocios: 2 });
+
+    const res = await subirPlanPorElDueno(supabase, cuentaId, 'starter');
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.toLowerCase()).toContain('solicitud');
+    expect((await planDe(cuentaId)).plan, 'le bajó el plan por su cuenta').toBe('growth');
+  });
+
+  it('subir NUNCA reduce un límite que FM negoció', async () => {
+    // El caso que rompe lo obvio: FM le dio a un Starter un cupo de 5 (trato negociado; el límite
+    // siempre fue un default sugerido, no una regla). Aplicar el sugerido de Growth —que es 2— al
+    // subir de plan le QUITARÍA capacidad al cliente que acaba de pagar más. Gana el mayor.
+    const cuentaId = await crearCuenta({ plan: 'starter', licencia_monto_mensual: 29, limite_negocios: 5 });
+
+    const res = await subirPlanPorElDueno(supabase, cuentaId, 'growth');
+
+    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    expect((await planDe(cuentaId)).limite_negocios, 'le quitó cupo al subir de plan').toBe(5);
+  });
+
+  it('subir a Pro deja la cuenta sin tope, aunque tuviera uno negociado', async () => {
+    const cuentaId = await crearCuenta({ plan: 'starter', licencia_monto_mensual: 29, limite_negocios: 5 });
+
+    const res = await subirPlanPorElDueno(supabase, cuentaId, 'pro');
+
+    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    expect((await planDe(cuentaId)).limite_negocios, 'Pro no tiene tope').toBeNull();
+  });
+
+  it('rechaza un plan que no está en el catálogo, y el mismo plan', async () => {
+    const cuentaId = await crearCuenta({ plan: 'starter', licencia_monto_mensual: 29, limite_negocios: 1 });
+
+    expect((await subirPlanPorElDueno(supabase, cuentaId, 'enterprise')).ok).toBe(false);
+    expect((await subirPlanPorElDueno(supabase, cuentaId, 'starter')).ok).toBe(false);
+    expect((await planDe(cuentaId)).plan).toBe('starter');
+  });
+
+  it('una cuenta SIN plan puede tomar cualquiera del catálogo', async () => {
+    // Nace así toda cuenta del alta self-service: sin plan asignado hasta que elige.
+    const cuentaId = await crearCuenta({ plan: null, licencia_monto_mensual: null, limite_negocios: null });
+
+    const res = await subirPlanPorElDueno(supabase, cuentaId, 'starter');
+
+    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    expect((await planDe(cuentaId)).plan).toBe('starter');
   });
 });
