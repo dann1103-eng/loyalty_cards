@@ -446,8 +446,15 @@ Quedó viejo tras el rediseño de la pantalla de Marca (branding por programa). 
   el portal y las dos rutas de API, con 15 pruebas que cubren hasta los países que comparten código
   de marcado) y **exportar clientes a CSV** (`/comercio/clientes/exportar`). Este documento decía
   que estaban pendientes: estaba desactualizado.
-- Queda **Tanda 4** (autogestión de plan sin pasarela). Fuera de alcance permanente: Stripe (no
-  acepta negocios de El Salvador) y N1co (espera la personería jurídica).
+- ~~Queda **Tanda 4**~~ → **HECHA el 2026-08-07.** Subir de plan es inmediato desde
+  `/comercio/plan`; bajar sigue siendo una solicitud que resuelve FM, y esa asimetría es
+  deliberada (subir es alguien aceptando pagar más: no hay nada que negociar, y hacerlo esperar
+  cuesta plata de los dos lados). Sin pasarela: el monto de la cuenta se actualiza y FM factura como
+  siempre. **Ojo con lo que no era obvio:** subir de plan podía QUITARLE cupo a una cuenta con
+  límite negociado (un Starter con cupo 5 pasando a Growth recibía el sugerido, que es 2) — ahora
+  gana el mayor, y `null` de Pro le gana a cualquier número.
+- Fuera de alcance permanente: Stripe (no acepta negocios de El Salvador) y N1co (espera la
+  personería jurídica). **Con la Tanda 4 cerrada, ya no queda nada de la hoja de tandas original.**
 
 ### 5. QA manual que necesita al usuario
 - Que una **franja puesta encima del QR** no impida escanear el cartel impreso (el diseño lo
