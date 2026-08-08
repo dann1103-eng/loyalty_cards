@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { tarjetasActivasDelComercio } from './programas';
+import { sigueVigente } from '../tarjetas/tipos';
+import { hoyEnZona } from '../tarjetas/vigencia';
 import { enviarMensajeTarjeta } from './enviarMensajeTarjeta';
 
 // Topes de cordura — mismo criterio que MAXIMO_ACREDITACIONES_DIA en controlesAcreditacion.ts.
@@ -99,7 +101,7 @@ export async function procesarAvisosInactividad(
 ): Promise<ResumenAvisoInactividad> {
   const { data: comercios, error } = await supabase
     .from('comercios')
-    .select('id, aviso_inactividad_dias, aviso_inactividad_mensaje')
+    .select('id, aviso_inactividad_dias, aviso_inactividad_mensaje, zona_horaria')
     .eq('aviso_inactividad_activo', true)
     .not('aviso_inactividad_dias', 'is', null)
     .not('aviso_inactividad_mensaje', 'is', null);
@@ -119,6 +121,9 @@ export async function procesarAvisosInactividad(
     .slice(0, 10);
 
   for (const comercio of comercios) {
+    // La fecha de HOY en la zona del comercio, para decidir si un cupón sigue vigente con el mismo
+    // criterio que usa el RPC que lo canjea.
+    const hoyDelComercio = hoyEnZona(comercio.zona_horaria);
     const dias = comercio.aviso_inactividad_dias!;
     const mensaje = comercio.aviso_inactividad_mensaje!;
     const umbralMs = hoy - dias * 24 * 60 * 60 * 1000;
@@ -128,11 +133,22 @@ export async function procesarAvisosInactividad(
       // Cupón ya usado: no tiene "volver" — ver decisión 5 / la nota de "cupón ya usado" del spec.
       const { data: fila } = await supabase
         .from('tarjetas')
-        .select('created_at, usado_en, aviso_inactividad_enviado_en')
+        .select('created_at, usado_en, vigencia_hasta, aviso_inactividad_enviado_en')
         .eq('id', t.id)
         .single();
       if (!fila) continue;
-      if (t.tipoTarjeta === 'cupon' && fila.usado_en !== null) continue;
+      // Un cupón muere de DOS formas y hay que saltear las dos. Usado ya estaba; VENCIDO faltaba, y
+      // era el peor de los dos: `usar_cupon_atomico` rechaza un cupón vencido con 'cupon_vencido',
+      // así que el push le pedía al cliente que volviera por algo que el cajero no le iba a poder
+      // entregar. El cliente se va con las manos vacías y el que queda mal es el comercio.
+      //
+      // La comparación es por TEXTO contra la fecha local del comercio, igual que sigueVigente y que
+      // el propio RPC: "vence el 30" significa el 30 completo en el local, y comparar instantes lo
+      // mataría a medianoche UTC — las seis de la tarde del 29 en El Salvador.
+      if (t.tipoTarjeta === 'cupon') {
+        if (fila.usado_en !== null) continue;
+        if (fila.vigencia_hasta !== null && !sigueVigente(fila.vigencia_hasta, hoyDelComercio)) continue;
+      }
 
       const { data: ultimaTransaccion } = await supabase
         .from('transacciones_puntos')

@@ -158,3 +158,89 @@ describe('procesarAvisosInactividad', () => {
     expect(resumen).toEqual({ comerciosRevisados: expect.any(Number), avisadas: expect.any(Array) });
   });
 });
+
+describe('un cupón VENCIDO tampoco recibe aviso', () => {
+  it('no se le pide volver por algo que ya no se le puede dar', async () => {
+    // El código salteaba el cupón YA USADO pero no el VENCIDO, y son las dos formas en que un cupón
+    // muere. `usar_cupon_atomico` rechaza un cupón vencido con 'cupon_vencido', así que el push le
+    // dice al cliente que vuelva por algo que el cajero no le va a poder entregar: queda mal el
+    // comercio y el cliente se va con las manos vacías.
+    const comercioId = await entorno.crearComercio();
+    await guardarConfiguracionAvisoInactividad(supabase, comercioId, { activo: true, dias: 30, mensaje: 'Volvé' });
+    const cuponPrograma = await crearPrograma(supabase, comercioId, {
+      nombre: 'Cupón vencido', tipoTarjeta: 'cupon',
+      cashbackPorcentaje: null, multipassVisitas: null, membresiaDias: null, cuponVigenciaDias: null,
+    });
+    expect(cuponPrograma.ok).toBe(true);
+    if (!cuponPrograma.ok) return;
+
+    const hace40dias = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
+    // created_at viejo TAMBIÉN, por el mismo motivo que la prueba del cupón usado: si no, la tarjeta
+    // queda afuera por el umbral de inactividad y la prueba pasaría sin discriminar nada.
+    const tarjeta = await entorno.crearTarjeta(comercioId, 0, {
+      programaId: cuponPrograma.id,
+      createdAt: hace40dias,
+    });
+    // Vencido pero NO usado: es exactamente el caso que la condición vieja dejaba pasar.
+    await supabase.from('tarjetas').update({ vigencia_hasta: '2020-01-01' }).eq('id', tarjeta.id);
+
+    const resumen = await procesarAvisosInactividad(supabase);
+
+    expect(resumen.avisadas, 'le pidió volver por un cupón que ya no puede canjear').not.toContain(tarjeta.id);
+  });
+
+  it('un cupón VIGENTE sí recibe el aviso', async () => {
+    // La otra mitad: si se saltearan TODOS los cupones, la prueba de arriba pasaría igual y la
+    // feature quedaría sin servir para el caso que más la necesita — recordarle a alguien que tiene
+    // un cupón sin usar y a punto de vencer.
+    const comercioId = await entorno.crearComercio();
+    await guardarConfiguracionAvisoInactividad(supabase, comercioId, { activo: true, dias: 30, mensaje: 'Volvé' });
+    const cuponPrograma = await crearPrograma(supabase, comercioId, {
+      nombre: 'Cupón vigente', tipoTarjeta: 'cupon',
+      cashbackPorcentaje: null, multipassVisitas: null, membresiaDias: null, cuponVigenciaDias: null,
+    });
+    expect(cuponPrograma.ok).toBe(true);
+    if (!cuponPrograma.ok) return;
+
+    const hace40dias = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
+    const tarjeta = await entorno.crearTarjeta(comercioId, 0, {
+      programaId: cuponPrograma.id,
+      createdAt: hace40dias,
+    });
+    const dentroDeUnAnio = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    await supabase.from('tarjetas').update({ vigencia_hasta: dentroDeUnAnio }).eq('id', tarjeta.id);
+
+    const resumen = await procesarAvisosInactividad(supabase);
+
+    expect(resumen.avisadas).toContain(tarjeta.id);
+  });
+});
+
+describe('una membresía VENCIDA sí recibe el aviso', () => {
+  it('el que dejó vencer su membresía es a quien más querés recordarle', async () => {
+    // Esta prueba nació de una mutación que SOBREVIVIÓ: quitarle el `tipoTarjeta === 'cupon'` a la
+    // guarda no rompía nada, porque todas las pruebas de vigencia usaban cupones. Pero sin ese
+    // scope, una membresía vencida —que TIENE vigencia_hasta— quedaría salteada, y es exactamente
+    // el cliente al que hay que avisarle: un cupón vencido ya no se puede canjear, pero una
+    // membresía vencida se RENUEVA. Son opuestos y la misma columna los describe.
+    const comercioId = await entorno.crearComercio();
+    await guardarConfiguracionAvisoInactividad(supabase, comercioId, { activo: true, dias: 30, mensaje: 'Volvé' });
+    const membresia = await crearPrograma(supabase, comercioId, {
+      nombre: 'Socios', tipoTarjeta: 'membresia',
+      cashbackPorcentaje: null, multipassVisitas: null, membresiaDias: 30, cuponVigenciaDias: null,
+    });
+    expect(membresia.ok).toBe(true);
+    if (!membresia.ok) return;
+
+    const hace40dias = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
+    const tarjeta = await entorno.crearTarjeta(comercioId, 0, {
+      programaId: membresia.id,
+      createdAt: hace40dias,
+    });
+    await supabase.from('tarjetas').update({ vigencia_hasta: '2020-01-01' }).eq('id', tarjeta.id);
+
+    const resumen = await procesarAvisosInactividad(supabase);
+
+    expect(resumen.avisadas, 'no le avisó a alguien con la membresía vencida').toContain(tarjeta.id);
+  });
+});
