@@ -15,6 +15,7 @@ import { guardarGeopushSucursal } from '@/lib/comercio/geopush';
 import { resolverCoordenadas } from '@/lib/comercio/coordenadas';
 import { notificarCambioComercio } from '@/lib/apple/notificarCambioComercio';
 import { syncClaseComercio } from '@/lib/google/syncClase';
+import { syncObjetosComercio } from '@/lib/google/syncComercio';
 import {
   COOKIE_COMERCIO_ACTIVO,
   COOKIE_SUCURSAL_ACTIVA,
@@ -163,6 +164,18 @@ export async function accionGuardarGeopush(
   await notificarCambioComercio(supabase, comercioId);
   // Google guarda las ubicaciones en la CLASE, o sea una sola llamada para todos los clientes.
   await syncClaseComercio(supabase, comercioId);
+  // ...Y TAMBIÉN EN CADA OBJETO. La clase sola NO alcanza: `merchantLocations` existe en los dos
+  // niveles y Google pide explícitamente ponerlas en ambos (ver construirRecursos.ts, que lo
+  // documenta con el hallazgo del 2026-07-30 — "hasta acá solo estaban en la clase y ningún Android
+  // recibía el aviso de cercanía").
+  //
+  // Sin esta línea, un objeto ya emitido solo recibe las ubicaciones nuevas cuando algo le mueve el
+  // saldo (una venta, un canje) o cuando alguien corre a mano
+  // scripts/resincronizar-objetos-google.ts. O sea: el dueño edita su geopush, la pantalla le dice
+  // que guardó, y los clientes que YA tienen la tarjeta siguen con las coordenadas viejas por
+  // tiempo indefinido — un fallo silencioso en una función de marketing, que es indistinguible de
+  // "no funciona". Mismo criterio que accionGuardarBranding, que sí llamaba a las dos.
+  await syncObjetosComercio(supabase, comercioId);
   // PENDIENTE (Task 6 del plan de branding por programa): cuando un programa pueda tener su PROPIA
   // LoyaltyClass, esta línea deja de alcanzar. Las ubicaciones del geopush viven en la clase
   // (construirRecursos.ts), así que los clientes de un programa con clase propia se quedarían con
