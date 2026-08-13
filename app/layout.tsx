@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Outfit, Hanken_Grotesk, Geist_Mono, Permanent_Marker, Anton } from "next/font/google";
+import { Outfit, Geist_Mono, Permanent_Marker, Anton } from "next/font/google";
+import localFont from "next/font/local";
 import { SCRIPT_TEMA, TEMA_POR_DEFECTO } from "@/lib/tema";
 import { MARCA } from "@/lib/marca";
 import { DESCRIPCION_SITIO, facebookDe, openGraphDe, twitterDe } from "@/lib/metadatosOg";
@@ -13,10 +14,34 @@ const outfit = Outfit({
   weight: ["400", "600", "700"],
 });
 
-const hanken = Hanken_Grotesk({
+// ══ HANKEN GROTESK VA SELF-HOSTEADA, NO POR next/font/google ══ (2026-08-13)
+//
+// El 2026-08-13 un deploy murió con ocho `Module not found: Can't resolve
+// '@vercel/turbopack-next/internal/font/google/font'` apuntando acá, sin que nadie hubiera tocado
+// una fuente. La causa real estaba en unos warnings más arriba del log: 404 al bajar los .woff2 de
+// fonts.gstatic.com. **Google rota los hashes de archivo de sus fuentes SIN cambiar el número de
+// versión** (seguía en v12 antes y después), y el build de Vercel arranca restaurando el caché del
+// deployment anterior — que guardaba las URLs viejas, ya muertas. El build local pasaba igual
+// porque tenía los archivos en `.next`, así que el fallo solo aparecía en producción.
+//
+// Con el archivo adentro del repo eso no puede volver a pasar: no hay descarga en tiempo de build.
+//
+// Se replica EXACTO lo que emitía Google para no cambiar nada visual: un único .woff2 —el archivo
+// que sirve Google es VARIABLE, un mismo binario para los dos pesos— declarado dos veces, en 400 y
+// en 600. Declararlo como rango (`weight: "400 600"`) NO sería equivalente: hoy un `font-weight:
+// 500` del CSS cae al 400 o al 600 más cercano, y con un rango renderizaría un 500 de verdad.
+//
+// Subset `latin` solamente, igual que antes: la app es en español (es-SV). Si algún día hace falta
+// otro subset, se baja el .woff2 de ese subset y se suma acá — no alcanza con cambiar un parámetro.
+// Licencia: SIL Open Font License 1.1, incluida en app/fonts/OFL.txt (la OFL exige distribuirla
+// junto al archivo).
+const hanken = localFont({
   variable: "--font-body",
-  subsets: ["latin"],
-  weight: ["400", "600"],
+  display: "swap",
+  src: [
+    { path: "./fonts/HankenGrotesk-latin.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/HankenGrotesk-latin.woff2", weight: "600", style: "normal" },
+  ],
 });
 
 const geistMono = Geist_Mono({
