@@ -559,3 +559,81 @@ configura el comercio, no está probando lo que vive el dueño.**
   es coherente: sus niveles son del COMERCIO, así que dos programas de descuento compartirían la
   escalera. Un comercio llega al tipo por el panel de FM (su programa principal espeja el tipo), y
   ahí la pantalla nueva de niveles ya lo hace usable de punta a punta.
+
+---
+
+## 2026-08-13 — Catálogo de planes nuevo (escalera 1/3/10) y onboarding opcional
+
+Disparado por un análisis competitivo que Daniel pidió sobre tres plataformas que él mismo señaló:
+**Vuelvo Cards** (El Salvador, competencia directa), **Loyalty Ladder** (Guatemala) y **Devotio
+Rewards** (LatAm).
+
+**HALLAZGO QUE MANDA SOBRE TODO LO DEMÁS, verificado por CNAME contra 8.8.8.8:** los tres resuelven
+`app.<dominio>` a `ns.digitalwallet.cards`, el MISMO host de `app.boomerangme.biz`. Son marcas
+blancas de Boomerangme. Consecuencias: sus 8 tipos de tarjeta son los 8 de Boomerangme (por eso
+"Multipass" aparece con ese nombre inventado en dos sitios distintos); tienen piso de costo real
+(Agency $259/mes + $15/mes por sub-cuenta) mientras que acá el costo marginal por comercio es ~0; y
+no controlan su roadmap. **Cardly es el único de la lista con código propio** — ésa es la ventaja
+que ninguno puede copiar sin dejar de revender. Detalle en la memoria `reference-competencia-cardly`.
+
+**Vuelvo cobra SOLO anual** ($300/$600/$1,200 por adelantado) + setup $97/$147/$197. No ofrecen mes
+a mes. Su arma no es el precio, es el plazo.
+
+### Qué cambió en el código
+
+| | Antes | Ahora |
+|---|---|---|
+| Starter | $29 · 1 | $29 · 1 |
+| Growth | $49 · **2** | $49 · **3** |
+| Pro | $89 · **sin límite** | $89 · **10** |
+| Instalación | $150 obligatorio | **onboarding opcional, $150 en los tres planes** |
+
+La escalera 1/3/10 es la que usan TODOS los competidores; el comprador ya la vio antes de llegar.
+Y el tope de Pro en 10 coincide con el techo TÉCNICO del geopush (Apple ignora la ubicación 11 en
+silencio, Google rechaza la clase entera con más de 10), así que el plan deja de prometer algo que
+la plataforma no puede cumplir. Arriba de 10 se sube `limite_negocios` a mano desde el panel FM.
+
+Archivos: `lib/comercios/cuentas.ts` (PLANES), `lib/comercios/planCuenta.ts`, `app/page.tsx`, y las
+cinco pantallas que ramificaban sobre `limiteSugerido === null` (rama ya muerta).
+
+### El bug que el cambio introducía y se atrapó antes de shipear
+
+`subirPlanPorElDueno` calculaba `Math.max(destino.limiteSugerido, cuenta.limite_negocios ?? 0)`.
+Ese `?? 0` trata "sin tope" como CERO. Mientras Pro era `null` no importaba (el null venía del plan
+destino y se resolvía antes). Con Pro en 10, una cuenta vieja con `limite_negocios = null` que
+subiera de plan quedaba en `Math.max(10, 0) = 10`: **le revocábamos en silencio el sin-límite que ya
+había comprado, justo al aceptar pagar más.** Arreglado con `yaEstabaSinTope` y prueba de regresión
+(`subir NO le quita el sin-tope a una cuenta que ya lo tenía`). Ninguna cuenta existente cambia por
+el cambio de catálogo: `limite_negocios` vive por cuenta y solo se toca al cambiar de plan.
+
+### Geopush: un defecto arreglado, y un síntoma que sigue SIN explicar
+
+Daniel reportó que el aviso por cercanía no llega ni en su iPhone ni en los Android de prueba. Se
+instrumentaron 5 bordes contra producción real y **el servidor está limpio**: la BD tiene las 2
+sucursales de Farmacias ABC activas con coordenadas, `listarUbicacionesGeopush` las devuelve con su
+`relevantText`, las 7 tarjetas generarían un `.pkpass` con las 2 `locations`, y la API real de
+Google devuelve `merchantLocations` con las 2 en la CLASE y en los 3 objetos muestreados.
+`merchantLocations` es el campo correcto (el `.d.ts` instalado dice literal que dispara
+notificación; `locations` es el deprecado). **No re-investigar eso.**
+
+**Defecto real encontrado y arreglado:** `accionGuardarGeopush` llamaba a `syncClaseComercio` pero
+NO a `syncObjetosComercio`. Un objeto ya emitido solo recibía las coordenadas nuevas por una venta o
+por correr a mano `scripts/resincronizar-objetos-google.ts`. Como `construirRecursos.ts` documenta,
+las ubicaciones a nivel de OBJETO son las que hacen que a un Android le llegue el aviso. Arreglado
+con prueba nueva (`app/comercio/(protegido)/sucursales/actions.test.ts`), verificada por mutación.
+
+**Lo que queda abierto es la ENTREGA al teléfono, y la prueba la tiene que hacer Daniel:** borrar el
+pase, volver a agregarlo desde el link de registro, y recién ahí pasar por el local.
+- Si con el pase recién agregado funciona → la causa es la actualización de pases ya instalados (el
+  push automático de Apple nunca se confirmó funcionando en su dispositivo).
+- Si tampoco → es comportamiento de plataforma: mirar `maxDistance` (hoy 100 m, el extremo angosto)
+  y el tiempo de permanencia que exige Google.
+- **En iPhone NO hay notificación con sonido, por diseño** — es una sugerencia en la pantalla de
+  bloqueo. Parte del reporte puede ser esa diferencia de expectativa.
+
+### Pendiente de decisión del dueño
+
+- **Plan anual con dos meses gratis.** Es la única arma real de Vuelvo y hoy no existe acá. Requiere
+  su propia migración (periodicidad por cuenta), no es un cambio de constantes.
+- **El adicional por local sobre el tope de Pro.** El análisis propone $12/mes; todavía no se fijó ni
+  se modeló — hoy se resuelve subiendo `limite_negocios` a mano.
