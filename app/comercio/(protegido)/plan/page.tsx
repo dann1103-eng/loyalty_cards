@@ -102,9 +102,7 @@ export default async function PaginaPlan() {
         {detalle && (
           <p className="admin-fila-slug" style={{ marginTop: 14 }}>
             {detalle.etiqueta} incluye{' '}
-            {detalle.limiteSugerido === null
-              ? 'negocios y sucursales sin límite'
-              : `hasta ${detalle.limiteSugerido} negocio(s) o sucursal(es)`}.
+            {`hasta ${detalle.limiteSugerido} negocio(s) o sucursal(es)`}.
           </p>
         )}
       </section>

@@ -661,7 +661,10 @@ export type Database = {
         Row: {
           id: string;
           nombre: string;
-          // null = sin límite (plan Pro). Antes NOT NULL (Fase 6) — migración 0011 lo relaja.
+          // null = sin límite. Antes NOT NULL (Fase 6) — migración 0011 lo relaja. OJO: hasta el
+          // 2026-08-13 null era el valor del plan Pro; desde que los tres planes tienen tope
+          // (1/3/10) ya NINGÚN plan del catálogo lo usa, y el null solo sobrevive en cuentas viejas
+          // o en tratos negociados que FM abre a mano. Ver PLANES en lib/comercios/cuentas.ts.
           limite_negocios: number | null;
           plan: string | null;
           licencia_estado: string;

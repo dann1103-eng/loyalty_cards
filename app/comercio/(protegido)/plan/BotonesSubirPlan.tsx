@@ -48,9 +48,7 @@ export default function BotonesSubirPlan({ planActual }: { planActual: string | 
             >
               <span>
                 Pasar a {p.etiqueta} ·{' '}
-                {p.limiteSugerido === null
-                  ? 'sin límite de locales'
-                  : `hasta ${p.limiteSugerido} ${p.limiteSugerido === 1 ? 'local' : 'locales'}`}
+                {`hasta ${p.limiteSugerido} ${p.limiteSugerido === 1 ? 'local' : 'locales'}`}
               </span>
               <span className="dato-mono">${p.montoMensual}/mes</span>
             </button>

@@ -30,7 +30,7 @@ export default function FormularioSolicitud({ planActual }: { planActual: string
           {disponibles.map((p) => (
             <option key={p.valor} value={p.valor}>
               {p.etiqueta} — ${p.montoMensual}/mes ·{' '}
-              {p.limiteSugerido === null ? 'sin límite' : `hasta ${p.limiteSugerido}`}
+              {`hasta ${p.limiteSugerido}`}
             </option>
           ))}
         </select>

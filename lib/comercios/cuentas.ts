@@ -4,12 +4,26 @@ import type { Database } from '../supabase/types';
 // Catálogo de planes de Cardly (fm-ai-website.vercel.app/productos/cardly). Fuente única de verdad
 // de nombre/monto/límite sugerido: el <select> de FormularioCuenta se construye desde esta MISMA
 // constante para que el formulario y el validador no puedan divergir (mismo patrón que
-// TIPOS_TARJETA en guardarComercio.ts). `limiteSugerido: null` en 'pro' = sin tope — ver
-// verificarLimiteCuenta más abajo.
+// TIPOS_TARJETA en guardarComercio.ts).
+//
+// La escalera 1 / 3 / 10 no es arbitraria: es la que usan TODOS los competidores del mercado
+// (Vuelvo Cards, Loyalty Ladder, Cardly MX, Loopy Loyalty — los tres primeros revenden la misma
+// plataforma). El comprador ya la vio en dos o tres cotizaciones antes de llegar acá, así que un
+// escalón distinto se lee como "menos" aunque el precio sea mejor. Análisis del 2026-08-13.
+//
+// Pro tenía `limiteSugerido: null` (SIN TOPE) hasta esa misma revisión: un cliente con cuarenta
+// locales pagaba lo mismo que uno con diez, y era el que más soporte y emisión consumía. Ahora
+// tope de 10, y arriba de eso se sube `limite_negocios` a mano desde el panel FM cobrando el
+// adicional por local — el campo YA es editable por cuenta justamente para tratos negociados.
+//
+// OJO: cambiar `limiteSugerido` NO toca a ninguna cuenta existente. `limite_negocios` se copia a la
+// fila al asignarle el plan y desde ahí vive por cuenta; las cuentas que hoy tienen null (sin tope)
+// siguen sin tope hasta que alguien las edite. Es deliberado: no se le sube el precio a un cliente
+// que ya dijo que sí.
 export const PLANES = [
   { valor: 'starter', etiqueta: 'Starter', montoMensual: 29, limiteSugerido: 1 },
-  { valor: 'growth', etiqueta: 'Growth', montoMensual: 49, limiteSugerido: 2 },
-  { valor: 'pro', etiqueta: 'Pro', montoMensual: 89, limiteSugerido: null },
+  { valor: 'growth', etiqueta: 'Growth', montoMensual: 49, limiteSugerido: 3 },
+  { valor: 'pro', etiqueta: 'Pro', montoMensual: 89, limiteSugerido: 10 },
 ] as const;
 export type Plan = (typeof PLANES)[number]['valor'];
 

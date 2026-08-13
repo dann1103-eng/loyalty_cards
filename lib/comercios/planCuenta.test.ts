@@ -162,7 +162,7 @@ describe('resolverSolicitud', () => {
     const resumen = await resumenPlan(supabase, cuentaId);
     expect(resumen!.plan).toBe('growth');
     expect(resumen!.montoMensual).toBe(49);
-    expect(resumen!.limite).toBe(2);
+    expect(resumen!.limite).toBe(3);
     // Ya no queda pendiente: si siguiera, el dueño no podría pedir otro cambio nunca más.
     expect(resumen!.solicitudPendiente).toBeNull();
   });
@@ -257,7 +257,7 @@ describe('subirPlanPorElDueno', () => {
     const cuenta = await planDe(cuentaId);
     expect(cuenta.plan).toBe('growth');
     expect(Number(cuenta.licencia_monto_mensual)).toBe(49);
-    expect(cuenta.limite_negocios).toBe(2);
+    expect(cuenta.limite_negocios).toBe(3);
   });
 
   it('BAJAR no se autogestiona: se rechaza indicando que va por solicitud', async () => {
@@ -284,13 +284,34 @@ describe('subirPlanPorElDueno', () => {
     expect((await planDe(cuentaId)).limite_negocios, 'le quitó cupo al subir de plan').toBe(5);
   });
 
-  it('subir a Pro deja la cuenta sin tope, aunque tuviera uno negociado', async () => {
+  it('subir a Pro aplica su tope de 10 y le gana a un cupo negociado menor', async () => {
     const cuentaId = await crearCuenta({ plan: 'starter', licencia_monto_mensual: 29, limite_negocios: 5 });
 
     const res = await subirPlanPorElDueno(supabase, cuentaId, 'pro');
 
     expect(res.ok, res.ok ? '' : res.error).toBe(true);
-    expect((await planDe(cuentaId)).limite_negocios, 'Pro no tiene tope').toBeNull();
+    expect((await planDe(cuentaId)).limite_negocios, 'Pro sugiere 10 y el negociado era 5').toBe(10);
+  });
+
+  // EL CASO QUE SE ROMPIÓ AL PONERLE TOPE A PRO (2026-08-13). Antes, Pro era `limiteSugerido: null`,
+  // así que el único null posible venía del plan destino. Ahora el null sobrevive solo en las
+  // cuentas viejas —las que YA compraron "sin límite"— y el `?? 0` del Math.max las mandaba a
+  // Math.max(10, 0) = 10: les revocaba en silencio lo que ya habían pagado, justo en el momento en
+  // que aceptaban pagar más. Sin esta prueba, la regresión no la atrapa nada.
+  it('subir NO le quita el sin-tope a una cuenta que ya lo tenía', async () => {
+    const cuentaId = await crearCuenta({
+      plan: 'growth',
+      licencia_monto_mensual: 49,
+      limite_negocios: null,
+    });
+
+    const res = await subirPlanPorElDueno(supabase, cuentaId, 'pro');
+
+    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    expect(
+      (await planDe(cuentaId)).limite_negocios,
+      'le revocó el sin-tope que ya tenía comprado',
+    ).toBeNull();
   });
 
   it('rechaza un plan que no está en el catálogo, y el mismo plan', async () => {

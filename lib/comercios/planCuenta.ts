@@ -202,14 +202,15 @@ export async function resolverSolicitud(
     // BAJAR de plan puede dejar a la cuenta por encima de su nuevo cupo. Se bloquea con un mensaje
     // que dice exactamente qué hacer, en vez de aplicarlo y dejar una cuenta en un estado que el
     // propio sistema considera inválido (verificarLimiteCuenta la bloquearía en la siguiente alta).
-    if (destino.limiteSugerido !== null) {
-      const cupo = await cupoDeCuenta(supabase, solicitud.cuenta_id);
-      if (cupo.ok && cupo.usadas > destino.limiteSugerido) {
-        return {
-          ok: false,
-          error: `La cuenta usa ${cupo.usadas} unidades y el plan ${destino.etiqueta} permite ${destino.limiteSugerido}. Pedile que desactive negocios o sucursales antes de bajar de plan.`,
-        };
-      }
+    // Antes esto estaba envuelto en `if (destino.limiteSugerido !== null)`, porque Pro no tenía
+    // tope y no había nada contra qué comparar. Desde que los tres planes tienen tope (2026-08-13)
+    // la comparación aplica siempre.
+    const cupo = await cupoDeCuenta(supabase, solicitud.cuenta_id);
+    if (cupo.ok && cupo.usadas > destino.limiteSugerido) {
+      return {
+        ok: false,
+        error: `La cuenta usa ${cupo.usadas} unidades y el plan ${destino.etiqueta} permite ${destino.limiteSugerido}. Pedile que desactive negocios o sucursales antes de bajar de plan.`,
+      };
     }
 
     const { error: eCuenta } = await supabase
@@ -298,12 +299,22 @@ export async function subirPlanPorElDueno(
 
   // El límite NUNCA baja al subir de plan. `limite_negocios` es un DEFAULT sugerido por plan y FM lo
   // ajusta por cuenta en tratos negociados (decisión cerrada del proyecto): a un Starter con cupo 5
-  // negociado, aplicarle el sugerido de Growth —que es 2— le quitaría capacidad justo cuando acaba
-  // de aceptar pagar más. Gana el mayor, y `null` (sin tope, Pro) le gana a cualquier número.
-  const limiteNuevo =
-    destino.limiteSugerido === null
-      ? null
-      : Math.max(destino.limiteSugerido, cuenta.limite_negocios ?? 0);
+  // negociado, aplicarle el sugerido de Growth —que es 3— le quitaría capacidad justo cuando acaba
+  // de aceptar pagar más. Gana el mayor.
+  //
+  // `null` EN LA CUENTA significa SIN TOPE, y sin tope le gana a cualquier número. Hasta el
+  // 2026-08-13 el catálogo tenía a Pro con `limiteSugerido: null`, así que el único null posible
+  // venía del PLAN destino y esta cuenta se resolvía sola. Ahora que Pro tiene tope de 10, el null
+  // sobrevive únicamente en las cuentas viejas —las que ya compraron "sin límite"— y un
+  // `?? 0` las mandaría a `Math.max(10, 0) = 10`: les revocaríamos lo que ya pagaron, en silencio y
+  // en el momento exacto en que aceptan pagar más. Por eso se chequea ANTES del Math.max.
+  //
+  // Se exige `cuenta.plan !== null` para no confundir "sin tope negociado" con "cuenta recién
+  // creada a la que todavía nadie le asignó nada": esa segunda sí toma el sugerido del destino.
+  const yaEstabaSinTope = cuenta.limite_negocios === null && cuenta.plan !== null;
+  const limiteNuevo = yaEstabaSinTope
+    ? null
+    : Math.max(destino.limiteSugerido, cuenta.limite_negocios ?? 0);
 
   const { error } = await supabase
     .from('cuentas_comercio')

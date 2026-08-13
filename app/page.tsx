@@ -196,9 +196,15 @@ interface PlanPrecio {
 //
 // El límite del plan NO es "negocios": cuenta **comercios distintos + sucursales adicionales,
 // sumados**, y la sucursal principal de cada comercio no consume cupo (ver contarUnidadesCuenta).
-// Por eso Growth dice "dos negocios, o uno con una sucursal más" en vez del ambiguo "hasta 2
-// negocios o sucursales" que traía el mockup: con ese texto, un dueño con dos locales de la misma
-// marca no sabe si le alcanza.
+//
+// ══ ESCALERA 1 / 3 / 10 (2026-08-13) ══ Antes era 1 / 2 / sin límite. Se alineó a la escalera que
+// usan TODOS los competidores (Vuelvo Cards, Loyalty Ladder, Cardly MX, Loopy Loyalty): el comprador
+// ya la vio en dos o tres cotizaciones antes de llegar acá, así que un escalón distinto se lee como
+// "menos" aunque el precio sea mejor. Y el tope de Pro en 10 no es arbitrario: es el techo TÉCNICO
+// del geopush (Apple admite 10 ubicaciones por pase e ignora la 11 en silencio; Google rechaza la
+// clase entera con más de 10), así que arriba de 10 locales el aviso por cercanía no los cubriría a
+// todos igual. Arriba de ese tope se sube `limite_negocios` a mano desde el panel FM cobrando el
+// adicional por local.
 //
 // "Hasta 2 tarjetas activas" es real y es igual en los tres planes (spec de programas de tarjeta):
 // es la cantidad de programas simultáneos por comercio, cada uno con su propio QR.
@@ -233,11 +239,11 @@ const PLANES_PRECIO: PlanPrecio[] = [
     destacado: true,
     etiqueta: 'Más elegido',
     caracteristicas: [
-      'Dos negocios, o uno con una sucursal más',
+      'Avisos por cercanía: tus clientes se enteran al pasar por el local',
+      'Hasta 3 negocios o sucursales',
       'Hasta 2 tarjetas activas por negocio',
       'Clientes ilimitados',
-      'Control de cajeros y auditoría de cada sello',
-      'Avisos por cercanía y reportes por sucursal',
+      'Control de cajeros, auditoría y reportes por sucursal',
     ],
     cta: 'Empezar',
   },
@@ -246,7 +252,7 @@ const PLANES_PRECIO: PlanPrecio[] = [
     nombre: 'Pro',
     precio: 89,
     caracteristicas: [
-      'Negocios y sucursales sin límite',
+      'Hasta 10 negocios o sucursales',
       'Hasta 2 tarjetas activas por negocio',
       'Clientes ilimitados',
       'Control de cajeros, auditoría y avisos por cercanía',
@@ -562,7 +568,10 @@ export default function Inicio() {
               ))}
             </div>
             <p className={estilos.planNota}>
-              + instalación inicial de $150 (pago único, todos los planes).
+              Todos los planes se configuran solos: la plataforma es autoservicio y trae un tutorial
+              paso a paso, así que no pagás nada por arrancar. Si tu empresa prefiere que
+              capacitemos a su personal, el <strong>onboarding es opcional</strong>: $150 de pago
+              único, el mismo precio en los tres planes.
             </p>
           </div>
 

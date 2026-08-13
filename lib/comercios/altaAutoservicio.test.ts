@@ -107,7 +107,7 @@ describe('crearCuentaAutoservicio', () => {
 
     expect(cuenta!.plan).toBe('growth');
     expect(Number(cuenta!.licencia_monto_mensual)).toBe(49);
-    expect(cuenta!.limite_negocios).toBe(2);
+    expect(cuenta!.limite_negocios).toBe(3);
     expect(cuenta!.licencia_estado).toBe('inactivo');
   });
 

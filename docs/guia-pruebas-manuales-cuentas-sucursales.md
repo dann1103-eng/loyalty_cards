@@ -17,15 +17,24 @@ filas normales que podés borrar después desde el propio panel FM).
 1. `/admin/cuentas` → "Nueva cuenta".
 2. Elegí "Growth" en el selector de plan.
 3. ✅ Esperado: el campo "Monto mensual" se precarga a `49` y "Límite de negocios + sucursales" a
-   `2`, automáticamente al elegir el plan.
+   `3`, automáticamente al elegir el plan.
 4. Cambiá el límite a mano (p. ej. `5`) y guardá.
 5. ✅ Esperado: guarda sin problema — el precargado es solo un default, no un tope fijo.
 
-**Cuenta sin límite (Pro):**
+**Cuenta Pro (tope de 10 desde el 2026-08-13):**
 1. Creá otra cuenta, elegí "Pro".
-2. ✅ Esperado: el campo de límite queda vacío ("Vacío = sin límite" como placeholder).
-3. Guardá con el límite vacío.
-4. ✅ Esperado: guarda bien. En `/admin/cuentas`, esa fila muestra "∞" en vez de un número.
+2. ✅ Esperado: el campo de límite se precarga a `10`. Antes de esa fecha Pro era "sin límite" y el
+   campo quedaba vacío — si lo ves vacío al elegir Pro, el catálogo no se desplegó.
+3. Guardá.
+4. ✅ Esperado: guarda bien y `/admin/cuentas` muestra `10` en esa fila.
+
+**Cuenta sin límite (trato negociado, ya no es un plan):**
+1. Editá una cuenta y borrá el contenido del campo de límite.
+2. ✅ Esperado: el placeholder dice "Vacío = sin límite" y guarda bien.
+3. ✅ Esperado: en `/admin/cuentas`, esa fila muestra "∞" en vez de un número.
+4. Con esa cuenta en "sin límite", subile el plan desde el panel del dueño (`/comercio/plan`).
+5. ✅ Esperado: **sigue en "∞"**. Subir de plan NUNCA le quita el sin-tope a quien ya lo tenía —
+   es la regresión que se arregló junto con el cambio de catálogo (ver `subirPlanPorElDueno`).
 
 **Cuenta demo existente (sin plan asignado):**
 1. Abrí cualquiera de las 6 cuentas piloto/demo (p. ej. "Café Aurora", "Cafetería Piloto") desde

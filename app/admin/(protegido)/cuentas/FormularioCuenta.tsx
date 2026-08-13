@@ -36,7 +36,7 @@ export default function FormularioCuenta({
   const [limite, setLimite] = useState(
     inicial?.limite_negocios !== undefined
       ? (inicial.limite_negocios === null ? '' : String(inicial.limite_negocios))
-      : String(PLANES[0].limiteSugerido ?? ''),
+      : String(PLANES[0].limiteSugerido),
   );
   const [monto, setMonto] = useState(
     inicial?.licencia_monto_mensual != null ? String(inicial.licencia_monto_mensual) : String(PLANES[0].montoMensual),
@@ -51,7 +51,7 @@ export default function FormularioCuenta({
     const p = PLANES.find((x) => x.valor === nuevoPlan);
     if (p) {
       setMonto(String(p.montoMensual));
-      setLimite(p.limiteSugerido === null ? '' : String(p.limiteSugerido));
+      setLimite(String(p.limiteSugerido));
     }
   };
 
@@ -68,7 +68,7 @@ export default function FormularioCuenta({
           {plan === '' && <option value="" disabled>— Elegí un plan —</option>}
           {PLANES.map((p) => (
             <option key={p.valor} value={p.valor}>
-              {p.etiqueta} (${p.montoMensual}/mes, {p.limiteSugerido ?? 'sin límite'})
+              {p.etiqueta} (${p.montoMensual}/mes, {p.limiteSugerido})
             </option>
           ))}
         </select>

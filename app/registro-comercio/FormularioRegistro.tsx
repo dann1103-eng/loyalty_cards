@@ -134,11 +134,9 @@ export default function FormularioRegistro({ planInicial }: { planInicial?: stri
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span className="admin-fila-nombre">{p.etiqueta}</span>
                 <span className="admin-fila-slug" style={{ display: 'block' }}>
-                  {p.limiteSugerido === null
-                    ? 'Negocios y sucursales sin límite'
-                    : p.limiteSugerido === 1
-                      ? '1 negocio o sucursal'
-                      : `Hasta ${p.limiteSugerido} negocios o sucursales`}
+                  {p.limiteSugerido === 1
+                    ? '1 negocio o sucursal'
+                    : `Hasta ${p.limiteSugerido} negocios o sucursales`}
                 </span>
               </span>
               <span className="dato-mono" style={{ flexShrink: 0 }}>${p.montoMensual}/mes</span>
