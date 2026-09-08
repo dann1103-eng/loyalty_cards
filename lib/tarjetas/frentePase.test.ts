@@ -30,6 +30,7 @@ describe('frentePase', () => {
   });
 
   it('sellos CON grilla: nada sobre la franja (taparía los sellos) y "7 de 10" debajo', () => {
+    // MUTACIÓN: ignorar `hayGrilla` (tratarlo siempre como false) sube el texto encima de la grilla.
     expect(frentePase({ tipoTarjeta: 'sellos', puntos: 7, selloMeta: 10, hayGrilla: true })).toEqual({
       primario: null,
       secundario: { etiqueta: 'SELLOS', valor: '7 de 10', numero: null },
@@ -37,7 +38,7 @@ describe('frentePase', () => {
   });
 
   it('sellos SIN grilla (franja propia o composición fallida): primario "7 de 10 sellos"', () => {
-    // MUTACIÓN: ignorar `hayGrilla` mueve el texto encima de la grilla del pass real.
+    // MUTACIÓN: tratar `hayGrilla` siempre como true deja la franja propia sin ningún contador encima.
     expect(frentePase({ tipoTarjeta: 'sellos', puntos: 7, selloMeta: 10, hayGrilla: false })).toEqual({
       primario: { etiqueta: 'SELLOS', valor: '7 de 10 sellos', numero: null },
       secundario: null,

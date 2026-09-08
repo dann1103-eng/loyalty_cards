@@ -71,6 +71,7 @@ describe('frentePase', () => {
   });
 
   it('sellos CON grilla: nada sobre la franja (taparía los sellos) y "7 de 10" debajo', () => {
+    // MUTACIÓN: ignorar `hayGrilla` (tratarlo siempre como false) sube el texto encima de la grilla.
     expect(frentePase({ tipoTarjeta: 'sellos', puntos: 7, selloMeta: 10, hayGrilla: true })).toEqual({
       primario: null,
       secundario: { etiqueta: 'SELLOS', valor: '7 de 10', numero: null },
@@ -78,7 +79,7 @@ describe('frentePase', () => {
   });
 
   it('sellos SIN grilla (franja propia o composición fallida): primario "7 de 10 sellos"', () => {
-    // MUTACIÓN: ignorar `hayGrilla` mueve el texto encima de la grilla del pass real.
+    // MUTACIÓN: tratar `hayGrilla` siempre como true deja la franja propia sin ningún contador encima.
     expect(frentePase({ tipoTarjeta: 'sellos', puntos: 7, selloMeta: 10, hayGrilla: false })).toEqual({
       primario: { etiqueta: 'SELLOS', valor: '7 de 10 sellos', numero: null },
       secundario: null,
@@ -865,6 +866,11 @@ y dentro de `describe('brandingEfectivo')` agregar:
     expect(r.heroUrl).toBe(COMERCIO.heroUrl);
     expect(r.encuadreFranja).toEqual(COMERCIO.encuadreFranja);
   });
+
+  it('encuadre: con branding_propio APAGADO se ignora el encuadre propio aunque haya foto propia', () => {
+    const r = brandingEfectivo(COMERCIO, { brandingPropio: false, heroUrl: 'https://ejemplo.com/hero-programa.png', encuadreFranja: { modo: 'llenar', focoX: 0, focoY: 0, zoom: 300 } });
+    expect(r.encuadreFranja).toEqual(COMERCIO.encuadreFranja);
+  });
 ```
 
 En `heroUrl.test.ts`, en `datos()` agregar `encuadreFranja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },` y agregar dentro de `describe('versionHero')`:
@@ -1042,7 +1048,7 @@ Run: `npx tsc --noEmit` → va a fallar en cada llamador de `brandingEfectivo` y
 - `app/comercio/(protegido)/branding/page.tsx`: agregar las 4 columnas al select de `comercios` (Task 9 las usa).
 - Cualquier `scripts/*.ts` que construya `DatosVersionHero` o `BrandingBase` (buscar con grep `versionHero(` y `brandingEfectivo(`).
 
-**Nota sobre `DatosStrip`:** para no dejar el typecheck roto entre tareas, en ESTA tarea agregá `encuadreFranja: Encuadre` a `DatosStrip` (`lib/apple/stripPass.tsx`) y a `DatosPass` (`lib/apple/generatePass.ts`), pasalo desde `generatePass` a `componerStrips`, y en `generatePass.test.ts` agregá `encuadreFranja: ENCUADRE_POR_DEFECTO` a `datosBase()`. `stripPass` todavía NO lo usa para dibujar: eso es Task 6.
+**Nota sobre `DatosStrip`:** para no dejar el typecheck roto entre tareas, en ESTA tarea agregá `encuadreFranja: Encuadre` a `DatosStrip` (`lib/apple/stripPass.tsx`) y a `DatosPass` (`lib/apple/generatePass.ts`), pasalo desde `generatePass` a `componerStrips`, y en `generatePass.test.ts` agregá `encuadreFranja: ENCUADRE_POR_DEFECTO` a `datosBase()`. **`lib/apple/pesoPass.test.ts` construye un `DatosPass` completo a mano** (no usa `datosBase()`): agregarle `encuadreFranja: ENCUADRE_POR_DEFECTO` también, y sumarlo al commit. `stripPass` todavía NO lo usa para dibujar: eso es Task 6.
 
 Run: `npx tsc --noEmit` → limpio. `npx vitest run lib/comercio lib/google lib/apple lib/portal` → verde (requiere la 0032 aplicada; si el usuario todavía no la aplicó, anotá qué archivos quedaron pendientes de correr y seguí).
 
@@ -1064,7 +1070,7 @@ git commit -m "El encuadre viaja con la foto en brandingEfectivo y entra al hash
 
 - [ ] **Step 1: Pruebas (rojo)**
 
-En `guardarBranding.test.ts`, toda llamada existente a `guardarBranding` gana `encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 }`. Agregar:
+En `guardarBranding.test.ts` **y en `lib/tarjetas/tiposFuncionales.test.ts` (dos llamadas, líneas ~190 y ~211)**, toda llamada existente a `guardarBranding` gana `encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 }` (sumar `tiposFuncionales.test.ts` al commit). Agregar:
 
 ```ts
   it('guarda el encuadre de la foto de la franja', async () => {
@@ -1639,6 +1645,25 @@ Implementación en `syncClase.ts`: el `select` pasa a `'nombre, color_fondo, col
 
 En `syncClasePrograma.ts`, con `marca` ya resuelta: `heroUrl: marca.heroUrl ? (urlFranjaClase(comercioId, programaId, versionFranjaClase({ colorFondo: marca.colorFondo, colorLabel: marca.colorLabel, heroUrl: marca.heroUrl, difuminadoFranja: marca.difuminadoFranja, encuadreFranja: marca.encuadreFranja })) ?? marca.heroUrl) : null`. Agregar a `syncClasePrograma.test.ts` una prueba equivalente a la primera de arriba (la URL lleva `?programa=<id>&v=`).
 
+Para no repetir esa expresión en tres archivos, ponerla en `lib/google/heroUrl.ts`:
+```ts
+// La portada que va en la clase: la compuesta si hay foto y base URL; la foto cruda si falta la base
+// (degradación); null sin foto. UNA función para los TRES lugares que construyen la clase.
+export function heroUrlDeClase(
+  comercioId: string,
+  programaId: string | null,
+  marca: { colorFondo: string | null; colorLabel: string | null; heroUrl: string | null; difuminadoFranja: string; encuadreFranja: Encuadre },
+): string | null {
+  if (!marca.heroUrl) return null;
+  return urlFranjaClase(comercioId, programaId, versionFranjaClase(marca)) ?? marca.heroUrl;
+}
+```
+y usarla en `syncClase.ts`, `syncClasePrograma.ts` y **`lib/google/linkGuardar.ts`**.
+
+**`linkGuardar.ts` es el TERCER lugar que construye la clase, y es el más peligroso:** la clase viaja EMBEBIDA en el JWT de "Agregar a Google Wallet" y Google la upsertea por id al procesarlo (el propio archivo lo documenta en su cabecera). Si siguiera mandando `heroUrl: marca.heroUrl`, cada cliente que toca el botón devolvería la portada a la foto cruda, deshaciendo lo que la ruta nueva logró. En `construirClase(classId, {...})` de `linkGuardar.ts` (línea ~108): `heroUrl: heroUrlDeClase(tarjeta.comercio_id, programa?.id ?? null, marca)`. Ojo: el `classId` puede ser el del comercio o el del programa; el `programaId` de la URL sigue la misma regla que `syncClasePrograma`: si el JWT lleva la clase del PROGRAMA (`resProg.ok && resProg.classId`), la URL lleva `?programa=`; si lleva la del comercio, no. Guardar en una variable `const claseDelPrograma = …` al decidir `classId` y usarla acá.
+
+Prueba en `lib/google/linkGuardar.test.ts` (ya decodifica el JWT con `jwt` y una llave de prueba; ver cómo lee `payload.loyaltyClasses[0]`): con un comercio con `hero_url` y `NEXT_PUBLIC_BASE_URL` fijado, `payload.loyaltyClasses[0].heroImage.sourceUri.uri` matchea `/\/api\/comercios\/<comercioId>\/franja\.png\?v=[0-9a-f]{12}$/`. MUTACIÓN: volver a `heroUrl: marca.heroUrl` → la prueba falla (URL de Storage).
+
 - [ ] **Step 4: Barrido de clases de programas al guardar la marca del negocio**
 
 En `lib/google/syncClasePrograma.ts` agregar:
@@ -1668,19 +1693,19 @@ export async function syncClasesDeProgramasConClase(
 }
 ```
 
-Prueba en `syncClasePrograma.test.ts`: comercio con dos programas, uno con `google_class_id: 'clase-x'` y logo en el comercio → `syncClasesDeProgramasConClase` hace `patch` UNA vez (con `resourceId: 'clase-x'`) y ningún `insert`. MUTACIÓN: quitar el `.not('google_class_id', 'is', null)` → aparece un `insert` (crearía una clase permanente).
+Prueba en `syncClasePrograma.test.ts`. **Ojo con el fixture de ese archivo:** `crearEscenario` crea UN programa y el `afterEach` borra UN `programaId`; un segundo programa quedaría huérfano, bloquearía el borrado del comercio por FK y dejaría basura permanente en la base REAL (incidente del 2026-07-30, CLAUDE.md). Para esta prueba usá `crearEntorno` de `test/fixtures/entornoComercio.ts` (borra por `comercio_id`) en un `describe` aparte con su propio `afterEach(() => entorno.limpiar())`, o extendé el fixture para rastrear varios programas. Escenario: comercio con `logo_url` y `google_class_id`; programa A con `google_class_id: 'clase-x'`; programa B **con `branding_propio: true` y `color_fondo` propio pero SIN `google_class_id`** (así `necesitaClasePropia` da true: sin eso, `syncClasePrograma` corta antes del insert y la mutación no se ve). Aserción: `syncClasesDeProgramasConClase` hace `patch` UNA vez con `resourceId: 'clase-x'` y **ningún `insert`**. MUTACIÓN: quitar el `.not('google_class_id', 'is', null)` → aparece un `insert` para B (crearía una clase permanente). Confirmar y restaurar.
 
 En `actions.ts`, `accionGuardarBranding`, después de `syncClaseComercio`: `await syncClasesDeProgramasConClase(createServiceClient(), comercioId);` con el comentario del porqué.
 
-Prueba nueva `app/comercio/(protegido)/branding/actions.test.ts` con el patrón de `sucursales/actions.test.ts` (mocks de `verifyComercioOwner`, `next/cache`, `notificarCambioComercio`, `syncClase`, `syncComercio`, y `syncClasePrograma` → `syncClasesDeProgramasConClase: vi.fn()`): un guardado válido (FormData con los tres colores, `difuminado_franja`, y los cuatro campos del encuadre) llama al barrido con el `comercioId` del gate; un guardado inválido (zoom 999) NO lo llama y devuelve `{ error: 'El zoom debe ser un entero de 100 a 300.' }`.
+Prueba nueva `app/comercio/(protegido)/branding/actions.test.ts` con el patrón de `sucursales/actions.test.ts` (mocks de `verifyComercioOwner`, `next/cache`, `notificarCambioComercio`, `syncClase`, `syncComercio`, y `@/lib/google/syncClasePrograma` → **exportar tanto `syncClasesDeProgramasConClase: vi.fn()` como `syncClasePrograma: vi.fn()`**, porque `actions.ts` importa `propagarMarcaPrograma`, que importa `syncClasePrograma`, y el proxy de vitest lanza al acceder a un export ausente del mock): un guardado válido (FormData con los tres colores, `difuminado_franja`, y los cuatro campos del encuadre) llama al barrido con el `comercioId` del gate; un guardado inválido (zoom 999) NO lo llama y devuelve `{ error: 'El zoom debe ser un entero de 100 a 300.' }`.
 
 - [ ] **Step 5: Verde, typecheck, commit**
 
 Run: `npx vitest run lib/google "app/api/comercios" "app/comercio/(protegido)/branding"` → verde. `npx tsc --noEmit` limpio.
 
 ```bash
-git add "app/api/comercios/[comercioId]/franja.png/route.ts" "app/api/comercios/[comercioId]/franja.png/route.test.ts" lib/google/syncClase.ts lib/google/syncClase.test.ts lib/google/syncClasePrograma.ts lib/google/syncClasePrograma.test.ts "app/comercio/(protegido)/branding/actions.ts" "app/comercio/(protegido)/branding/actions.test.ts"
-git commit -m "La portada de la clase de Google es la misma banda compuesta del pass de Apple" -m "Ruta nueva franja.png (una escala, sin progreso, sin franja propia) con ?v= por todo lo que dibuja. syncClase y syncClasePrograma apuntan ahi cuando hay foto; sin NEXT_PUBLIC_BASE_URL caen a la foto cruda. Al guardar la marca del negocio se re-sincronizan las clases de los programas que ya tienen una."
+git add "app/api/comercios/[comercioId]/franja.png/route.ts" "app/api/comercios/[comercioId]/franja.png/route.test.ts" lib/google/heroUrl.ts lib/google/heroUrl.test.ts lib/google/syncClase.ts lib/google/syncClase.test.ts lib/google/syncClasePrograma.ts lib/google/syncClasePrograma.test.ts lib/google/linkGuardar.ts lib/google/linkGuardar.test.ts "app/comercio/(protegido)/branding/actions.ts" "app/comercio/(protegido)/branding/actions.test.ts"
+git commit -m "La portada de la clase de Google es la misma banda compuesta del pass de Apple" -m "Ruta nueva franja.png (una escala, sin progreso, sin franja propia) con ?v= por todo lo que dibuja. Los TRES lugares que construyen la clase (syncClase, syncClasePrograma y la clase embebida en el JWT de linkGuardar, que Google upsertea por id) apuntan ahi cuando hay foto; sin NEXT_PUBLIC_BASE_URL caen a la foto cruda. Al guardar la marca del negocio se re-sincronizan las clases de los programas que ya tienen una."
 ```
 
 ---

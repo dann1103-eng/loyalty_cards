@@ -84,6 +84,14 @@ imprimible** (plantilla "foto").
    `image/png` es exactamente el tipo de cosa que Google rechaza al validar la clase. Un comercio
    con foto Y franja personalizada ve en Android la banda con la foto, no la franja.
 
+   **La clase EMBEBIDA en el JWT de "Agregar a Google Wallet" (`lib/google/linkGuardar.ts`) apunta
+   a la misma URL compuesta**, con la misma condición. Google hace upsert por id al procesar el JWT
+   (el propio archivo lo documenta: ese cuerpo ya pisó una vez lo que `syncObjetoTarjeta` había
+   escrito bien). Si el JWT llevara la foto cruda, cada cliente que toca el botón devolvería la
+   portada a la foto sin velo ni encuadre, deshaciendo lo que la ruta logró. Son TRES lugares que
+   construyen la clase (`syncClaseComercio`, `syncClasePrograma`, `linkGuardar`) y los tres pasan
+   por `urlFranjaClase` + `versionFranjaClase`.
+
 6. **Zoom y arrastre no cambian el modelo.** El zoom es el cuarto número del encuadre. El
    arrastre es aritmética pura sobre los mismos datos: mover la foto N píxeles en la vista previa
    cambia el foco en `N / holgura × 100` en ese eje, donde la holgura es `marco − foto escalada`
