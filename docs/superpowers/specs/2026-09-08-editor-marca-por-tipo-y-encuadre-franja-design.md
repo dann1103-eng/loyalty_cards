@@ -23,14 +23,19 @@ imprimible** (plantilla "foto").
 
 ## Decisiones
 
-1. **La vista previa replica el pass de Apple para los ocho tipos.** Etiqueta y valor salen de
-   `contadorPase`, la misma función que usa el pass real, con contador 0 (una tarjeta recién
-   emitida). Los tipos sin contador no muestran ninguno. El campo primario se dibuja **sobre la
-   franja** (abajo a la izquierda), que es donde Apple dibuja los `primaryFields` de un
-   `storeCard`. Debajo de la franja va la fila secundaria: "SELLOS · 7 de N" a la izquierda solo
-   en sellos con grilla (hoy va ahí en el pass), y el nombre del titular a la derecha, con el
-   texto de ejemplo "Nombre del cliente". Sellos conserva su lógica actual (7 sellos llenos como
-   demostración, meta solo si está configurada).
+1. **La vista previa replica el pass de Apple para los ocho tipos, con la MISMA función que
+   arma el frente del pass.** Hoy la decisión "qué va en el campo primario y qué en el
+   secundario" vive inline en `generarPassApple` (sellos con grilla → secundario "SELLOS · 7 de
+   N"; sellos sin grilla → primario "7 de N sellos"; el resto → `contadorPase`, que devuelve
+   `null` para cupón, membresía y descuento). Se extrae a un módulo puro
+   `lib/tarjetas/frentePase.ts` (`frentePase({ tipoTarjeta, puntos, selloMeta, hayGrilla })` →
+   `{ primario, secundario }`, cada uno `{ etiqueta, valor, numero } | null`) que consumen
+   `generatePass` y la vista previa. Así la vista previa no puede decir algo distinto del pass ni
+   siquiera en una palabra. La vista previa usa contador 0 (tarjeta recién emitida) salvo en
+   sellos, que conserva su demostración de 7 llenos con meta solo si está configurada. El campo
+   primario se dibuja **sobre la franja** (abajo a la izquierda), que es donde Apple dibuja los
+   `primaryFields` de un `storeCard`. Debajo va la fila secundaria: el secundario a la izquierda
+   si lo hay, y el nombre del titular a la derecha con el texto de ejemplo "Nombre del cliente".
 
 2. **El encuadre es un dato de cuatro partes: modo, foco horizontal, foco vertical y zoom.**
    - `modo`: `'llenar'` (la foto cubre el marco y se recorta) o `'completa'` (la foto entra
@@ -71,12 +76,23 @@ imprimible** (plantilla "foto").
    (`/api/tarjetas/[id]/hero.png`) ya se compone con `componerStrips` y hereda el encuadre sin
    código aparte.
 
+   **La franja personalizada (`strip_url`) NO entra en la portada de la clase.** La ruta fuerza
+   `stripUrl: null` y sirve solo la banda con la foto; la condición para usar la URL compuesta es
+   una sola, en la ruta y en `syncClase`/`syncClasePrograma`: **hay foto efectiva**. Sin foto
+   efectiva, la clase sale sin `heroImage`, como hoy. Motivo: `componerStrips` con `stripUrl`
+   devuelve los bytes crudos de la franja (formato y tamaño arbitrarios) y servirlos como
+   `image/png` es exactamente el tipo de cosa que Google rechaza al validar la clase. Un comercio
+   con foto Y franja personalizada ve en Android la banda con la foto, no la franja.
+
 6. **Zoom y arrastre no cambian el modelo.** El zoom es el cuarto número del encuadre. El
    arrastre es aritmética pura sobre los mismos datos: mover la foto N píxeles en la vista previa
    cambia el foco en `N / holgura × 100` en ese eje, donde la holgura es `marco − foto escalada`
-   (negativa cuando la foto desborda). En un eje sin holgura la foto no se mueve. Los deslizadores
-   siguen existiendo (precisión y teclado) y se actualizan al arrastrar. La rueda del mouse NO hace
-   zoom: pelearía con el scroll de la página.
+   (negativa cuando la foto desborda). En un eje sin holgura la foto no se mueve. El delta es
+   **incremental** (desde el último `pointermove`, no acumulado desde el `pointerdown`): al
+   arrastrar más allá del borde el foco se acota en 0 o 100 y, al volver, la foto responde de
+   inmediato en vez de quedarse pegada hasta que el puntero desanda el exceso. Los deslizadores
+   siguen existiendo (precisión y teclado) y se actualizan al arrastrar. La rueda del mouse NO
+   hace zoom: pelearía con el scroll de la página.
 
 7. **Migración primero, deploy después.** Las cuatro columnas nuevas entran al payload de
    `guardarBranding` y `guardarBrandingPrograma`. Sin la migración aplicada, TODO el formulario
@@ -144,14 +160,24 @@ export function validarEncuadre(e: { modo: string; focoX: number; focoY: number;
 // crudos (NaN incluido) para que validarEncuadre los rechace con mensaje claro.
 export function encuadreDesdeFormulario(c: { modo: string; focoX: string; focoY: string; zoom: string }):
   { modo: string; focoX: number; focoY: number; zoom: number } | null;
-// Lo que sale de la BD es dato hostil. Comercio: cuatro columnas NOT NULL. Programa: si alguna es
-// null → null (sin encuadre propio). Un valor fuera de rango cae al default.
-export function encuadreDesdeColumnas(fila: {
+// Lo que sale de la BD es dato hostil. Dos funciones y no una con `| null`: las cuatro columnas
+// del comercio son NOT NULL, y un `?? ENCUADRE_POR_DEFECTO` en cada llamador del comercio sería
+// indistinguible de un olvido. Un valor fuera de rango o ilegible hace caer el ENCUADRE ENTERO al
+// default (se lee como unidad), nunca un campo suelto.
+export function encuadreDelComercio(fila: {
+  encuadre_franja: string; foco_franja_x: number; foco_franja_y: number; zoom_franja: number;
+}): Encuadre;
+// Programa: si alguna columna es null → null (sin encuadre propio).
+export function encuadreDelPrograma(fila: {
   encuadre_franja: string | null; foco_franja_x: number | null;
   foco_franja_y: number | null; zoom_franja: number | null;
 }): Encuadre | null;
-export function sanearEncuadre(e: Encuadre): Encuadre;
 ```
+
+Medidas no positivas (`ancho` o `alto` ≤ 0, que es lo que da `naturalWidth` antes del `onLoad`):
+`colocarFoto` devuelve el marco entero sin desplazamiento, `rectanguloVisible` la ventana `0 0
+marco`, y `focoTrasArrastre` el foco sin cambios. Nunca `NaN`/`Infinity`: un `NaN` en una
+coordenada rompe el SVG del cartel entero.
 
 Aritmética de `colocarFoto`:
 
@@ -168,7 +194,8 @@ top        = (marco.alto  − alto)  × focoY / 100
 `alto = marco.alto/escala`. `focoTrasArrastre`: `holgura = marcoPx − fotoEscaladaPx` por eje;
 `foco' = acotar(foco + deltaPx/holgura × 100)`; con `|holgura| < 0.5` px el foco no cambia.
 
-Casos que las pruebas fijan (y su mutación): centrado con default reproduce el `cover` actual;
+Casos que las pruebas fijan (y su mutación): medidas no positivas → marco entero y foco sin
+cambios; centrado con default reproduce el `cover` actual;
 `focoY` 0 y 100 muestran los extremos opuestos; `completa` sin zoom deja la foto entera dentro
 del marco; zoom 200 en `llenar` duplica el tamaño; el arrastre con holgura 0 no mueve; arrastrar
 más allá del borde deja el foco en 0 o en 100; `validarEncuadre` rechaza modo desconocido,
@@ -202,20 +229,36 @@ la regla, y que con `branding_propio` apagado se ignora el encuadre propio.
 `GET /api/comercios/[comercioId]/franja.png?programa=<programaId>&v=<hash>`
 
 - Lee el comercio y, si viene `programa`, el programa **scopeado por `comercio_id`** (uno ajeno
-  o inexistente → 404, no cae al comercio en silencio). Resuelve `brandingEfectivo` y llama a
-  `componerStrips` con `tipoTarjeta: 'puntos'`, `puntos: 0`, `selloMeta: null` (fuerza la banda de
-  marca: la clase es de todos los clientes y no puede llevar el progreso de uno). Sirve `s3`
-  (1125×369, el tamaño más cercano al recomendado de Google). Sin foto efectiva ni franja
-  personalizada → 404. `Cache-Control: no-store`, como `hero.png`.
+  o inexistente → 404, no cae al comercio en silencio). Resuelve `brandingEfectivo` y compone la
+  banda con `tipoTarjeta: 'puntos'`, `puntos: 0`, `selloMeta: null`, **`stripUrl: null`** (fuerza
+  la banda de marca con la foto: la clase es de todos los clientes y no puede llevar el progreso
+  de uno, y la franja personalizada queda afuera — decisión 5). Sin foto efectiva → 404.
+  `Cache-Control: no-store`, como `hero.png`.
+- **Esta ruta está en el camino crítico de la creación de la clase**: Google descarga la imagen al
+  hacer `insert`/`patch`, y si falla o tarda, falla la sincronización entera (en el `insert`
+  inicial, el comercio se queda sin Google Wallet hasta el próximo intento). Por eso se renderiza
+  UNA sola escala y no tres: `stripPass` exporta `componerFranja(datos, escala)` (la función que
+  `componerStrips` ya llama tres veces por dentro) y la ruta sirve la escala 3 (1125×369, el
+  tamaño más cercano al recomendado de Google). La degradación a foto cruda cuando falta
+  `NEXT_PUBLIC_BASE_URL` no cubre un fallo de esta ruta en producción; eso se vigila con
+  `scripts/verificar-wallet.ts` como el resto de Google.
 - `lib/google/heroUrl.ts` gana `urlFranjaClase(comercioId, programaId | null, version)`; null si
   falta `NEXT_PUBLIC_BASE_URL`, y en ese caso `syncClase`/`syncClasePrograma` mandan la foto cruda
   como hoy (degradación, no fallo).
 - `syncClaseComercio` y `syncClasePrograma` leen las columnas que la banda dibuja (colores,
-  difuminado, franja, encuadre) para calcular la versión con `versionHero` y pasan a
-  `construirClase` la URL compuesta cuando hay foto efectiva. `construirClase` no cambia.
-- Prueba de ruta (patrón de `hero.png/route.test.ts`, con `componerStrips` mockeado): dibuja con
-  el branding efectivo del programa, fuerza banda de marca aunque el programa sea de sellos,
-  rechaza un `programa` de otro comercio, y 404 sin foto.
+  difuminado, encuadre) para calcular la versión con `versionHero` (`puntos: 0`, `selloMeta:
+  null`, `stripUrl: null`, igual que la ruta) y pasan a `construirClase` la URL compuesta cuando
+  hay foto efectiva. `construirClase` no cambia.
+- **Barrido de clases de programas al guardar la marca del negocio.** La imagen de clase de un
+  programa con clase propia que HEREDA la foto ahora depende de ocho campos del negocio (foto,
+  colores, difuminado, encuadre). `accionGuardarBranding` hoy solo llama `syncClaseComercio`;
+  pasa a llamar además `syncClasePrograma` para cada programa del comercio con `google_class_id`
+  (best-effort, en secuencia). Sin esto, cambiar el encuadre desde "Todas mis tarjetas" dejaría
+  esas clases con el `?v=` viejo en Android. Prueba: con un programa con `google_class_id`, el
+  guardado dispara su sync; sin `google_class_id`, no (una clase de Google no se crea por esto).
+- Prueba de ruta (patrón de `hero.png/route.test.ts`, con `componerFranja` mockeado): dibuja con
+  el branding efectivo del programa, fuerza banda de marca aunque el programa sea de sellos y
+  aunque tenga franja personalizada, rechaza un `programa` de otro comercio, y 404 sin foto.
 
 ## Guardado
 
@@ -225,7 +268,7 @@ la regla, y que con `branding_propio` apagado se ignora el encuadre propio.
   (null = no tocar/heredar). `brandingProgramaDesdeFormulario` usa `encuadreDesdeFormulario`.
   `hayMarcaPropia` NO cambia: un encuadre propio solo existe con foto propia, y subir la foto ya
   enciende `branding_propio` (documentado en el código).
-- `brandingDeProgramas` devuelve `encuadreFranja: Encuadre | null` vía `encuadreDesdeColumnas`.
+- `brandingDeProgramas` devuelve `encuadreFranja: Encuadre | null` vía `encuadreDelPrograma`.
 - Server Actions: `accionGuardarBranding` y `accionGuardarBrandingDePrograma` leen
   `encuadre_franja`, `foco_franja_x`, `foco_franja_y`, `zoom_franja` del `FormData`.
 - Pruebas: rechazo con mensaje por cada regla; persistencia; en programa, cuatro vacíos → null y
@@ -234,12 +277,16 @@ la regla, y que con `branding_propio` apagado se ignora el encuadre propio.
 ## Consumidores a barrer (lección del spec de branding por programa)
 
 Todos los `select` que hoy traen `difuminado_franja` traen también las cuatro columnas nuevas y
-pasan el encuadre a `brandingEfectivo`. Lista, por grep sobre `difuminado_franja`:
+pasan el encuadre a `brandingEfectivo`. Lista, por grep sobre `difuminado_franja` y sobre
+`brandingEfectivo(`:
 `lib/apple/datosPassDeTarjeta.ts`, `app/api/tarjetas/[tarjetaId]/hero.png/route.ts`,
 `lib/google/syncObjeto.ts`, `lib/google/linkGuardar.ts`, `lib/google/syncClasePrograma.ts`,
 `lib/google/syncClase.ts`, `lib/comercio/cartel/resolverDatosCartel.ts`,
-`lib/comercio/guardarBrandingPrograma.ts`, `app/comercio/(protegido)/branding/page.tsx`. El tipo
-obligatorio en `BrandingBase` hace que el compilador señale el que falte.
+`lib/comercio/guardarBrandingPrograma.ts`, `app/comercio/(protegido)/branding/page.tsx`, y
+`lib/portal/buscarTarjetas.ts`, que llama `brandingEfectivo` con valores de relleno (ya pasa
+`difuminadoFranja: 'medio'` porque el portal no dibuja la franja) y pasa `ENCUADRE_POR_DEFECTO`
+con el mismo comentario. El tipo obligatorio en `BrandingBase` hace que el compilador señale el
+que falte.
 
 ## Cartel imprimible (plantilla "foto")
 
@@ -269,12 +316,15 @@ obligatorio en `BrandingBase` hace que el compilador señale el que falte.
   - Posición horizontal y vertical: `<input type="range" 0–100 step 1>`.
   - Zoom: `<input type="range" 100–300 step 5>` con el valor visible.
   - Difuminado: el `<select>` de hoy, con su `key` de remount intacta.
-  - Se muestra cuando hay foto efectiva y no hay franja personalizada. En negocio, los cuatro
-    valores viajan SIEMPRE (inputs ocultos cuando el bloque no se ve) para no resetear un
-    encuadre guardado mientras haya una franja personalizada puesta. En programa sin foto
-    propia, el bloque no se renderiza ni manda los campos (→ null → hereda) y un texto explica que
-    el encuadre acompaña a la foto y se ajusta desde "Todas mis tarjetas". Con franja
-    personalizada, una nota dice que la franja reemplaza a la foto.
+  - **Cuándo se VE:** hay foto efectiva, no hay franja personalizada y (en programa) la foto es
+    propia. **Cuándo VIAJAN los cuatro campos:** siempre que haya foto propia — en negocio,
+    siempre que haya foto; en programa, siempre que tenga `hero_url` propio — como inputs ocultos
+    cuando el bloque no se ve. Son dos reglas distintas a propósito: si viajaran solo cuando se
+    ven, un programa con foto propia y franja personalizada mandaría cuatro vacíos al publicar
+    los colores, `encuadreDesdeFormulario` daría null y el guardado borraría el encuadre que el
+    dueño ya había ajustado. Solo un programa SIN foto propia no manda los campos (→ null →
+    hereda), y ahí un texto explica que el encuadre acompaña a la foto y se ajusta desde "Todas
+    mis tarjetas". Con franja personalizada, una nota dice que la franja reemplaza a la foto.
 - **Arrastre en la vista previa**: la franja captura el puntero (`setPointerCapture`,
   `touch-action: none`), calcula el delta contra el `getBoundingClientRect` del marco y usa
   `focoTrasArrastre` con las medidas naturales de la foto (`naturalWidth/Height` al `onLoad`).
@@ -298,6 +348,8 @@ obligatorio en `BrandingBase` hace que el compilador señale el que falte.
 
 ## Orden de trabajo
 
+0. `lib/tarjetas/frentePase.ts` + `generatePass` consumiéndolo (las pruebas de `generatePass`
+   existentes son la red).
 1. Módulo puro + pruebas de mutación.
 2. Migración 0032, `types.ts`, `verificar-0032.ts`; el usuario aplica el SQL.
 3. `brandingEfectivo` + herencia; `versionHero`.
