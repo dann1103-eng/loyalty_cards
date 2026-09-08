@@ -19,6 +19,7 @@ import {
 } from '@/lib/comercio/guardarReversoPrograma';
 import { notificarCambioComercio, notificarCambioPrograma } from '@/lib/apple/notificarCambioComercio';
 import { syncClaseComercio } from '@/lib/google/syncClase';
+import { syncClasesDeProgramasConClase } from '@/lib/google/syncClasePrograma';
 import { syncObjetosComercio } from '@/lib/google/syncComercio';
 import { propagarMarcaPrograma } from '@/lib/comercio/propagarMarca';
 import {
@@ -71,6 +72,12 @@ export async function accionGuardarBranding(
   // URL, así que los objetos hay que re-sincronizarlos uno por uno o los passes ya guardados se
   // quedan con la grilla vieja. Best-effort las dos.
   await syncClaseComercio(createServiceClient(), comercioId);
+  // Y las clases PROPIAS de los programas que ya tienen una: su portada es la banda compuesta, que
+  // depende de ocho campos del negocio (foto, colores, difuminado y los cuatro del encuadre) cuando
+  // el programa hereda la foto. Sin esto, cambiar el encuadre desde "Todas mis tarjetas" las dejaba
+  // con el `?v=` viejo y en Android seguían mostrando la portada anterior para siempre. No crea
+  // ninguna clase nueva: una clase de Google es permanente.
+  await syncClasesDeProgramasConClase(createServiceClient(), comercioId);
   await syncObjetosComercio(createServiceClient(), comercioId);
 
   revalidatePath('/comercio/branding');

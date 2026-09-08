@@ -3,6 +3,7 @@ import type { Database } from '../supabase/types';
 import { walletClient, issuerId } from './walletClient';
 import { idClasePrograma } from './ids';
 import { construirClase } from './construirRecursos';
+import { heroUrlDeClase } from './heroUrl';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
 import { brandingEfectivo, necesitaClasePropia } from '../comercio/brandingEfectivo';
 import { encuadreDelComercio, encuadreDelPrograma } from '../comercio/encuadreFranja';
@@ -108,7 +109,15 @@ export async function syncClasePrograma(
       nombre: c.nombre,
       colorFondo: marca.colorFondo,
       logoUrl: marca.logoUrl,
-      heroUrl: marca.heroUrl,
+      // La portada compuesta de ESTE programa (misma banda que su pass de Apple), versionada por
+      // todo lo que dibuja. Sin NEXT_PUBLIC_BASE_URL cae a la foto cruda: degradación, no fallo.
+      heroUrl: heroUrlDeClase(comercioId, programaId, {
+        colorFondo: marca.colorFondo,
+        colorLabel: marca.colorLabel,
+        heroUrl: marca.heroUrl,
+        difuminadoFranja: marca.difuminadoFranja,
+        encuadreFranja: marca.encuadreFranja,
+      }),
       ubicaciones,
     });
     const client = walletClient();
@@ -132,5 +141,28 @@ export async function syncClasePrograma(
   } catch (err) {
     console.error('[google] falló la sincronización de la clase del programa:', err);
     return { ok: false, error: 'No se pudo sincronizar con Google Wallet.' };
+  }
+}
+
+// Re-sincroniza la clase de cada programa del comercio que YA tiene una. Lo llama el guardado de la
+// marca del NEGOCIO: la portada de un programa con clase propia que hereda la foto depende de ocho
+// campos del negocio (foto, colores, difuminado, encuadre), y sin esto quedaba con el `?v=` viejo en
+// Android. Solo los que tienen google_class_id: una clase de Google es permanente y no se crea por
+// esto. Best-effort y en secuencia.
+export async function syncClasesDeProgramasConClase(
+  supabase: SupabaseClient<Database>,
+  comercioId: string,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('programas_tarjeta')
+    .select('id')
+    .eq('comercio_id', comercioId)
+    .not('google_class_id', 'is', null);
+  if (error) {
+    console.error('[google] no se pudieron listar los programas con clase:', error);
+    return;
+  }
+  for (const p of data ?? []) {
+    await syncClasePrograma(supabase, comercioId, p.id);
   }
 }

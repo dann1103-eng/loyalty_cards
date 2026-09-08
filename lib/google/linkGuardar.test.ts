@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { createServiceClient } from '../supabase/server';
 import { generarLinkGuardar } from './linkGuardar';
+import { syncClaseComercio } from './syncClase';
 
 // Par de llaves de PRUEBA generado en memoria — nunca toca las credenciales reales del proyecto.
 const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
@@ -35,7 +36,11 @@ beforeEach(() => {
   patchObjetoMock.mockReset().mockResolvedValue({});
 });
 
-async function crearTarjeta(opts: { googleClassId?: string | null; logoUrl?: string | null; puntos?: number }) {
+// NEXT_PUBLIC_BASE_URL lo fijan las pruebas de la portada compuesta (viaja dentro de la URL): se
+// restaura para no filtrarlo al resto de la suite.
+const BASE_ORIGINAL = process.env.NEXT_PUBLIC_BASE_URL;
+
+async function crearTarjeta(opts: { googleClassId?: string | null; logoUrl?: string | null; puntos?: number; heroUrl?: string | null }) {
   const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const { data: comercio, error: eC } = await supabase
     .from('comercios')
@@ -44,6 +49,7 @@ async function crearTarjeta(opts: { googleClassId?: string | null; logoUrl?: str
       slug: `test-google-link-${sufijo}`,
       google_class_id: opts.googleClassId === undefined ? 'issuer-test.comercio_x' : opts.googleClassId,
       logo_url: opts.logoUrl === undefined ? 'https://ejemplo.com/logo.png' : opts.logoUrl,
+      hero_url: opts.heroUrl ?? null,
     })
     .select('id, nombre, tipo_tarjeta, sello_meta, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias')
     .single();
@@ -79,6 +85,8 @@ async function crearTarjeta(opts: { googleClassId?: string | null; logoUrl?: str
 }
 
 afterEach(async () => {
+  if (BASE_ORIGINAL === undefined) delete process.env.NEXT_PUBLIC_BASE_URL;
+  else process.env.NEXT_PUBLIC_BASE_URL = BASE_ORIGINAL;
   if (!ids) return;
   await supabase.from('tarjetas').delete().eq('id', ids.tarjetaId);
   await supabase.from('clientes').delete().eq('id', ids.clienteId);
@@ -102,6 +110,43 @@ describe('generarLinkGuardar', () => {
     expect(payload.loyaltyClasses[0].id).toBe('issuer-test.comercio_x');
     expect(payload.loyaltyObjects[0].id).toBe('issuer-test.tarjeta_' + t.tarjetaId);
     expect(payload.loyaltyObjects[0].classId).toBe('issuer-test.comercio_x');
+  });
+
+  // La clase viaja EMBEBIDA en el JWT y Google la upsertea por id al procesarlo. Si acá siguiera
+  // mandando la foto cruda, cada cliente que toca "Agregar a Google Wallet" devolvería la portada
+  // de TODO el negocio a la foto sin velo ni encuadre, deshaciendo lo que syncClaseComercio logró.
+  describe('portada compuesta en la clase embebida', () => {
+    async function claseDelJwt(tarjetaId: string) {
+      const url = await generarLinkGuardar(supabase, tarjetaId);
+      const claims = jwt.verify(url!.replace('https://pay.google.com/gp/v/save/', ''), publicKey, {
+        algorithms: ['RS256'],
+      }) as Record<string, unknown>;
+      const payload = claims.payload as { loyaltyClasses: Array<{ heroImage?: { sourceUri: { uri: string } } }> };
+      return payload.loyaltyClasses[0];
+    }
+
+    it('apunta a la portada compuesta del COMERCIO, sin ?programa=, cuando el programa no tiene clase propia', async () => {
+      // MUTACIÓN 1: volver a `heroUrl: marca.heroUrl` → llega la URL de Storage y falla.
+      // MUTACIÓN 2: usar `programa?.id ?? null` en vez de `claseDelPrograma` → la URL lleva
+      // `?programa=` aunque la clase que viaja sea la del comercio, y también falla.
+      process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+      const t = await crearTarjeta({ heroUrl: 'https://ejemplo.com/hero.jpg' });
+      const clase = await claseDelJwt(t.tarjetaId);
+      expect(clase.heroImage!.sourceUri.uri).toMatch(
+        new RegExp(`^https://www\\.cardly-sv\\.site/api/comercios/${t.comercioId}/franja\\.png\\?v=[0-9a-f]{12}$`),
+      );
+    });
+
+    it('con el MISMO ?v= que escribe syncClaseComercio: si difirieran, Google re-descargaría en cada JWT', async () => {
+      process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+      const t = await crearTarjeta({ heroUrl: 'https://ejemplo.com/hero.jpg' });
+      const clase = await claseDelJwt(t.tarjetaId);
+
+      await syncClaseComercio(supabase, t.comercioId);
+      const delSync = patchClaseMock.mock.calls.at(-1)![0].requestBody.heroImage.sourceUri.uri;
+
+      expect(clase.heroImage!.sourceUri.uri).toBe(delSync);
+    });
   });
 
   it('devuelve null si el comercio no tiene logo (Google lo exige, ni intenta autorreparar)', async () => {

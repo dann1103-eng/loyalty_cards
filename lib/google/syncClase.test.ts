@@ -15,7 +15,11 @@ vi.mock('./walletClient', () => ({
 const supabase = createServiceClient();
 let comercioId: string | null = null;
 
-async function crearComercio(datos: Partial<{ logo_url: string | null; google_class_id: string | null; nombre: string; color_fondo: string }>) {
+// NEXT_PUBLIC_BASE_URL lo fijan las pruebas de la portada compuesta (la URL la lleva dentro): se
+// restaura para no filtrar el valor a los demás archivos de la suite.
+const BASE_ORIGINAL = process.env.NEXT_PUBLIC_BASE_URL;
+
+async function crearComercio(datos: Partial<{ logo_url: string | null; google_class_id: string | null; nombre: string; color_fondo: string; hero_url: string | null }>) {
   const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const { data, error } = await supabase
     .from('comercios')
@@ -25,6 +29,7 @@ async function crearComercio(datos: Partial<{ logo_url: string | null; google_cl
       logo_url: datos.logo_url === undefined ? 'https://ejemplo.com/logo.png' : datos.logo_url,
       google_class_id: datos.google_class_id ?? null,
       color_fondo: datos.color_fondo ?? 'rgb(10, 20, 30)',
+      hero_url: datos.hero_url ?? null,
     })
     .select('id')
     .single();
@@ -39,6 +44,8 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  if (BASE_ORIGINAL === undefined) delete process.env.NEXT_PUBLIC_BASE_URL;
+  else process.env.NEXT_PUBLIC_BASE_URL = BASE_ORIGINAL;
   if (!comercioId) return;
   await supabase.from('comercios').delete().eq('id', comercioId);
   comercioId = null;
@@ -72,6 +79,31 @@ describe('syncClaseComercio', () => {
     expect(patchMock).toHaveBeenCalledOnce();
     expect(patchMock).toHaveBeenCalledWith(expect.objectContaining({ resourceId: idExistente }));
     expect(insertMock).not.toHaveBeenCalled();
+  });
+
+  it('con foto: la clase apunta a la portada COMPUESTA con versión, no a la foto cruda', async () => {
+    process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+    const id = await crearComercio({ google_class_id: null, hero_url: 'https://ejemplo.com/hero.jpg' });
+    await syncClaseComercio(supabase, id);
+    const uri = insertMock.mock.calls[0][0].requestBody.heroImage.sourceUri.uri;
+    expect(uri).toMatch(new RegExp(`^https://www\\.cardly-sv\\.site/api/comercios/${id}/franja\\.png\\?v=[0-9a-f]{12}$`));
+  });
+
+  it('cambiar el encuadre cambia la versión de la portada (Google la re-descarga)', async () => {
+    // MUTACIÓN: hashear sin el encuadre deja la URL igual y Google sirve la portada vieja para siempre.
+    process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+    const id = await crearComercio({ google_class_id: 'clase-existente', hero_url: 'https://ejemplo.com/hero.jpg' });
+    await syncClaseComercio(supabase, id);
+    await supabase.from('comercios').update({ foco_franja_y: 0 }).eq('id', id);
+    await syncClaseComercio(supabase, id);
+    const [a, b] = patchMock.mock.calls.map((c) => c[0].requestBody.heroImage.sourceUri.uri);
+    expect(a).not.toBe(b);
+  });
+
+  it('sin foto: la clase sale sin heroImage, como siempre', async () => {
+    const id = await crearComercio({ google_class_id: null, hero_url: null });
+    await syncClaseComercio(supabase, id);
+    expect(insertMock.mock.calls[0][0].requestBody.heroImage).toBeUndefined();
   });
 
   it('si Google Wallet falla, no revienta y deja un resultado ok:false (best-effort)', async () => {

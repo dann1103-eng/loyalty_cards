@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { createServiceClient } from '../supabase/server';
-import { syncClasePrograma } from './syncClasePrograma';
+import { crearEntorno } from '../../test/fixtures/entornoComercio';
+import { syncClasePrograma, syncClasesDeProgramasConClase } from './syncClasePrograma';
 
 // walletClient MOCKEADO, nunca Google real: las LoyaltyClass NO se pueden borrar (la API no tiene
 // `delete`), así que una prueba que llamara de verdad dejaría basura permanente y visible para el
@@ -19,12 +20,18 @@ const supabase = createServiceClient();
 let comercioId: string | null = null;
 let programaId: string | null = null;
 
+// NEXT_PUBLIC_BASE_URL lo fija la prueba de la portada compuesta: se restaura para no filtrarlo al
+// resto de la suite.
+const BASE_ORIGINAL = process.env.NEXT_PUBLIC_BASE_URL;
+
 beforeEach(() => {
   insertMock.mockReset().mockResolvedValue({});
   patchMock.mockReset().mockResolvedValue({});
 });
 
 afterEach(async () => {
+  if (BASE_ORIGINAL === undefined) delete process.env.NEXT_PUBLIC_BASE_URL;
+  else process.env.NEXT_PUBLIC_BASE_URL = BASE_ORIGINAL;
   if (programaId) await supabase.from('programas_tarjeta').delete().eq('id', programaId);
   if (comercioId) await supabase.from('comercios').delete().eq('id', comercioId);
   programaId = null;
@@ -110,6 +117,18 @@ describe('syncClasePrograma', () => {
     expect(data!.google_class_id).toBe(esperado);
   }, 30_000);
 
+  it('con foto propia: la clase apunta a la portada COMPUESTA de ESE programa, no a la foto cruda', async () => {
+    process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+    const id = await crearEscenario({ branding_propio: true, hero_url: 'https://ejemplo.com/hero-prog.jpg' });
+
+    await syncClasePrograma(supabase, comercioId!, id);
+
+    const uri = insertMock.mock.calls[0][0].requestBody.heroImage.sourceUri.uri;
+    expect(uri).toMatch(
+      new RegExp(`^https://www\\.cardly-sv\\.site/api/comercios/${comercioId}/franja\\.png\\?programa=${id}&v=[0-9a-f]{12}$`),
+    );
+  }, 30_000);
+
   it('si el programa YA tiene google_class_id: patch, nunca un segundo insert', async () => {
     const id = await crearEscenario({
       branding_propio: true,
@@ -155,5 +174,41 @@ describe('syncClasePrograma', () => {
 
     expect(insertMock, 'un segundo insert sobre una clase existente es irreparable').not.toHaveBeenCalled();
     expect(patchMock).toHaveBeenCalledOnce();
+  }, 40_000);
+});
+
+// El barrido va en su PROPIO describe con crearEntorno, y no con crearEscenario, por una razón que
+// no es de estilo: el afterEach de arriba borra UN programa por id. Este escenario necesita DOS, y
+// el segundo quedaría huérfano, bloquearía por FK el borrado del comercio y dejaría basura
+// permanente en la base REAL (incidente del 2026-07-30, CLAUDE.md). `entorno.limpiar()` borra por
+// comercio_id, así que barre los dos.
+describe('syncClasesDeProgramasConClase', () => {
+  const entorno = crearEntorno(supabase);
+
+  afterEach(() => entorno.limpiar());
+
+  it('re-sincroniza SOLO los programas que ya tienen clase; nunca crea una nueva', async () => {
+    // MUTACIÓN: quitar el .not('google_class_id','is',null) del select hace que el programa B —que
+    // SÍ necesita clase propia (branding propio con color de fondo)— entre al barrido y se le cree
+    // una LoyaltyClass PERMANENTE que nadie pidió. Las clases de Google no se pueden borrar.
+    const comercio = await entorno.crearComercio({ logo_url: 'https://ejemplo.com/logo.png', google_class_id: 'issuer-test.comercio_y' });
+    const programaA = entorno.obtenerProgramaPrincipal(comercio);
+    await supabase.from('programas_tarjeta').update({ google_class_id: 'clase-x' }).eq('id', programaA);
+    const { error } = await supabase.from('programas_tarjeta').insert({
+      comercio_id: comercio,
+      nombre: 'Sin clase',
+      slug: `sin-clase-${Date.now()}`,
+      tipo_tarjeta: 'cupon',
+      es_principal: false,
+      branding_propio: true,
+      color_fondo: 'rgb(7,7,7)',
+    });
+    if (error) throw error;
+
+    await syncClasesDeProgramasConClase(supabase, comercio);
+
+    expect(insertMock, 'el barrido no crea clases: una clase de Google es permanente').not.toHaveBeenCalled();
+    expect(patchMock).toHaveBeenCalledOnce();
+    expect(patchMock).toHaveBeenCalledWith(expect.objectContaining({ resourceId: 'clase-x' }));
   }, 40_000);
 });

@@ -7,7 +7,7 @@ import { construirClase, construirObjeto } from './construirRecursos';
 import { syncClaseComercio } from './syncClase';
 import { syncClasePrograma } from './syncClasePrograma';
 import { syncObjetoTarjeta } from './syncObjeto';
-import { urlHeroTarjeta, versionHero } from './heroUrl';
+import { urlHeroTarjeta, versionHero, heroUrlDeClase } from './heroUrl';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
 import { brandingEfectivo } from '../comercio/brandingEfectivo';
 import { encuadreDelComercio, encuadreDelPrograma } from '../comercio/encuadreFranja';
@@ -61,9 +61,17 @@ export async function generarLinkGuardar(
   // Es crítico que el JWT lleve la clase CORRECTA: Google hace upsert por id al procesarlo, así que
   // un cuerpo con la clase equivocada pisa lo que syncObjetoTarjeta acaba de escribir bien. Esa
   // fue exactamente la falla del 2026-07-30 con el tipo de tarjeta (commit 998bcae).
+  //
+  // `claseDelPrograma` registra CUÁL de las dos clases terminó viajando: un programa sin clase
+  // propia —o uno cuyo sync falló— sale con la del COMERCIO, y la portada tiene que corresponder a
+  // esa clase (ver más abajo, en construirClase).
+  let claseDelPrograma = false;
   if (programa) {
     const resProg = await syncClasePrograma(supabase, tarjeta.comercio_id, programa.id);
-    if (resProg.ok && resProg.classId) classId = resProg.classId;
+    if (resProg.ok && resProg.classId) {
+      classId = resProg.classId;
+      claseDelPrograma = true;
+    }
   }
   await syncObjetoTarjeta(supabase, tarjetaId);
 
@@ -112,7 +120,20 @@ export async function generarLinkGuardar(
     nombre: cm.nombre,
     colorFondo: marca.colorFondo,
     logoUrl: marca.logoUrl ?? tarjeta.comercios.logo_url,
-    heroUrl: marca.heroUrl,
+    // La portada tiene que ser la de ESTA clase: con la del comercio, la marca del comercio; con la
+    // del programa, la efectiva. Con `marca` en los dos casos, un programa con branding propio que NO
+    // llega a tener clase propia (necesitaClasePropia solo mira color de fondo, logo y foto) le
+    // pondría a la clase del negocio una URL con un `?v=` distinto del que escribe syncClaseComercio
+    // para la misma imagen: Google re-descargaría en cada JWT.
+    heroUrl: claseDelPrograma
+      ? heroUrlDeClase(tarjeta.comercio_id, programa!.id, marca)
+      : heroUrlDeClase(tarjeta.comercio_id, null, {
+          colorFondo: cm.color_fondo,
+          colorLabel: cm.color_label,
+          heroUrl: cm.hero_url,
+          difuminadoFranja: cm.difuminado_franja,
+          encuadreFranja: encuadreDelComercio(cm),
+        }),
     ubicaciones,
   });
   const objeto = construirObjeto(objectId, classId, {

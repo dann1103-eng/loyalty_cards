@@ -74,3 +74,18 @@ export function versionFranjaClase(marca: {
     encuadreFranja: marca.encuadreFranja,
   });
 }
+
+// La portada que va en la clase: la compuesta si hay foto y base URL; la foto cruda si falta la base
+// (degradación); null sin foto. UNA función para los TRES lugares que construyen la clase
+// (syncClase, syncClasePrograma y la clase EMBEBIDA en el JWT de linkGuardar, que Google upsertea
+// por id). Si cada uno armara su URL, bastaría con que uno hasheara otros campos para que Google
+// re-descargara la misma imagen en cada llamada — o peor, para que un camino devolviera la clase a
+// la foto cruda deshaciendo lo que los otros dos lograron.
+export function heroUrlDeClase(
+  comercioId: string,
+  programaId: string | null,
+  marca: { colorFondo: string | null; colorLabel: string | null; heroUrl: string | null; difuminadoFranja: string; encuadreFranja: Encuadre },
+): string | null {
+  if (!marca.heroUrl) return null;
+  return urlFranjaClase(comercioId, programaId, versionFranjaClase(marca)) ?? marca.heroUrl;
+}

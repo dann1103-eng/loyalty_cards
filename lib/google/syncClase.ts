@@ -3,7 +3,9 @@ import type { Database } from '../supabase/types';
 import { walletClient, issuerId } from './walletClient';
 import { idClaseGoogle } from './ids';
 import { construirClase } from './construirRecursos';
+import { heroUrlDeClase } from './heroUrl';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
+import { encuadreDelComercio } from '../comercio/encuadreFranja';
 
 export type ResultadoSyncClase = { ok: true; classId: string } | { ok: false; error: string };
 
@@ -18,7 +20,9 @@ export async function syncClaseComercio(
 ): Promise<ResultadoSyncClase> {
   const { data: comercio, error } = await supabase
     .from('comercios')
-    .select('nombre, color_fondo, logo_url, hero_url, google_class_id')
+    .select(
+      'nombre, color_fondo, color_label, logo_url, hero_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, google_class_id',
+    )
     .eq('id', comercioId)
     .maybeSingle();
 
@@ -37,11 +41,21 @@ export async function syncClaseComercio(
     // clase sin aviso por cercanía, no sin clase.
     const ubicaciones = await listarUbicacionesGeopush(supabase, comercioId);
 
+    // La portada compuesta (misma banda que el pass de Apple), versionada por todo lo que dibuja. Si
+    // falta NEXT_PUBLIC_BASE_URL cae a la foto cruda: degradación, no fallo.
+    const heroUrl = heroUrlDeClase(comercioId, null, {
+      colorFondo: comercio.color_fondo,
+      colorLabel: comercio.color_label,
+      heroUrl: comercio.hero_url,
+      difuminadoFranja: comercio.difuminado_franja,
+      encuadreFranja: encuadreDelComercio(comercio),
+    });
+
     const cuerpo = construirClase(classId, {
       nombre: comercio.nombre,
       colorFondo: comercio.color_fondo,
       logoUrl: comercio.logo_url,
-      heroUrl: comercio.hero_url,
+      heroUrl,
       ubicaciones,
     });
     const client = walletClient();

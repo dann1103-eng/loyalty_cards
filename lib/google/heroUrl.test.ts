@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { urlHeroTarjeta, urlFranjaClase, versionHero, versionFranjaClase, type DatosVersionHero } from './heroUrl';
+import { urlHeroTarjeta, urlFranjaClase, versionHero, versionFranjaClase, heroUrlDeClase, type DatosVersionHero } from './heroUrl';
 
 const ORIGINAL = process.env.NEXT_PUBLIC_BASE_URL;
 
@@ -100,5 +100,31 @@ describe('versionFranjaClase', () => {
     expect(versionFranjaClase(marca)).toBe(
       versionHero({ ...marca, puntos: 0, selloMeta: null, selloIconoUrl: null, stripUrl: null }),
     );
+  });
+});
+
+describe('heroUrlDeClase', () => {
+  const marca = {
+    colorFondo: 'rgb(1,1,1)', colorLabel: 'rgb(2,2,2)', heroUrl: 'https://ejemplo.com/h.jpg',
+    difuminadoFranja: 'medio', encuadreFranja: { modo: 'llenar' as const, focoX: 50, focoY: 50, zoom: 100 },
+  };
+
+  it('con foto y base URL: la portada compuesta, versionada por lo que dibuja', () => {
+    process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+    expect(heroUrlDeClase('com-1', null, marca)).toBe(
+      `https://www.cardly-sv.site/api/comercios/com-1/franja.png?v=${versionFranjaClase(marca)}`,
+    );
+  });
+
+  // La rama `?? marca.heroUrl` sin red se rompería en silencio: la clase se quedaría SIN heroImage
+  // en un entorno sin NEXT_PUBLIC_BASE_URL en vez de degradar a la foto cruda como hasta la 0032.
+  it('sin NEXT_PUBLIC_BASE_URL: degrada a la foto cruda, no a null', () => {
+    delete process.env.NEXT_PUBLIC_BASE_URL;
+    expect(heroUrlDeClase('com-1', 'prog-9', marca)).toBe('https://ejemplo.com/h.jpg');
+  });
+
+  it('sin foto efectiva: null (la clase sale sin heroImage, como siempre)', () => {
+    process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+    expect(heroUrlDeClase('com-1', null, { ...marca, heroUrl: null })).toBeNull();
   });
 });
