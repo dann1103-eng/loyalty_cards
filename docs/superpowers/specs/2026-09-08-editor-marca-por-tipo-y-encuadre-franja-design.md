@@ -124,7 +124,8 @@ commit;
 ```
 
 - Los CHECK son la defensa barata; la real es `validarEncuadre` en TS, que corre al guardar, y
-  `sanearEncuadre` al leer (un valor ilegible cae al default, nunca revienta un pass).
+  `encuadreDelComercio`/`encuadreDelPrograma` al leer (un valor ilegible cae al default entero,
+  nunca revienta un pass).
 - `lib/supabase/types.ts` se transcribe a mano (así está el archivo); `scripts/verificar-0032.ts`
   verifica columnas, defaults y que un programa existente lea null en las cuatro.
 - El usuario aplica el SQL en Studio y avisa; el asistente no puede correr DDL.
@@ -200,7 +201,8 @@ cambios; centrado con default reproduce el `cover` actual;
 del marco; zoom 200 en `llenar` duplica el tamaño; el arrastre con holgura 0 no mueve; arrastrar
 más allá del borde deja el foco en 0 o en 100; `validarEncuadre` rechaza modo desconocido,
 foco fuera de 0–100, zoom fuera de 100–300 y `NaN`, cada uno con su mensaje;
-`encuadreDesdeColumnas` devuelve null con una sola columna null.
+`encuadreDelPrograma` devuelve null con una sola columna null; `encuadreDelComercio` con un valor
+fuera de rango (o un modo desconocido) devuelve el default ENTERO, no el campo corregido.
 
 ## Herencia: `brandingEfectivo`
 
@@ -237,9 +239,13 @@ la regla, y que con `branding_propio` apagado se ignora el encuadre propio.
 - **Esta ruta está en el camino crítico de la creación de la clase**: Google descarga la imagen al
   hacer `insert`/`patch`, y si falla o tarda, falla la sincronización entera (en el `insert`
   inicial, el comercio se queda sin Google Wallet hasta el próximo intento). Por eso se renderiza
-  UNA sola escala y no tres: `stripPass` exporta `componerFranja(datos, escala)` (la función que
-  `componerStrips` ya llama tres veces por dentro) y la ruta sirve la escala 3 (1125×369, el
-  tamaño más cercano al recomendado de Google). La degradación a foto cruda cuando falta
+  UNA sola escala y no tres: `stripPass` exporta `componerFranja(datos, escala): Promise<Buffer |
+  null>`, que baja la foto y el ícono, mide la foto con sharp y renderiza ESA escala. La ruta
+  sirve la escala 3 (1125×369, el tamaño más cercano al recomendado de Google).
+  `componerStrips` NO se reescribe como tres llamadas a `componerFranja`: sigue bajando y
+  midiendo UNA vez y renderizando tres, o cada pass descargaría la foto y correría
+  `sharp.metadata()` tres veces. Las dos comparten la función interna de render (`renderizar`) y
+  la de descarga/medición. La degradación a foto cruda cuando falta
   `NEXT_PUBLIC_BASE_URL` no cubre un fallo de esta ruta en producción; eso se vigila con
   `scripts/verificar-wallet.ts` como el resto de Google.
 - `lib/google/heroUrl.ts` gana `urlFranjaClase(comercioId, programaId | null, version)`; null si
@@ -262,10 +268,14 @@ la regla, y que con `branding_propio` apagado se ignora el encuadre propio.
 
 ## Guardado
 
-- `guardarBranding` (comercio): `DatosBranding` gana los cuatro campos; `validarEncuadre` antes
-  del update; se escriben en `comercios`.
+- `guardarBranding` (comercio): `DatosBranding` gana `encuadreFranja: { modo: string; focoX:
+  number; focoY: number; zoom: number }`; `validarEncuadre` antes del update; se escriben en
+  `comercios`. Las columnas del comercio son NOT NULL, así que acá NO hay null: el formulario del
+  negocio manda los cuatro campos SIEMPRE (ver Editor) y `accionGuardarBranding` los lee sin
+  default — si faltan, `validarEncuadre` rechaza con su mensaje, igual que un color vacío.
 - `guardarBrandingPrograma`: `DatosBrandingPrograma` gana `encuadreFranja: Encuadre | null`
-  (null = no tocar/heredar). `brandingProgramaDesdeFormulario` usa `encuadreDesdeFormulario`.
+  (null SE ESCRIBE en las cuatro columnas: significa "hereda"; no es "dejar como está").
+  `brandingProgramaDesdeFormulario` usa `encuadreDesdeFormulario`.
   `hayMarcaPropia` NO cambia: un encuadre propio solo existe con foto propia, y subir la foto ya
   enciende `branding_propio` (documentado en el código).
 - `brandingDeProgramas` devuelve `encuadreFranja: Encuadre | null` vía `encuadreDelPrograma`.
@@ -317,9 +327,10 @@ que falte.
   - Zoom: `<input type="range" 100–300 step 5>` con el valor visible.
   - Difuminado: el `<select>` de hoy, con su `key` de remount intacta.
   - **Cuándo se VE:** hay foto efectiva, no hay franja personalizada y (en programa) la foto es
-    propia. **Cuándo VIAJAN los cuatro campos:** siempre que haya foto propia — en negocio,
-    siempre que haya foto; en programa, siempre que tenga `hero_url` propio — como inputs ocultos
-    cuando el bloque no se ve. Son dos reglas distintas a propósito: si viajaran solo cuando se
+    propia. **Cuándo VIAJAN los cuatro campos:** en negocio, SIEMPRE (haya foto o no: las
+    columnas son NOT NULL y un negocio sin foto tiene que poder publicar colores); en programa,
+    siempre que tenga `hero_url` propio. Cuando el bloque no se ve, viajan como inputs ocultos
+    con el valor guardado. Son dos reglas distintas a propósito: si viajaran solo cuando se
     ven, un programa con foto propia y franja personalizada mandaría cuatro vacíos al publicar
     los colores, `encuadreDesdeFormulario` daría null y el guardado borraría el encuadre que el
     dueño ya había ajustado. Solo un programa SIN foto propia no manda los campos (→ null →
@@ -330,13 +341,18 @@ que falte.
   `focoTrasArrastre` con las medidas naturales de la foto (`naturalWidth/Height` al `onLoad`).
   Hasta que la foto carga, se dibuja con `object-fit: cover` centrado y no se arrastra.
 - **Vista previa fiel**: decisión 1. La foto se coloca con `colocarFoto` sobre un marco de
-  375×123 unidades convertido a porcentajes del contenedor.
+  375×123 unidades convertido a porcentajes del contenedor. `hayGrilla` en el pass depende de
+  que la composición haya tenido éxito, cosa que el navegador no puede saber: la vista previa
+  pasa `hayGrilla = esSellos && meta configurada && !urls.strip` y asume composición exitosa.
+  Nadie intenta replicar el fallback de composición fallida en el navegador.
 - **Etiquetas**: la franja personalizada dice "(reemplaza la grilla de sellos)" en sellos y
   "(reemplaza la foto de fondo)" en el resto. El resto de etiquetas no cambia.
 - Verificación del pegamento con el DOM: no hay pruebas de componentes en el repo. Se verifica en
   el navegador contra el dev server del worktree (que sí tiene este código): posición de la
   `<img>` medida con `getBoundingClientRect` para dos focos, arrastre con eventos de puntero y
-  lectura de los deslizadores, y que membresía no muestra contador.
+  lectura de los deslizadores, que membresía no muestra contador, y que sellos con grilla deja
+  la franja sin texto encima y el contador debajo (el único caso donde el primario es null y el
+  secundario no).
 
 ## Fuera de alcance
 
