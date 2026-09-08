@@ -1,7 +1,8 @@
 import { ImageResponse } from 'next/og';
+import sharp from 'sharp';
 import { stopsDifuminado } from './difuminadoFranja';
 import { comprimirPng } from './imagenesPass';
-import type { Encuadre } from '@/lib/comercio/encuadreFranja';
+import { colocarFoto, MARCO_FRANJA, type Encuadre, type Medidas } from '@/lib/comercio/encuadreFranja';
 
 // Composición de la FRANJA (strip) del pass con next/og — el "pipeline de composición de
 // imágenes" que la Fase 3 no tenía: llegó gratis con los íconos del portal (PWA). Tres casos:
@@ -29,9 +30,15 @@ export interface DatosStrip {
   // migración 0007). Ver stopsDifuminado(): 'ninguno' = corte seco, sin gradiente.
   difuminadoFranja: string;
   // Qué parte de la foto se ve dentro del marco (migración 0032, lib/comercio/encuadreFranja.ts).
-  // Entra al contrato ya —obligatorio, para que ningún llamador lo omita— aunque la composición
-  // todavía lo aplique en la siguiente tarea.
+  // Con el default es el cover centrado de siempre.
   encuadreFranja: Encuadre;
+}
+
+// La foto ya bajada, con sus medidas. Sin medidas (sharp no pudo leerla) la capa cae al cover
+// centrado de siempre: el encuadre es best-effort como todo lo demás de la franja.
+interface FotoFondo {
+  dataUrl: string;
+  medidas: Medidas | null;
 }
 
 export interface StripsPass {
@@ -43,18 +50,32 @@ export interface StripsPass {
 // Capa de fondo compartida: foto (si hay) + velo oscuro para contraste + DIFUMINADO en los
 // bordes hacia el color del pass — la foto se funde con la tarjeta en vez de cortarse seca
 // (referencia del usuario: así lo hace la competencia). Sin foto no hace falta nada.
-function capasDeFondo(datos: DatosStrip, escala: number, heroDataUrl: string | null) {
-  if (!heroDataUrl) return [];
+function capasDeFondo(datos: DatosStrip, escala: number, foto: FotoFondo | null) {
+  if (!foto) return [];
+  const marco = { ancho: MARCO_FRANJA.ancho * escala, alto: MARCO_FRANJA.alto * escala };
+  // Con medidas, la foto va posicionada en absoluto por colocarFoto (la MISMA función que usa la
+  // vista previa del editor): en modo 'completa' lo que sobra queda del color de la tarjeta, que ya
+  // es el fondo del contenedor, y el difuminado lo funde. Sin medidas, el cover de siempre.
+  const colocacion = foto.medidas ? colocarFoto(foto.medidas, marco, datos.encuadreFranja) : null;
   const capaLlena = { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' };
   const capas = [
     {
       type: 'img',
-      props: {
-        src: heroDataUrl,
-        width: 375 * escala,
-        height: 123 * escala,
-        style: { position: 'absolute', top: 0, left: 0, objectFit: 'cover' },
-      },
+      // satori no entiende objectPosition ni transform: la única forma de encuadrar es dar la caja
+      // ya calculada en números (top/left/width/height) sobre el contenedor relativo.
+      props: colocacion
+        ? {
+            src: foto.dataUrl,
+            width: colocacion.ancho,
+            height: colocacion.alto,
+            style: { position: 'absolute', top: colocacion.top, left: colocacion.left },
+          }
+        : {
+            src: foto.dataUrl,
+            width: marco.ancho,
+            height: marco.alto,
+            style: { position: 'absolute', top: 0, left: 0, objectFit: 'cover' },
+          },
     },
     {
       type: 'div',
@@ -91,7 +112,7 @@ function capasDeFondo(datos: DatosStrip, escala: number, heroDataUrl: string | n
   return capas;
 }
 
-function grillaSellos(datos: DatosStrip, escala: number, iconoDataUrl: string | null, heroDataUrl: string | null) {
+function grillaSellos(datos: DatosStrip, escala: number, iconoDataUrl: string | null, foto: FotoFondo | null) {
   const meta = datos.selloMeta ?? 10;
   const llenos = Math.min(datos.puntos, meta);
   // Con más de 6 sellos se parte en 2 filas: círculos más grandes y legibles que una sola fila
@@ -214,12 +235,12 @@ function grillaSellos(datos: DatosStrip, escala: number, iconoDataUrl: string | 
         position: 'relative',
         background: datos.colorFondo,
       },
-      children: [...capasDeFondo(datos, escala, heroDataUrl), filasDeSellos],
+      children: [...capasDeFondo(datos, escala, foto), filasDeSellos],
     },
   };
 }
 
-function bandaMarca(datos: DatosStrip, escala: number, heroDataUrl: string | null) {
+function bandaMarca(datos: DatosStrip, escala: number, foto: FotoFondo | null) {
   return {
     type: 'div',
     props: {
@@ -231,7 +252,7 @@ function bandaMarca(datos: DatosStrip, escala: number, heroDataUrl: string | nul
         position: 'relative',
       },
       children: [
-        ...capasDeFondo(datos, escala, heroDataUrl),
+        ...capasDeFondo(datos, escala, foto),
         // Resplandor suave del color de etiqueta hacia la derecha: da textura sin pelear con el
         // número de puntos que Wallet superpone en esta zona.
         {
@@ -273,12 +294,12 @@ async function renderizar(
   datos: DatosStrip,
   escala: number,
   iconoDataUrl: string | null,
-  heroDataUrl: string | null,
+  foto: FotoFondo | null,
 ): Promise<Buffer> {
   const esSellos = datos.tipoTarjeta === 'sellos' && datos.selloMeta != null && datos.selloMeta > 0;
   const jsx = esSellos
-    ? grillaSellos(datos, escala, iconoDataUrl, heroDataUrl)
-    : bandaMarca(datos, escala, heroDataUrl);
+    ? grillaSellos(datos, escala, iconoDataUrl, foto)
+    : bandaMarca(datos, escala, foto);
   const img = new ImageResponse(jsx as React.ReactElement, { width: 375 * escala, height: 123 * escala });
   // next/og escupe PNG de 24 bits sin cuantizar: con una foto de fondo, las tres franjas sumaban
   // 661 KB medidos (49 + 176 + 435). Cuantizar a paleta las deja en 145 KB sin que se note — se
@@ -309,6 +330,46 @@ function comoDataUrl(img: { buf: Buffer; tipo: string } | null): string | null {
   return img ? `data:${img.tipo};base64,${img.buf.toString('base64')}` : null;
 }
 
+// Mide la foto para el encuadre. Best-effort: sin medidas la franja sale con el cover de siempre.
+async function medir(buf: Buffer): Promise<Medidas | null> {
+  try {
+    const { width, height } = await sharp(buf).metadata();
+    return width && height ? { ancho: width, alto: height } : null;
+  } catch (error) {
+    console.warn('[apple] no se pudo medir la foto de fondo; va sin encuadre:', error);
+    return null;
+  }
+}
+
+// Baja el ícono y la foto UNA vez y mide la foto UNA vez: componerStrips renderiza tres escalas con
+// lo mismo, y la ruta de portada de clase una sola.
+async function bajarInsumos(datos: DatosStrip): Promise<{ iconoUrl: string | null; foto: FotoFondo | null }> {
+  const [icono, hero] = await Promise.all([
+    descargarImagen(datos.selloIconoUrl, 'el ícono del sello'),
+    descargarImagen(datos.heroUrl, 'la foto de fondo de la franja'),
+  ]);
+  const foto = hero ? { dataUrl: comoDataUrl(hero)!, medidas: await medir(hero.buf) } : null;
+  return { iconoUrl: comoDataUrl(icono), foto };
+}
+
+// UNA escala. Para la portada de la clase de Google (app/api/comercios/[comercioId]/franja.png), que
+// está en el camino crítico de la creación de la clase y no tiene por qué renderizar tres tamaños
+// para servir uno. Respeta stripUrl igual que componerStrips (la ruta lo manda en null a propósito).
+export async function componerFranja(datos: DatosStrip, escala: 1 | 2 | 3): Promise<Buffer | null> {
+  try {
+    if (datos.stripUrl) {
+      const res = await fetch(datos.stripUrl);
+      if (!res.ok) throw new Error(`strip del comercio respondió ${res.status}`);
+      return Buffer.from(await res.arrayBuffer());
+    }
+    const { iconoUrl, foto } = await bajarInsumos(datos);
+    return await renderizar(datos, escala, iconoUrl, foto);
+  } catch (error) {
+    console.warn('[apple] no se pudo componer la franja de una escala:', error);
+    return null;
+  }
+}
+
 export async function componerStrips(datos: DatosStrip): Promise<StripsPass | null> {
   try {
     if (datos.stripUrl) {
@@ -318,13 +379,10 @@ export async function componerStrips(datos: DatosStrip): Promise<StripsPass | nu
       const buf = Buffer.from(await res.arrayBuffer());
       return { s1: buf, s2: buf, s3: buf };
     }
-    const [icono, hero] = await Promise.all([
-      descargarImagen(datos.selloIconoUrl, 'el ícono del sello'),
-      descargarImagen(datos.heroUrl, 'la foto de fondo de la franja'),
-    ]);
-    const iconoUrl = comoDataUrl(icono);
-    const heroDataUrl = comoDataUrl(hero);
-    const [s1, s2, s3] = await Promise.all([1, 2, 3].map((e) => renderizar(datos, e, iconoUrl, heroDataUrl)));
+    // Los insumos se bajan y se miden UNA vez para las tres escalas (no tres llamadas a
+    // componerFranja: eso bajaría y mediría la foto tres veces).
+    const { iconoUrl, foto } = await bajarInsumos(datos);
+    const [s1, s2, s3] = await Promise.all([1, 2, 3].map((e) => renderizar(datos, e, iconoUrl, foto)));
     return { s1, s2, s3 };
   } catch (error) {
     console.warn('[apple] no se pudo componer la franja; el pass sale sin strip:', error);

@@ -255,6 +255,38 @@ describe('generarPassApple', () => {
     expect(strip1.equals(strip2)).toBe(false);
   });
 
+  it('el encuadre llega al PNG: focoY 0 muestra la mitad roja y focoY 100 la azul', async () => {
+    // Prueba de integración (no unitaria de colocarFoto): confirma que DatosPass.encuadreFranja
+    // llega hasta los píxeles. Foto 200×100 con la mitad superior roja y la inferior azul; en
+    // 'llenar' sobra alto, así que el foco vertical decide qué mitad queda en el centro. Difuminado
+    // 'ninguno' para que el centro no se tiña del color de fondo. El velo del 45% oscurece pero no
+    // cambia qué canal domina.
+    // MUTACIÓN: ignorar el encuadre en capasDeFondo deja las dos franjas con el centro rojo.
+    const mitades = await sharp({ create: { width: 200, height: 100, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 1 } } })
+      .composite([{ input: await sharp({ create: { width: 200, height: 50, channels: 4, background: { r: 0, g: 0, b: 255, alpha: 1 } } }).png().toBuffer(), top: 50, left: 0 }])
+      .png()
+      .toBuffer();
+    const conFoto = {
+      ...datosBase(),
+      puntos: 0,
+      tipoTarjeta: 'membresia',
+      selloMeta: null,
+      stripUrl: null,
+      heroUrl: `data:image/png;base64,${mitades.toString('base64')}`,
+      difuminadoFranja: 'ninguno',
+    };
+    async function centroDe(buffer: Buffer): Promise<{ r: number; b: number }> {
+      const strip = Buffer.from(await (await JSZip.loadAsync(buffer)).file('strip.png')!.async('nodebuffer'));
+      const { data, info } = await sharp(strip).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+      const i = (Math.floor(info.height / 2) * info.width + Math.floor(info.width / 2)) * info.channels;
+      return { r: data[i], b: data[i + 2] };
+    }
+    const arriba = await centroDe(await generarPassApple({ ...conFoto, serialNumber: 'test-enc-0', qrToken: 'e0', encuadreFranja: { modo: 'llenar', focoX: 50, focoY: 0, zoom: 100 } }));
+    const abajo = await centroDe(await generarPassApple({ ...conFoto, serialNumber: 'test-enc-100', qrToken: 'e1', encuadreFranja: { modo: 'llenar', focoX: 50, focoY: 100, zoom: 100 } }));
+    expect(arriba.r).toBeGreaterThan(arriba.b);
+    expect(abajo.b).toBeGreaterThan(abajo.r);
+  });
+
   it('las TRES densidades del logo llegan al pass distintas y en la caja que les toca', async () => {
     // MUTATION-TESTING: el bug original (el 56% del peso de un pass de 1763 KB) era meter el MISMO
     // buffer en logo.png, @2x y @3x. ESTA es la prueba que lo atrapa, y tiene que vivir acá y no en

@@ -76,4 +76,18 @@ describe('GET /api/tarjetas/[tarjetaId]/hero.png', () => {
     const args = componerStripsMock.mock.calls[0][0];
     expect(args.selloIconoUrl).toBe('https://ejemplo.com/sello-COMERCIO.png');
   }, 30_000);
+
+  it('pasa a la composición el encuadre de la foto PROPIA del programa', async () => {
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos', sello_meta: 8, hero_url: 'https://ejemplo.com/hero-COMERCIO.jpg', foco_franja_y: 10 });
+    const programaId = entorno.obtenerProgramaPrincipal(comercioId);
+    await supabase.from('programas_tarjeta').update({
+      branding_propio: true, hero_url: 'https://ejemplo.com/hero-PROGRAMA.jpg',
+      encuadre_franja: 'completa', foco_franja_x: 0, foco_franja_y: 100, zoom_franja: 200,
+    }).eq('id', programaId);
+    const { id: tarjetaId } = await entorno.crearTarjeta(comercioId, 3);
+    await pedirImagen(tarjetaId);
+    const args = componerStripsMock.mock.calls[0][0];
+    expect(args.heroUrl).toBe('https://ejemplo.com/hero-PROGRAMA.jpg');
+    expect(args.encuadreFranja).toEqual({ modo: 'completa', focoX: 0, focoY: 100, zoom: 200 });
+  }, 30_000);
 });
