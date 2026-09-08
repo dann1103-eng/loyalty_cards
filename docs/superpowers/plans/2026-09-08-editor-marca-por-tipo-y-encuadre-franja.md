@@ -1106,7 +1106,7 @@ En `guardarBranding.test.ts` **y en `lib/tarjetas/tiposFuncionales.test.ts` (dos
   });
 ```
 
-En `guardarBrandingPrograma.test.ts`: `BRANDING_VACIO` gana `encuadreFranja: null`. Agregar:
+En `guardarBrandingPrograma.test.ts`: `BRANDING_VACIO` gana `encuadreFranja: null`, y las **dos llamadas a `brandingProgramaDesdeFormulario` que construyen su entrada a mano (líneas ~346 y ~364, no usan `BRANDING_VACIO`)** ganan `encuadre: { modo: '', focoX: '', focoY: '', zoom: '' }`. Agregar:
 
 ```ts
   it('guarda el encuadre propio de un programa y lo lee de vuelta como unidad', async () => {
@@ -1658,11 +1658,47 @@ export function heroUrlDeClase(
   return urlFranjaClase(comercioId, programaId, versionFranjaClase(marca)) ?? marca.heroUrl;
 }
 ```
-y usarla en `syncClase.ts`, `syncClasePrograma.ts` y **`lib/google/linkGuardar.ts`**.
+y usarla en `syncClase.ts`, `syncClasePrograma.ts` y **`lib/google/linkGuardar.ts`**. Dos pruebas en `heroUrl.test.ts` para su degradación, o la rama `?? marca.heroUrl` queda sin red: sin `NEXT_PUBLIC_BASE_URL` devuelve la foto cruda; sin foto devuelve null.
 
-**`linkGuardar.ts` es el TERCER lugar que construye la clase, y es el más peligroso:** la clase viaja EMBEBIDA en el JWT de "Agregar a Google Wallet" y Google la upsertea por id al procesarlo (el propio archivo lo documenta en su cabecera). Si siguiera mandando `heroUrl: marca.heroUrl`, cada cliente que toca el botón devolvería la portada a la foto cruda, deshaciendo lo que la ruta nueva logró. En `construirClase(classId, {...})` de `linkGuardar.ts` (línea ~108): `heroUrl: heroUrlDeClase(tarjeta.comercio_id, programa?.id ?? null, marca)`. Ojo: el `classId` puede ser el del comercio o el del programa; el `programaId` de la URL sigue la misma regla que `syncClasePrograma`: si el JWT lleva la clase del PROGRAMA (`resProg.ok && resProg.classId`), la URL lleva `?programa=`; si lleva la del comercio, no. Guardar en una variable `const claseDelPrograma = …` al decidir `classId` y usarla acá.
+**`linkGuardar.ts` es el TERCER lugar que construye la clase, y es el más peligroso:** la clase viaja EMBEBIDA en el JWT de "Agregar a Google Wallet" y Google la upsertea por id al procesarlo (el propio archivo lo documenta en su cabecera). Si siguiera mandando `heroUrl: marca.heroUrl`, cada cliente que toca el botón devolvería la portada a la foto cruda, deshaciendo lo que la ruta nueva logró.
 
-Prueba en `lib/google/linkGuardar.test.ts` (ya decodifica el JWT con `jwt` y una llave de prueba; ver cómo lee `payload.loyaltyClasses[0]`): con un comercio con `hero_url` y `NEXT_PUBLIC_BASE_URL` fijado, `payload.loyaltyClasses[0].heroImage.sourceUri.uri` matchea `/\/api\/comercios\/<comercioId>\/franja\.png\?v=[0-9a-f]{12}$/`. MUTACIÓN: volver a `heroUrl: marca.heroUrl` → la prueba falla (URL de Storage).
+**La imagen tiene que corresponder a la CLASE que se está mandando, no al programa de la tarjeta.** El `classId` de `linkGuardar` es el del comercio salvo que `syncClasePrograma` haya devuelto una clase propia (`if (resProg.ok && resProg.classId) classId = resProg.classId`, línea ~63): un programa sin clase propia —o uno cuyo sync falló— viaja con la clase del COMERCIO. Mandar ahí la banda del programa (`?programa=<id>`) haría que Google upsertee la imagen de un programa sobre la clase de todos los clientes del negocio: la misma forma del bug que esta tarea cierra. Y el hash tiene que salir de los mismos campos que usa `syncClaseComercio` para esa clase, o las dos URLs difieren para la misma imagen y Google re-descarga en cada JWT.
+
+Entonces, al decidir el `classId`, guardar en una variable si la clase es la del programa, y usarla para las dos cosas:
+
+```ts
+  let claseDelPrograma = false;
+  if (programa) {
+    const resProg = await syncClasePrograma(supabase, tarjeta.comercio_id, programa.id);
+    if (resProg.ok && resProg.classId) {
+      classId = resProg.classId;
+      claseDelPrograma = true;
+    }
+  }
+```
+y en `construirClase(classId, {...})` (línea ~108):
+```ts
+    // La portada tiene que ser la de ESTA clase: con la del comercio, la marca del comercio; con la
+    // del programa, la efectiva. Con `marca` en los dos casos, un programa con branding propio que NO
+    // llega a tener clase propia (necesitaClasePropia solo mira color de fondo, logo y foto) le
+    // pondría a la clase del negocio una URL con un `?v=` distinto del que escribe syncClaseComercio
+    // para la misma imagen: Google re-descargaría en cada JWT.
+    heroUrl: claseDelPrograma
+      ? heroUrlDeClase(tarjeta.comercio_id, programa!.id, marca)
+      : heroUrlDeClase(tarjeta.comercio_id, null, {
+          colorFondo: cm.color_fondo,
+          colorLabel: cm.color_label,
+          heroUrl: cm.hero_url,
+          difuminadoFranja: cm.difuminado_franja,
+          encuadreFranja: encuadreDelComercio(cm),
+        }),
+```
+
+Prueba en `lib/google/linkGuardar.test.ts` (ya decodifica el JWT con `jwt` y una llave de prueba; ver cómo lee `payload.loyaltyClasses[0]`). `crearTarjeta` de ese archivo NO admite hoy una foto: agregarle `heroUrl?: string | null` a `opts` y al `insert` del comercio. Fijar y restaurar `NEXT_PUBLIC_BASE_URL` como hace `heroUrl.test.ts`. Dos casos:
+- con foto en el comercio y sin clase propia del programa, `payload.loyaltyClasses[0].heroImage.sourceUri.uri` matchea `/\/api\/comercios\/<comercioId>\/franja\.png\?v=[0-9a-f]{12}$/` — **sin `programa=`**;
+- el `?v=` de esa URL es EL MISMO que el que escribe `syncClaseComercio` para el mismo comercio (llamarla y comparar contra `patchMock`/`insertMock`): es lo que impide la re-descarga en cada JWT.
+
+MUTACIÓN: volver a `heroUrl: marca.heroUrl` → falla la primera (URL de Storage). MUTACIÓN 2: usar `programa?.id ?? null` en vez de `claseDelPrograma` → la URL lleva `?programa=` y falla la primera también.
 
 - [ ] **Step 4: Barrido de clases de programas al guardar la marca del negocio**
 
@@ -1838,7 +1874,14 @@ No hay pruebas de componentes en el repo: la verificación de esta tarea es el t
 - Import: `import { encuadreDelComercio } from '@/lib/comercio/encuadreFranja';` (el select de `comercios` ya trae las 4 columnas desde Task 4).
 - `const tipoTarjeta = programaDeReferencia?.tipoTarjeta ?? c.tipo_tarjeta ?? 'puntos';` y `const esSellos = tipoOPuntos(tipoTarjeta).valor === 'sellos';` (reemplaza el cálculo actual de `esSellos`; `FormularioReverso` recibe `tipoTarjeta`).
 - Etiqueta de la franja: `etiqueta: esSellos ? 'Franja personalizada (reemplaza la grilla de sellos)' : 'Franja personalizada (reemplaza la foto de fondo)'`.
-- Props nuevas de `FormularioBranding`: `tipoTarjeta={tipoTarjeta}` (en vez de `esSellos`), `encuadreInicial={seleccionado ? (marca?.encuadreFranja ?? null) : encuadreDelComercio(c)}`, `fotoPropia={seleccionado ? marca?.heroUrl != null : c.hero_url != null}`, y `urls` gana `strip: seleccionado ? (marca?.stripUrl ?? c.strip_url) : c.strip_url`.
+- Props nuevas de `FormularioBranding`: `tipoTarjeta={tipoTarjeta}` (en vez de `esSellos`), `fotoPropia={seleccionado ? marca?.heroUrl != null : c.hero_url != null}`, y `urls` gana `strip: seleccionado ? (marca?.stripUrl ?? c.strip_url) : c.strip_url`.
+- `encuadreInicial`: **el encuadre viaja con la foto también acá**. Una tarjeta que HEREDA la foto del negocio tiene que previsualizarse con el encuadre del NEGOCIO, que es el que `brandingEfectivo` le da al pass; mostrarle el encuadre propio que le quedó guardado de una foto anterior sería una vista previa que miente (decisión 4 + "réplica del pass"). Los campos no viajan en ese caso, así que no corrompe datos, pero el dueño vería una cosa y el cliente otra:
+  ```tsx
+  const encuadreDelNegocio = encuadreDelComercio(c);
+  const fotoPropia = seleccionado ? marca?.heroUrl != null : c.hero_url != null;
+  // …
+  encuadreInicial={seleccionado ? (fotoPropia ? (marca?.encuadreFranja ?? null) : encuadreDelNegocio) : encuadreDelNegocio}
+  ```
 
 - [ ] **Step 2: `FormularioBranding.tsx`** — reescribir con esta estructura (conservar TODO lo que hoy funciona: estado de colores, remount del select, botón de volver al negocio, mensajes):
 
@@ -1923,8 +1966,10 @@ Cuerpo del componente (además de lo que ya existe):
     // Delta INCREMENTAL: al pasarse del borde el foco se acota y al volver responde de inmediato.
     const delta = { x: e.clientX - anterior.x, y: e.clientY - anterior.y };
     ultimoPunteroRef.current = { x: e.clientX, y: e.clientY };
-    const foco = focoTrasArrastre(encuadre, delta, medidasFoto, { ancho: caja.width, alto: caja.height });
-    setEncuadre((v) => ({ ...v, ...foco }));
+    // El foco se calcula DENTRO del updater, sobre `v` y no sobre el `encuadre` del closure: con
+    // varios pointermove entre dos commits de React, el delta incremental se aplicaría a una base
+    // vieja y se perderían movimientos (la foto "se traba" al arrastrar rápido).
+    setEncuadre((v) => ({ ...v, ...focoTrasArrastre(v, delta, medidasFoto, { ancho: caja.width, alto: caja.height }) }));
   }
   function alSoltarFoto(e: PointerEventReact<HTMLDivElement>) {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
@@ -1987,6 +2032,9 @@ Vista previa — la franja:
                     solo cuando no hay foto (como hoy) */}
               </>
             )}
+            {/* El aviso de "poné la meta de sellos" (rama esSellos sin meta) se dibuja centrado en la
+                franja y ahora convive con el campo primario de abajo a la izquierda: darle
+                `paddingBottom: 34` para que no se pisen. */}
             {/* El campo primario, SOBRE la franja, abajo a la izquierda: donde Apple dibuja los
                 primaryFields de un storeCard. Los tipos sin contador no lo tienen. */}
             {frente.primario && (
