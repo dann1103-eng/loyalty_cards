@@ -637,3 +637,90 @@ pase, volver a agregarlo desde el link de registro, y recién ahí pasar por el 
   su propia migración (periodicidad por cuenta), no es un cambio de constantes.
 - **El adicional por local sobre el tope de Pro.** El análisis propone $12/mes; todavía no se fijó ni
   se modeló — hoy se resuelve subiendo `limite_negocios` a mano.
+
+---
+
+## 2026-09-08 — El editor de marca deja de mentir, y la foto de la franja se puede encuadrar
+
+Disparado por Daniel dándose de alta como un cliente nuevo cualquiera: eligió **membresía** (una
+tarjeta que solo muestra el QR), entró al editor de marca y encontró tres cosas.
+
+1. **La vista previa estaba cableada a puntos o sellos.** Debajo de la franja decía "PUNTOS 0"
+   aunque el pase real de una membresía no lleva ningún contador. Una gift card de $25 se
+   previsualizaba como "PUNTOS 2500" — la misma unidad equivocada que ya se había arreglado en el
+   pase el 2026-08-07, pero que seguía viva en la pantalla.
+2. **La foto de fondo de la franja salía cortada y no había forma de acomodarla.** Apple fija la
+   franja en 375×123 y la foto se recortaba al centro: el logo que Daniel había puesto arriba
+   quedaba partido al medio. El único control era el difuminado.
+3. **Las etiquetas hablaban de sellos en todos los tipos** ("Franja personalizada (reemplaza la
+   grilla de sellos)" en una membresía).
+
+Spec: `specs/2026-09-08-editor-marca-por-tipo-y-encuadre-franja-design.md`.
+Plan: `plans/2026-09-08-editor-marca-por-tipo-y-encuadre-franja.md`.
+**Migración 0032 APLICADA y verificada** (`scripts/verificar-0032.ts`).
+
+### Lo que ahora existe
+
+- **`lib/tarjetas/frentePase.ts`** — qué va en el campo primario (sobre la franja) y en el
+  secundario (debajo). Vivía inline dentro de `generarPassApple`, y la vista previa lo
+  re-adivinaba con su propio `if/else`: por eso pudo divergir. Ahora las dos leen la misma función
+  y no pueden decir cosas distintas ni en una palabra.
+- **`lib/comercio/encuadreFranja.ts`** — el encuadre de la foto: **modo** (`llenar`/`completa`),
+  **foco** X e Y (0–100, semántica de `object-position`) y **zoom** (100–300%). `colocarFoto`
+  decide dónde va la foto dentro de un marco cualquiera y `rectanguloVisible` es su inversa (la
+  ventana de la foto que ocupa el marco). Cinco consumidores: la vista previa (CSS), la franja del
+  pase de Apple (next/og), la grilla de sellos y la portada de clase de Google, y el cartel (SVG).
+  Como el marco es un parámetro, la misma foto se ve coherente en la franja 3:1 y en el cartel
+  vertical.
+- **Migración 0032**: cuatro columnas en `comercios` (NOT NULL con default, así nada existente
+  cambia de aspecto) y cuatro en `programas_tarjeta` (nullable).
+- **Ruta nueva `app/api/comercios/[comercioId]/franja.png`**: la portada de la `LoyaltyClass` de
+  Google pasa a ser la MISMA banda compuesta que va en el pase de Apple.
+- **El cartel imprimible** aplica el mismo encuadre en su plantilla "foto".
+- **El editor**: bloque "Foto de fondo de la franja" con radios de modo, tres deslizadores y el
+  difuminado mudado adentro, más **arrastrar la foto directamente sobre la vista previa**.
+
+### Lo que NO es obvio y hay que recordar
+
+1. **El encuadre VIAJA CON LA FOTO; no se hereda campo por campo como los colores.** Un color del
+   negocio sirve igual en cualquier tarjeta, pero la posición de una foto solo tiene sentido para
+   ESA foto: heredar el foco del negocio sobre una foto distinta da siempre un resultado sin
+   sentido. La regla vive dentro de `brandingEfectivo` (con foto propia, su encuadre o el default;
+   heredando la foto, el encuadre del negocio) para que ningún consumidor pueda divergir. Vale
+   también para la vista previa: una tarjeta que hereda la foto se previsualiza con el encuadre
+   del NEGOCIO, que es el que ve el cliente.
+2. **Hay TRES lugares que construyen la clase de Google, no dos.** `syncClaseComercio`,
+   `syncClasePrograma` y **la clase EMBEBIDA en el JWT de `linkGuardar`**, que Google upsertea por
+   id al procesarlo. La revisión del plan lo atrapó: sin cambiar el tercero, cada cliente que toca
+   "Agregar a Google Wallet" habría devuelto la portada a la foto cruda, deshaciendo en silencio lo
+   que la ruta nueva logró. Y la URL tiene que corresponder a la clase que VIAJA (la del comercio
+   salvo que el programa tenga clase propia) y hashearse con los campos de ESA clase, o Google
+   re-descarga en cada JWT.
+3. **`onLoad` de una `<img>` no alcanza para medir la foto, y ninguna prueba lo podía atrapar.**
+   El HTML llega renderizado del servidor, así que el navegador termina de bajar la foto ANTES de
+   que React hidrate; `onLoad` no vuelve a dispararse y `medidasFoto` se quedaba en `null`. El
+   encuadre no se aplicaba NUNCA y los deslizadores no movían nada, con el typecheck limpio y las
+   ~1000 pruebas en verde. Se encontró **midiendo en el navegador** con `getBoundingClientRect`
+   sobre el componente real (una página temporal fuera del gate, borrada al terminar) — que es
+   exactamente el procedimiento que CLAUDE.md ya documentaba para una interfaz sin pruebas de
+   componentes. Arreglado con un `ref` que mide al montar, además del `onLoad`.
+4. **La franja personalizada (`strip_url`) queda FUERA de la portada de la clase de Google.** La
+   ruta fuerza `stripUrl: null`: con franja, `componerFranja` devuelve los bytes crudos del archivo
+   (formato y tamaño arbitrarios) y servirlos como `image/png` es lo que Google rechaza al validar
+   la clase.
+5. **Dos reglas distintas en el formulario: cuándo se VE el bloque y cuándo VIAJAN los campos.** Si
+   viajaran solo cuando se ven, publicar los colores con una franja personalizada puesta le
+   borraría al dueño el encuadre que ya había ajustado. En el negocio viajan siempre (columnas NOT
+   NULL); en una tarjeta, solo con foto propia.
+6. **Cambio VISIBLE para los comercios existentes en Android:** la portada de las tarjetas que no
+   son de sellos deja de ser la foto cruda y pasa a ser la banda con velo, difuminado y encuadre —
+   o sea, igual que en iPhone. Fue una decisión explícita de Daniel, no un efecto colateral.
+
+### Lo que queda pendiente acá
+
+- **QA en teléfono real, que solo puede hacer Daniel:** subir una foto con el logo arriba,
+  encuadrarla, publicar, y confirmar en un iPhone (`.pkpass`) y en un Android (portada de la clase)
+  que llega el mismo encuadre que muestra la pantalla. Ojo con Google: cachea por URL, así que el
+  cambio se ve recién cuando el `?v=` cambia (lo hace solo al guardar).
+- **La vista previa de la franja personalizada** ahora se muestra tal cual en la pantalla; nunca se
+  verificó contra un pase real con `strip_url` puesta.
