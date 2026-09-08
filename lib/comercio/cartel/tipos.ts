@@ -1,4 +1,5 @@
 // Tipos y dimensiones del cartel/QR (migración 0028). Puro — sin Supabase, sin fetch, sin DOM.
+import type { Encuadre, Medidas } from '../encuadreFranja';
 import type { ElementoCartel } from './elementos';
 
 export const PLANTILLAS_CARTEL = ['centrado', 'split', 'foto'] as const;
@@ -28,6 +29,10 @@ export interface DatosCartel {
   // Textos y franjas EXTRA que el dueño puso por coordenada (migración 0030). Llegan YA saneados:
   // acá adentro solo hay elementos dibujables — ver sanearElementos en elementos.ts.
   elementos: ElementoCartel[];
+  // Encuadre de la foto (0032), el MISMO que la franja del pass. Con medidas, plantillaFoto dibuja
+  // la ventana exacta; sin medidas (sharp no pudo leerla) cae al xMidYMid slice de siempre.
+  encuadreFoto: Encuadre;
+  medidasFoto: Medidas | null;
 }
 
 interface DimensionCartel {

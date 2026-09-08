@@ -5,6 +5,7 @@ import { PDFDocument, PDFDict, PDFName, PDFNumber, PDFStream } from 'pdf-lib';
 import { construirCartelSvg as construirCartelSvgCon } from './plantillas';
 import { dibujarTextoConInter } from './textoInter';
 import { dibujarTextoConFuenteDelSistema } from './texto';
+import { ENCUADRE_POR_DEFECTO } from '../encuadreFranja';
 import { rasterizarCartelPng, generarCartelPdf } from './export';
 import { DIMENSIONES_CARTEL } from './tipos';
 import type { DatosCartel, FormatoCartel } from './tipos';
@@ -26,6 +27,8 @@ const DATOS: DatosCartel = {
   textoTeaser: null,
   urlRegistro: 'https://www.cardly-sv.site/registro/cafe-sol',
   elementos: [],
+  encuadreFoto: ENCUADRE_POR_DEFECTO,
+  medidasFoto: null,
 };
 
 // Este archivo mide el PNG/PDF que se DESCARGA, así que arma el cartel exactamente como lo arma la
@@ -198,6 +201,34 @@ describe('rasterizarCartelPng', () => {
     // Fondo a lienzo completo (1748x2480 = 4,3 M px) menos la tarjeta blanca del QR: medidos
     // 2.751.242 píxeles magenta el 2026-07-31.
     expect(await contarMagenta(png)).toBeGreaterThan(500000);
+  });
+
+  it('el encuadre mueve qué parte de la foto queda en el centro del cartel', async () => {
+    // Foto 400×200: mitad izquierda magenta, mitad derecha cian. El cartel "mostrador" es vertical
+    // (148×210 mm), así que en 'llenar' sobra ANCHO y el foco horizontal decide qué mitad se ve.
+    // Las pruebas de dimensiones no pueden atrapar una foto mal encuadrada: esta cuenta píxeles.
+    // MUTACIÓN: volver al `xMidYMid slice` fijo deja el centro del mismo color en los dos casos.
+    const mitades = await sharp({ create: { width: 400, height: 200, channels: 4, background: { r: 255, g: 0, b: 255, alpha: 1 } } })
+      .composite([{ input: await sharp({ create: { width: 200, height: 200, channels: 4, background: { r: 0, g: 255, b: 255, alpha: 1 } } }).png().toBuffer(), top: 0, left: 200 }])
+      .png()
+      .toBuffer();
+    const base: DatosCartel = {
+      ...DATOS,
+      plantilla: 'foto',
+      fotoDataUri: `data:image/png;base64,${mitades.toString('base64')}`,
+      medidasFoto: { ancho: 400, alto: 200 },
+    };
+    // Se mide el 30% superior del cartel para quedar lejos de la tarjeta blanca del QR y del logo.
+    async function magentaEnLaFranjaSuperior(datos: DatosCartel): Promise<number> {
+      const png = await rasterizarCartelPng(await construirCartelSvg(datos, 'mostrador'), 'mostrador');
+      const dim = DIMENSIONES_CARTEL.mostrador.px;
+      const recorte = await sharp(png).extract({ left: 0, top: 0, width: dim.ancho, height: Math.floor(dim.alto * 0.3) }).png().toBuffer();
+      return contarMagenta(recorte);
+    }
+    const izquierda = await magentaEnLaFranjaSuperior({ ...base, encuadreFoto: { modo: 'llenar', focoX: 0, focoY: 50, zoom: 100 } });
+    const derecha = await magentaEnLaFranjaSuperior({ ...base, encuadreFoto: { modo: 'llenar', focoX: 100, focoY: 50, zoom: 100 } });
+    expect(izquierda).toBeGreaterThan(100000);
+    expect(derecha).toBe(0);
   });
 
   // El QR va anidado como <svg> dentro del <svg> (plantillas.ts no lo pasa por un PNG intermedio).

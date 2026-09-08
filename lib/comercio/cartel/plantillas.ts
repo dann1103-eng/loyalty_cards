@@ -1,4 +1,5 @@
 import QRCode from 'qrcode';
+import { rectanguloVisible } from '../encuadreFranja';
 import { DIMENSIONES_CARTEL, type DatosCartel, type FormatoCartel } from './tipos';
 import { escaparXml, type DibujarTexto } from './texto';
 import { dibujarFranjas, dibujarTextosExtra } from './elementos';
@@ -176,6 +177,25 @@ async function plantillaSplit(
 </svg>`;
 }
 
+// La foto a sangre con el encuadre del dueño. `preserveAspectRatio` de SVG solo admite nueve anclajes
+// fijos, así que un foco arbitrario necesita un <svg> anidado cuyo viewBox es la VENTANA de la foto
+// (rectanguloVisible, la misma aritmética del pass). El <rect> de atrás es lo que se ve en modo
+// 'completa' o con zoom hacia afuera; el <svg> interno recorta por defecto, y como la ventana tiene
+// la proporción del cartel por construcción, `none` no deforma nada.
+function fotoDeFondo(datos: DatosCartel, w: number, h: number): string {
+  if (!datos.medidasFoto) {
+    return `<image href="${datos.fotoDataUri}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"/>`;
+  }
+  const r = rectanguloVisible(datos.medidasFoto, { ancho: w, alto: h }, datos.encuadreFoto);
+  const n = (v: number) => Number(v.toFixed(3));
+  return (
+    `<rect width="${w}" height="${h}" fill="${datos.colorFondo}"/>` +
+    `<svg x="0" y="0" width="${w}" height="${h}" viewBox="${n(r.x)} ${n(r.y)} ${n(r.ancho)} ${n(r.alto)}" preserveAspectRatio="none">` +
+    `<image href="${datos.fotoDataUri}" x="0" y="0" width="${datos.medidasFoto.ancho}" height="${datos.medidasFoto.alto}" preserveAspectRatio="none"/>` +
+    `</svg>`
+  );
+}
+
 async function plantillaFoto(
   datos: DatosCartel,
   formato: FormatoCartel,
@@ -202,7 +222,7 @@ async function plantillaFoto(
   // Sin fotoDataUri, cae a fondo sólido (spec §7: la UI no debería ofrecer esta plantilla sin
   // hero_url, pero el renderizador no confía en que la UI lo respete siempre).
   const fondo = datos.fotoDataUri
-    ? `<image href="${datos.fotoDataUri}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"/><rect width="${w}" height="${h}" fill="#000000" opacity="0.35"/>`
+    ? `${fotoDeFondo(datos, w, h)}<rect width="${w}" height="${h}" fill="#000000" opacity="0.35"/>`
     : `<rect width="${w}" height="${h}" fill="${datos.colorFondo}"/>`;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ENCUADRE_POR_DEFECTO } from '../encuadreFranja';
 import { construirCartelSvg as construirCartelSvgCon, escaparXml } from './plantillas';
 import { dibujarTextoConFuenteDelSistema } from './texto';
 import { dibujarTextoConInter } from './textoInter';
@@ -23,6 +24,8 @@ const DATOS_BASE: DatosCartel = {
   textoTeaser: null,
   urlRegistro: 'https://www.cardly-sv.site/registro/cafe-sol',
   elementos: [],
+  encuadreFoto: ENCUADRE_POR_DEFECTO,
+  medidasFoto: null,
 };
 
 describe('escaparXml', () => {
@@ -153,6 +156,24 @@ describe('construirCartelSvg — plantilla foto', () => {
       expect(svg.trim().startsWith('<svg')).toBe(true);
       expect(svg.match(/xmlns="http:\/\/www\.w3\.org\/2000\/svg"/g)?.length).toBe(2);
     }
+  });
+
+  // `preserveAspectRatio` solo tiene nueve anclajes fijos, así que el foco arbitrario del dueño
+  // (0032) se dibuja con un <svg> anidado cuyo viewBox es la ventana visible de la foto.
+  // MUTACIÓN: si fotoDeFondo vuelve al <image ... xMidYMid slice> fijo, no hay <svg> anidado y las
+  // dos aserciones caen.
+  it('con medidas de la foto, la mete en un <svg> anidado con la ventana del encuadre', async () => {
+    const datos: DatosCartel = { ...DATOS_BASE, plantilla: 'foto', fotoDataUri: 'data:image/png;base64,AAAA', medidasFoto: { ancho: 400, alto: 200 }, encuadreFoto: { modo: 'llenar', focoX: 0, focoY: 50, zoom: 100 } };
+    const svg = await construirCartelSvg(datos, 'sticker');
+    expect(svg).toMatch(/<svg x="0" y="0" width="400" height="400" viewBox="0 0 200 200" preserveAspectRatio="none">/);
+    expect(svg).toContain('<image href="data:image/png;base64,AAAA" x="0" y="0" width="400" height="200" preserveAspectRatio="none"/>');
+  });
+
+  // sharp puede no leer las medidas de una foto (formato raro, bytes cortados). Sin ellas no hay
+  // ventana que calcular, y el cartel tiene que salir igual que antes de que existiera el encuadre.
+  it('sin medidas, conserva el xMidYMid slice de siempre', async () => {
+    const datos: DatosCartel = { ...DATOS_BASE, plantilla: 'foto', fotoDataUri: 'data:image/png;base64,AAAA', medidasFoto: null };
+    expect(await construirCartelSvg(datos, 'sticker')).toContain('preserveAspectRatio="xMidYMid slice"');
   });
 });
 

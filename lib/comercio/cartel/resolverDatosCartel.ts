@@ -1,7 +1,8 @@
+import sharp from 'sharp';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/types';
 import { brandingEfectivo } from '../brandingEfectivo';
-import { encuadreDelComercio, encuadreDelPrograma } from '../encuadreFranja';
+import { encuadreDelComercio, encuadreDelPrograma, type Medidas } from '../encuadreFranja';
 import { urlRegistroPrograma } from '../urlRegistroPrograma';
 import { combinarDatosCartel } from './combinarDatos';
 import type { DatosCartel } from './tipos';
@@ -11,16 +12,33 @@ import type { DatosCartel } from './tipos';
 // referencias externas, y el logo/foto desaparecerían en silencio del PNG/PDF exportado.
 // Best-effort: si falla, el cartel se arma igual sin esa imagen (spec §7) — una imagen faltante no
 // puede tumbar la descarga entera de un cartel.
-async function aDataUri(url: string | null): Promise<string | null> {
+//
+// Devuelve además las MEDIDAS en píxeles, que es lo único que le falta a plantillas.ts para aplicar
+// el encuadre: la medición vive acá (servidor) y no en plantillas.ts porque esa es pura y la importa
+// el navegador para la vista previa — sharp no puede entrar ahí.
+async function bajarImagen(url: string | null): Promise<{ dataUri: string; medidas: Medidas | null } | null> {
   if (!url) return null;
   try {
     const respuesta = await fetch(url);
     if (!respuesta.ok) return null;
     const tipo = respuesta.headers.get('content-type') ?? 'image/webp';
     const bytes = Buffer.from(await respuesta.arrayBuffer());
-    return `data:${tipo};base64,${bytes.toString('base64')}`;
+    return { dataUri: `data:${tipo};base64,${bytes.toString('base64')}`, medidas: await medirImagen(bytes) };
   } catch (error) {
     console.warn('[comercio] no se pudo convertir una imagen del cartel a data URI:', error);
+    return null;
+  }
+}
+
+// Best-effort aparte del fetch: una foto que sharp no sabe leer NO puede tumbar el cartel, solo
+// pierde el encuadre y vuelve al recorte centrado de siempre. Por eso su propio try/catch.
+async function medirImagen(bytes: Buffer): Promise<Medidas | null> {
+  try {
+    const { width, height } = await sharp(bytes).metadata();
+    if (!width || !height) return null;
+    return { ancho: width, alto: height };
+  } catch (error) {
+    console.warn('[comercio] no se pudieron medir las dimensiones de la foto del cartel:', error);
     return null;
   }
 }
@@ -153,9 +171,11 @@ export async function resolverDatosCartel(
   // cartel de un comercio que nunca configuró su marca.
   const sinOverrides = combinarDatosCartel(marcaParaCartel, null, programa.tipo_tarjeta);
 
-  const [logoDataUri, fotoDataUri] = await Promise.all([
-    aDataUri(combinados.logoUrl),
-    aDataUri(combinados.fotoUrl),
+  // El logo solo necesita el data: URI — se dibuja con su propio recorte cuadrado y el encuadre no
+  // lo toca.
+  const [logo, foto] = await Promise.all([
+    bajarImagen(combinados.logoUrl),
+    bajarImagen(combinados.fotoUrl),
   ]);
 
   return {
@@ -165,12 +185,15 @@ export async function resolverDatosCartel(
       colorFondo: combinados.colorFondo,
       colorTexto: combinados.colorTexto,
       colorLabel: combinados.colorLabel,
-      logoDataUri,
-      fotoDataUri,
+      logoDataUri: logo?.dataUri ?? null,
+      fotoDataUri: foto?.dataUri ?? null,
       textoCta: combinados.textoCta,
       textoTeaser: combinados.textoTeaser,
       urlRegistro,
       elementos: combinados.elementos,
+      // El MISMO encuadre que la franja del pass: sale de brandingEfectivo y viaja con la foto.
+      encuadreFoto: marca.encuadreFranja,
+      medidasFoto: foto?.medidas ?? null,
     },
     programaActivo: programa.activo,
     tipoTarjeta: programa.tipo_tarjeta,
