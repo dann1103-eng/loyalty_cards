@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { validarColorRgb } from '../comercios/validarColorRgb';
 import { NIVELES_DIFUMINADO } from '../apple/difuminadoFranja';
+import { validarEncuadre } from './encuadreFranja';
 
 export interface DatosBranding {
   color_fondo: string;
@@ -13,6 +14,10 @@ export interface DatosBranding {
   // NIVELES_DIFUMINADO (migración 0007) — misma constante que valida el pass real, así el
   // <select> del formulario y este check nunca pueden divergir.
   difuminado_franja: string;
+  // El encuadre de la foto de la franja, crudo desde el formulario. null = no llegó (un formulario
+  // roto): las columnas del comercio son NOT NULL, así que acá null es un ERROR, no "heredá". El
+  // formulario del negocio manda los cuatro campos SIEMPRE (haya foto o no).
+  encuadre_franja: { modo: string; focoX: number; focoY: number; zoom: number } | null;
 }
 
 export type ResultadoBranding = { ok: true } | { ok: false; error: string };
@@ -47,6 +52,14 @@ export async function guardarBranding(
     return { ok: false, error: 'El nivel de difuminado no es válido.' };
   }
 
+  if (datos.encuadre_franja === null) {
+    return { ok: false, error: 'Falta el encuadre de la foto de fondo.' };
+  }
+  // La misma razón que el difuminado: el CHECK de la base solo devuelve un 23514 mudo, que acá se
+  // traduciría a "No se pudo guardar el branding". Esta es la defensa real y la que da el mensaje.
+  const errorEncuadre = validarEncuadre(datos.encuadre_franja);
+  if (errorEncuadre) return { ok: false, error: errorEncuadre };
+
   const { error } = await supabase
     .from('comercios')
     .update({
@@ -55,6 +68,10 @@ export async function guardarBranding(
       color_label: colores[2][1],
       sello_meta: datos.sello_meta,
       difuminado_franja: datos.difuminado_franja,
+      encuadre_franja: datos.encuadre_franja.modo,
+      foco_franja_x: datos.encuadre_franja.focoX,
+      foco_franja_y: datos.encuadre_franja.focoY,
+      zoom_franja: datos.encuadre_franja.zoom,
     })
     .eq('id', comercioId)
     .select('id')

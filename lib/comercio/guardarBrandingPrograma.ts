@@ -3,7 +3,7 @@ import type { Database } from '../supabase/types';
 import { validarColorRgb } from '../comercios/validarColorRgb';
 import { NIVELES_DIFUMINADO } from '../apple/difuminadoFranja';
 import { necesitaClasePropia } from './brandingEfectivo';
-import { encuadreDelPrograma, type Encuadre } from './encuadreFranja';
+import { encuadreDelPrograma, encuadreDesdeFormulario, validarEncuadre, type Encuadre } from './encuadreFranja';
 
 // Escritura del branding de UN programa de tarjeta (migración 0027). El espejo de
 // guardarBranding.ts, con dos diferencias que importan:
@@ -31,6 +31,10 @@ export interface DatosBrandingPrograma {
   colorTexto: string | null;
   colorLabel: string | null;
   difuminadoFranja: string | null;
+  // A diferencia del comercio, acá null SE ESCRIBE y significa "heredá": las cuatro columnas del
+  // programa son nullable. El encuadre solo cuenta cuando la tarjeta tiene foto propia — con la
+  // foto del negocio viaja el encuadre del negocio (ver brandingEfectivo).
+  encuadreFranja: { modo: string; focoX: number; focoY: number; zoom: number } | null;
   // OJO: sello_meta NO es branding y no se rige por brandingPropio. Es la mecánica del programa —
   // el pase la lee SIEMPRE desde programas_tarjeta (datosPassDeTarjeta.ts), mire o no el
   // interruptor. Y su `null` es un VALOR legítimo (un cupón no tiene meta), no una ausencia: nunca
@@ -92,6 +96,12 @@ export async function guardarBrandingPrograma(
     return { ok: false, error: 'La meta de sellos debe ser un número entero mayor que cero.' };
   }
 
+  // null es "heredá" y no se valida; lo que SÍ vino tiene que ser un encuadre entero y en rango.
+  if (datos.encuadreFranja !== null) {
+    const errorEncuadre = validarEncuadre(datos.encuadreFranja);
+    if (errorEncuadre) return { ok: false, error: errorEncuadre };
+  }
+
   const { data, error } = await supabase
     .from('programas_tarjeta')
     .update({
@@ -100,6 +110,10 @@ export async function guardarBrandingPrograma(
       color_texto: datos.colorTexto,
       color_label: datos.colorLabel,
       difuminado_franja: datos.difuminadoFranja,
+      encuadre_franja: datos.encuadreFranja?.modo ?? null,
+      foco_franja_x: datos.encuadreFranja?.focoX ?? null,
+      foco_franja_y: datos.encuadreFranja?.focoY ?? null,
+      zoom_franja: datos.encuadreFranja?.zoom ?? null,
       sello_meta: datos.selloMeta,
     })
     .eq('id', programaId)
@@ -140,6 +154,9 @@ export async function guardarBrandingPrograma(
 //
 // `sello_meta` NO entra acá a propósito: no es marca, es la mecánica del programa, y el pase la lee
 // SIEMPRE desde programas_tarjeta mire o no el interruptor (ver DatosBrandingPrograma).
+//
+// El encuadre tampoco entra: solo existe con foto propia, y subir la foto ya enciende
+// branding_propio (accionSubirImagenDePrograma).
 export function hayMarcaPropia(campos: {
   colorFondo: string | null;
   colorTexto: string | null;
@@ -231,6 +248,7 @@ export function brandingProgramaDesdeFormulario(campos: {
   colorTexto: string;
   colorLabel: string;
   difuminadoFranja: string;
+  encuadre: { modo: string; focoX: string; focoY: string; zoom: string };
   selloMeta: string;
 }): DatosBrandingPrograma {
   const aTexto = (valor: string): string | null => valor.trim() || null;
@@ -242,6 +260,9 @@ export function brandingProgramaDesdeFormulario(campos: {
     colorTexto: aTexto(campos.colorTexto),
     colorLabel: aTexto(campos.colorLabel),
     difuminadoFranja: aTexto(campos.difuminadoFranja),
+    // Los cuatro campos se leen como UNIDAD (encuadreDesdeFormulario): los cuatro vacíos son null
+    // —heredar—, y uno solo vacío llega como NaN para que la validación lo rechace con mensaje.
+    encuadreFranja: encuadreDesdeFormulario(campos.encuadre),
     // Number() y no parseInt: parseInt('12a') devuelve 12 y se tragaría el typo del dueño en
     // silencio. NaN llega hasta la validación de arriba, que lo rechaza con un mensaje claro.
     selloMeta: metaLimpia === '' ? null : Number(metaLimpia),

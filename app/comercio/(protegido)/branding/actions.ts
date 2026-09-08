@@ -5,6 +5,7 @@ import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { guardarBranding } from '@/lib/comercio/guardarBranding';
 import { guardarReverso } from '@/lib/comercio/guardarReverso';
+import { encuadreDesdeFormulario } from '@/lib/comercio/encuadreFranja';
 import {
   guardarBrandingPrograma,
   brandingProgramaDesdeFormulario,
@@ -48,6 +49,15 @@ export async function accionGuardarBranding(
     // '' → null; "12" → 12; "12a" → NaN, que guardarBranding rechaza con mensaje claro.
     sello_meta: montoMeta === '' ? null : Number(montoMeta),
     difuminado_franja: String(formData.get('difuminado_franja') ?? 'medio'),
+    // Los cuatro campos van SIEMPRE en el formulario del negocio (haya foto o no): sus columnas son
+    // NOT NULL. Si no llegaran, encuadreDesdeFormulario devuelve null y guardarBranding lo rechaza
+    // con "Falta el encuadre de la foto de fondo." en vez de escribir un encuadre inventado.
+    encuadre_franja: encuadreDesdeFormulario({
+      modo: String(formData.get('encuadre_franja') ?? ''),
+      focoX: String(formData.get('foco_franja_x') ?? ''),
+      focoY: String(formData.get('foco_franja_y') ?? ''),
+      zoom: String(formData.get('zoom_franja') ?? ''),
+    }),
   });
 
   if (!res.ok) return { error: res.error };
@@ -250,6 +260,13 @@ export async function accionGuardarBrandingDePrograma(
     colorTexto: String(formData.get('color_texto') ?? ''),
     colorLabel: String(formData.get('color_label') ?? ''),
     difuminadoFranja: String(formData.get('difuminado_franja') ?? ''),
+    // Acá los cuatro vacíos SÍ son un valor: significan "heredá el encuadre del negocio".
+    encuadre: {
+      modo: String(formData.get('encuadre_franja') ?? ''),
+      focoX: String(formData.get('foco_franja_x') ?? ''),
+      focoY: String(formData.get('foco_franja_y') ?? ''),
+      zoom: String(formData.get('zoom_franja') ?? ''),
+    },
     selloMeta: String(formData.get('sello_meta') ?? ''),
   });
 

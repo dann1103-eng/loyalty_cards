@@ -45,6 +45,7 @@ const BRANDING_VACIO = {
   colorTexto: null,
   colorLabel: null,
   difuminadoFranja: null,
+  encuadreFranja: null,
   selloMeta: null,
 };
 
@@ -237,6 +238,34 @@ describe('guardarBrandingPrograma', () => {
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.necesitaClasePropia).toBe(false);
   });
+
+  it('guarda el encuadre propio de un programa y lo lee de vuelta como unidad', async () => {
+    const { comercioId, cuponId } = await comercioConDosProgramas();
+    const res = await guardarBrandingPrograma(supabase, comercioId, cuponId, {
+      ...BRANDING_VACIO, brandingPropio: true,
+      encuadreFranja: { modo: 'completa', focoX: 0, focoY: 100, zoom: 120 },
+    });
+    expect(res.ok).toBe(true);
+    const filas = await brandingDeProgramas(supabase, comercioId);
+    expect(filas.find((f) => f.programaId === cuponId)?.encuadreFranja).toEqual({ modo: 'completa', focoX: 0, focoY: 100, zoom: 120 });
+  });
+
+  it('encuadre null SE ESCRIBE (hereda): deja las cuatro columnas en null aunque antes tuvieran valor', async () => {
+    const { comercioId, cuponId } = await comercioConDosProgramas();
+    await guardarBrandingPrograma(supabase, comercioId, cuponId, { ...BRANDING_VACIO, brandingPropio: true, encuadreFranja: { modo: 'llenar', focoX: 1, focoY: 2, zoom: 110 } });
+    const res = await guardarBrandingPrograma(supabase, comercioId, cuponId, { ...BRANDING_VACIO, brandingPropio: true, encuadreFranja: null });
+    expect(res.ok).toBe(true);
+    const { data } = await supabase.from('programas_tarjeta').select('encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja').eq('id', cuponId).single();
+    expect(data).toEqual({ encuadre_franja: null, foco_franja_x: null, foco_franja_y: null, zoom_franja: null });
+  });
+
+  it('rechaza un encuadre inválido con el mensaje de validarEncuadre', async () => {
+    const { comercioId, cuponId } = await comercioConDosProgramas();
+    const res = await guardarBrandingPrograma(supabase, comercioId, cuponId, {
+      ...BRANDING_VACIO, brandingPropio: true, encuadreFranja: { modo: 'raro', focoX: 50, focoY: 50, zoom: 100 } as never,
+    });
+    expect(res).toEqual({ ok: false, error: 'El modo de encuadre no es válido.' });
+  });
 });
 
 describe('brandingDeProgramas', () => {
@@ -349,6 +378,7 @@ describe('brandingProgramaDesdeFormulario', () => {
       colorTexto: '',
       colorLabel: '   ',
       difuminadoFranja: '',
+      encuadre: { modo: '', focoX: '', focoY: '', zoom: '' },
       selloMeta: '',
     });
 
@@ -367,9 +397,22 @@ describe('brandingProgramaDesdeFormulario', () => {
       colorTexto: '',
       colorLabel: '',
       difuminadoFranja: '',
+      encuadre: { modo: '', focoX: '', focoY: '', zoom: '' },
       selloMeta: '12a',
     });
 
     expect(Number.isNaN(datos.selloMeta)).toBe(true);
+  });
+
+  describe('encuadre', () => {
+    const base = { brandingPropio: false, colorFondo: '', colorTexto: '', colorLabel: '', difuminadoFranja: '', selloMeta: '' };
+    it('cuatro vacíos → null', () => {
+      expect(brandingProgramaDesdeFormulario({ ...base, encuadre: { modo: '', focoX: '', focoY: '', zoom: '' } }).encuadreFranja).toBeNull();
+    });
+    it('un solo vacío NO es null: llega con NaN para que la validación lo rechace', () => {
+      const r = brandingProgramaDesdeFormulario({ ...base, encuadre: { modo: 'llenar', focoX: '', focoY: '50', zoom: '100' } });
+      expect(r.encuadreFranja).not.toBeNull();
+      expect(Number.isNaN(r.encuadreFranja!.focoX)).toBe(true);
+    });
   });
 });

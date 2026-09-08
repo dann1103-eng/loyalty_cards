@@ -42,6 +42,7 @@ describe('guardarBranding', () => {
       color_label: 'rgb(200, 200, 200)',
       sello_meta: 10,
       difuminado_franja: 'fuerte',
+      encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
     });
 
     expect(res.ok).toBe(true);
@@ -63,6 +64,7 @@ describe('guardarBranding', () => {
       color_label: 'rgb(255, 255, 255)',
       sello_meta: null,
       difuminado_franja: 'medio',
+      encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
     });
 
     expect(res.ok).toBe(false);
@@ -77,6 +79,7 @@ describe('guardarBranding', () => {
       color_label: 'rgb(255, 255, 255)',
       sello_meta: 0,
       difuminado_franja: 'medio',
+      encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
     });
 
     expect(res.ok).toBe(false);
@@ -91,6 +94,7 @@ describe('guardarBranding', () => {
       color_label: 'rgb(255, 255, 255)',
       sello_meta: null,
       difuminado_franja: 'extremo',
+      encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
     });
 
     expect(res.ok).toBe(false);
@@ -124,6 +128,7 @@ describe('guardarBranding', () => {
       color_label: 'rgb(255, 255, 255)',
       sello_meta: 12,
       difuminado_franja: 'medio',
+      encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
     });
 
     expect(res.ok).toBe(true);
@@ -143,9 +148,42 @@ describe('guardarBranding', () => {
       color_label: 'rgb(255, 255, 255)',
       sello_meta: null,
       difuminado_franja: 'medio',
+      encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
     });
 
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/no existe/i);
+  });
+
+  it('guarda el encuadre de la foto de la franja', async () => {
+    const id = await crearComercio();
+    const res = await guardarBranding(supabase, id, {
+      color_fondo: 'rgb(10, 20, 30)', color_texto: 'rgb(255, 255, 255)', color_label: 'rgb(200, 200, 200)',
+      sello_meta: null, difuminado_franja: 'medio',
+      encuadre_franja: { modo: 'completa', focoX: 10, focoY: 90, zoom: 150 },
+    });
+    expect(res.ok).toBe(true);
+    const { data } = await supabase.from('comercios').select('encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja').eq('id', id).single();
+    expect(data).toEqual({ encuadre_franja: 'completa', foco_franja_x: 10, foco_franja_y: 90, zoom_franja: 150 });
+  });
+
+  it('rechaza un encuadre inválido con el mensaje de validarEncuadre, sin escribir nada', async () => {
+    // MUTACIÓN: quitar el `validarEncuadre` deja que el 23514 de la BD llegue como "No se pudo guardar".
+    const id = await crearComercio();
+    const res = await guardarBranding(supabase, id, {
+      color_fondo: 'rgb(10, 20, 30)', color_texto: 'rgb(255, 255, 255)', color_label: 'rgb(200, 200, 200)',
+      sello_meta: null, difuminado_franja: 'medio',
+      encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 999 },
+    });
+    expect(res).toEqual({ ok: false, error: 'El zoom debe ser un entero de 100 a 300.' });
+  });
+
+  it('sin encuadre (formulario roto) rechaza con mensaje claro: las columnas del comercio no admiten null', async () => {
+    const id = await crearComercio();
+    const res = await guardarBranding(supabase, id, {
+      color_fondo: 'rgb(10, 20, 30)', color_texto: 'rgb(255, 255, 255)', color_label: 'rgb(200, 200, 200)',
+      sello_meta: null, difuminado_franja: 'medio', encuadre_franja: null,
+    });
+    expect(res).toEqual({ ok: false, error: 'Falta el encuadre de la foto de fondo.' });
   });
 });
