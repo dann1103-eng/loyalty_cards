@@ -4,7 +4,7 @@ import { requireEnv } from '@/lib/env';
 import { componerStrips, descargarImagen } from './stripPass';
 import { redimensionarLogo } from './imagenesPass';
 import type { CampoReverso } from './construirReverso';
-import { contadorPase } from '@/lib/tarjetas/contadorPase';
+import { frentePase } from '@/lib/tarjetas/frentePase';
 import {
   MAXIMO_UBICACIONES_APPLE,
   LARGO_MAXIMO_MENSAJE_CERCANIA,
@@ -154,41 +154,35 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
     pass.addBuffer('logo@3x.png', logo3x);
   }
 
+  // Qué va en el frente del pass lo decide frentePase, compartido con la vista previa del editor de
+  // marca: así la vista previa no puede decir algo distinto del pass ni en una palabra. `hayGrilla`
+  // es "la composición tuvo éxito y no hay franja propia": con franja del comercio o composición
+  // fallida, el texto vuelve al campo primario (mismo fallback seguro de siempre).
   const esSellos = datos.tipoTarjeta === 'sellos' && datos.selloMeta != null && datos.selloMeta > 0;
-  if (esSellos && strips && !datos.stripUrl) {
-    // La grilla se VE en la franja; texto encima taparía los círculos (los primaryFields de un
-    // storeCard se dibujan sobre el strip). El contador baja a secondaryFields, debajo.
+  const frente = frentePase({
+    tipoTarjeta: datos.tipoTarjeta,
+    puntos: datos.puntos,
+    selloMeta: datos.selloMeta,
+    hayGrilla: esSellos && strips !== null && !datos.stripUrl,
+  });
+  if (frente.secundario) {
     pass.secondaryFields.push({
       key: 'puntos',
-      label: 'SELLOS',
-      value: `${datos.puntos} de ${datos.selloMeta}`,
+      label: frente.secundario.etiqueta,
+      value: frente.secundario.valor,
     });
-  } else if (esSellos) {
-    // Sin grilla (composición falló, o el comercio usa SU franja): el texto vuelve al campo
-    // primario — mismo fallback seguro de siempre.
+  }
+  if (frente.primario) {
     pass.primaryFields.push({
       key: 'puntos',
-      label: 'SELLOS',
-      value: `${datos.puntos} de ${datos.selloMeta} sellos`,
+      label: frente.primario.etiqueta,
+      // Número pelado → va como number CON numberStyle, para que iOS le ponga los separadores de
+      // miles del teléfono. Valor ya formateado ("$25.00") → va como string y sin numberStyle:
+      // aplicárselo haría que iOS intente reformatear lo que ya está formateado.
+      ...(frente.primario.numero !== null
+        ? { value: frente.primario.numero, numberStyle: 'PKNumberStyleDecimal' as const }
+        : { value: frente.primario.valor }),
     });
-  } else {
-    // contadorPase decide etiqueta y formato SEGÚN EL TIPO. Antes esta rama dibujaba todo como
-    // "PUNTOS <entero>", y como gift card y cashback guardan CENTAVOS en la misma columna, un saldo
-    // de $25.00 se veía "PUNTOS 2500". Devuelve null en los tipos sin contador (cupón, membresía,
-    // descuento): ahí el pase no lleva número, en vez de un "PUNTOS 0" que no dice nada.
-    const contador = contadorPase(datos.tipoTarjeta, datos.puntos, datos.selloMeta);
-    if (contador) {
-      pass.primaryFields.push({
-        key: 'puntos',
-        label: contador.etiqueta,
-        // Número pelado → va como number CON numberStyle, para que iOS le ponga los separadores de
-        // miles del teléfono. Valor ya formateado ("$25.00") → va como string y sin numberStyle:
-        // aplicárselo haría que iOS intente reformatear lo que ya está formateado.
-        ...(contador.numero !== null
-          ? { value: contador.numero, numberStyle: 'PKNumberStyleDecimal' as const }
-          : { value: contador.valor }),
-      });
-    }
   }
 
   // El TITULAR de la tarjeta, alineado a la derecha de la misma fila que el contador. Es el nombre
