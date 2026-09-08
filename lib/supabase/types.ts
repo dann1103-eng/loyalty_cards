@@ -17,6 +17,7 @@
 //   - supabase/migrations/0014_prospectos.sql (tabla prospectos, formulario de la página pública)
 //   - supabase/migrations/0028_disenos_cartel.sql (tabla disenos_cartel: cartel/QR imprimible por programa)
 //   - supabase/migrations/0030_elementos_cartel.sql (columna elementos jsonb en disenos_cartel)
+//   - supabase/migrations/0032_encuadre_franja.sql (encuadre_franja/foco_franja_x/foco_franja_y/zoom_franja en comercios y programas_tarjeta)
 //   - supabase/migrations/0029_reverso_por_programa.sql (reverso por programa en programas_tarjeta)
 //   - supabase/migrations/0027_branding_por_programa.sql (branding por programa en programas_tarjeta)
 //   - supabase/migrations/0026_notificaciones_push.sql (tablas difusiones y notificaciones_enviadas; tarjetas.aviso_texto/aviso_hasta/aviso_inactividad_enviado_en; comercios.aviso_inactividad_activo/dias/mensaje)
@@ -65,6 +66,12 @@ export type Database = {
           sello_icono_url: string | null;
           sello_meta: number | null;
           difuminado_franja: string;
+          // Encuadre de la foto de fondo de la franja (migración 0032). NOT NULL con default: el
+          // comercio siempre tiene un encuadre; con el default se ve como antes (cover centrado).
+          encuadre_franja: string;
+          foco_franja_x: number;
+          foco_franja_y: number;
+          zoom_franja: number;
           cuenta_id: string | null;
           // Reverso configurable del pass (migración 0013). La sección "Cómo funciona" NO vive acá:
           // se arma en cada generación desde reglas_puntos y recompensas, para que no pueda quedar
@@ -116,6 +123,10 @@ export type Database = {
           sello_icono_url?: string | null;
           sello_meta?: number | null;
           difuminado_franja?: string;
+          encuadre_franja?: string;
+          foco_franja_x?: number;
+          foco_franja_y?: number;
+          zoom_franja?: number;
           cuenta_id?: string | null;
           terminos_uso?: string | null;
           red_instagram?: string | null;
@@ -153,6 +164,10 @@ export type Database = {
           sello_icono_url?: string | null;
           sello_meta?: number | null;
           difuminado_franja?: string;
+          encuadre_franja?: string;
+          foco_franja_x?: number;
+          foco_franja_y?: number;
+          zoom_franja?: number;
           cuenta_id?: string | null;
           terminos_uso?: string | null;
           red_instagram?: string | null;
@@ -925,6 +940,11 @@ export type Database = {
           strip_url: string | null;
           sello_icono_url: string | null;
           difuminado_franja: string | null;
+          // Encuadre propio (0032). Las cuatro se leen como unidad: una null = sin encuadre propio.
+          encuadre_franja: string | null;
+          foco_franja_x: number | null;
+          foco_franja_y: number | null;
+          zoom_franja: number | null;
           // Una vez seteado NUNCA vuelve a null: las clases de Google no se borran.
           google_class_id: string | null;
           branding_propio: boolean;
@@ -961,6 +981,10 @@ export type Database = {
           strip_url?: string | null;
           sello_icono_url?: string | null;
           difuminado_franja?: string | null;
+          encuadre_franja?: string | null;
+          foco_franja_x?: number | null;
+          foco_franja_y?: number | null;
+          zoom_franja?: number | null;
           google_class_id?: string | null;
           branding_propio?: boolean;
           terminos_uso?: string | null;
@@ -993,6 +1017,10 @@ export type Database = {
           strip_url?: string | null;
           sello_icono_url?: string | null;
           difuminado_franja?: string | null;
+          encuadre_franja?: string | null;
+          foco_franja_x?: number | null;
+          foco_franja_y?: number | null;
+          zoom_franja?: number | null;
           google_class_id?: string | null;
           branding_propio?: boolean;
           terminos_uso?: string | null;
