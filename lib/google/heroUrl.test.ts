@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { urlHeroTarjeta, versionHero, type DatosVersionHero } from './heroUrl';
+import { urlHeroTarjeta, urlFranjaClase, versionHero, versionFranjaClase, type DatosVersionHero } from './heroUrl';
 
 const ORIGINAL = process.env.NEXT_PUBLIC_BASE_URL;
 
@@ -12,7 +12,9 @@ function datos(sobre: Partial<DatosVersionHero> = {}): DatosVersionHero {
   return {
     puntos: 3, selloMeta: 8, colorFondo: 'rgb(36, 24, 18)', colorLabel: 'rgb(214, 146, 74)',
     selloIconoUrl: 'https://ejemplo.com/icono.png', heroUrl: 'https://ejemplo.com/hero.jpg',
-    stripUrl: null, difuminadoFranja: 'medio', ...sobre,
+    stripUrl: null, difuminadoFranja: 'medio',
+    encuadreFranja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
+    ...sobre,
   };
 }
 
@@ -58,7 +60,45 @@ describe('versionHero', () => {
     expect(versionHero(datos({ difuminadoFranja: 'fuerte' }))).not.toBe(base);
   });
 
+  // MUTACIÓN: quitar los cuatro campos del encuadre de la clave en versionHero deja las cuatro
+  // URLs iguales a la base y esta prueba falla.
+  it('cambia con cada uno de los cuatro campos del encuadre (si no, Google sirve la foto mal encuadrada para siempre)', () => {
+    const base = versionHero(datos());
+    expect(versionHero(datos({ encuadreFranja: { modo: 'completa', focoX: 50, focoY: 50, zoom: 100 } }))).not.toBe(base);
+    expect(versionHero(datos({ encuadreFranja: { modo: 'llenar', focoX: 0, focoY: 50, zoom: 100 } }))).not.toBe(base);
+    expect(versionHero(datos({ encuadreFranja: { modo: 'llenar', focoX: 50, focoY: 0, zoom: 100 } }))).not.toBe(base);
+    expect(versionHero(datos({ encuadreFranja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 150 } }))).not.toBe(base);
+  });
+
   it('es corta y apta para una URL (12 hex)', () => {
     expect(versionHero(datos())).toMatch(/^[0-9a-f]{12}$/);
+  });
+});
+
+describe('urlFranjaClase', () => {
+  it('sin programa: la portada del comercio', () => {
+    process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+    expect(urlFranjaClase('com-1', null, 'abc')).toBe('https://www.cardly-sv.site/api/comercios/com-1/franja.png?v=abc');
+  });
+  it('con programa: lleva el id del programa en la query, ANTES de la versión', () => {
+    process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site/';
+    expect(urlFranjaClase('com-1', 'prog-9', 'abc')).toBe('https://www.cardly-sv.site/api/comercios/com-1/franja.png?programa=prog-9&v=abc');
+  });
+  it('devuelve null si falta NEXT_PUBLIC_BASE_URL', () => {
+    delete process.env.NEXT_PUBLIC_BASE_URL;
+    expect(urlFranjaClase('com-1', null, 'abc')).toBeNull();
+  });
+});
+
+describe('versionFranjaClase', () => {
+  it('es la versión de la banda SIN progreso ni franja propia: no cambia con puntos ni con stripUrl', () => {
+    const marca = { colorFondo: 'rgb(1,1,1)', colorLabel: 'rgb(2,2,2)', heroUrl: 'https://ejemplo.com/h.jpg', difuminadoFranja: 'medio', encuadreFranja: { modo: 'llenar' as const, focoX: 50, focoY: 50, zoom: 100 } };
+    expect(versionFranjaClase(marca)).toBe(versionFranjaClase(marca));
+    expect(versionFranjaClase(marca)).not.toBe(versionFranjaClase({ ...marca, encuadreFranja: { ...marca.encuadreFranja, focoY: 0 } }));
+    // Es EXACTAMENTE versionHero con progreso cero, sin meta, sin ícono y sin franja propia: lo que
+    // dibuja la ruta franja.png. Si un sync hasheara otra cosa, la URL de la clase no coincidiría.
+    expect(versionFranjaClase(marca)).toBe(
+      versionHero({ ...marca, puntos: 0, selloMeta: null, selloIconoUrl: null, stripUrl: null }),
+    );
   });
 });

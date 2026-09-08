@@ -2,6 +2,8 @@
 // lo del comercio si no. Función PURA para que los nueve consumidores compartan una sola definición
 // de "efectivo" y no puedan divergir — que es exactamente lo que pasó dos veces en julio de 2026
 // cuando el tipo de tarjeta se mudó al programa y quedaron consumidores leyendo la columna legada.
+import { ENCUADRE_POR_DEFECTO, type Encuadre } from './encuadreFranja';
+
 export interface BrandingBase {
   colorFondo: string | null;
   colorTexto: string | null;
@@ -11,10 +13,18 @@ export interface BrandingBase {
   stripUrl: string | null;
   selloIconoUrl: string | null;
   difuminadoFranja: string;
+  // Obligatorio a propósito (como `reverso` y `ubicaciones` en DatosPass): el compilador obliga a
+  // cada consumidor a decidir, en vez de que uno nuevo se lo olvide en silencio.
+  encuadreFranja: Encuadre;
 }
 
 // El programa define lo que quiera y hereda el resto. `brandingPropio` es el interruptor maestro.
-export type BrandingPrograma = Partial<BrandingBase> & { brandingPropio: boolean };
+// `encuadreFranja` va aparte del Partial porque en el programa `null` es un valor ("no lo toqué"),
+// mismo patrón que `mostrarComoFunciona` en ReversoPrograma.
+export type BrandingPrograma = Partial<Omit<BrandingBase, 'encuadreFranja'>> & {
+  brandingPropio: boolean;
+  encuadreFranja?: Encuadre | null;
+};
 
 export function brandingEfectivo(
   comercio: BrandingBase,
@@ -42,6 +52,11 @@ export function brandingEfectivo(
     stripUrl: programa.stripUrl ?? comercio.stripUrl,
     selloIconoUrl: programa.selloIconoUrl ?? comercio.selloIconoUrl,
     difuminadoFranja: programa.difuminadoFranja ?? comercio.difuminadoFranja,
+    // EL ENCUADRE VIAJA CON LA FOTO, y NO es `programa.encuadreFranja ?? comercio.encuadreFranja`:
+    // la posición de una foto solo tiene sentido para ESA foto. Con foto propia, su encuadre (o el
+    // default si nunca lo tocó); heredando la foto, se hereda el encuadre del negocio aunque el
+    // programa tenga uno guardado de una foto anterior.
+    encuadreFranja: programa.heroUrl ? (programa.encuadreFranja ?? ENCUADRE_POR_DEFECTO) : comercio.encuadreFranja,
   };
 }
 

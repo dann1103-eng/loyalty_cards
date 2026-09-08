@@ -35,7 +35,7 @@ export default async function PaginaBranding({
   const [{ data: c }, programas] = await Promise.all([
     supabase
       .from('comercios')
-      .select('nombre, tipo_tarjeta, color_fondo, color_texto, color_label, sello_meta, logo_url, strip_url, hero_url, sello_icono_url, difuminado_franja, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona')
+      .select('nombre, tipo_tarjeta, color_fondo, color_texto, color_label, sello_meta, logo_url, strip_url, hero_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona')
       .eq('id', comercioId)
       .maybeSingle(),
     // Solo los activos: darle diseño propio a una tarjeta desactivada no se ve en ningún lado, y su

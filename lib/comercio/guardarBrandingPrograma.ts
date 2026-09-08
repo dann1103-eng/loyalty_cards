@@ -3,6 +3,7 @@ import type { Database } from '../supabase/types';
 import { validarColorRgb } from '../comercios/validarColorRgb';
 import { NIVELES_DIFUMINADO } from '../apple/difuminadoFranja';
 import { necesitaClasePropia } from './brandingEfectivo';
+import { encuadreDelPrograma, type Encuadre } from './encuadreFranja';
 
 // Escritura del branding de UN programa de tarjeta (migración 0027). El espejo de
 // guardarBranding.ts, con dos diferencias que importan:
@@ -57,6 +58,8 @@ export interface BrandingProgramaFila {
   stripUrl: string | null;
   selloIconoUrl: string | null;
   difuminadoFranja: string | null;
+  // null = las cuatro columnas del encuadre están en null ("no lo toqué"), ver encuadreDelPrograma.
+  encuadreFranja: Encuadre | null;
   selloMeta: number | null;
 }
 
@@ -194,7 +197,7 @@ export async function brandingDeProgramas(
   const { data, error } = await supabase
     .from('programas_tarjeta')
     .select(
-      'id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, sello_meta',
+      'id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, sello_meta',
     )
     .eq('comercio_id', comercioId);
 
@@ -214,6 +217,7 @@ export async function brandingDeProgramas(
     stripUrl: f.strip_url,
     selloIconoUrl: f.sello_icono_url,
     difuminadoFranja: f.difuminado_franja,
+    encuadreFranja: encuadreDelPrograma(f),
     selloMeta: f.sello_meta,
   }));
 }

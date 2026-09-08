@@ -3,6 +3,7 @@ import type { Database } from '../supabase/types';
 import { normalizarTelefono } from '../clientes/normalizarTelefono';
 import { historialParaCliente, type MovimientoPortal } from './historialCliente';
 import { brandingEfectivo } from '../comercio/brandingEfectivo';
+import { ENCUADRE_POR_DEFECTO } from '../comercio/encuadreFranja';
 import { describirFila, type NivelDeDescuento } from '../tarjetas/estadoTarjeta';
 import { hoyEnZona } from '../tarjetas/vigencia';
 import { listarNiveles } from '../tarjetas/descuento';
@@ -177,6 +178,9 @@ export async function buscarTarjetasPorTelefono(
         stripUrl: null,
         selloIconoUrl: null,
         difuminadoFranja: 'medio',
+        // Mismo motivo que `difuminadoFranja`: el portal no dibuja la franja, así que el encuadre
+        // es relleno y nadie lo lee.
+        encuadreFranja: ENCUADRE_POR_DEFECTO,
       },
       p
         ? {

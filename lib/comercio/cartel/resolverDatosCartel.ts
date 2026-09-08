@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/types';
 import { brandingEfectivo } from '../brandingEfectivo';
+import { encuadreDelComercio, encuadreDelPrograma } from '../encuadreFranja';
 import { urlRegistroPrograma } from '../urlRegistroPrograma';
 import { combinarDatosCartel } from './combinarDatos';
 import type { DatosCartel } from './tipos';
@@ -61,13 +62,13 @@ export async function resolverDatosCartel(
         // porque brandingEfectivo pide el branding COMPLETO, y rellenar esos tres con literales
         // inventados dejaría un `stripUrl: null` mentiroso a la espera de que alguien lo lea.
         // Cuesta cero round-trips.
-        .select('nombre, slug, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja')
+        .select('nombre, slug, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja')
         .eq('id', comercioId)
         .maybeSingle(),
       supabase
         .from('programas_tarjeta')
         .select(
-          'slug, es_principal, activo, tipo_tarjeta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja',
+          'slug, es_principal, activo, tipo_tarjeta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja',
         )
         .eq('id', programaId)
         .eq('comercio_id', comercioId)
@@ -113,6 +114,7 @@ export async function resolverDatosCartel(
       stripUrl: comercio.strip_url,
       selloIconoUrl: comercio.sello_icono_url,
       difuminadoFranja: comercio.difuminado_franja,
+      encuadreFranja: encuadreDelComercio(comercio),
     },
     {
       brandingPropio: programa.branding_propio,
@@ -126,6 +128,7 @@ export async function resolverDatosCartel(
       // `?? undefined` porque en el programa esta columna es nullable y en BrandingBase no:
       // undefined activa el `??` de brandingEfectivo y hereda.
       difuminadoFranja: programa.difuminado_franja ?? undefined,
+      encuadreFranja: encuadreDelPrograma(programa),
     },
   );
 

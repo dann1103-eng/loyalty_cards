@@ -1,6 +1,7 @@
 import { ImageResponse } from 'next/og';
 import { stopsDifuminado } from './difuminadoFranja';
 import { comprimirPng } from './imagenesPass';
+import type { Encuadre } from '@/lib/comercio/encuadreFranja';
 
 // Composición de la FRANJA (strip) del pass con next/og — el "pipeline de composición de
 // imágenes" que la Fase 3 no tenía: llegó gratis con los íconos del portal (PWA). Tres casos:
@@ -27,6 +28,10 @@ export interface DatosStrip {
   // Cuánto se funde esa foto hacia el color de la tarjeta en los bordes (comercios.difuminado_franja,
   // migración 0007). Ver stopsDifuminado(): 'ninguno' = corte seco, sin gradiente.
   difuminadoFranja: string;
+  // Qué parte de la foto se ve dentro del marco (migración 0032, lib/comercio/encuadreFranja.ts).
+  // Entra al contrato ya —obligatorio, para que ningún llamador lo omita— aunque la composición
+  // todavía lo aplique en la siguiente tarea.
+  encuadreFranja: Encuadre;
 }
 
 export interface StripsPass {

@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { generarPassApple } from './generatePass';
 import { PRESUPUESTO_PASS_KB } from './imagenesPass';
 import { LADOS_MAXIMOS } from '@/lib/comercio/redimensionarImagen';
+import { ENCUADRE_POR_DEFECTO } from '@/lib/comercio/encuadreFranja';
 
 // EL PRESUPUESTO DE PESO DEL PASS: la prueba que impide que vuelva el problema del 2026-07-26 (pass
 // de 1763 KB, tarjetas que tardaban en verse actualizadas porque el iPhone se baja el pass ENTERO
@@ -72,6 +73,7 @@ describe('presupuesto de peso del .pkpass', () => {
       heroUrl: hero,
       logoUrl: logo,
       difuminadoFranja: 'medio',
+      encuadreFranja: ENCUADRE_POR_DEFECTO,
       reverso: [],
       // El presupuesto de peso se mide sin geopush a propósito: `locations` son unos pocos cientos
       // de bytes de JSON y el peor caso que esta prueba acota es el de las IMÁGENES, que es donde

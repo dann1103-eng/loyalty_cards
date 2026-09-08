@@ -4,6 +4,7 @@ import type { DatosPass } from './generatePass';
 import { construirReverso, resolverAviso } from './construirReverso';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
 import { brandingEfectivo, reversoEfectivo } from '../comercio/brandingEfectivo';
+import { encuadreDelComercio, encuadreDelPrograma } from '../comercio/encuadreFranja';
 
 export async function datosPassDeTarjeta(
   supabase: SupabaseClient<Database>,
@@ -25,7 +26,7 @@ export async function datosPassDeTarjeta(
   const { data: tarjeta } = await supabase
     .from('tarjetas')
     .select(
-      '*, comercios(*), clientes(nombre), programas_tarjeta(tipo_tarjeta, sello_meta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, reverso_propio, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona)',
+      '*, comercios(*), clientes(nombre), programas_tarjeta(tipo_tarjeta, sello_meta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, reverso_propio, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona)',
     )
     .eq('apple_serial_number', serialNumber)
     .maybeSingle();
@@ -60,6 +61,7 @@ export async function datosPassDeTarjeta(
       stripUrl: c.strip_url,
       selloIconoUrl: c.sello_icono_url,
       difuminadoFranja: c.difuminado_franja,
+      encuadreFranja: encuadreDelComercio(c),
     },
     programa
       ? {
@@ -75,6 +77,9 @@ export async function datosPassDeTarjeta(
           // undefined activa el `??` de brandingEfectivo y hereda; null lo activaría igual, pero
           // el tipo pide undefined para no prometer un string que no está.
           difuminadoFranja: programa.difuminado_franja ?? undefined,
+          // Acá `null` SÍ viaja tal cual: brandingEfectivo lo lee como "nunca lo tocó" y decide
+          // según la foto (default con foto propia, el del negocio si hereda la foto).
+          encuadreFranja: encuadreDelPrograma(programa),
         }
       : null,
   );
@@ -174,6 +179,7 @@ export async function datosPassDeTarjeta(
       heroUrl: marca.heroUrl,
       logoUrl: marca.logoUrl,
       difuminadoFranja: marca.difuminadoFranja,
+      encuadreFranja: marca.encuadreFranja,
       // El reverso se ARMA en cada generación, nunca se congela una copia: un reverso que promete
       // una recompensa que el dueño ya cambió es una promesa incumplida frente al cliente final.
       reverso: construirReverso({

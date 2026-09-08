@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { componerStrips } from '@/lib/apple/stripPass';
 import { brandingEfectivo } from '@/lib/comercio/brandingEfectivo';
+import { encuadreDelComercio, encuadreDelPrograma } from '@/lib/comercio/encuadreFranja';
 
 export const runtime = 'nodejs';
 
@@ -25,7 +26,7 @@ export async function GET(
     // cacheaba esa imagen equivocada. Peor: el cache-busting de heroUrl.ts hashea el branding, así
     // que la URL cambiaba y Google re-descargaba… la misma imagen mal dibujada.
     .select(
-      'puntos_actuales, programas_tarjeta(tipo_tarjeta, sello_meta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja), comercios(tipo_tarjeta, sello_meta, color_fondo, color_texto, color_label, logo_url, strip_url, sello_icono_url, hero_url, difuminado_franja)',
+      'puntos_actuales, programas_tarjeta(tipo_tarjeta, sello_meta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(tipo_tarjeta, sello_meta, color_fondo, color_texto, color_label, logo_url, strip_url, sello_icono_url, hero_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja)',
     )
     .eq('id', tarjetaId)
     .maybeSingle();
@@ -51,6 +52,7 @@ export async function GET(
       stripUrl: c.strip_url,
       selloIconoUrl: c.sello_icono_url,
       difuminadoFranja: c.difuminado_franja,
+      encuadreFranja: encuadreDelComercio(c),
     },
     programa
       ? {
@@ -63,6 +65,7 @@ export async function GET(
           stripUrl: programa.strip_url,
           selloIconoUrl: programa.sello_icono_url,
           difuminadoFranja: programa.difuminado_franja ?? undefined,
+          encuadreFranja: encuadreDelPrograma(programa),
         }
       : null,
   );
@@ -77,6 +80,7 @@ export async function GET(
     selloIconoUrl: marca.selloIconoUrl,
     heroUrl: marca.heroUrl,
     difuminadoFranja: marca.difuminadoFranja,
+    encuadreFranja: marca.encuadreFranja,
   });
 
   if (!strips) {

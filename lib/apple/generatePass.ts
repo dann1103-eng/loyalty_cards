@@ -5,6 +5,7 @@ import { componerStrips, descargarImagen } from './stripPass';
 import { redimensionarLogo } from './imagenesPass';
 import type { CampoReverso } from './construirReverso';
 import { frentePase } from '@/lib/tarjetas/frentePase';
+import type { Encuadre } from '@/lib/comercio/encuadreFranja';
 import {
   MAXIMO_UBICACIONES_APPLE,
   LARGO_MAXIMO_MENSAJE_CERCANIA,
@@ -44,6 +45,10 @@ export interface DatosPass {
   heroUrl: string | null;
   logoUrl: string | null;
   difuminadoFranja: string;
+  // Qué parte de la foto de la franja se ve (migración 0032). OBLIGATORIO por el mismo motivo que
+  // `reverso` y `ubicaciones`: si fuera opcional, una ruta de emisión nueva dibujaría la foto con
+  // el encuadre por defecto y nadie se enteraría.
+  encuadreFranja: Encuadre;
   // Campos del reverso del pass, ya armados por construirReverso. Arreglo vacio = pass sin reverso
   // (es lo que pasa si las consultas de reglas/recompensas fallan: best-effort, ver datosPassDeTarjeta).
   //
@@ -135,6 +140,7 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
     selloIconoUrl: datos.selloIconoUrl,
     heroUrl: datos.heroUrl,
     difuminadoFranja: datos.difuminadoFranja,
+    encuadreFranja: datos.encuadreFranja,
   });
   if (strips) {
     pass.addBuffer('strip.png', strips.s1);

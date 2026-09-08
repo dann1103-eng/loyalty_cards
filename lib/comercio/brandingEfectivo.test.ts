@@ -6,6 +6,7 @@ import {
   type BrandingBase,
   type ReversoBase,
 } from './brandingEfectivo';
+import { ENCUADRE_POR_DEFECTO } from './encuadreFranja';
 
 // Módulo PURO. Es la única definición de "qué branding ve el cliente" y la comparten los NUEVE
 // consumidores (pase de Apple, clase y objeto de Google, JWT de guardado, portal, la ruta que
@@ -20,6 +21,7 @@ const COMERCIO: BrandingBase = {
   stripUrl: null,
   selloIconoUrl: 'https://ejemplo.com/sello-comercio.png',
   difuminadoFranja: 'medio',
+  encuadreFranja: { modo: 'completa', focoX: 10, focoY: 90, zoom: 150 },
 };
 
 describe('brandingEfectivo', () => {
@@ -57,6 +59,39 @@ describe('brandingEfectivo', () => {
   it('un campo del comercio que es null y el programa tampoco define: queda null', () => {
     const resultado = brandingEfectivo(COMERCIO, { brandingPropio: true, colorFondo: 'rgb(1,2,3)' });
     expect(resultado.stripUrl).toBeNull();
+  });
+
+  // EL ENCUADRE VIAJA CON LA FOTO, no campo por campo como los colores: la posición de una foto solo
+  // tiene sentido para ESA foto, y heredar el foco del negocio sobre otra foto daría siempre un
+  // resultado sin sentido (decisión 4 del spec).
+  it('encuadre: programa CON foto propia usa su encuadre propio', () => {
+    const propio = { modo: 'llenar' as const, focoX: 0, focoY: 0, zoom: 200 };
+    const r = brandingEfectivo(COMERCIO, { brandingPropio: true, heroUrl: 'https://ejemplo.com/hero-programa.png', encuadreFranja: propio });
+    expect(r.encuadreFranja).toEqual(propio);
+  });
+
+  it('encuadre: programa CON foto propia y sin encuadre tocado usa el DEFAULT, no el del negocio', () => {
+    // MUTACIÓN: `programa.encuadreFranja ?? comercio.encuadreFranja` pone el foco de la foto del
+    // negocio sobre la foto nueva del programa.
+    const r = brandingEfectivo(COMERCIO, { brandingPropio: true, heroUrl: 'https://ejemplo.com/hero-programa.png', encuadreFranja: null });
+    expect(r.encuadreFranja).toEqual(ENCUADRE_POR_DEFECTO);
+  });
+
+  it('encuadre: programa que HEREDA la foto hereda también el encuadre, aunque tenga uno guardado', () => {
+    // MUTACIÓN: la misma `programa.encuadreFranja ?? comercio.encuadreFranja` pondría el encuadre
+    // guardado (de una foto anterior del programa) sobre la foto del negocio.
+    const r = brandingEfectivo(COMERCIO, { brandingPropio: true, colorFondo: 'rgb(1,2,3)', encuadreFranja: { modo: 'llenar', focoX: 0, focoY: 0, zoom: 300 } });
+    expect(r.heroUrl).toBe(COMERCIO.heroUrl);
+    expect(r.encuadreFranja).toEqual(COMERCIO.encuadreFranja);
+  });
+
+  it('encuadre: con branding_propio APAGADO se ignora el encuadre propio (y la foto propia)', () => {
+    const r = brandingEfectivo(COMERCIO, {
+      brandingPropio: false,
+      heroUrl: 'https://ejemplo.com/hero-programa.png',
+      encuadreFranja: { modo: 'llenar', focoX: 0, focoY: 0, zoom: 300 },
+    });
+    expect(r.encuadreFranja).toEqual(COMERCIO.encuadreFranja);
   });
 });
 

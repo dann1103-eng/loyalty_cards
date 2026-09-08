@@ -6,6 +6,7 @@ import { construirObjeto } from './construirRecursos';
 import { urlHeroTarjeta, versionHero } from './heroUrl';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
 import { brandingEfectivo } from '../comercio/brandingEfectivo';
+import { encuadreDelComercio, encuadreDelPrograma } from '../comercio/encuadreFranja';
 
 export type ResultadoSyncObjeto = { ok: true; objectId: string } | { ok: false; error: string };
 
@@ -22,7 +23,7 @@ export async function syncObjetoTarjeta(
     // columnas homónimas de comercios quedaron legadas. Sin este join, la tarjeta de un programa
     // secundario se sincronizaba a Google con el tipo del COMERCIO — la misma falla que tenía el
     // lado de Apple (ver datosPassDeTarjeta.ts).
-    .select('qr_token, puntos_actuales, google_object_id, comercio_id, programas_tarjeta(tipo_tarjeta, sello_meta, google_class_id, branding_propio, color_fondo, color_label, hero_url, strip_url, sello_icono_url, difuminado_franja), comercios(google_class_id, tipo_tarjeta, sello_meta, color_fondo, color_label, sello_icono_url, hero_url, strip_url, difuminado_franja)')
+    .select('qr_token, puntos_actuales, google_object_id, comercio_id, programas_tarjeta(tipo_tarjeta, sello_meta, google_class_id, branding_propio, color_fondo, color_label, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(google_class_id, tipo_tarjeta, sello_meta, color_fondo, color_label, sello_icono_url, hero_url, strip_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
@@ -57,6 +58,7 @@ export async function syncObjetoTarjeta(
       stripUrl: cm.strip_url,
       selloIconoUrl: cm.sello_icono_url,
       difuminadoFranja: cm.difuminado_franja,
+      encuadreFranja: encuadreDelComercio(cm),
     },
     programa
       ? {
@@ -67,6 +69,7 @@ export async function syncObjetoTarjeta(
           stripUrl: programa.strip_url,
           selloIconoUrl: programa.sello_icono_url,
           difuminadoFranja: programa.difuminado_franja ?? undefined,
+          encuadreFranja: encuadreDelPrograma(programa),
         }
       : null,
   );
@@ -103,6 +106,7 @@ export async function syncObjetoTarjeta(
           heroUrl: marca.heroUrl,
           stripUrl: marca.stripUrl,
           difuminadoFranja: marca.difuminadoFranja,
+          encuadreFranja: marca.encuadreFranja,
         }),
       ),
     });

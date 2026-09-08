@@ -5,6 +5,7 @@ import { idClasePrograma } from './ids';
 import { construirClase } from './construirRecursos';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
 import { brandingEfectivo, necesitaClasePropia } from '../comercio/brandingEfectivo';
+import { encuadreDelComercio, encuadreDelPrograma } from '../comercio/encuadreFranja';
 
 export type ResultadoSyncClasePrograma =
   // classId null = este programa NO tiene clase propia y sus objetos siguen colgando de la del
@@ -34,7 +35,7 @@ export async function syncClasePrograma(
   const { data: programa, error } = await supabase
     .from('programas_tarjeta')
     .select(
-      'id, branding_propio, google_class_id, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, comercios(nombre, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja)',
+      'id, branding_propio, google_class_id, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, comercios(nombre, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja)',
     )
     .eq('id', programaId)
     // Scope por comercio: conocer el id de un programa ajeno no debe permitir tocarle la clase.
@@ -70,6 +71,7 @@ export async function syncClasePrograma(
       stripUrl: c.strip_url,
       selloIconoUrl: c.sello_icono_url,
       difuminadoFranja: c.difuminado_franja,
+      encuadreFranja: encuadreDelComercio(c),
     },
     {
       // Si el branding propio está apagado pero la clase YA existe, se le hace patch con lo
@@ -83,6 +85,7 @@ export async function syncClasePrograma(
       stripUrl: programa.strip_url,
       selloIconoUrl: programa.sello_icono_url,
       difuminadoFranja: programa.difuminado_franja ?? undefined,
+      encuadreFranja: encuadreDelPrograma(programa),
     },
   );
 

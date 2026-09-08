@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { generarPassApple } from './generatePass';
 import { ALTOS_LOGO } from './imagenesPass';
 import type { UbicacionGeopush } from '@/lib/comercio/geopush';
+import { ENCUADRE_POR_DEFECTO } from '@/lib/comercio/encuadreFranja';
 
 // PNG de 1×1 para probar la franja subida por el comercio sin depender de la red: fetch() de Node
 // soporta data: URLs, así el test compara los bytes exactos que "subió" el comercio.
@@ -24,6 +25,7 @@ function datosBase() {
     heroUrl: null,
     logoUrl: null,
     difuminadoFranja: 'medio',
+    encuadreFranja: ENCUADRE_POR_DEFECTO,
     // Reverso vacío por defecto: acá se prueba el CABLEADO (que los campos que llegan viajan al
     // pass.json), no qué campos produce construirReverso — eso tiene su propio archivo de pruebas,
     // sin firmar passes ni componer imágenes.
