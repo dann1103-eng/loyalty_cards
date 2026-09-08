@@ -4,6 +4,7 @@ import {
   useState,
   useRef,
   useEffect,
+  useCallback,
   type ChangeEvent,
   type PointerEvent as PointerEventReact,
   type ReactNode,
@@ -198,11 +199,24 @@ export default function FormularioBranding({
 
   // ---- encuadre de la foto de la franja ---------------------------------------------------------
   const [encuadre, setEncuadre] = useState<Encuadre>(encuadreInicial ?? ENCUADRE_POR_DEFECTO);
-  // Medidas naturales de la foto: null hasta el onLoad. Sin ellas la foto se dibuja con cover
+  // Medidas naturales de la foto: null hasta que se conocen. Sin ellas la foto se dibuja con cover
   // centrado y no se arrastra (colocarFoto exige medidas válidas y devolvería el marco pelado).
   const [medidasFoto, setMedidasFoto] = useState<Medidas | null>(null);
   const [arrastrando, setArrastrando] = useState(false);
   const ultimoPunteroRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Mide la foto al montarse el <img>, para el caso en que YA terminó de cargar antes de que React
+  // hidrate (imagen cacheada, o simplemente una foto liviana servida desde el mismo origen). Ahí
+  // `onLoad` no vuelve a dispararse nunca. Se compara antes de escribir el estado porque el ref
+  // corre en cada montaje y un setState incondicional volvería a renderizar de gusto.
+  const medirFoto = useCallback((img: HTMLImageElement | null) => {
+    if (!img || !img.complete || img.naturalWidth <= 0) return;
+    setMedidasFoto((previas) =>
+      previas && previas.ancho === img.naturalWidth && previas.alto === img.naturalHeight
+        ? previas
+        : { ancho: img.naturalWidth, alto: img.naturalHeight },
+    );
+  }, []);
 
   const hayFoto = Boolean(urls.hero);
   const hayStrip = Boolean(urls.strip);
@@ -351,6 +365,14 @@ export default function FormularioBranding({
                       alt=""
                       aria-hidden="true"
                       draggable={false}
+                      // `ref` ADEMÁS de `onLoad`, y no es redundante: el HTML llega renderizado del
+                      // servidor, así que el navegador empieza a bajar la foto ANTES de que React
+                      // hidrate. Cuando la foto ya terminó de cargar para cuando se engancha el
+                      // manejador —lo normal con una imagen cacheada, y lo que se vio en el
+                      // navegador el 2026-09-08— `onLoad` NO vuelve a dispararse, `medidasFoto`
+                      // se quedaba en null y el encuadre no se aplicaba NUNCA: la franja se veía
+                      // con el recorte centrado y los deslizadores no movían nada.
+                      ref={medirFoto}
                       onLoad={(e) => setMedidasFoto({ ancho: e.currentTarget.naturalWidth, alto: e.currentTarget.naturalHeight })}
                       // Con las medidas ya conocidas manda colocarFoto; antes del onLoad, cover centrado
                       // (que es exactamente lo que da el encuadre por defecto, así no hay salto).
