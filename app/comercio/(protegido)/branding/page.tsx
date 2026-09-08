@@ -5,6 +5,7 @@ import { listarProgramas } from '@/lib/comercio/programas';
 import { brandingDeProgramas, hayMarcaPropia } from '@/lib/comercio/guardarBrandingPrograma';
 import { reversoDePrograma, hayReversoPropio } from '@/lib/comercio/guardarReversoPrograma';
 import { tipoOPuntos } from '@/lib/tarjetas/tipos';
+import { encuadreDelComercio } from '@/lib/comercio/encuadreFranja';
 import FormularioBranding from './FormularioBranding';
 import FormularioReverso from './FormularioReverso';
 import SubidaImagen from './SubidaImagen';
@@ -98,9 +99,11 @@ export default async function PaginaBranding({
   // guardado leen la misma fila.
   const principal = activos.find((p) => p.esPrincipal) ?? null;
   const programaDeReferencia = seleccionado ?? principal;
-  const esSellos = programaDeReferencia
-    ? tipoOPuntos(programaDeReferencia.tipoTarjeta).valor === 'sellos'
-    : c.tipo_tarjeta === 'sellos';
+  // El TIPO, no un booleano: la vista previa arma el frente del pass con frentePase, que distingue
+  // los ocho tipos (una membresía no lleva contador; una gift card muestra saldo en dólares). Con
+  // `esSellos` a secas, todo lo que no fuera sellos se dibujaba como "PUNTOS 0".
+  const tipoTarjeta = programaDeReferencia?.tipoTarjeta ?? c.tipo_tarjeta ?? 'puntos';
+  const esSellos = tipoOPuntos(tipoTarjeta).valor === 'sellos';
   const nombreTarjeta = seleccionado ? seleccionado.nombre : c.nombre;
 
   // Cada etiqueta dice DÓNDE aparece la imagen en el pass — "Imagen principal" a secas no le
@@ -108,7 +111,17 @@ export default async function PaginaBranding({
   const imagenes: { campo: string; etiqueta: string; propia: string | null; heredada: string | null; google: boolean }[] = [
     { campo: 'logo', etiqueta: 'Logo (esquina superior del pass)', propia: marca?.logoUrl ?? null, heredada: c.logo_url, google: true },
     { campo: 'hero', etiqueta: 'Foto de fondo de la franja', propia: marca?.heroUrl ?? null, heredada: c.hero_url, google: true },
-    { campo: 'strip', etiqueta: 'Franja personalizada (reemplaza la grilla de sellos)', propia: marca?.stripUrl ?? null, heredada: c.strip_url, google: false },
+    // Qué reemplaza la franja personalizada depende del tipo: en sellos tapa la grilla; en el resto,
+    // la foto de fondo. Decirle "reemplaza la grilla de sellos" a una membresía no significaba nada.
+    {
+      campo: 'strip',
+      etiqueta: esSellos
+        ? 'Franja personalizada (reemplaza la grilla de sellos)'
+        : 'Franja personalizada (reemplaza la foto de fondo)',
+      propia: marca?.stripUrl ?? null,
+      heredada: c.strip_url,
+      google: false,
+    },
   ];
   if (esSellos) {
     imagenes.push({ campo: 'sello_icono', etiqueta: 'Ícono de los sellos', propia: marca?.selloIconoUrl ?? null, heredada: c.sello_icono_url, google: false });
@@ -120,6 +133,12 @@ export default async function PaginaBranding({
     marca !== null && marca.colorFondo === null && marca.logoUrl === null && marca.heroUrl === null;
 
   const usaDisenoPropio = marca?.brandingPropio ?? false;
+
+  // El encuadre VIAJA CON LA FOTO (decisión 4 del spec): quien no tiene foto propia usa la del
+  // negocio, y entonces le corresponde el encuadre del negocio. Por eso `fotoPropia` decide las dos
+  // cosas — si los cuatro campos viajan al guardar y con qué encuadre se previsualiza.
+  const encuadreDelNegocio = encuadreDelComercio(c);
+  const fotoPropia = seleccionado ? marca?.heroUrl != null : c.hero_url != null;
   const tieneDisenoGuardado = marca
     ? hayMarcaPropia({
         colorFondo: marca.colorFondo,
@@ -202,7 +221,7 @@ export default async function PaginaBranding({
 
       <FormularioBranding
         nombreComercio={c.nombre}
-        esSellos={esSellos}
+        tipoTarjeta={tipoTarjeta}
         programaId={seleccionado?.id ?? null}
         nombreTarjeta={nombreTarjeta}
         inicial={
@@ -229,6 +248,14 @@ export default async function PaginaBranding({
               }
         }
         heredado={seleccionado ? marcaComercio : null}
+        // Una tarjeta que HEREDA la foto tiene que previsualizarse con el encuadre del NEGOCIO, que
+        // es el que brandingEfectivo le da al pass. Mostrarle el encuadre propio que le quedó
+        // guardado de una foto anterior sería una vista previa que miente: el dueño vería una cosa y
+        // el cliente otra. Los cuatro campos no viajan en ese caso, así que no corrompe datos.
+        encuadreInicial={
+          seleccionado ? (fotoPropia ? (marca?.encuadreFranja ?? null) : encuadreDelNegocio) : encuadreDelNegocio
+        }
+        fotoPropia={fotoPropia}
         usaDisenoPropio={usaDisenoPropio}
         tieneDisenoGuardado={tieneDisenoGuardado}
         urls={
@@ -236,9 +263,10 @@ export default async function PaginaBranding({
             ? {
                 logo: marca?.logoUrl ?? c.logo_url,
                 hero: marca?.heroUrl ?? c.hero_url,
+                strip: marca?.stripUrl ?? c.strip_url,
                 selloIcono: marca?.selloIconoUrl ?? c.sello_icono_url,
               }
-            : { logo: c.logo_url, hero: c.hero_url, selloIcono: c.sello_icono_url }
+            : { logo: c.logo_url, hero: c.hero_url, strip: c.strip_url, selloIcono: c.sello_icono_url }
         }
         subidas={imagenes.map(({ campo, etiqueta, propia, heredada, google }) => (
           <SubidaImagen
@@ -265,7 +293,7 @@ export default async function PaginaBranding({
           tipos, no solo entre sellos y "todo lo demás" — ver lib/comercio/borradorTerminos.ts. */}
       <FormularioReverso
         nombreComercio={c.nombre}
-        tipoTarjeta={programaDeReferencia?.tipoTarjeta ?? c.tipo_tarjeta ?? 'puntos'}
+        tipoTarjeta={tipoTarjeta}
         programaId={seleccionado?.id ?? null}
         nombreTarjeta={nombreTarjeta}
         inicial={

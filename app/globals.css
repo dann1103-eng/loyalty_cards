@@ -1307,6 +1307,62 @@ a {
   .branding-editor { order: 1; }
 }
 
+/* ---------- bloque de encuadre de la foto de la franja (editor de marca) ----------
+   Un <fieldset> sin la caja que le pone el navegador: la sección ya vive dentro del panel de
+   vidrio del formulario, y un borde más ahí adentro se lee como un error de maquetado. El
+   fieldset (y no un div) porque los dos radios del modo necesitan una agrupación real con
+   nombre accesible. */
+.encuadre-franja {
+  border: 0;
+  padding: 0;
+  margin: 0 0 18px;
+  /* Un fieldset trae `min-width: min-content` de fábrica y, dentro de una pista de grid, eso le
+     impide encogerse: el deslizador al 100% estiraría la columna del editor. */
+  min-width: 0;
+}
+.encuadre-franja legend {
+  padding: 0;
+  margin-bottom: 14px;
+}
+.encuadre-modos {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+/* Las opciones son texto para leer, no rótulos de campo: sin esto heredan de `.field label` la
+   versalita en mayúsculas y "LLENAR (RECORTA)" cuesta leerlo. */
+.encuadre-modos label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--texto);
+}
+/* `.field input` le pone borde, fondo y 13px de padding a todo input: en un range eso deja el
+   riel dentro de una caja de formulario. */
+.encuadre-franja input[type='range'] {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  accent-color: var(--acento);
+}
+/* Rótulo de un grupo que no es un solo control (los radios del modo): un <label> ahí apuntaría a
+   un único input. Copia el aspecto de `.field label` para que la sección se lea pareja. */
+.field-etiqueta {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--texto-2);
+}
+
 /* ---------- nav inferior móvil (C2/C3) ----------
    GRILLA FIJA, no carrusel. Antes era un carril deslizable con las 9 secciones: no entraban en un
    teléfono, había que arrastrar para llegar a las últimas cuatro y prácticamente nadie descubría
