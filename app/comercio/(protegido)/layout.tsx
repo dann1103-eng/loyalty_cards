@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { verifyComercioAcceso } from '@/lib/comercio/verifyComercioAcceso';
+import { listarProgramas } from '@/lib/comercio/programas';
 import { createServiceClient } from '@/lib/supabase/server';
 import MenuOpciones from './MenuOpciones';
 import NavInferior from './NavInferior';
@@ -33,6 +34,24 @@ export default async function LayoutComercio({ children }: { children: React.Rea
         .filter((s) => s.comercio_id === c.comercioId)
         .map((s) => ({ id: s.id, nombre: s.nombre, esPrincipal: s.es_principal })),
     }));
+  }
+
+  // El tipo del programa PRINCIPAL decide el reparto de la nav: con contador 'ninguno' (cupón,
+  // membresía, descuento) ninguna recompensa se puede canjear nunca, así que Premios le cede su
+  // lugar en la barra a Programas (ver lib/comercio/navegacion.ts).
+  //
+  // Arranca en 'puntos' —el reparto de HOY— y ese valor es también el fallback ante un error de la
+  // consulta: listarProgramas devuelve null (ya lo loguea) y `?? 'puntos'` deja la barra completa y
+  // con Escanear centrado. Hasta ahora la nav no podía fallar; con esta consulta sí puede, y una
+  // barra vacía o descentrada sería mucho peor que un destino de más.
+  //
+  // Solo para el OWNER: el cajero no ve ninguno de los dos destinos que se intercambian
+  // (RUTAS_CAJERO), así que su nav sale idéntica con cualquier tipo —hay una prueba que lo fija— y
+  // esto le ahorra una consulta en CADA pantalla del panel, incluida la que más abre en el día.
+  let tipoTarjetaPrincipal = 'puntos';
+  if (rol === 'owner') {
+    const programas = await listarProgramas(createServiceClient(), comercioId);
+    tipoTarjetaPrincipal = (programas ?? []).find((p) => p.esPrincipal)?.tipoTarjeta ?? 'puntos';
   }
 
   // El cajero no tiene switcher: su contexto es fijo y se muestra en la marca del header.
@@ -70,11 +89,11 @@ export default async function LayoutComercio({ children }: { children: React.Rea
               el lugar que tenía el botón "Salir" en vez de sumarse a él — el header a 360px no
               tenía 56px libres que darle (la cuenta está en MenuOpciones.tsx y en el comentario de
               .contexto-pastilla). */}
-          <MenuOpciones rol={rol} />
+          <MenuOpciones rol={rol} tipoTarjeta={tipoTarjetaPrincipal} />
         </div>
       </header>
       {children}
-      <NavInferior rol={rol} />
+      <NavInferior rol={rol} tipoTarjeta={tipoTarjetaPrincipal} />
     </div>
   );
 }

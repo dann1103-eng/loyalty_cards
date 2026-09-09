@@ -24,11 +24,15 @@ const useEstaEnCliente = () => useSyncExternalStore(suscribirNada, () => true, (
 // robaba ~56px a la marca y a la pastilla. Cerrar sesión se hace una vez al día; escanear, decenas
 // de veces: el ancho es de quien lo usa más. El <form> es el MISMO y la Server Action también —
 // cambia dónde está el botón, no el mecanismo.
-export default function MenuOpciones({ rol }: { rol: string }) {
+// `tipoTarjeta` (el del programa principal) NO es decorativo acá: es el MISMO argumento que recibe
+// la barra, y las dos superficies tienen que decidir con él a la vez. Premios y Programas se
+// intercambian, así que si el tipo llegara solo a la barra, Programas subiría ahí y SEGUIRÍA en
+// este menú: el mismo destino dos veces (ver lib/comercio/navegacion.ts).
+export default function MenuOpciones({ rol, tipoTarjeta }: { rol: string; tipoTarjeta: string }) {
   const [abierto, setAbierto] = useState(false);
   const enCliente = useEstaEnCliente();
   const ruta = usePathname();
-  const enlaces = enlacesMenuPorRol(rol);
+  const enlaces = enlacesMenuPorRol(rol, tipoTarjeta);
 
   // Escape cierra el menú. El listener va en `document` y NO un onKeyDown en el panel: al abrir, el
   // foco se queda en el botón de hamburguesa (FUERA del panel), así que un handler local nunca

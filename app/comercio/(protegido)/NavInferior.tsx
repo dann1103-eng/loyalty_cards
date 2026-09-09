@@ -7,11 +7,12 @@ import { enlacesBarraPorRol, HREF_ESCANEAR } from '@/lib/comercio/navegacion';
 // Nav inferior móvil. Reemplaza al carrusel deslizable de 9 secciones: entraban a la fuerza, había
 // que deslizar para ver las últimas cuatro y nadie descubría que se podía. Ahora son 5 destinos
 // FIJOS repartidos en una grilla (nunca desbordan, nunca hay que deslizar) y lo demás vive en el
-// menú de más opciones del header. En desktop se oculta por CSS. Qué ve cada rol lo decide
-// enlacesBarraPorRol (lib/comercio/navegacion.ts), que tiene sus propios tests.
-export default function NavInferior({ rol }: { rol: string }) {
+// menú de más opciones del header. En desktop se oculta por CSS. Qué ve cada rol —y qué destino
+// ocupa el cuarto lugar según el tipo del programa principal— lo decide enlacesBarraPorRol
+// (lib/comercio/navegacion.ts), que tiene sus propios tests.
+export default function NavInferior({ rol, tipoTarjeta }: { rol: string; tipoTarjeta: string }) {
   const ruta = usePathname();
-  const enlaces = enlacesBarraPorRol(rol);
+  const enlaces = enlacesBarraPorRol(rol, tipoTarjeta);
 
   return (
     <nav className="nav-inferior" aria-label="Secciones del panel">

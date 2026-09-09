@@ -1,3 +1,5 @@
+import { puedeCanjearRecompensas } from '../tarjetas/tipos';
+
 // Enlaces del panel comercio y qué ve cada rol. Módulo puro (sin JSX ni 'use client') para poder
 // testear la política sin montar el componente.
 //
@@ -16,11 +18,17 @@ export interface EnlaceNav {
 // reordenar aquí (o meter un sexto destino) descentra el botón sin que nada más se queje.
 export const HREF_ESCANEAR = '/comercio/escanear';
 
+// Los dos destinos que INTERCAMBIAN superficie según el tipo (ver `intercambiarSiNoHayCanje`).
+// Están fuera de los arreglos porque cada uno tiene que poder aparecer en el otro con SU ícono y SU
+// etiqueta, no con los del que reemplaza.
+const ENLACE_PREMIOS: EnlaceNav = { href: '/comercio/recompensas', icono: 'redeem', etiqueta: 'Premios' };
+const ENLACE_PROGRAMAS: EnlaceNav = { href: '/comercio/programas', icono: 'style', etiqueta: 'Programas' };
+
 export const ENLACES_BARRA: readonly EnlaceNav[] = [
   { href: '/comercio/panel', icono: 'dashboard', etiqueta: 'Resumen' },
   { href: '/comercio/branding', icono: 'palette', etiqueta: 'Marca' },
   { href: HREF_ESCANEAR, icono: 'qr_code_scanner', etiqueta: 'Escanear' },
-  { href: '/comercio/recompensas', icono: 'redeem', etiqueta: 'Premios' },
+  ENLACE_PREMIOS,
   { href: '/comercio/clientes', icono: 'group', etiqueta: 'Clientes' },
 ];
 
@@ -33,7 +41,7 @@ export const ENLACES_MENU: readonly EnlaceNav[] = [
   { href: '/comercio/reglas', icono: 'rule', etiqueta: 'Reglas' },
   // Justo después de Reglas (migración 0024): absorbió la configuración por tipo que antes vivía
   // ahí (cashback%, visitas del paquete, …), así que es la sección hermana más cercana.
-  { href: '/comercio/programas', icono: 'style', etiqueta: 'Programas' },
+  ENLACE_PROGRAMAS,
   // Notificaciones (migración 0026): la perilla del aviso AUTOMÁTICO de inactividad vive en
   // Reglas, así que esta pantalla —la campaña MANUAL y su historial— es la sección hermana más
   // cercana de ese bloque Reglas/Programas.
@@ -58,10 +66,36 @@ function filtrarPorRol(enlaces: readonly EnlaceNav[], rol: string): EnlaceNav[] 
   return enlaces.filter((e) => e.href === HREF_ESCANEAR);
 }
 
-export function enlacesBarraPorRol(rol: string): EnlaceNav[] {
-  return filtrarPorRol(ENLACES_BARRA, rol);
+// Premios y Programas CAMBIAN de superficie —en la misma posición— cuando el tipo del programa
+// principal no puede canjear recompensas (spec 2026-09-08, decisión 5). En cupón, membresía y
+// descuento (contador 'ninguno') un canje descuenta de `puntos_actuales`, que en esos tipos nunca
+// se mueve: ninguna recompensa se puede canjear jamás, y esa sección muerta ocupaba uno de los cinco
+// lugares de la barra. Programas, en cambio, es donde ese dueño configura lo que sí usa.
+//
+// POR QUÉ ES UN INTERCAMBIO Y NO UN OCULTAMIENTO: la barra lleva exactamente 5 destinos y Escanear
+// se centra por estar en la posición 3 de 5 (ver arriba). Sacar Premios y dejar cuatro lo descentra
+// sin que nada se queje.
+//
+// POR QUÉ UNA SOLA FUNCIÓN PARA LAS DOS SUPERFICIES: hoy Premios vive SOLO en la barra y Programas
+// SOLO en el menú, así que el intercambio tiene que ser simultáneo — subir uno sin bajar el otro
+// duplica el destino. Con este `map` simétrico aplicado a los dos arreglos, media mudanza no se
+// puede escribir por descuido: el que sale de una superficie es siempre el que entra en la otra.
+function intercambiarSiNoHayCanje(enlaces: readonly EnlaceNav[], tipoTarjeta: string): EnlaceNav[] {
+  // La regla se pregunta, no se reescribe: puedeCanjearRecompensas ya es la única definición de
+  // "este tipo puede canjear" y degrada un tipo desconocido a 'puntos', o sea que ante un dato raro
+  // se conserva el reparto de hoy y nunca queda una barra descentrada.
+  if (puedeCanjearRecompensas(tipoTarjeta)) return [...enlaces];
+  return enlaces.map((e) => {
+    if (e.href === ENLACE_PREMIOS.href) return ENLACE_PROGRAMAS;
+    if (e.href === ENLACE_PROGRAMAS.href) return ENLACE_PREMIOS;
+    return e;
+  });
 }
 
-export function enlacesMenuPorRol(rol: string): EnlaceNav[] {
-  return filtrarPorRol(ENLACES_MENU, rol);
+export function enlacesBarraPorRol(rol: string, tipoTarjeta: string): EnlaceNav[] {
+  return filtrarPorRol(intercambiarSiNoHayCanje(ENLACES_BARRA, tipoTarjeta), rol);
+}
+
+export function enlacesMenuPorRol(rol: string, tipoTarjeta: string): EnlaceNav[] {
+  return filtrarPorRol(intercambiarSiNoHayCanje(ENLACES_MENU, tipoTarjeta), rol);
 }
