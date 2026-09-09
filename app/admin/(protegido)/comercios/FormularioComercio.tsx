@@ -4,6 +4,13 @@ import { useState, type ChangeEvent } from 'react';
 import { useActionState } from 'react';
 import type { EstadoFormulario } from './actions';
 import { TIPOS_TARJETA, type DatosComercio } from '@/lib/comercios/guardarComercio';
+import { frentePase } from '@/lib/tarjetas/frentePase';
+import { rotuloTarjeta } from '@/lib/tarjetas/textosPorTipo';
+
+// Meta de DEMOSTRACIÓN para la vista previa de sellos. El alta no pregunta la meta —
+// crearProgramaPrincipal inserta el programa con sello_meta null y el dueño la elige después en
+// Marca—, así que este 10 no sale de ningún dato: es el mismo ejemplo que ya estaba cableado acá.
+const META_SELLOS_DEMO = 10;
 
 type Valores = {
   nombre: string;
@@ -66,7 +73,28 @@ export default function FormularioComercio({
     (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setValores((v) => ({ ...v, [campo]: e.target.value }));
 
-  const esSellos = valores.tipo_tarjeta === 'sellos';
+  // El frente de la tarjeta sale de frentePase, la MISMA función que arma el pass real y las otras
+  // dos réplicas (el editor de marca del dueño y la pantalla de registro del cliente). Antes acá
+  // vivía un `esSellos ? '0 de 10' : '0'` propio, y por eso dar de alta una MEMBRESÍA —— o un cupón,
+  // o un descuento —— dibujaba "0 Puntos": una unidad que esa tarjeta no tiene y un número que su
+  // pase nunca va a mostrar. Con esos tipos frentePase devuelve los dos campos en null y el bloque
+  // del contador no se dibuja, igual que en la billetera.
+  const frente = frentePase({
+    tipoTarjeta: valores.tipo_tarjeta,
+    // Tarjeta recién emitida: el preview muestra lo que va a ver el primer cliente del comercio.
+    puntos: 0,
+    selloMeta: valores.tipo_tarjeta === 'sellos' ? META_SELLOS_DEMO : null,
+    // `hayGrilla` le pregunta a frentePase si la palabra "sellos" YA se ve en otra parte del frente
+    // (en el pase, la grilla de círculos de la franja). Acá se ve: esta tarjeta imprime la etiqueta
+    // en su propio renglón, el <span> de abajo. Con `false`, frentePase la metería ADEMÁS dentro del
+    // valor ("0 de 10 sellos") y quedaría repetida y, a los 2.2rem de mono de .cardface-points b,
+    // más ancha que la tarjeta —— que recorta con overflow:hidden.
+    hayGrilla: true,
+  });
+
+  // La tarjeta de FM tiene UN solo renglón de contador, así que da lo mismo en qué campo lo haya
+  // puesto frentePase; en los tipos sin contador los dos son null y no se dibuja nada.
+  const contador = frente.primario ?? frente.secundario;
 
   return (
     <>
@@ -74,15 +102,22 @@ export default function FormularioComercio({
           Un valor de color a medio escribir es inválido en CSS y el navegador simplemente lo
           ignora (conserva el anterior) — no hace falta validar aquí. */}
       <div className="cardface reveal d2" style={{ background: valores.color_fondo, color: valores.color_texto, maxWidth: 360, margin: '0 auto 22px' }}>
+        {/* El rótulo de arriba sale del catálogo (rotuloTarjeta), no de un literal. Antes decía
+            "Comercio afiliado", que es la única de las tres réplicas que dice algo que la tarjeta
+            del cliente nunca diría —— y, sobre todo, en los seis tipos sin contador el rótulo es lo
+            ÚNICO que cambia al elegir otro tipo: sin él, una membresía y un cupón se ven idénticos y
+            el operador de FM se queda sin señal de que el <select> hizo algo. */}
         <div className="cardface-top" style={{ color: valores.color_label }}>
-          <span>Comercio afiliado</span>
+          <span>{rotuloTarjeta(valores.tipo_tarjeta)}</span>
           <span>Cardly SV</span>
         </div>
         <div className="cardface-name">{valores.nombre || 'Nombre del comercio'}</div>
-        <div className="cardface-points">
-          <b>{esSellos ? '0 de 10' : '0'}</b>
-          <span style={{ color: valores.color_label }}>{esSellos ? 'sellos' : 'Puntos'}</span>
-        </div>
+        {contador && (
+          <div className="cardface-points">
+            <b>{contador.valor}</b>
+            <span style={{ color: valores.color_label }}>{contador.etiqueta}</span>
+          </div>
+        )}
       </div>
 
       <form className="panel" action={ejecutar} style={{ marginTop: 0 }}>
