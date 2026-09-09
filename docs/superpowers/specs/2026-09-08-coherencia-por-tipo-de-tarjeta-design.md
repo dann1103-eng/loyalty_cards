@@ -55,10 +55,24 @@ La corrección no es escribir lógica nueva: es **hacer imposible no pasar por e
    (estado de una tarjeta), `describirCosto` (un costo o un delta) o `contadorPase`/`frentePase`
    (lo que va en el pase y en cualquier réplica suya).
 
-2. **Los agregados que mezclan tipos no se muestran: se parten por programa.** La métrica del panel
-   deja de ser una suma global. Con un solo programa muestra su estado en su unidad; con varios
-   muestra una línea por programa. Un número que suma centavos con sellos no se arregla con una
-   etiqueta mejor: no existe la etiqueta correcta.
+2. **Los agregados que mezclan tipos no se muestran: se parten por programa, y cada tipo tiene su
+   pregunta.** La métrica del panel deja de ser una suma global. Un número que suma centavos con
+   sellos no se arregla con una etiqueta mejor: no existe la etiqueta correcta.
+
+   `describirFila` NO sirve acá: describe UNA tarjeta, no un agregado. Y para los tres tipos con
+   contador `'ninguno'` no hay nada que sumar. Entonces el agregado es un módulo puro nuevo,
+   `lib/tarjetas/resumenPrograma.ts`, con **una pregunta por familia de tipo**:
+
+   | Familia | Qué se muestra | Ejemplo |
+   |---|---|---|
+   | contador `'entero'` (puntos, sellos, prepago) | la suma, en su unidad | "1 240 sellos · sin canjear" |
+   | contador `'centavos'` (gift card, cashback) | la suma con `formatearCentavos` | "$1 250.00 · saldo circulante" |
+   | `usaVigencia` (membresía, cupón) | CUÁNTAS siguen vigentes hoy, contra el total | "12 activas · de 15" |
+   | descuento | cuántos clientes ya alcanzaron un nivel | "8 con descuento · de 40" |
+
+   Para una membresía "cuántos socios activos tengo" es LA métrica del negocio, así que la carta no
+   se esconde: cambia de pregunta. La función es pura y recibe `hoyIso` (mismo criterio que
+   `describirSaldo`), y las filas llegan con `COLUMNAS_ESTADO`.
 
 3. **El tutorial se DERIVA del tipo del programa principal.** `PASOS` deja de ser una constante y
    pasa a ser una función del tipo. Cada tipo recibe pasos que **puede completar**, y ninguno
@@ -66,20 +80,54 @@ La corrección no es escribir lógica nueva: es **hacer imposible no pasar por e
    módulo ya documenta y que es su mejor idea: el estado se deriva de los datos reales, nunca se
    guarda.
 
-4. **Los reportes cuentan OPERACIONES, no solo acreditaciones.** El ledger distingue
-   `acreditacion`, `ajuste`, `canje`, `uso` y `renovacion` (0019). Las funciones de reporte (0015)
-   filtran `tipo = 'acreditacion'`, así que para una membresía **todo el módulo de reportes está
-   estructuralmente en cero**, incluida la pantalla antifraude por cajero: es ciega frente a un
-   cajero que regala renovaciones. Se corrige contando `acreditacion + uso + renovacion` como
-   "operaciones". El **monto** (`puntos_delta`) se sigue sumando solo donde significa algo, y se
-   formatea por tipo.
+4. **Los reportes CUENTAN operaciones; lo que SUMAN no se toca.** El ledger distingue
+   `acreditacion`, `ajuste`, `canje`, `uso` y `renovacion` (0019). Las funciones de reporte (0015 y
+   0010) filtran `tipo = 'acreditacion'`, así que para una membresía **todo el módulo de reportes
+   está estructuralmente en cero**, incluida la pantalla antifraude por cajero: es ciega frente a
+   un cajero que regala renovaciones.
+
+   La corrección se parte en dos, y la distinción es lo más importante de esta decisión:
+
+   - **`count(*)` pasa a `tipo in ('acreditacion','uso','renovacion')`.** Una operación es lo que el
+     cajero le hizo a una tarjeta de cara al cliente. Puntos y sellos NO cambian (nunca generan
+     `uso` ni `renovacion`); gift card y prepago SÍ empiezan a contar sus consumos, que es lo
+     correcto y hay que anunciarlo como cambio visible.
+   - **`sum(puntos_delta)` se queda EXACTAMENTE como está**, filtrada a `'acreditacion'`. Un `uso`
+     NO lleva delta cero: lleva `-1` en prepago (0020) y `-monto` en gift card (0022). Meterlo en
+     la suma convertiría el total de BRUTO a NETO y desharía la decisión explícita de la 0015 (que
+     el fraude no se autoborre del reporte). Una suma que mezcla lo otorgado con lo consumido no
+     sirve para juzgar a un cajero.
+
+   La columna `acreditaciones` **se renombra a `operaciones`**, porque un nombre que ya no describe
+   lo que cuenta es la trampa que este trabajo entero combate. Renombrar cambia el tipo de retorno,
+   así que `create or replace` NO alcanza: la migración hace `drop function` + `create` + **volver
+   a otorgar los `grant … to service_role`** que dan la 0010 y la 0015, todo dentro de la misma
+   transacción, y `lib/reportes/reportes.ts` actualiza sus tipos derivados de `Database[...]`.
+   Alcanza a `reporte_sucursales`, `reporte_top_clientes`, `reporte_tendencia`,
+   `reporte_cajeros` y `reporte_fm_comercios` (esta última alimenta el panel de FM, y entra: si no,
+   FM ve cero actividad en cada comercio de membresía de la plataforma).
 
 5. **Una sección que no puede funcionar no ocupa un lugar en la barra.** En los tipos con contador
    `'ninguno'` (cupón, membresía, descuento) un canje descuenta de un contador que nunca se mueve:
-   **ninguna recompensa se puede canjear jamás**. Premios sale de la barra inferior en esos tipos y
-   entra **Programas** en su lugar. El reemplazo no es negociable: la barra lleva exactamente cinco
-   destinos y el botón de Escanear se centra por estar en la posición 3 de 5; quitar uno lo
-   descentra sin que nada se queje (lo dice `navegacion.ts`). Premios sigue existiendo en el menú.
+   **ninguna recompensa se puede canjear jamás**. En esos tipos, Premios y Programas **cambian de
+   superficie**: Premios sale de la barra y baja al menú, y Programas sube del menú a la barra, en
+   la misma posición. No es "esconder Premios": la barra del dueño lleva exactamente cinco destinos
+   y el botón de Escanear se centra por estar en la posición 3 de 5; sacar uno lo descentra sin que
+   nada se queje (lo dice `navegacion.ts`). Y el intercambio tiene que ser simultáneo porque hoy
+   Premios vive SOLO en la barra y Programas SOLO en el menú: duplicar cualquiera de los dos rompe
+   la invariante de que las dos superficies no repiten destino.
+
+   Consecuencias que el plan tiene que ejecutar y no dar por resueltas:
+   - `enlacesBarraPorRol` **y** `enlacesMenuPorRol` reciben el tipo.
+   - El único llamador es `NavInferior`, montado desde `app/comercio/(protegido)/layout.tsx`, que
+     hoy NO consulta programas. Hace falta una consulta nueva ahí, o sea en cada pantalla del
+     panel: se resuelve con el mismo `listarProgramas` que ya usa el panel, y se mide su costo.
+   - La invariante que se prueba es **"Escanear al centro del arreglo devuelto"**, no "cinco
+     destinos": el cajero recibe tres y un rol desconocido uno, y las pruebas vigentes ya lo
+     afirman. Escribirla como "siempre cinco" es escribir una prueba en rojo.
+   - Se conservan las dos pruebas existentes: que barra y menú no repitan destino, y que entre las
+     dos sumen las doce secciones.
+
    En gift card y cashback (contador `'centavos'`) los premios SÍ se canjean: no se toca nada.
 
 6. **El pase gana identidad y vigencia, y las dos por el mismo camino que el frente ya usa.**
@@ -89,8 +137,28 @@ La corrección no es escribir lógica nueva: es **hacer imposible no pasar por e
      ya está en el logo.
    - **Vigencia**: `DatosPass` gana `vigenciaHasta`, y `frentePase` deja de devolver `null` para
      cupón y membresía. Devuelve el estado que `describirSaldo` ya sabe redactar ("Activa hasta el
-     12 de octubre", "Venció el 3 de agosto"). Como `frentePase` lo comparten el pase y la vista
-     previa del editor, el dueño ve exactamente lo mismo que su cliente.
+     12 de octubre" y "Vencida el 3 de agosto" en membresía; "Disponible hasta el…" y "Venció el…"
+     en cupón). Como `frentePase` lo comparten el pase y la vista previa del editor, el dueño ve
+     exactamente lo mismo que su cliente.
+   - **`frentePase` gana `hoyIso` en su firma**, por el mismo motivo que `describirSaldo` lo tiene:
+     sin fecha por argumento no se puede probar el borde del vencimiento sin congelar el reloj. Sus
+     dos llamadores son un módulo de servidor (`generatePass`) y un componente CLIENTE
+     (`FormularioBranding`), así que los dos tienen que pasarla.
+   - **Google también pasa por `frentePase`.** Hoy `construirRecursos.ts` llama a `contadorPase`
+     directo, así que si solo se cambiara Apple la vigencia se decidiría en dos lugares — justo lo
+     que el guardarraíl de este spec prohíbe. `loyaltyPointsDe` migra a `frentePase`.
+   - **El cache-busting de Google NO aplica acá, y meterlo sería un error.** `versionHero` versiona
+     la URL de una IMAGEN y su comentario dice que resume todo lo que altera esa imagen.
+     `nombre_pase` y la vigencia viajan en `textModulesData` y `validTimeInterval` del
+     `LoyaltyObject`: son campos JSON que se escriben en el patch de la API, no se cachean por URL
+     y no cambian un solo píxel. Lo que hace falta es que el objeto se re-sincronice cuando cambian,
+     que es lo que ya hace `propagarMarcaPrograma`.
+   - **Asimetría conocida entre plataformas, y se documenta en vez de disimularse.** Google recibe
+     `validTimeInterval` y marca solo el pase vencido. Apple no (su `expirationDate` está fuera de
+     alcance) y su texto solo se refresca cuando llega un push, que hoy ocurre al operar la
+     tarjeta. O sea que el pase de Apple de una membresía vencida va a seguir diciendo "Activa
+     hasta el 3 de agosto" hasta el próximo escaneo. Es aceptable —el cajero ve el estado real al
+     escanear— pero tiene que estar escrito.
 
 7. **`nombre_pase` se edita en Marca, y en modo negocio escribe el programa PRINCIPAL.** Es el
    mismo camino que ya usa la meta de sellos (`guardarBranding` escribe `sello_meta` en el
@@ -148,7 +216,7 @@ que una función de reporte cuente una fila `renovacion`.
 | `reportes/page.tsx`, `reportes/cajeros/page.tsx` | enteros crudos y celdas vacías | `describirCosto`; y donde quede vacío, no se imprime el separador |
 | `exportarClientes.ts` | `describirCosto(tipo, puntos_actuales)` → columna vacía | `describirFila` + `COLUMNAS_ESTADO` en el `select` |
 | `historial.ts` | `normalizarClase` colapsa `uso`/`renovacion` en `acreditacion` | clases propias con su etiqueta ("Uso", "Renovación") |
-| `escanear/actions.ts:427` | `cantidad === 1 ? 'Sello agregado.' : …` | mensaje por unidad del tipo |
+| `escanear/actions.ts:219` **y** `:427` | `cantidad === 1 ? 'Sello agregado.' : …` en LOS DOS (la acreditación normal y el switch por tipo); sumar 1 punto confirma "Sello agregado" | mensaje por unidad del tipo, en una sola función compartida |
 | `reglas/FormularioControles.tsx` | `esDePuntos ? 'acreditaciones' : 'sellos'` | `unidadPrograma`, que ya se calcula en `reglas/page.tsx` y no se pasa |
 
 ### Grupo 1-bis — La pantalla de registro usa la marca y el tipo (defecto 4)
@@ -156,10 +224,10 @@ que una función de reporte cuente una fila `renovacion`.
 Es la pantalla que el cliente ve al escanear el QR, y hoy no recibe nada del comercio salvo el
 nombre. Se corrige de raíz, no con un texto:
 
-- `app/registro/[comercioSlug]/page.tsx` (y su variante con `programaSlug`) resuelve el **branding
-  efectivo** con `brandingEfectivo` y el **tipo del programa** que se está registrando, con las
-  mismas columnas que ya usa el editor de marca. Es una consulta más en una pantalla que hoy hace
-  una sola.
+- Las dos páginas de registro YA resuelven el programa completo (con `tipoTarjeta` y `selloMeta`)
+  vía `resolverProgramaPorSlug`, y simplemente no se lo pasan al componente. O sea que del tipo no
+  falta consultar nada: falta **pasarlo**. Lo único que hay que agregar es el **branding efectivo**
+  (`brandingEfectivo`, con las mismas columnas que ya usa el editor de marca).
 - `VistaTarjeta` deja de tener el degradado marrón fijo: usa `colorFondo`, `colorTexto` y
   `colorLabel` del comercio, el logo si lo hay, y `frentePase` para el contador. Sin contador no
   dibuja el bloque de número. El rótulo "Tarjeta de lealtad" pasa a ser la etiqueta del tipo
@@ -174,18 +242,28 @@ está cerrando.
 
 ### Grupo 2 — Tutorial por tipo (decisión 3)
 
-`PASOS` pasa a `pasosParaTipo(tipo)`. Cada tipo devuelve cuatro pasos completables. Ejemplos:
+`PASOS` pasa a `pasosParaTipo(tipo)`. Cada tipo devuelve cuatro pasos, y el segundo y el tercero
+son los que cambian:
 
-- **membresía**: marca → *"Definí cuánto dura la membresía"* (`/comercio/programas`) → *"Personalizá
-  el pase"* (`/comercio/branding`, hecho con `nombre_pase` cargado) → primer cliente.
-- **cupón**: marca → *"Definí cuántos días vale el cupón"* → personalizá el pase → primer cliente.
-- **gift card / cashback / prepago**: marca → su configuración propia → primer premio (sí aplica en
-  gift card y cashback) o el paso de pase → primer cliente.
-- **puntos / sellos**: los cuatro de hoy, sin cambios.
+| Tipo | Paso 2 | Paso 3 | `hecho` de los pasos 2 y 3 |
+|---|---|---|---|
+| puntos, sellos | Definí cómo se ganan | Cargá tu primer premio | `reglas_puntos` / `recompensas` activas |
+| prepago | Definí cuántas visitas trae el paquete | Cargá tu primer premio | `multipass_visitas` / recompensas |
+| cashback | Definí tu porcentaje de cashback | Cargá tu primer premio | `cashback_porcentaje` / recompensas |
+| gift card | Cargá tu primer premio | Escribí los términos de tu tarjeta | recompensas / `terminos_uso` |
+| membresía | Definí cuánto dura la membresía | Escribí los términos de tu membresía | `membresia_dias` / `terminos_uso` |
+| cupón | Definí cuántos días vale el cupón | Escribí los términos de tu cupón | `cupon_vigencia_dias` / `terminos_uso` |
+| descuento | Cargá tus niveles de descuento | Escribí los términos | `niveles_descuento` / `terminos_uso` |
 
-El `hecho` de cada paso se sigue derivando de los datos reales. Prueba obligatoria: **para los ocho
-tipos, todos los pasos son alcanzables** (ninguno apunta a una pantalla que esconde su formulario
-para ese tipo).
+**Ningún paso puede colgar de `nombre_pase`.** Es opcional por la decisión 6, y un paso opcional
+como condición de completitud dejaría al dueño clavado en "3 de 4" para siempre: exactamente el
+defecto 1 que este trabajo cierra. Todos los criterios de la tabla son configuración que el tipo de
+verdad necesita.
+
+El `hecho` de cada paso se sigue derivando de los datos reales, nunca se guarda. Dos pruebas
+obligatorias: **para los ocho tipos hay exactamente cuatro pasos**, y **todos son alcanzables** (el
+destino de cada paso muestra de verdad el formulario que ese paso pide para ese tipo — hoy Reglas
+lo esconde para seis de los ocho, que es lo que rompe el tutorial).
 
 ### Grupo 3 — Reportes que cuentan operaciones (decisión 4)
 
@@ -203,8 +281,11 @@ Migración de las funciones + UI que rotula por tipo. Donde el monto no signifiq
   ofrecer cargar premios que nadie podrá canjear.
 - `reglas/page.tsx`: los controles antifraude solo se ofrecen donde la operación pasa por
   `acreditar_atomico`.
-- `avisoInactividad.ts`: membresía tiene `usaVigencia` igual que cupón; su aviso habla de renovar,
-  no de "seguir sumando".
+- `avisoInactividad.ts`: **membresía y cupón necesitan lo OPUESTO ante una fecha vencida**, y por
+  eso NO se unifican bajo `usaVigencia`. Un cupón vencido se saltea (hoy ya se hace: el cajero no
+  lo va a poder canjear, invitarlo sería mandarlo a un rechazo). Un socio con la membresía vencida
+  es justamente a quien hay que escribirle, con un mensaje de renovación. Un `if (usaVigencia)
+  saltear vencidos` silenciaría al único público que este aviso debería alcanzar.
 
 ### Grupo 5 — Nombre del pase y vigencia (decisiones 6 y 7)
 
