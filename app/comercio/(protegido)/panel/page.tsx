@@ -49,10 +49,15 @@ export default async function PaginaPanel() {
   // del comercio (0024): son las que de verdad rigen las tarjetas que el dueño tiene entregadas.
   const programas = await listarProgramas(supabase, comercioId);
   const principal = (programas ?? []).find((p) => p.esPrincipal) ?? null;
+  const tipoValor = principal?.tipoTarjeta ?? comercio?.tipo_tarjeta;
 
   // El tutorial. Solo para el DUEÑO: el cajero no puede tocar marca, reglas ni recompensas, así que
   // una lista de pasos que no puede completar sería una lista de reproches.
-  const pasos = esOwner ? await primerosPasos(supabase, comercioId) : null;
+  //
+  // Va con el TIPO del programa principal: los cuatro pasos cambian según la tarjeta. Sin esto, el
+  // dueño de una membresía quedaba clavado en "1 de 4" para siempre, porque el paso 2 lo mandaba a
+  // Reglas — una pantalla que a su tipo le esconde el formulario.
+  const pasos = esOwner ? await primerosPasos(supabase, comercioId, tipoValor ?? 'puntos') : null;
 
   // Métricas reales: cuántos clientes tienen tarjeta y cuánto saldo circulante hay.
   const { data: tarjetas, count } = await supabase
@@ -77,7 +82,6 @@ export default async function PaginaPanel() {
     };
   }
 
-  const tipoValor = principal?.tipoTarjeta ?? comercio?.tipo_tarjeta;
   const tipo = TIPOS_TARJETA.find((t) => t.valor === tipoValor);
   const esSellos = tipoValor === 'sellos';
 
