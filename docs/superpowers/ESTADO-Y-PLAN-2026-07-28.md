@@ -802,3 +802,85 @@ Spec: `specs/2026-09-08-coherencia-por-tipo-de-tarjeta-design.md` (**tres** rond
   INACTIVIDAD, y alguien que renovó ayer no está inactivo.
 - **`reporte_fm_comercios.saldo_circulante`**, que suma `puntos_actuales` de todos los comercios y
   todos los tipos: el mismo defecto de la métrica del panel, a escala de plataforma.
+
+---
+
+## 2026-09-09 — Reportes por operaciones, navegación por tipo, e identidad del pase (entrega 2 de 2)
+
+Cierra el trabajo abierto el 2026-09-08. **Migración 0033 APLICADA y verificada**
+(`scripts/verificar-0033.ts`). Plan: `plans/2026-09-08-reportes-navegacion-identidad-pase.md`.
+
+### Lo que entró
+
+- **Los reportes cuentan OPERACIONES.** El ledger distingue `acreditacion`, `ajuste`, `uso` y
+  `renovacion` (0019), pero las cinco funciones de reporte filtraban `tipo = 'acreditacion'`: un
+  comercio de membresía veía CERO actividad con cientos de renovaciones, y la pantalla antifraude
+  por cajero era ciega frente a un cajero que regala renovaciones. La columna `acreditaciones` pasó
+  a `operaciones`.
+- **`resumenPrograma`**: la métrica del panel se parte por programa y cada familia de tipo trae su
+  propia PREGUNTA (suma en su unidad / dinero / vigentes sobre el total / con descuento).
+- **Navegación por tipo**: Premios y Programas intercambian superficie donde ningún premio se puede
+  canjear nunca.
+- **Secciones muertas**: el escáner no trae recompensas que el tipo no puede canjear, y los cuatro
+  límites antifraude solo se ofrecen donde la operación pasa por `acreditar_atomico`.
+- **El pase dice cómo se llama y hasta cuándo vale**: `programas_tarjeta.nombre_pase` (opcional,
+  hasta 40 caracteres) y la vigencia en el frente, en las DOS billeteras.
+
+### Lo que NO es obvio y hay que recordar
+
+1. **CONTAR se ensancha; SUMAR no se toca.** Un `uso` lleva delta NEGATIVO en prepago (`-1`, 0020)
+   y en gift card (`-monto`, 0022). Meterlo en `sum(puntos_delta)` habría convertido el reporte
+   antifraude de BRUTO a NETO: un cajero que otorga y después consume se borraría solo del reporte,
+   que es exactamente lo que la 0015 decidió impedir. Por eso el `WHERE` se ensancha y la suma lleva
+   su propio `filter`.
+2. **El predicado tiene que SALIR del `WHERE` compartido, o el cambio es INERTE.** Si se deja
+   `tipo = 'acreditacion'` en el `WHERE` y se agregan `filter` nuevos, ninguna fila `uso` ni
+   `renovacion` llega al agregado: el conteo sale idéntico, la membresía sigue en cero y TODAS las
+   pruebas siguen verdes porque para puntos y sellos nada cambia. Lo encontró la tercera ronda de
+   revisión del spec.
+3. **Renombrar una columna de salida NO es una migración aditiva.** `create or replace` falla con
+   "cannot change return type", así que hay `drop` + `create` — y eso borra el ACL: hay que repetir
+   los `revoke` ADEMÁS de los `grant`, o `reporte_fm_comercios()` (sin parámetros, cross-comercio)
+   queda invocable por `anon`. **Y la regla "migración primero, deploy después" NO aplica acá:** el
+   código en producción leía `.acreditaciones`, así que aplicarla sola rompió cuatro pantallas hasta
+   el deploy. Para un renombre, el orden correcto es deploy tolerante → migración, o las dos en la
+   misma ventana.
+4. **Google NO puede tomar `frentePase().primario`.** `loyaltyPointsDe` usaba `contadorPase` a
+   propósito: en Google el texto va SIEMPRE, también con grilla, porque es lo que se lee en la vista
+   de lista de Wallet. Con `hayGrilla: true` el primario es `null`, así que tomarlo dejaba a Android
+   **sin el contador de sellos**. Por eso `frentePase` tiene un cuarto campo, `listado`.
+5. **`validTimeInterval` va SIN offset** (`2026-10-12T23:59:59`): la API lo interpreta como hora
+   local del teléfono. Con `Z`, el pase se apagaría a las 6 de la tarde en El Salvador. Y va gateado
+   por `usaVigencia`, para que una fecha basura en una tarjeta de puntos no le apague el pase a nadie.
+6. **Asimetría Apple/Google ante el vencimiento, documentada y aceptada.** Google marca el pase
+   vencido con `validTimeInterval`; Apple no (su `expirationDate` está fuera de alcance) y su texto
+   se refresca con el push, que ocurre al operar la tarjeta. El pase de Apple de una membresía
+   vencida sigue diciendo "Activa hasta el …" hasta el próximo escaneo.
+7. **La barra inferior: es un INTERCAMBIO, no un ocultamiento.** Premios vivía SOLO en la barra y
+   Programas SOLO en el menú, así que subir uno sin bajar el otro duplica el destino, y sacar Premios
+   sin reemplazo descentra el botón de Escanear (se centra por estar en la posición 3 de 5). Un `map`
+   simétrico aplicado a las dos superficies hace que media mudanza no se pueda escribir por descuido.
+   Y la invariante vieja (`hrefs[Math.floor(largo/2)] === escanear`) **no atrapaba** el caso de
+   cuatro destinos: se reescribió como "misma cantidad de destinos de cada lado".
+8. **Membresía y cupón vencidos necesitan lo OPUESTO en el aviso de inactividad.** El cupón vencido
+   se saltea (el cajero no lo va a poder canjear); el socio con la membresía vencida es justamente a
+   quien hay que escribirle. Un `if (usaVigencia) saltear vencidos` —la "limpieza obvia"— silenciaría
+   al único público que ese aviso debería alcanzar. El comportamiento ya era correcto; lo que faltaba
+   era el comentario que impide la limpieza.
+9. **El formulario antifraude NO se esconde entero en los tipos donde no aplica.** La zona horaria
+   vive ahí y es el ÚNICO lugar del producto donde se puede elegir — y es la que decide a qué hora
+   vence un cupón en el mostrador. Se esconden los cuatro límites; los dos que se guardan viajan como
+   `<input type="hidden">`, porque el Server Action lee los seis campos y lo ausente se guarda `null`:
+   sin eso, entrar a cambiar la zona horaria borraba en silencio los topes del dueño.
+
+### Pendiente, anotado para no perderlo
+
+- **`pedir_monto_compra` sigue ofreciéndose en cupón y membresía**, donde es una perilla muerta:
+  `usar_cupon_atomico` y `renovar_membresia_atomico` no reciben el monto y el dato se descarta.
+- **Una campaña disparada por el VENCIMIENTO** (avisarle al socio antes de que se le venza). Hoy el
+  único aviso automático se dispara por INACTIVIDAD, y quien renovó ayer no está inactivo. Es lo que
+  de verdad necesita un negocio de membresías.
+- **`reporte_fm_comercios.saldo_circulante`** sigue sumando `puntos_actuales` de todos los comercios
+  y todos los tipos: el defecto de la métrica del panel, a escala de plataforma.
+- **QA en teléfono real**: escribir un nombre de pase, publicar, y confirmar en un iPhone y un
+  Android que aparece arriba y que la fecha se lee bien.
