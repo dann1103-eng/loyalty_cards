@@ -1,6 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createServiceClient } from '../supabase/server';
 import { crearEntorno } from '../../test/fixtures/entornoComercio';
+import { crearPrograma } from './programas';
+import { renovarMembresia } from '../tarjetas/vigencia';
 import { escaparCelda, generarCsv, filasParaExportar } from './exportarClientes';
 
 // Dos mitades: el formateador PURO (lo que rompe un CSV en la práctica) y el RECORRIDO contra la
@@ -136,7 +138,10 @@ describe('filasParaExportar (contra la base)', () => {
     const filas = await filasParaExportar(supabase, comercioId);
 
     expect(filas).toHaveLength(1);
-    expect(filas![0].saldo, 'exportó el entero crudo: $12.50 se lee como 1250').toBe('$12.50');
+    // "disponibles" y no "$12.50" a secas desde el 2026-09-08: el saldo lo arma `describirFila`,
+    // el MISMO formateador que ve el cliente en su billetera y el dueño en Clientes. Que el CSV
+    // hable distinto que la pantalla es justo lo que hace dudar de cuál de los dos miente.
+    expect(filas![0].saldo, 'exportó el entero crudo: $12.50 se lee como 1250').toBe('$12.50 disponibles');
     expect(filas![0].tarjeta.length, 'la fila no dice a qué tarjeta pertenece').toBeGreaterThan(0);
   });
 
@@ -148,5 +153,49 @@ describe('filasParaExportar (contra la base)', () => {
     const filas = await filasParaExportar(supabase, comercioId);
 
     expect(filas![0].saldo).toBe('8 sellos');
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Los tres tipos SIN contador (2026-09-08)
+  // ───────────────────────────────────────────────────────────────────────────
+  // El export formateaba el saldo con `describirCosto`, que está pensada para COSTOS y devuelve
+  // cadena VACÍA cuando el tipo no cuenta enteros (cupón, membresía y descuento: su estado es una
+  // fecha o un nivel, no un número). O sea que el dueño de un gimnasio descargaba su base y la
+  // columna "Saldo" venía vacía para TODOS sus socios — justo el dato por el que abre el archivo.
+  //
+  // El arreglo es el mismo de siempre: `describirFila` + `COLUMNAS_ESTADO`, que viajan juntas para
+  // que el `select` no pueda quedarse corto (le faltaban vigencia_hasta, usado_en y
+  // acumulado_centavos).
+  it('una membresía exporta hasta cuándo está activa, no una celda vacía', async () => {
+    // La configuración se carga con `crearPrograma()` —la MISMA función que usa la pantalla
+    // Programas— y el comercio queda con sus columnas legadas vacías. Es la única forma de que la
+    // prueba mida lo que vive el dueño (ver el encabezado de lib/tarjetas/tiposFuncionales.test.ts).
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    const programa = await crearPrograma(supabase, comercioId, {
+      nombre: 'Socios',
+      tipoTarjeta: 'membresia',
+      cashbackPorcentaje: null,
+      multipassVisitas: null,
+      membresiaDias: 30,
+      cuponVigenciaDias: null,
+    });
+    if (!programa.ok) throw new Error(`no se pudo crear el programa de membresía: ${programa.error}`);
+    const { id: tarjetaId } = await entorno.crearTarjeta(comercioId, 0, { programaId: programa.id });
+    // La vigencia la escribe el camino de PRODUCCIÓN (el RPC de renovación), no un insert a mano:
+    // así la fecha que termina en el CSV es la misma que ve el socio en su billetera.
+    const renovacion = await renovarMembresia(supabase, comercioId, tarjetaId);
+    expect(renovacion.ok, renovacion.ok ? '' : renovacion.error).toBe(true);
+
+    const filas = await filasParaExportar(supabase, comercioId);
+    const fila = (filas ?? []).find((f) => f.tarjeta === 'Socios');
+
+    // MUTACIÓN (2026-09-08): volver la línea del saldo de `filasParaExportar` a
+    // `describirCosto(programa?.tipoTarjeta ?? 'puntos', t.puntos_actuales)` deja esta celda VACÍA
+    // y esta prueba falla con "expected '' to match /^Activa hasta el /". Es exactamente la línea
+    // que la prueba dice proteger.
+    expect(
+      fila?.saldo,
+      'la columna Saldo salió vacía: el socio no sabe hasta cuándo está activo',
+    ).toMatch(/^Activa hasta el /);
   });
 });

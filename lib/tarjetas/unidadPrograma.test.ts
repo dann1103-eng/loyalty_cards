@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { TIPOS } from './tipos';
-import { unidadPrograma, unidadPara, describirCosto } from './unidadPrograma';
+import { unidadPrograma, unidadPara, describirCosto, mensajeAcreditacion } from './unidadPrograma';
 
 // Cómo se LLAMA lo que cuenta un programa. Existe porque la respuesta estaba escrita dos veces y
 // las dos veces mal: `unidad()` en lib/apple/construirReverso.ts y las etiquetas a mano de las
@@ -89,5 +91,91 @@ describe('describirCosto', () => {
     expect(describirCosto('cupon', 10)).toBe('');
     expect(describirCosto('membresia', 10)).toBe('');
     expect(describirCosto('descuento', 10)).toBe('');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// El mensaje que lee el CAJERO (2026-09-08)
+// ─────────────────────────────────────────────────────────────────────────────
+// `'Sello agregado.'` estaba cableado en DOS sitios de escanear/actions.ts: la acreditación normal
+// y el switch por tipo. O sea que sumar 1 PUNTO le confirmaba al cajero "Sello agregado", y sumar
+// 1 visita a un prepago también. Es el mismo defecto de siempre —una frase que asume sellos— pero
+// del lado del mostrador, donde el cajero la usa para saber si hizo lo que quería hacer.
+describe('mensajeAcreditacion', () => {
+  it('cada tipo con contador se confirma en SU palabra', () => {
+    expect(mensajeAcreditacion('sellos', 1)).toBe('Sello agregado.');
+    expect(mensajeAcreditacion('puntos', 1)).toBe('Punto agregado.');
+    expect(mensajeAcreditacion('sellos', 3)).toBe('3 sellos agregados.');
+    expect(mensajeAcreditacion('puntos', 5)).toBe('5 puntos agregados.');
+  });
+
+  it('concuerda el género con la unidad, no con "sello"', () => {
+    // 'visita' es femenino y el artículo viaja dentro de la Unidad justamente para esto: sin él la
+    // frase saldría "Visita agregado".
+    expect(mensajeAcreditacion('prepago', 1)).toBe('Visita agregada.');
+    expect(mensajeAcreditacion('prepago', 4)).toBe('4 visitas agregadas.');
+  });
+
+  it('los tipos de dinero se confirman en dólares', () => {
+    // 250 son $2.50. Decirle al cajero "250 puntos agregados" es el bug de origen otra vez.
+    expect(mensajeAcreditacion('gift_card', 250)).toBe('$2.50 agregados.');
+    expect(mensajeAcreditacion('cashback', 1250)).toBe('$12.50 agregados.');
+  });
+
+  it('los tipos sin contador no inventan una moneda', () => {
+    expect(mensajeAcreditacion('cupon', 1)).toBe('Listo. Queda registrado.');
+    expect(mensajeAcreditacion('membresia', 1)).toBe('Listo. Queda registrado.');
+    expect(mensajeAcreditacion('descuento', 1)).toBe('Listo. Queda registrado.');
+  });
+
+  // EL guardián: ningún tipo que no sea de sellos puede decir "sello". Un tipo nuevo que herede la
+  // frase por descuido rompe acá y no en el mostrador.
+  it('solo el programa de sellos habla de sellos', () => {
+    for (const tipo of TIPOS) {
+      if (tipo.valor === 'sellos') continue;
+      for (const cantidad of [1, 3]) {
+        expect(
+          mensajeAcreditacion(tipo.valor, cantidad).toLowerCase(),
+          `el tipo "${tipo.valor}" le confirma sellos al cajero`,
+        ).not.toContain('sello');
+      }
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Que los DOS sitios del escáner de verdad la usen (2026-09-08)
+// ─────────────────────────────────────────────────────────────────────────────
+// Las pruebas de arriba son de la función PURA y no alcanzan: pasan en verde aunque
+// escanear/actions.ts siga armando la frase a mano — que es exactamente el estado del repositorio
+// antes de esta tarea, con la misma frase escrita en dos sitios. El defecto vive en el CONSUMIDOR,
+// así que la prueba tiene que mirar al consumidor.
+//
+// No hay pruebas de componentes ni de Server Actions en este repo (environment: 'node', y estas
+// acciones están detrás de verifyComercioAcceso), así que el candado se pone sobre el archivo
+// fuente — misma técnica que lib/marca.test.ts usa con el nombre viejo del producto.
+describe('el escáner no arma la confirmación a mano', () => {
+  const fuente = readFileSync(
+    join(__dirname, '..', '..', 'app', 'comercio', '(protegido)', 'escanear', 'actions.ts'),
+    'utf8',
+  );
+
+  it('ningún sitio tiene la frase de sellos cableada', () => {
+    // MUTACIÓN (2026-09-08): devolver la frase fija en CUALQUIERA de los dos sitios —la
+    // acreditación normal o el default del switch por tipo— hace fallar esta prueba con
+    // "la confirmación volvió a quedar cableada en escanear/actions.ts".
+    expect(fuente, 'la confirmación volvió a quedar cableada en escanear/actions.ts').not.toContain(
+      'Sello agregado',
+    );
+    expect(fuente, 'la confirmación volvió a quedar cableada en escanear/actions.ts').not.toContain(
+      'puntos agregados',
+    );
+  });
+
+  it('los DOS sitios de acreditación pasan por mensajeAcreditacion', () => {
+    // Dos y no uno: accionAcreditar (la acreditación normal) y el default del switch por tipo.
+    // Contarlos es lo que atrapa el arreglo a medias, que es como nació el defecto.
+    const usos = fuente.match(/mensajeAcreditacion\(/g) ?? [];
+    expect(usos.length, 'falta alguno de los dos sitios de acreditación').toBe(2);
   });
 });

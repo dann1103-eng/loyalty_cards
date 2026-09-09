@@ -565,6 +565,11 @@ export default function Escaner({
           <div className="admin-lista">
             {resultado.recompensas!.map((r) => {
               const alcanza = puntos >= r.costoPuntos;
+              // Cuánto le falta, YA formateado. Puede salir vacío: en cupón, membresía y descuento
+              // no hay contador del que descontar, y describirCosto devuelve '' a propósito en vez
+              // de inventar una moneda. Sin este chequeo, el cajero leía un " · le faltan " colgado
+              // sin ningún número atrás.
+              const falta = alcanza ? '' : describirCosto(resultado.tipoTarjeta ?? 'puntos', r.costoPuntos - puntos);
               return (
                 <div key={r.id} className="admin-fila">
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
@@ -597,7 +602,7 @@ export default function Escaner({
                           `costoPuntos - puntos` son centavos y mostrarlo crudo le diría al cajero
                           "le faltan 250" cuando le faltan $2.50. describirCosto es puro (solo
                           depende del catálogo), así que se puede usar del lado del cliente. */}
-                      {!alcanza && ` · le faltan ${describirCosto(resultado.tipoTarjeta ?? 'puntos', r.costoPuntos - puntos)}`}
+                      {falta && ` · le faltan ${falta}`}
                     </div>
                     </div>
                   </div>

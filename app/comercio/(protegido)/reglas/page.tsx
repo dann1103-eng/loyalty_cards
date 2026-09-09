@@ -89,11 +89,15 @@ export default async function PaginaReglas() {
         {controles ? (
           <FormularioControles
             controles={controles}
+            // La MISMA unidad que ya se calculó arriba para el formulario de reglas. Sin ella, el
+            // formulario decía "Control de sellos" y "Máximo de sellos por cliente al día" a los
+            // seis tipos que no son de puntos — a una membresía, entre otros.
+            unidad={unidad}
             esDePuntos={tipoPrincipal === 'puntos'}
           />
         ) : (
           <p className="admin-error" role="alert">
-            No se pudo cargar el control de sellos. Recarga la página.
+            No se pudieron cargar los controles. Recargá la página.
           </p>
         )}
       </div>

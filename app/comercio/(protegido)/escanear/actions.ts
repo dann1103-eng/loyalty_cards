@@ -12,7 +12,7 @@ import { notificarCambioTarjeta } from '@/lib/apple/notificarCambioTarjeta';
 import { syncObjetoTarjeta } from '@/lib/google/syncObjeto';
 import { tipoOPuntos, describirSaldo, centavosDesdeTexto, nivelParaAcumulado, type AccionPrincipal } from '@/lib/tarjetas/tipos';
 import { usarCupon, renovarMembresia, hoyEnZona } from '@/lib/tarjetas/vigencia';
-import { unidadPrograma, describirCosto, type Unidad } from '@/lib/tarjetas/unidadPrograma';
+import { unidadPrograma, describirCosto, mensajeAcreditacion, type Unidad } from '@/lib/tarjetas/unidadPrograma';
 import { usarVisita, venderPaquete } from '@/lib/tarjetas/prepago';
 import { acreditarCashback, cargarGiftCard, consumirSaldo } from '@/lib/tarjetas/dinero';
 import { registrarCompra, listarNiveles } from '@/lib/tarjetas/descuento';
@@ -212,11 +212,16 @@ export async function accionAcreditar(
   await notificarCambioTarjeta(supabase, tarjetaId);
   await syncObjetoTarjeta(supabase, tarjetaId);
 
+  // El tipo del PROGRAMA de esta tarjeta, que es lo que decide en qué palabra se confirma la
+  // operación. Se resuelve después de acreditar para no pagar la consulta cuando la acreditación
+  // se rechaza (tope diario, espera mínima).
+  const programa = await resolverProgramaDeTarjeta(supabase, sesion.comercioId, tarjetaId);
+
   return {
     ok: true,
     puntosActuales: res.puntosActuales,
     saldoTexto: await saldoTextoActual(sesion.comercioId, tarjetaId),
-    mensaje: delta === 1 ? 'Sello agregado.' : `${delta} puntos agregados.`,
+    mensaje: mensajeAcreditacion(programa?.tipoTarjeta ?? 'puntos', delta),
   };
 }
 
@@ -424,7 +429,7 @@ export async function accionOperacionPrincipal(
         montoCompra: centavos !== null ? centavos / 100 : null,
       });
       resultado = res.ok
-        ? { ok: true, mensaje: cantidad === 1 ? 'Sello agregado.' : `${cantidad} puntos agregados.` }
+        ? { ok: true, mensaje: mensajeAcreditacion(tipo.valor, cantidad) }
         : { ok: false, error: res.error, bloqueoLimite: res.bloqueoLimite };
     }
   }

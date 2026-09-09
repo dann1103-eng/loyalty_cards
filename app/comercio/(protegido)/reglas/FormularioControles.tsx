@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import { accionGuardarControles, type EstadoControles } from './actions';
 import { ZONAS_HORARIAS } from '@/lib/comercio/zonasHorarias';
 import type { ControlesAcreditacion } from '@/lib/comercio/controlesAcreditacion';
+import type { Unidad } from '@/lib/tarjetas/unidadPrograma';
 
 // CAMPOS NO CONTROLADOS + `key` derivada de los valores guardados. Es a propósito y va en contra de
 // la convención del resto de los formularios del proyecto (useState controlado), así que vale la
@@ -24,11 +25,41 @@ import type { ControlesAcreditacion } from '@/lib/comercio/controlesAcreditacion
 // Este es un formulario de EDICIÓN, a diferencia de FormularioRegla, que es de ALTA — ahí el reset
 // es lo deseado y por eso aquel no necesita nada de esto.
 
+// Las dos primeras perillas —el tope diario y la espera mínima— cuentan VECES, no unidades. En
+// sellos y en prepago da lo mismo, porque cada operación vale exactamente un sello o una visita, y
+// decirlo en la palabra del programa es lo que el dueño entiende ("Máximo de sellos por cliente al
+// día"). En los otros seis tipos NO da lo mismo, y por eso hacen falta estas dos palabras.
+
+// Puntos: una sola acreditación puede valer 50 puntos, así que la perilla que limita CUÁNTAS VECES
+// no se puede llamar "puntos" — más abajo hay otra que sí limita puntos, y quedarían dos campos con
+// la misma etiqueta queriendo decir cosas distintas.
+const ACREDITACIONES: Unidad = { singular: 'acreditación', plural: 'acreditaciones', articulo: 'Las' };
+
+// Los cinco tipos a los que `unidadPrograma` les devuelve null a propósito (gift card, cashback,
+// cupón, membresía y descuento): no tienen una unidad de conteo que nombrar.
+//
+// Se eligió "operaciones" y no "escaneos" porque es lo que el control mide de verdad: el tope
+// diario y la espera cuentan MOVIMIENTOS registrados sobre la tarjeta, y un escaneo que termina en
+// error o que el cajero abandona no suma. Además "operación" cubre igual de bien renovar una
+// membresía, usar un cupón y descontar saldo de una gift card, que es justo lo que estos cinco
+// tipos hacen cuando el cajero escanea.
+const OPERACIONES: Unidad = { singular: 'operación', plural: 'operaciones', articulo: 'Las' };
+
 export default function FormularioControles({
   controles,
+  unidad,
   esDePuntos,
 }: {
   controles: ControlesAcreditacion;
+  // Cómo se llama lo que cuenta ESTE programa. Reemplaza al viejo booleano `esDePuntos` para los
+  // TEXTOS: con él, los seis tipos que no son de puntos leían "Control de sellos" y "Máximo de
+  // sellos por cliente al día" — incluida una membresía, que no tiene sellos ni los va a tener.
+  // null = el tipo no cuenta enteros, y entonces se habla de operaciones (ver OPERACIONES).
+  unidad: Unidad | null;
+  // Distinto de `unidad`: este no decide palabras sino qué CAMPOS existen. Los dos techos de puntos
+  // solo tienen sentido donde una sola acreditación puede valer más de uno — en sellos, prepago y
+  // los demás, cada operación vale exactamente una, así que el techo por transacción sería una
+  // perilla que no hace nada.
   esDePuntos: boolean;
 }) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoControles, FormData>(
@@ -49,18 +80,18 @@ export default function FormularioControles({
     controles.zonaHoraria,
   ].join('|');
 
-  const unidad = esDePuntos ? 'acreditaciones' : 'sellos';
+  const palabra = esDePuntos ? ACREDITACIONES : (unidad ?? OPERACIONES);
 
   return (
     <form key={clave} className="panel" style={{ marginTop: 0 }} action={ejecutar}>
-      <h2 className="subtitle" style={{ marginTop: 0 }}>Control de {unidad}</h2>
+      <h2 className="subtitle" style={{ marginTop: 0 }}>Control de {palabra.plural}</h2>
       <p className="admin-fila-slug" style={{ marginTop: -6, marginBottom: 18 }}>
         Dejá un campo vacío para no poner ese límite. Si alcanza un límite, el cajero queda
         bloqueado y solo vos podés autorizar la acreditación escribiendo un motivo.
       </p>
 
       <div className="field">
-        <label htmlFor="tope_acreditaciones_dia">Máximo de {unidad} por cliente al día</label>
+        <label htmlFor="tope_acreditaciones_dia">Máximo de {palabra.plural} por cliente al día</label>
         <input
           id="tope_acreditaciones_dia"
           name="tope_acreditaciones_dia"
@@ -74,7 +105,7 @@ export default function FormularioControles({
       </div>
 
       <div className="field">
-        <label htmlFor="espera_minima_minutos">Minutos mínimos entre {unidad} al mismo cliente</label>
+        <label htmlFor="espera_minima_minutos">Minutos mínimos entre {palabra.plural} al mismo cliente</label>
         <input
           id="espera_minima_minutos"
           name="espera_minima_minutos"
@@ -148,8 +179,8 @@ export default function FormularioControles({
           Pedir el monto de la compra al acreditar
         </label>
         <p className="admin-fila-slug" style={{ marginTop: 6 }}>
-          Suma un paso al mostrador, pero deja ver cuánto se vendió por cada sello. Es lo que
-          convierte una sospecha en evidencia.
+          Suma un paso al mostrador, pero te deja ver cuánto se vendió por cada {palabra.singular}.
+          Es lo que convierte una sospecha en evidencia.
         </p>
       </div>
 

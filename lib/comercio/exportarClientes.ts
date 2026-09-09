@@ -1,7 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { listarProgramas } from './programas';
-import { describirCosto } from '../tarjetas/unidadPrograma';
+import { describirFila, COLUMNAS_ESTADO, type NivelDeDescuento } from '../tarjetas/estadoTarjeta';
+import { hoyEnZona } from '../tarjetas/vigencia';
+import { listarNiveles } from '../tarjetas/descuento';
 
 // Exportación de la base de clientes del comercio a CSV. "Tus datos son tuyos" es algo que la
 // competencia vende explícitamente y que acá no existía.
@@ -16,11 +18,13 @@ export interface FilaExportacion {
   // A cuál de las tarjetas del comercio pertenece la fila. Sin esta columna, en un comercio con dos
   // programas activos la fila de alguien con 8 sellos y la de alguien con $8.00 se ven identicas.
   tarjeta: string;
-  // YA FORMATEADO en la unidad de ese programa: "8 sellos", "$12.50", "3 visitas". Es un string y
-  // no un numero A PROPOSITO — `puntos_actuales` es un contador universal cuyo significado depende
-  // del tipo, y exportar 1250 bajo una columna llamada "Saldo" no es ambiguo: es falso por un
-  // factor de cien. Mezclar unidades en una columna hace que sumarla no signifique nada de todas
-  // formas, asi que la claridad no cuesta aritmetica.
+  // YA FORMATEADO en el idioma de ese programa: "8 sellos", "$12.50 disponibles", "3 visitas
+  // disponibles", "Activa hasta el 7 de octubre de 2026". Es un string y no un numero A PROPOSITO
+  // — `puntos_actuales` es un contador universal cuyo significado depende del tipo, y exportar 1250
+  // bajo una columna llamada "Saldo" no es ambiguo: es falso por un factor de cien. Mezclar
+  // unidades en una columna hace que sumarla no signifique nada de todas formas, asi que la
+  // claridad no cuesta aritmetica. En cupon, membresia y descuento ni siquiera hay un numero: el
+  // estado es una fecha o un nivel, y por eso lo arma `describirFila` y no `describirCosto`.
   saldo: string;
   visitas: number;
   alta: string;
@@ -74,9 +78,13 @@ export async function filasParaExportar(
   supabase: SupabaseClient<Database>,
   comercioId: string,
 ): Promise<FilaExportacion[] | null> {
+  // COLUMNAS_ESTADO y no una lista escrita a mano: la lista y el formateador viajan JUNTOS a
+  // propósito (ver lib/tarjetas/estadoTarjeta.ts). Hasta el 2026-09-08 este select traía solo
+  // `puntos_actuales`, y por eso la columna "Saldo" salía vacía en cupón, membresía y descuento —
+  // los tres tipos cuyo estado es una fecha o un nivel, no un número.
   const { data: tarjetas, error } = await supabase
     .from('tarjetas')
-    .select('puntos_actuales, created_at, cliente_id, programa_id, clientes(nombre, telefono)')
+    .select(`${COLUMNAS_ESTADO}, created_at, cliente_id, programa_id, clientes(nombre, telefono)`)
     .eq('comercio_id', comercioId)
     .order('created_at');
 
@@ -101,6 +109,22 @@ export async function filasParaExportar(
   const programas = await listarProgramas(supabase, comercioId, { soloActivos: false });
   const programaPorId = new Map((programas ?? []).map((p) => [p.id, p]));
 
+  // Los niveles solo hacen falta si el comercio tiene un programa de descuento; casi ninguno lo
+  // usa, asi que no se paga la consulta de gusto (mismo criterio que la pantalla Clientes).
+  let niveles: NivelDeDescuento[] = [];
+  if ((programas ?? []).some((p) => p.tipoTarjeta === 'descuento')) {
+    niveles = (await listarNiveles(supabase, comercioId)) ?? [];
+  }
+
+  // El "hoy" del COMERCIO, no el del servidor: es lo que decide si una membresia se lee "Activa
+  // hasta el ..." o "Vencida el ...", y esa diferencia le regalaria o le quitaria un dia entero.
+  const { data: comercio } = await supabase
+    .from('comercios')
+    .select('zona_horaria')
+    .eq('id', comercioId)
+    .maybeSingle();
+  const hoyIso = hoyEnZona(comercio?.zona_horaria ?? null);
+
   return (tarjetas ?? [])
     .filter((t) => t.clientes)
     .map((t) => {
@@ -109,7 +133,7 @@ export async function filasParaExportar(
       nombre: t.clientes!.nombre,
       telefono: t.clientes!.telefono,
       tarjeta: programa?.nombre ?? '',
-      saldo: describirCosto(programa?.tipoTarjeta ?? 'puntos', t.puntos_actuales),
+      saldo: describirFila(t, programa?.tipoTarjeta ?? 'puntos', programa?.selloMeta ?? null, niveles, hoyIso),
       visitas: visitasPorCliente.get(t.cliente_id) ?? 0,
       // Solo la fecha, sin hora: es un dato de negocio, no forense. El historial por cliente ya
       // cubre el detalle con hora.

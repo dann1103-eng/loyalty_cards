@@ -73,3 +73,39 @@ export function describirCosto(tipoTarjeta: string, costo: number): string {
   if (tipoOPuntos(tipoTarjeta).contador === 'centavos') return formatearCentavos(costo);
   return '';
 }
+
+// El mensaje que lee el CAJERO después de acreditar, en la unidad de ESE programa.
+//
+// Vive acá y no en la Server Action porque la frase se armaba en DOS sitios de
+// app/comercio/(protegido)/escanear/actions.ts —la acreditación normal y el switch por tipo— y los
+// dos tenían cableado `'Sello agregado.'`. O sea que sumar 1 punto (o 1 visita de un prepago) le
+// confirmaba al cajero "Sello agregado": la confirmación con la que decide si hizo lo que quería
+// hacer le describía otra mecánica. Dos copias de una decisión que ya divergieron una vez no se
+// arreglan por separado; se retiran a una sola función.
+//
+// El participio concuerda con el GÉNERO de la unidad, que viaja dentro de `Unidad`: sin eso, la
+// visita de un prepago saldría "Visita agregado".
+export function mensajeAcreditacion(tipoTarjeta: string, cantidad: number): string {
+  const unidad = unidadPrograma(tipoTarjeta);
+
+  if (unidad) {
+    const participio = unidad.articulo === 'Las' ? 'agregada' : 'agregado';
+    // Con exactamente uno se dice la palabra sola, sin el "1": es lo que el cajero venía leyendo en
+    // sellos ("Sello agregado.") y es más corto de leer en un mostrador con cola.
+    if (cantidad === 1) {
+      return `${unidad.singular[0].toUpperCase()}${unidad.singular.slice(1)} ${participio}.`;
+    }
+    return `${cantidad} ${unidad.plural} ${participio}s.`;
+  }
+
+  // Gift card y cashback: el contador son CENTAVOS. "250 puntos agregados" sobre $2.50 es el bug de
+  // origen visto desde el mostrador.
+  if (tipoOPuntos(tipoTarjeta).contador === 'centavos') {
+    return `${formatearCentavos(cantidad)} agregados.`;
+  }
+
+  // Cupón, membresía y descuento no tienen contador que mover, así que no hay cantidad que
+  // confirmar. Por el camino normal no se llega acá (su operación principal es otra), pero un
+  // mensaje honesto es mejor que uno que nombre una moneda que ese programa no tiene.
+  return 'Listo. Queda registrado.';
+}
