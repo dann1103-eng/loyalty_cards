@@ -1,5 +1,6 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { resolverProgramaPorSlug } from '@/lib/comercio/programas';
+import { marcaDelRegistro } from './marcaDelRegistro';
 import RegistroCliente from './RegistroCliente';
 
 export const dynamic = 'force-dynamic';
@@ -38,5 +39,19 @@ export default async function PaginaRegistro({
     );
   }
 
-  return <RegistroCliente comercioSlug={comercioSlug} programaSlug={null} nombreComercio={comercio.nombre} />;
+  // La marca se pide DESPUÉS de resolver el programa, y no en paralelo con el comercio: hereda del
+  // programa (migración 0027) y sin él no hay de qué heredar. Un QR de un comercio inexistente no
+  // paga esta consulta.
+  const marca = await marcaDelRegistro(supabase, comercio.id, programa.id);
+
+  return (
+    <RegistroCliente
+      comercioSlug={comercioSlug}
+      programaSlug={null}
+      nombreComercio={comercio.nombre}
+      tipoTarjeta={programa.tipoTarjeta}
+      selloMeta={programa.selloMeta}
+      marca={marca}
+    />
+  );
 }

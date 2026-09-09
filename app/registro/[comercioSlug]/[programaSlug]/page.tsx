@@ -1,5 +1,6 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { resolverProgramaPorSlug } from '@/lib/comercio/programas';
+import { marcaDelRegistro } from '../marcaDelRegistro';
 import RegistroCliente from '../RegistroCliente';
 
 export const dynamic = 'force-dynamic';
@@ -38,7 +39,18 @@ export default async function PaginaRegistroPrograma({
     );
   }
 
+  // Misma resolución de marca que el QR sin programa: la comparten para que el cliente que escanea
+  // uno y el que escanea el otro no vean marcas distintas (ver marcaDelRegistro.ts).
+  const marca = await marcaDelRegistro(supabase, comercio.id, programa.id);
+
   return (
-    <RegistroCliente comercioSlug={comercioSlug} programaSlug={programaSlug} nombreComercio={comercio.nombre} />
+    <RegistroCliente
+      comercioSlug={comercioSlug}
+      programaSlug={programaSlug}
+      nombreComercio={comercio.nombre}
+      tipoTarjeta={programa.tipoTarjeta}
+      selloMeta={programa.selloMeta}
+      marca={marca}
+    />
   );
 }

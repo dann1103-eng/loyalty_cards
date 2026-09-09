@@ -2,6 +2,9 @@
 
 import { useState, type FormEvent } from 'react';
 import { PAISES, PAIS_DEFAULT, buscarPaisPorClave } from '@/lib/clientes/paises';
+import { frentePase } from '@/lib/tarjetas/frentePase';
+import { promesaRegistro, promesaTarjetaLista, rotuloTarjeta } from '@/lib/tarjetas/textosPorTipo';
+import type { MarcaRegistro } from './marcaDelRegistro';
 
 function IconoWallet() {
   return (
@@ -24,24 +27,68 @@ function IconoGoogle() {
   );
 }
 
-function VistaTarjeta({ nombreComercio }: { nombreComercio: string }) {
+// La tarjeta de muestra que ve el cliente junto al botón de Wallet. Es una RÉPLICA de su pase, no
+// un adorno: hasta el 2026-09-08 tenía un degradado marrón cableado, el rótulo "Tarjeta de lealtad"
+// y "0 PUNTOS" para los ocho tipos, así que el dueño de una membresía azul con logo veía —al
+// escanear su propio QR— una tarjeta café que le prometía a su cliente una mecánica inexistente.
+//
+// El contador sale de `frentePase`, la MISMA función que arma el frente del pase real y la vista
+// previa del editor de marca. Es a propósito y es un guardarraíl: si esta pantalla volviera a
+// tener su propio if, el dueño diseñaría una cosa y su cliente vería otra.
+function VistaTarjeta({
+  nombreComercio,
+  tipoTarjeta,
+  selloMeta,
+  marca,
+}: {
+  nombreComercio: string;
+  tipoTarjeta: string;
+  selloMeta: number | null;
+  marca: MarcaRegistro;
+}) {
+  // `hayGrilla: false` es literal, no una simplificación: esta tarjeta de muestra no dibuja la
+  // grilla de sellos. Con la grilla ausente, `frentePase` baja la palabra al valor ("0 de 10
+  // sellos") porque el número solo no dice qué se está contando —— exactamente lo que hace el pase
+  // real cuando la franja no pudo componerse. `puntos: 0` porque la tarjeta acaba de nacer.
+  const frente = frentePase({ tipoTarjeta, puntos: 0, selloMeta, hayGrilla: false });
+
+  // Mismos respaldos que la cara de la tarjeta del portal (mi-tarjeta/PortalCliente.tsx): un
+  // comercio sin colores cargados cae al fondo oscuro del sistema, no a un café inventado.
+  const fondo = marca.colorFondo ?? '#131315';
+  const texto = marca.colorTexto ?? '#f5f5f0';
+  const label = marca.colorLabel ?? undefined;
+  const estiloLabel = label ? { color: label } : undefined;
+
   return (
-    <div
-      className="cardface"
-      style={{
-        background:
-          'linear-gradient(155deg, #3a2a1e 0%, #241812 55%, #1c120c 100%)',
-      }}
-    >
-      <div className="cardface-top">
-        <span>Tarjeta de lealtad</span>
-        <span className="cardface-dot">fm</span>
+    <div className="cardface" style={{ background: fondo, color: texto }}>
+      <div className="cardface-top" style={estiloLabel}>
+        {/* La etiqueta del catálogo: "Membresía", "Cupón", "Gift card"… La palabra que el dueño
+            eligió al crear su programa, no "Tarjeta de lealtad" para todos. */}
+        <span>{rotuloTarjeta(tipoTarjeta)}</span>
+        <span>Cardly SV</span>
       </div>
+      {marca.logoUrl && (
+        <div className="cardface-logo">
+          {/* <img> y no next/image: la URL viene del bucket público de Supabase y next/image
+              exigiría declarar el dominio, sin ganancia en un logo de 54 px. */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- URL pública del bucket */}
+          <img src={marca.logoUrl} alt={`Logo de ${nombreComercio}`} />
+        </div>
+      )}
       <div className="cardface-name">{nombreComercio}</div>
-      <div className="cardface-points">
-        <b>0</b>
-        <span>Puntos</span>
-      </div>
+      {/* SIN CONTADOR NO SE DIBUJA EL BLOQUE. Cupón, membresía y descuento no tienen número —su
+          estado es una fecha o un nivel— y su pase real tampoco lo lleva. */}
+      {frente.primario && (
+        // Etiqueta arriba y valor abajo, como los dibuja Apple y como los replica el editor de
+        // marca. El valor compuesto ("0 de 10 sellos", "$0.00") no entra a 2.2rem en un teléfono
+        // angosto, así que el número pelado se queda grande y el texto baja de tamaño.
+        <div className="cardface-points" style={{ flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          <span style={estiloLabel}>{frente.primario.etiqueta}</span>
+          <b style={frente.primario.numero === null ? { fontSize: '1.5rem' } : undefined}>
+            {frente.primario.valor}
+          </b>
+        </div>
+      )}
     </div>
   );
 }
@@ -50,11 +97,20 @@ export default function RegistroCliente({
   comercioSlug,
   programaSlug,
   nombreComercio,
+  tipoTarjeta,
+  selloMeta,
+  marca,
 }: {
   comercioSlug: string;
   // null = el programa principal (migración 0024) — ver app/registro/[comercioSlug]/page.tsx.
   programaSlug: string | null;
   nombreComercio: string;
+  // El tipo del PROGRAMA que se está registrando (no `comercios.tipo_tarjeta`, columna legada desde
+  // la 0024). Las dos páginas ya lo tenían resuelto y no lo pasaban: de ahí salían el rótulo, el
+  // contador y la promesa equivocados.
+  tipoTarjeta: string;
+  selloMeta: number | null;
+  marca: MarcaRegistro;
 }) {
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
@@ -95,11 +151,17 @@ export default function RegistroCliente({
           <h1 className="title reveal d2" style={{ marginTop: 18 }}>
             Tu tarjeta está <em>lista</em>
           </h1>
-          <p className="lede reveal d2">
-            Agrégala a tu Apple Wallet y empieza a sumar puntos en {nombreComercio}.
-          </p>
+          {/* La tarjeta YA existe: acá no se vuelve a prometer el beneficio, se dice qué acaba de
+              quedar en el teléfono. No interpola el nombre del comercio a propósito —— ya está en la
+              tarjeta de muestra de abajo, y un nombre largo rompía la frase. */}
+          <p className="lede reveal d2">{promesaTarjetaLista(tipoTarjeta)}</p>
           <div className="panel reveal d3" style={{ background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, marginTop: 26 }}>
-            <VistaTarjeta nombreComercio={nombreComercio} />
+            <VistaTarjeta
+              nombreComercio={nombreComercio}
+              tipoTarjeta={tipoTarjeta}
+              selloMeta={selloMeta}
+              marca={marca}
+            />
             <a className="wallet-btn" href={`/api/tarjetas/${tarjetaId}/pass.pkpass`}>
               <IconoWallet />
               Agregar a Apple Wallet
@@ -126,11 +188,13 @@ export default function RegistroCliente({
   return (
     <main className="shell">
       <div className="stack">
-        <p className="kicker reveal d1">Tarjeta de lealtad</p>
+        <p className="kicker reveal d1">{rotuloTarjeta(tipoTarjeta)}</p>
         <h1 className="title reveal d2">{nombreComercio}</h1>
+        {/* El motivo para dejar el teléfono, en la mecánica de ESTA tarjeta. Antes prometía sumar
+            puntos a los ocho tipos: a quien venía por una membresía se le prometía algo que su
+            tarjeta no hace. */}
         <p className="lede reveal d2">
-          Regístrate una vez y suma puntos en cada visita, directo en tu Apple Wallet.
-          Sin apps, sin plásticos.
+          {promesaRegistro(tipoTarjeta)} Directo en tu Apple Wallet, sin apps y sin plásticos.
         </p>
 
         <form className="panel reveal d3" onSubmit={handleSubmit}>
