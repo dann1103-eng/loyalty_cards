@@ -71,10 +71,35 @@ El sistema de notificaciones está completo desde la migración 0026. Este traba
    manda avisos de vencimiento sería la trampa de nombre que este proyecto viene cerrando.
    **Consecuencia a anunciar:** el `curl` de QA documentado cambia de path.
 
-7. **El aviso de vencimiento se manda ANTES que el de inactividad, y el que ya recibió uno no
-   recibe el otro el mismo día.** Los dos escriben `tarjetas.aviso_texto`, así que sin orden el
-   segundo pisa al primero en el reverso del pase y el cliente recibe dos notificaciones seguidas.
-   El de vencimiento gana: es el que tiene fecha y el que pide una acción concreta.
+7. **Mientras el aviso de vencimiento siga VIGENTE, el de inactividad no manda.** No alcanza con
+   "no los dos el mismo día", que era la primera redacción de este spec y no resuelve nada: hay UN
+   solo par `aviso_texto`/`aviso_hasta` por tarjeta y `enviarMensajeTarjeta` lo sobrescribe
+   incondicionalmente. Con la regla del mismo día, una membresía inactiva y por vencer recibe el
+   aviso con fecha el día 1 y **al día siguiente** el de inactividad lo pisa: dos push seguidos y el
+   reverso pierde la fecha.
+
+   La regla es: `procesarAvisosInactividad` saltea la tarjeta cuyo `aviso_hasta` sea **hoy o
+   futuro**. Es la condición correcta porque:
+   - se apaga sola cuando el aviso caduca (`DURACION_AVISO_…_DIAS`), sin marca que limpiar;
+   - **no** silencia para siempre al socio con la membresía vencida, que es lo que haría saltear por
+     `aviso_vencimiento_para` (esa marca no se limpia hasta la renovación siguiente). Ese destinatario
+     está blindado a propósito con un comentario largo desde la entrega anterior, y hay una prueba
+     que existe para atrapar justamente esta clase de refactorización;
+   - vale igual para el aviso de una campaña manual, que escribe las mismas dos columnas.
+
+   El orden dentro del cron (vencimiento primero) deja de ser una regla de negocio y pasa a ser lo
+   que hace que la condición se evalúe con el dato del día. Prueba obligatoria: una membresía
+   inactiva Y por vencer recibe UN solo aviso, el de vencimiento, y el de inactividad no sale
+   mientras ese siga vigente.
+
+8. **Los días de anticipación no pueden alcanzar al plazo del propio programa.** Con
+   `membresia_dias = 30` y `aviso_vencimiento_dias = 30`, `renovar_membresia_atomico` deja
+   `vigencia_hasta = hoy + 30`, así que al día siguiente de PAGAR el socio recibe "tu membresía está
+   por vencer". Es el reverso exacto del caso que motivó esta feature. La validación exige
+   `aviso_vencimiento_dias < plazo del programa` (`membresia_dias` o `cupon_vigencia_dias` según el
+   tipo), con un mensaje que lo explique. No alcanza con un CHECK de base: el cruce es entre dos
+   columnas de la misma fila y depende del tipo, así que vive en `validar()` como el resto de la
+   validación real de este proyecto.
 
 ## Modelo de datos — migración 0034
 
@@ -100,8 +125,11 @@ alter table tarjetas
 -- El origen nuevo en la auditoría. Sin esto el insert de notificaciones_enviadas falla con 23514 y
 -- el push se manda igual: quedaría un envío sin rastro, que es lo contrario de para qué existe la
 -- tabla.
+-- `if exists` por el precedente de la 0019, que hizo este mismo movimiento sobre
+-- transacciones_puntos_tipo_check. El nombre autogenerado por Postgres para un CHECK de columna es
+-- <tabla>_<columna>_check, y se verificó que no hay otro CHECK sobre `origen` que fuerce sufijo.
 alter table notificaciones_enviadas
-  drop constraint notificaciones_enviadas_origen_check;
+  drop constraint if exists notificaciones_enviadas_origen_check;
 alter table notificaciones_enviadas
   add constraint notificaciones_enviadas_origen_check
     check (origen in ('campana', 'inactividad', 'vencimiento'));
@@ -109,9 +137,15 @@ alter table notificaciones_enviadas
 commit;
 ```
 
+**`enviarMensajeTarjeta` también cambia**, y no solo la base: su parámetro es
+`origen: 'campana' | 'inactividad'`, una unión literal de TypeScript. Sin ampliarla a
+`| 'vencimiento'` esto no compila — es error de compilación, no bug silencioso, pero pertenece a
+esta tarea.
+
 `scripts/verificar-0034.ts`: las columnas existen con sus defaults, el CHECK de días rechaza 91, y
 —lo que de verdad importa— `notificaciones_enviadas` **acepta** un insert con `origen =
-'vencimiento'` (y se borra al terminar).
+'vencimiento'`. Ojo: `tarjeta_id` es NOT NULL con FK, así que el script necesita el id de una
+tarjeta REAL (lee una existente; no crea nada) y borra la fila de prueba al terminar.
 
 ## El módulo: `lib/comercio/avisoVencimiento.ts`
 
@@ -141,8 +175,17 @@ export function textoAviso(mensaje: string | null, tipoTarjeta: string, vigencia
 el cupón ya se usó, ya se avisó para esa misma fecha, la fecha ya pasó, o todavía faltan más de
 `diasAntes` días. Cada uno de esos cinco casos es una prueba con su mutación.
 
-`textoAviso` compone `"<mensaje>. Vence el 12 de octubre de 2026."` reusando el formateador de
-fecha que ya usa `describirSaldo` — la fecha se escribe en UN solo lugar del sistema.
+`textoAviso` compone el mensaje del dueño seguido de "Vence el 12 de octubre de 2026.".
+**Ojo: hoy el formateador de fecha NO está en un solo lugar** — hay dos copias privadas, una en
+`lib/tarjetas/tipos.ts` (la que usa `describirSaldo`) y otra en `lib/tarjetas/vigencia.ts`, y
+ninguna se exporta. Escribir una tercera sería el mismo error por tercera vez: la tarea EXPORTA una
+y hace que las otras la usen.
+
+**`validar` NO se puede copiar tal cual del aviso de inactividad.** Aquel exige mensaje no vacío y
+su cron filtra las filas con mensaje nulo; acá el mensaje es OPCIONAL (decisión 1: vacío = el
+default del tipo), así que ni la validación lo exige ni la consulta puede filtrarlo. Lo que sí se
+exige con el interruptor encendido son los días, y el cruce contra el plazo del programa
+(decisión 8).
 
 **Defaults por tipo** (tabla, cubierta por una prueba que recorre los tipos con `usaVigencia`):
 - membresía: *"Tu membresía está por vencer. Renovala en el local."*
@@ -153,17 +196,41 @@ fecha que ya usa `describirSaldo` — la fecha se escribe en UN solo lugar del s
 En **Programas de tarjeta**, dentro de la configuración del programa (donde ya se eligen los días
 de vigencia), un bloque "Aviso antes del vencimiento": interruptor, días de anticipación y el
 mensaje, con el texto de ayuda diciendo que la fecha la agrega la app. Solo se dibuja en los tipos
-con `usaVigencia`; en los demás, ni el bloque ni los campos (mismo criterio que el resto del
-trabajo de coherencia por tipo).
+con `usaVigencia`; en los demás, ni el bloque ni los campos.
+
+**Ese formulario es UNO SOLO con un único `action`**, y `guardarConfiguracionPrograma` escribe sus
+columnas incondicionalmente. Con dos escritores separados, o el aviso no se guarda o el bloque es
+solo visual. Entonces: las tres columnas nuevas entran a `guardarConfiguracionPrograma` y a su
+conversión desde el formulario, y `avisoVencimiento.ts` aporta la VALIDACIÓN y la lectura, no una
+segunda escritura. Y la `key` de remonte del formulario tiene que incluir los campos nuevos, o
+después de guardar vuelven a mostrarse los valores viejos (el bug de React 19 con Server Actions
+que ya está documentado en el editor de marca).
 
 ## Los otros dos pendientes
 
 ### A. `pedir_monto_compra` es una perilla muerta en cupón y membresía
 
-`usar_cupon_atomico` y `renovar_membresia_atomico` no reciben el monto: el campo aparece en el
-escáner y el dato se **descarta**. Se deja de ofrecer donde no aplica, con el mismo criterio y el
-mismo aviso que ya usan Reglas y Recompensas. La condición sale del catálogo (`TIPOS`), no de una
-lista escrita aparte: es la tercera vez que este proyecto paga por una lista paralela.
+`usar_cupon_atomico` y `renovar_membresia_atomico` no reciben el monto: el campo aparece y el dato
+se **descarta**.
+
+**Hace falta un campo NUEVO en `TIPOS`, `usaMontoDeCompra`.** Ninguno de los cinco existentes
+sirve: `requiereMonto` es "lo EXIGE" (deja afuera a puntos y sellos, que lo usan opcionalmente para
+las reglas por monto), y `aplicanControlesAcreditacion` incluye a `descuento`, que sí usa el monto.
+Usar `usaVigencia` porque hoy da exactamente cupón y membresía sería fusionar por coincidencia
+semántica: el mismo movimiento que el propio `tipos.ts` prohíbe por escrito al explicar por qué
+`aplicanControlesAcreditacion` no se fusiona con `puedeCanjearRecompensas`. Con un campo propio, un
+noveno tipo no compila hasta que alguien decida su valor.
+
+**Se arreglan las DOS superficies, y son distintas:**
+- **Reglas** (la perilla del dueño) mira el programa **principal**, como el resto de esa pantalla.
+- **El escáner** es por TARJETA: hoy lee `comercios.pedir_monto_compra` sin mirar el tipo de la
+  tarjeta escaneada, así que un comercio con principal de puntos y un programa de cupón seguiría
+  pidiendo el monto sobre el cupón. Ahí la condición usa el tipo de ESA tarjeta.
+
+**Y la casilla oculta no se puede omitir.** `accionGuardarControles` lee la casilla del `FormData`:
+si el campo no se dibuja, no llega nada y se guarda `false`. Es exactamente la mordida que ya está
+resuelta tres líneas más arriba en ese mismo formulario, con un input oculto y su comentario. El
+aviso explicativo reemplaza al campo VISIBLE; el oculto con el valor guardado va igual.
 
 ### B. `reporte_fm_comercios.saldo_circulante` mezcla unidades
 
@@ -171,13 +238,24 @@ Suma `puntos_actuales` de **todos** los comercios y **todos** los tipos: sellos 
 visitas. Es el mismo defecto que la métrica del panel, a escala de plataforma, en el panel de FM.
 
 **No se arregla sumando distinto: se deja de sumar.** No existe un "saldo total de la plataforma"
-que signifique algo cuando se agregan comercios de tipos distintos, así que la columna se retira
-del reporte y de la pantalla. En su lugar, el panel de FM ya muestra clientes, operaciones y canjes,
-que sí son comparables entre comercios. Si en algún momento FM necesita el saldo de UN comercio,
-ese número ya existe bien calculado en el panel del dueño (`resumenPrograma`).
+que signifique algo cuando se agregan comercios de tipos distintos. En su lugar, el panel de FM ya
+muestra clientes, operaciones y canjes, que sí son comparables entre comercios. Si FM necesita el
+saldo de UN comercio, ese número ya existe bien calculado en el panel del dueño (`resumenPrograma`).
 
 Alternativa descartada: dejarlo y rotularlo "referencial". Un número que nadie puede interpretar no
 mejora con una etiqueta que avise que no se puede interpretar.
+
+**B NECESITA SU PROPIA MIGRACIÓN, LA 0035, Y VA AL REVÉS QUE LAS DEMÁS.** `saldo_circulante` no es
+una columna de tabla: es una columna del `returns table` de `reporte_fm_comercios()`. Sacarla
+cambia el tipo de retorno, o sea `drop function` mas `create function` mas repetir los `revoke` **y**
+los `grant`: la lección que dejó escrita la 0033.
+
+Y como es **sustractivo**, el orden es el opuesto al habitual: **primero el deploy, después la
+migración.** Aplicar la 0035 antes rompe el panel de FM, igual que pasó el 2026-09-09 con el
+renombre de `acreditaciones`. Los cuatro consumidores a limpiar ANTES:
+`app/admin/(protegido)/reportes/page.tsx` (el `reduce` de la métrica de cabecera, la tarjeta
+"Saldo circulante" entera, y el `EstadisticaMini` por comercio), `lib/reportes/reportes.test.ts` y
+`lib/supabase/types.ts`.
 
 ## Fuera de alcance
 
@@ -190,13 +268,15 @@ mejora con una etiqueta que avise que no se puede interpretar.
 
 ## Orden de trabajo
 
-1. Migración 0034 + `types.ts` + `verificar-0034.ts`. El usuario la aplica.
-2. El módulo puro con sus pruebas de mutación.
-3. El recorrido, el orden contra el aviso de inactividad, y el renombre del cron.
-4. La interfaz en Programas.
-5. Los dos pendientes (A y B).
-6. Verificación, estado, deploy.
-
-**Migración primero, deploy después** — y esta vez sí aplica, porque todo es aditivo salvo el CHECK
-de `origen`, que se amplía (nunca se restringe): la base con la 0034 aplicada sigue funcionando con
-el código viejo.
+1. Migración **0034** mas `types.ts` mas `verificar-0034.ts`. **El usuario la aplica ANTES del
+   deploy**: es aditiva (el CHECK de `origen` se amplía, nunca se restringe), así que la base con la
+   0034 puesta sigue funcionando con el código viejo.
+2. Exportar el formateador de fecha y unificar las dos copias.
+3. El módulo puro `avisoVencimiento.ts` con sus pruebas de mutación.
+4. El recorrido, la regla contra el aviso de inactividad (decisión 7), y el renombre del cron.
+5. La interfaz en Programas.
+6. Pendiente A (`usaMontoDeCompra`, las dos superficies, y el input oculto).
+7. Pendiente B, en DOS pasos y en este orden: **(7a)** limpiar los cuatro consumidores de
+   `saldo_circulante` y desplegar; **(7b)** recién entonces el usuario aplica la **0035** que la
+   retira de la función. Es sustractivo: al revés que todo lo demás.
+8. Verificación, estado, deploy.
