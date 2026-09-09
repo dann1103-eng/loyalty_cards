@@ -724,3 +724,81 @@ Plan: `plans/2026-09-08-editor-marca-por-tipo-y-encuadre-franja.md`.
   cambio se ve recién cuando el `?v=` cambia (lo hace solo al guardar).
 - **La vista previa de la franja personalizada** ahora se muestra tal cual en la pantalla; nunca se
   verificó contra un pase real con `strip_url` puesta.
+
+---
+
+## 2026-09-08 (tarde) — El panel deja de hablarle de sellos a quien no los tiene (entrega 1 de 2)
+
+Disparado por Daniel siguiendo con la misma cuenta de **membresía**: terminada la personalización, el
+panel le pedía "Definí cómo se ganan los sellos" y "Cargá tu primer premio", y una métrica gigante
+decía "PUNTOS VIGENTES 0". Pidió auditar TODO.
+
+**La auditoría encontró 38 lugares.** El patrón es siempre el mismo: una rama **binaria**
+(`esSellos ? … : …`) sobre un catálogo de **ocho** tipos, o una lectura del contador universal
+`tarjetas.puntos_actuales` sin mirar qué significa en ese tipo.
+
+Spec: `specs/2026-09-08-coherencia-por-tipo-de-tarjeta-design.md` (**tres** rondas de revisión: 13,
+12 y 3 hallazgos). Plan de esta entrega: `plans/2026-09-08-coherencia-pantallas-por-tipo.md`.
+**Sin migración.** Suite: **1150 verdes en 110 archivos**.
+
+### Lo que entró
+
+- **`lib/tarjetas/textosPorTipo.ts`** y **`lib/tarjetas/etiquetaEscaner.ts`**: los textos salen de
+  tablas por tipo con prueba de cobertura de los ocho, no de un `if` sobre sellos.
+- **`pasosParaTipo`** (`primerosPasos.ts`): el tutorial cambia sus cuatro pasos según el tipo.
+- **`mensajeAcreditacion`** (`unidadPrograma.ts`): la confirmación del cajero, en la unidad del
+  programa y con el género concordado.
+- **`historial.ts`**: `uso` y `renovacion` dejan de colapsarse en `acreditacion`.
+- **`app/registro/**`**: la pantalla que ve el cliente usa la marca del comercio y el tipo real.
+- **`exportarClientes.ts`**: el CSV pasa a `describirFila` + `COLUMNAS_ESTADO`.
+- Y los consumidores: panel, clientes, recompensas, reglas, sucursales, portal, panel de FM.
+
+### Lo que no es obvio y hay que recordar
+
+1. **El tutorial era IMPOSIBLE de completar, y esa es la forma más cara del defecto.** El paso 2
+   apuntaba a Reglas, pantalla que para seis de los ocho tipos ESCONDE su formulario y dice "tu
+   tarjeta no necesita estas reglas". Como el `hecho` se derivaba de que existiera una fila en
+   `reglas_puntos`, el dueño quedaba clavado en "1 de 4" para siempre, y `PrimerosPasos` solo se
+   esconde con los cuatro hechos. **Un checklist cuyo paso vive en una pantalla que lo esconde no
+   es un texto mal escrito: es un callejón sin salida.** La prueba que lo cierra recorre los ocho
+   tipos y verifica que ningún paso apunte a una pantalla que no le sirve a ese tipo.
+2. **El `hecho` de "términos" se lee con `reversoEfectivo`, no con la columna del programa.** En
+   modo negocio el editor de Marca escribe `comercios.terminos_uso`, y ese es el flujo por defecto
+   (el selector de programa aparece recién con dos tarjetas). Leyendo solo la del programa, el dueño
+   que YA escribió sus términos quedaba clavado en 3 de 4: el mismo bug, por otra puerta.
+3. **La pantalla de registro era ciega a la marca Y al tipo**, y es el momento de la conversión.
+   `page.tsx` hacía `select('id, nombre')`, así que la tarjeta de muestra era un degradado marrón
+   fijo que decía "TARJETA DE LEALTAD" y "0 PUNTOS" — a un comercio azul de membresía, recién
+   personalizado. La resolución de marca vive en `marcaDelRegistro.ts` y NO dentro de cada
+   `page.tsx`: hay DOS entradas de registro (el QR viejo sin programa y el de un programa no
+   principal), y tocar una sola era la trampa del "reemplazo en todos los sitios de llamada".
+4. **Tres pantallas dibujan una réplica de la tarjeta y las tres pasan por `frentePase`**: el editor
+   de marca, el registro del cliente y el alta en el panel de FM. Es un guardarraíl explícito: si
+   una vuelve a tener su propio `if`, el dueño diseña una cosa y su cliente ve otra.
+5. **El trato es distinto a propósito.** El panel del dueño **vosea**; el registro y el portal
+   **tutean**. Decisión de Daniel el 2026-09-08. No unificar una frase suelta: mezclar los dos
+   registros en la misma pantalla se nota.
+6. **`ETIQUETA_PRINCIPAL` no se puede importar desde una página**: vive en un archivo `'use server'`,
+   que solo exporta funciones async. Por eso `etiquetaEscaner.ts` deriva de `accionPrincipal` del
+   catálogo, que es la misma fuente, en vez de duplicar la tabla.
+7. **En los controles antifraude, "operaciones" y no "escaneos"**: el tope diario y la espera cuentan
+   MOVIMIENTOS registrados, y un escaneo abandonado no suma. En puntos se conserva "acreditaciones"
+   porque más abajo hay otra perilla que sí limita puntos.
+
+### Lo que queda (entrega 2, CON migración 0033)
+
+- **Reportes que cuentan operaciones.** Hoy filtran `tipo = 'acreditacion'`, así que una membresía
+  reporta CERO actividad con cientos de renovaciones y la pantalla antifraude por cajero es ciega.
+  Ojo con la trampa que encontró la tercera ronda de revisión: agregar los `filter` sin SACAR el
+  predicado del `WHERE` compartido deja el conteo idéntico y todas las pruebas en verde.
+- **Secciones muertas y navegación.** Premios y Programas intercambian superficie en los tipos con
+  contador `'ninguno'` (un canje descuenta de un contador que nunca se mueve).
+- **Identidad del pase**: `nombre_pase` y la vigencia en el frente, en las dos billeteras.
+
+### Fuera de alcance, anotado para no perderlo
+
+- **Una campaña disparada por el VENCIMIENTO** (avisarle al socio antes de que se le venza). Es lo
+  que de verdad necesita un negocio de membresías: hoy el único aviso automático se dispara por
+  INACTIVIDAD, y alguien que renovó ayer no está inactivo.
+- **`reporte_fm_comercios.saldo_circulante`**, que suma `puntos_actuales` de todos los comercios y
+  todos los tipos: el mismo defecto de la métrica del panel, a escala de plataforma.
