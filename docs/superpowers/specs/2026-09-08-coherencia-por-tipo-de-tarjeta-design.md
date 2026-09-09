@@ -234,10 +234,16 @@ Las funciones de reporte de la 0015 y la 0010 se **borran y se recrean** (ver de
 renombre cambia el tipo de retorno y `create or replace` falla con *cannot change return type*),
 repitiendo sus `grant` **y sus `revoke`**.
 
-**El filtro NO se mueve al `WHERE`.** Hoy en `reporte_sucursales` y `reporte_top_clientes` el
-conteo, la suma y el `count(distinct cliente_id)` cuelgan del MISMO `where tp.tipo =
-'acreditacion'`. Ensanchar ese `WHERE` volvería neta la suma, que es justo lo que la decisión 4
-prohíbe. La separación se hace con `filter`, campo por campo:
+**El predicado de tipo SALE del `WHERE` compartido y cada campo lleva el suyo.** Es el paso que
+hace que el cambio no sea inerte: hoy en `reporte_sucursales` y `reporte_top_clientes` el conteo,
+la suma y el `count(distinct …)` cuelgan del MISMO `where … and tp.tipo = 'acreditacion'`. Si ese
+predicado se deja donde está y se agregan `filter` nuevos, **ninguna fila `uso` ni `renovacion`
+llega al agregado**: el conteo sale idéntico, la membresía sigue en cero, la pantalla antifraude
+sigue ciega, y todas las pruebas siguen verdes porque para puntos y sellos nada cambia. Es la forma
+de falla más peligrosa de este trabajo, y por eso se escribe explícita.
+
+Y al sacarlo hay que **devolverle su filtro a la suma**: sin el `WHERE` que la protegía, un
+`sum(tp.puntos_delta)` pelado empezaría a incluir los `ajuste`.
 
 ```sql
 -- Una OPERACIÓN es lo que el cajero le hizo a una tarjeta de cara al cliente: acreditar, usar
@@ -247,15 +253,35 @@ prohíbe. La separación se hace con `filter`, campo por campo:
 -- Sin el conteo ancho, un comercio de membresía ve CERO actividad con cientos de renovaciones y la
 -- pantalla antifraude es ciega. Con la SUMA ancha, en cambio, el consumo de una gift card
 -- cancelaría lo otorgado y el fraude se autoborraría del reporte — que es lo que la 0015 vino a
--- impedir. Por eso son dos filtros distintos sobre la misma pasada, y no un WHERE compartido.
-count(*) filter (where tp.tipo in ('acreditacion','uso','renovacion'))          as operaciones,
-coalesce(sum(tp.puntos_delta) filter (where tp.tipo = 'acreditacion'), 0)       as puntos_otorgados,
-count(distinct tp.tarjeta_id) filter (where tp.tipo in ('acreditacion','uso','renovacion')) as clientes_unicos
+-- impedir. Por eso son filtros distintos sobre la misma pasada, y NO un WHERE compartido.
+    from transacciones_puntos tp
+    join tarjetas t on t.id = tp.tarjeta_id
+    where t.comercio_id = p_comercio_id        -- ← el `and tp.tipo = 'acreditacion'` SE VA de acá
+    ...
+           count(*) filter (where tp.tipo in ('acreditacion','uso','renovacion'))::bigint
+             as operaciones,
+           coalesce(sum(tp.puntos_delta) filter (where tp.tipo = 'acreditacion'), 0)::bigint
+             as puntos_otorgados,
+           count(distinct t.cliente_id) filter (where tp.tipo in ('acreditacion','uso','renovacion'))::bigint
+             as clientes_unicos
 ```
 
-Los tres campos derivados siguen la misma regla: **lo que cuenta ACTIVIDAD se ensancha; lo que
-suma VALOR no se toca.** `clientes_unicos` y `visitas` son actividad, así que se ensanchan;
-`puntos_otorgados`, `puntos_totales` y `puntos_ajustados` son valor, y quedan como están.
+La entidad contada NO cambia: sigue siendo `t.cliente_id`, como hoy, y no `tp.tarjeta_id`. Desde la
+0024 un cliente con dos programas activos tiene DOS tarjetas en el mismo comercio, así que contar
+tarjetas inflaría `clientes_unicos` sin que nada avise.
+
+Los campos siguen la regla: **lo que cuenta ACTIVIDAD se ensancha; lo que suma VALOR no se toca.**
+`operaciones`, `clientes_unicos` y `visitas` son actividad; `puntos_otorgados`, `puntos_totales` y
+`puntos_ajustados` son valor.
+
+**Cada función tiene su forma y el plan no puede tratarlas igual:**
+- `reporte_sucursales` y `reporte_top_clientes`: tienen el `WHERE` compartido; hay que sacarlo y
+  poner los `filter`.
+- `reporte_cajeros`: **ya** usa `filter` campo por campo, así que solo se ensancha el del conteo.
+  Ojo con `clientes_unicos`, que hoy NO está filtrado por tipo: ponerle el filtro lo ESTRECHA
+  (deja fuera a quien solo tuvo un ajuste). Se le pone igual, y entra en los cambios visibles.
+- `reporte_fm_comercios`: cada campo es una subconsulta escalar con su propio `where`; ahí sí se
+  ensancha el `where` de la subconsulta que cuenta.
 
 `scripts/verificar-0033.ts` (solo lectura, salvo el sondeo del CHECK) verifica la columna nueva y
 que una función de reporte cuente una fila `renovacion`.
@@ -380,9 +406,20 @@ conteos de actividad, porque sus consumos hoy no se cuentan. Puntos y sellos no 
 
 - Migración + `types.ts` + `guardarBranding`/`guardarBrandingPrograma` + campo en el editor de Marca
   (junto a la meta de sellos, con su ayuda: "Lo que tu cliente ve arriba en su tarjeta").
-- `frentePase` gana `vigenciaHasta` y `nombrePase`; devuelve además un `encabezado`. Apple lo pone
-  en `headerFields`; Google en `textModulesData` del objeto, más `validTimeInterval` para que un
-  pase vencido se vea vencido.
+- **`frentePase` cambia su firma y su salida (ver decisión 6, que manda sobre este resumen):**
+  - Entra: `vigenciaHasta`, `usadoEn`, `nombrePase` y **`hoyIso`**.
+  - Sale: `primario`, `secundario`, **`encabezado`** y **`listado`**. Son cuatro campos con
+    destinos distintos y no hay que confundirlos: `primario`/`secundario` son los campos de Apple;
+    `encabezado` es el nombre del pase, que va a `headerFields` de Apple y a `textModulesData` de
+    Google; y **`listado` es la línea única que consume Google en `loyaltyPointsDe`**, que hoy usa
+    `contadorPase` a propósito para que el texto viaje SIEMPRE, también cuando hay grilla. Sin
+    `listado`, Android pierde el contador de sellos.
+  - `validTimeInterval` del objeto de Google se llena con la vigencia, para que un pase vencido se
+    vea vencido. No hace falta nada extra para que llegue: la renovación ya re-sincroniza Google.
+- **`hoyIso` sale del servidor**, con `hoyEnZona(comercio.zona_horaria)`. Ojo: `zona_horaria` NO
+  está hoy en el `select` de la página de Marca, y `hoyEnZona(null)` degrada en silencio a la zona
+  de El Salvador — o sea que olvidarse no rompe nada visible y corre el vencimiento un día para un
+  comercio de otra zona. Hay que agregarla al `select`.
 - `datosPassDeTarjeta` lleva `vigencia_hasta` y `nombre_pase` a `DatosPass`.
 - La vista previa del editor los muestra, porque comparte `frentePase`.
 - **`versionHero` NO se toca** (ver decisión 6): versiona la URL de una imagen y estos campos no
