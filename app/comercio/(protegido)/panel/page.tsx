@@ -8,6 +8,9 @@ import { reporteSucursales } from '@/lib/reportes/reportes';
 import { listarProgramas } from '@/lib/comercio/programas';
 import { primerosPasos } from '@/lib/comercio/primerosPasos';
 import { textoAtajoEscanear, textoAtajoReglas } from '@/lib/tarjetas/textosPorTipo';
+import { COLUMNAS_RESUMEN, resumenPrograma } from '@/lib/tarjetas/resumenPrograma';
+import { listarNiveles } from '@/lib/tarjetas/descuento';
+import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import PrimerosPasos from './PrimerosPasos';
 
 export const dynamic = 'force-dynamic';
@@ -50,7 +53,10 @@ export default async function PaginaPanel() {
   const supabase = createServiceClient();
   const { data: comercio } = await supabase
     .from('comercios')
-    .select('nombre, slug, tipo_tarjeta')
+    // zona_horaria: el "hoy" con el que se cuentan las membresías y los cupones vigentes es el del
+    // COMERCIO, no el del servidor. En UTC, a las 6 de la tarde en El Salvador ya es el día
+    // siguiente, y una membresía que vence hoy aparecería vencida media tarde antes de tiempo.
+    .select('nombre, slug, tipo_tarjeta, zona_horaria')
     .eq('id', comercioId)
     .maybeSingle();
 
@@ -74,14 +80,31 @@ export default async function PaginaPanel() {
   // Reglas — una pantalla que a su tipo le esconde el formulario.
   const pasos = esOwner ? await primerosPasos(supabase, comercioId, tipoValor ?? 'puntos') : null;
 
-  // Métricas reales: cuántos clientes tienen tarjeta y cuánto saldo circulante hay.
+  // Métricas reales. La consulta trae COLUMNAS_RESUMEN —o sea el estado completo de cada tarjeta MÁS
+  // su programa_id— y no `puntos_actuales` a secas: sin el programa no hay por dónde agrupar, y sin
+  // la vigencia y el acumulado no se pueden responder las preguntas de membresía, cupón y descuento.
   const { data: tarjetas, count } = await supabase
     .from('tarjetas')
-    .select('puntos_actuales', { count: 'exact' })
+    .select(COLUMNAS_RESUMEN, { count: 'exact' })
     .eq('comercio_id', comercioId);
 
   const totalClientes = count ?? 0;
-  const totalSaldo = (tarjetas ?? []).reduce((suma, t) => suma + (t.puntos_actuales ?? 0), 0);
+
+  // Los niveles son del COMERCIO (no del programa) y solo los mira la familia 'descuento': se leen
+  // una sola vez, y únicamente si hay algún programa de ese tipo.
+  const programasActivos = programas ?? [];
+  const niveles = programasActivos.some((p) => p.tipoTarjeta === 'descuento')
+    ? ((await listarNiveles(supabase, comercioId)) ?? [])
+    : [];
+
+  // Una carta por programa activo, cada una con la pregunta de SU tipo. `null` = el comercio todavía
+  // no tiene ninguna tarjeta: ahí manda el tutorial de arriba, no una métrica en cero.
+  const cartasResumen = resumenPrograma(
+    programasActivos,
+    tarjetas ?? [],
+    niveles,
+    hoyEnZona(comercio?.zona_horaria ?? null),
+  );
 
   // Contexto de sucursal (owner): actividad de ESA sucursal, con los reportes por sucursal ya
   // existentes. Sin contexto no se consulta nada extra. Una sucursal sin actividad todavía no
@@ -134,16 +157,31 @@ export default async function PaginaPanel() {
             <div className="metric-sub">registrados en tu comercio</div>
           </div>
         </div>
-        <div className="metric-carta menta">
-          <div className="metric-etiqueta">
-            <span>{esSellos ? 'Sellos vigentes' : 'Puntos vigentes'}</span>
-            <span className="icono" aria-hidden="true">auto_awesome</span>
+        {/* Una carta por programa activo, cada una con la pregunta de SU tipo (resumenPrograma).
+            Antes había UNA sola con la suma global de `puntos_actuales`: le decía "PUNTOS VIGENTES 0"
+            a una membresía y "125000 puntos" a una gift card con $1 250.00 circulantes. */}
+        {(cartasResumen ?? []).map((carta) => (
+          <div key={carta.programaId} className="metric-carta menta">
+            <div className="metric-etiqueta">
+              <span>{carta.etiqueta}</span>
+              <span className="icono" aria-hidden="true">auto_awesome</span>
+            </div>
+            <div>
+              {/* El nombre solo aparece con más de un programa: con uno solo sería ruido. */}
+              {carta.nombre && <div className="metric-sub" style={{ marginBottom: 6 }}>{carta.nombre}</div>}
+              {/* El número grande y su palabra en chico, en la misma línea: "8 con descuento" entero
+                  a 2.9rem se sale de la carta. La palabra va vacía en gift card y cashback, donde el
+                  valor ya es dinero. */}
+              <div className="metric-valor">
+                {carta.valor}
+                {carta.unidad && (
+                  <span style={{ fontSize: '0.95rem', letterSpacing: '0.06em', marginLeft: 8 }}>{carta.unidad}</span>
+                )}
+              </div>
+              <div className="metric-sub">{carta.detalle}</div>
+            </div>
           </div>
-          <div>
-            <div className="metric-valor">{totalSaldo}</div>
-            <div className="metric-sub">{esSellos ? 'sellos sin canjear' : 'puntos sin canjear'}</div>
-          </div>
-        </div>
+        ))}
       </section>
 
       {sucursalActiva && actividadSucursal && (
