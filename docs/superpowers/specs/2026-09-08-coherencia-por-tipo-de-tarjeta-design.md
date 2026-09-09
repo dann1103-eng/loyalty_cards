@@ -71,8 +71,19 @@ La corrección no es escribir lógica nueva: es **hacer imposible no pasar por e
    | descuento | cuántos clientes ya alcanzaron un nivel | "8 con descuento · de 40" |
 
    Para una membresía "cuántos socios activos tengo" es LA métrica del negocio, así que la carta no
-   se esconde: cambia de pregunta. La función es pura y recibe `hoyIso` (mismo criterio que
-   `describirSaldo`), y las filas llegan con `COLUMNAS_ESTADO`.
+   se esconde: cambia de pregunta.
+
+   Entradas de `resumenPrograma`, explícitas porque la ronda de revisión mostró que era el punto
+   más flojo del spec:
+   - Es pura y recibe `hoyIso`, resuelto con `hoyEnZona(comercio.zona_horaria)` en el servidor.
+   - Las filas llegan con `COLUMNAS_ESTADO` **más `programa_id`**, que es por donde se agrupa y que
+     hoy no está en esa constante ni en la consulta del panel (que trae solo `puntos_actuales`).
+   - La familia `descuento` necesita además los `niveles_descuento`, que son **del comercio** y no
+     del programa: se pasan aparte, una sola vez.
+   - Se muestran solo los programas **activos**, igual que el selector del editor de marca.
+   - **Un comercio sin ninguna tarjeta todavía no ve la carta**: el tutorial está justo arriba y es
+     lo que ese dueño necesita. Una carta que dice cero no le dice qué hacer, que es el mismo
+     criterio con el que hoy el tutorial va antes que las métricas.
 
 3. **El tutorial se DERIVA del tipo del programa principal.** `PASOS` deja de ser una constante y
    pasa a ser una función del tipo. Cada tipo recibe pasos que **puede completar**, y ninguno
@@ -81,7 +92,8 @@ La corrección no es escribir lógica nueva: es **hacer imposible no pasar por e
    guarda.
 
 4. **Los reportes CUENTAN operaciones; lo que SUMAN no se toca.** El ledger distingue
-   `acreditacion`, `ajuste`, `canje`, `uso` y `renovacion` (0019). Las funciones de reporte (0015 y
+   `acreditacion`, `ajuste`, `uso` y `renovacion` (0019; `canje` NO es un valor del CHECK, los
+   canjes viven en su propia tabla). Las funciones de reporte (0015 y
    0010) filtran `tipo = 'acreditacion'`, así que para una membresía **todo el módulo de reportes
    está estructuralmente en cero**, incluida la pantalla antifraude por cajero: es ciega frente a
    un cajero que regala renovaciones.
@@ -103,9 +115,22 @@ La corrección no es escribir lógica nueva: es **hacer imposible no pasar por e
    así que `create or replace` NO alcanza: la migración hace `drop function` + `create` + **volver
    a otorgar los `grant … to service_role`** que dan la 0010 y la 0015, todo dentro de la misma
    transacción, y `lib/reportes/reportes.ts` actualiza sus tipos derivados de `Database[...]`.
-   Alcanza a `reporte_sucursales`, `reporte_top_clientes`, `reporte_tendencia`,
-   `reporte_cajeros` y `reporte_fm_comercios` (esta última alimenta el panel de FM, y entra: si no,
-   FM ve cero actividad en cada comercio de membresía de la plataforma).
+   El renombre alcanza a las funciones que HOY tienen una columna `acreditaciones`:
+   `reporte_sucursales`, `reporte_cajeros`, `reporte_tendencia` y `reporte_fm_comercios` (esta
+   última alimenta el panel de FM, y entra: si no, FM ve cero actividad en cada comercio de
+   membresía de la plataforma). **`reporte_top_clientes` NO se renombra**: sus columnas son
+   `visitas` y `puntos_totales`, y lo que cambia ahí es solo el filtro del conteo de `visitas`.
+
+   Los consumidores del nombre viejo que el plan tiene que barrer, por grep de `acreditaciones`:
+   `lib/reportes/agregados.ts` y su prueba, `lib/reportes/reportes.test.ts`, `lib/supabase/types.ts`
+   (los tipos de `Functions`), `app/comercio/(protegido)/panel/page.tsx`,
+   `app/comercio/(protegido)/reportes/**` y `app/admin/(protegido)/reportes/page.tsx`.
+
+   **`drop function` no solo pierde los `grant`: pierde los `revoke`.** Una función recién creada
+   nace con `execute` para `PUBLIC` — es exactamente lo que documenta el cierre de la 0015 al
+   explicar por qué `create or replace` no reinicia el ACL. La migración tiene que repetir también
+   el `revoke execute … from public, anon, authenticated` de cada función, o `reporte_fm_comercios`
+   (sin parámetros y cross-comercio) queda invocable por `anon` vía PostgREST.
 
 5. **Una sección que no puede funcionar no ocupa un lugar en la barra.** En los tipos con contador
    `'ninguno'` (cupón, membresía, descuento) un canje descuenta de un contador que nunca se mueve:
@@ -119,9 +144,14 @@ La corrección no es escribir lógica nueva: es **hacer imposible no pasar por e
 
    Consecuencias que el plan tiene que ejecutar y no dar por resueltas:
    - `enlacesBarraPorRol` **y** `enlacesMenuPorRol` reciben el tipo.
-   - El único llamador es `NavInferior`, montado desde `app/comercio/(protegido)/layout.tsx`, que
-     hoy NO consulta programas. Hace falta una consulta nueva ahí, o sea en cada pantalla del
-     panel: se resuelve con el mismo `listarProgramas` que ya usa el panel, y se mide su costo.
+   - **Son DOS llamadores, no uno**: `NavInferior` (barra) y `MenuOpciones` (menú), los dos
+     montados desde `app/comercio/(protegido)/layout.tsx`. Si el tipo llega solo a la barra,
+     Programas entra ahí y SIGUE en el menú: destino duplicado, y se rompe la invariante que esta
+     misma decisión quiere proteger.
+   - El layout hoy NO consulta programas. Hace falta una consulta nueva ahí, o sea en CADA pantalla
+     del panel: se resuelve con el mismo `listarProgramas` que ya usa el panel. **Ante un error de
+     esa consulta la navegación cae al reparto de hoy**, nunca a una barra vacía: hasta ahora la
+     barra no podía fallar y con la consulta sí puede.
    - La invariante que se prueba es **"Escanear al centro del arreglo devuelto"**, no "cinco
      destinos": el cajero recibe tres y un rol desconocido uno, y las pruebas vigentes ya lo
      afirman. Escribirla como "siempre cinco" es escribir una prueba en rojo.
@@ -141,12 +171,26 @@ La corrección no es escribir lógica nueva: es **hacer imposible no pasar por e
      en cupón). Como `frentePase` lo comparten el pase y la vista previa del editor, el dueño ve
      exactamente lo mismo que su cliente.
    - **`frentePase` gana `hoyIso` en su firma**, por el mismo motivo que `describirSaldo` lo tiene:
-     sin fecha por argumento no se puede probar el borde del vencimiento sin congelar el reloj. Sus
-     dos llamadores son un módulo de servidor (`generatePass`) y un componente CLIENTE
-     (`FormularioBranding`), así que los dos tienen que pasarla.
-   - **Google también pasa por `frentePase`.** Hoy `construirRecursos.ts` llama a `contadorPase`
-     directo, así que si solo se cambiara Apple la vigencia se decidiría en dos lugares — justo lo
-     que el guardarraíl de este spec prohíbe. `loyaltyPointsDe` migra a `frentePase`.
+     sin fecha por argumento no se puede probar el borde del vencimiento sin congelar el reloj.
+     **La fecha se resuelve SIEMPRE en el servidor con `hoyEnZona(comercio.zona_horaria)`**, nunca
+     con un `new Date()` dentro del componente: `FormularioBranding` es `'use client'` montado
+     desde una página de servidor, así que un reloj propio daría mismatch de hidratación, y usar
+     UTC corre el vencimiento un día (la regla ya está escrita en el repositorio). La página de
+     Marca la baja como prop, igual que baja los colores.
+   - **La vista previa no inventa una fecha.** No hay tarjeta emitida, así que pasa
+     `vigenciaHasta: null`, y ahí `describirSaldo` ya dice "Sin activar" (membresía) o "Disponible"
+     (cupón) sin mirar el reloj. Es exactamente el estado de una membresía recién registrada, así
+     que el dueño ve lo que su cliente va a ver el primer día.
+   - **Google también pasa por `frentePase`, pero NO por su campo `primario`.** `loyaltyPointsDe`
+     usa hoy `contadorPase` a propósito: en Google el texto va SIEMPRE, incluso cuando hay grilla,
+     porque es lo que se lee en la vista de lista de Wallet. `frentePase` con `hayGrilla: true`
+     devuelve `primario: null`, así que tomar ese campo dejaría a Android sin el contador de
+     sellos. Y la rama sin grilla ya agrega la palabra, así que un `${valor} sellos` encima daría
+     "3 de 8 sellos sellos".
+
+     La solución es que `frentePase` devuelva un tercer campo, **`listado`**: la línea única que
+     describe la tarjeta sin importar dónde se dibuje. Apple usa `primario`/`secundario`; Google
+     usa `listado`. Así la vigencia se decide UNA vez y ninguna plataforma pierde lo que hoy tiene.
    - **El cache-busting de Google NO aplica acá, y meterlo sería un error.** `versionHero` versiona
      la URL de una IMAGEN y su comentario dice que resume todo lo que altera esa imagen.
      `nombre_pase` y la vigencia viajan en `textModulesData` y `validTimeInterval` del
@@ -186,18 +230,32 @@ alter table programas_tarjeta
 commit;
 ```
 
-Las funciones de reporte de la 0015 y la 0010 se **reemplazan** (`create or replace`) para contar
-operaciones en vez de solo acreditaciones. El detalle exacto de cada función va en el plan; la
-regla es una sola y se escribe una vez en SQL:
+Las funciones de reporte de la 0015 y la 0010 se **borran y se recrean** (ver decisión 4: el
+renombre cambia el tipo de retorno y `create or replace` falla con *cannot change return type*),
+repitiendo sus `grant` **y sus `revoke`**.
+
+**El filtro NO se mueve al `WHERE`.** Hoy en `reporte_sucursales` y `reporte_top_clientes` el
+conteo, la suma y el `count(distinct cliente_id)` cuelgan del MISMO `where tp.tipo =
+'acreditacion'`. Ensanchar ese `WHERE` volvería neta la suma, que es justo lo que la decisión 4
+prohíbe. La separación se hace con `filter`, campo por campo:
 
 ```sql
--- Una OPERACIÓN es lo que un cajero le hizo a una tarjeta de cara al cliente: acreditar, usar
--- (cupón, visita de prepago, cobro de gift card) o renovar (membresía). `ajuste` y `canje` quedan
--- fuera porque ya se cuentan por separado en las mismas consultas.
--- Sin esto, un comercio de membresía ve CERO actividad aunque tenga cientos de renovaciones, y la
--- pantalla antifraude por cajero —que existe para detectar a quien regala cosas— es ciega.
-tp.tipo in ('acreditacion', 'uso', 'renovacion')
+-- Una OPERACIÓN es lo que el cajero le hizo a una tarjeta de cara al cliente: acreditar, usar
+-- (cupón, visita de prepago, cobro de gift card) o renovar (membresía). El `ajuste` queda afuera
+-- porque ya se cuenta aparte, y `canje` ni siquiera es un valor de esta columna.
+--
+-- Sin el conteo ancho, un comercio de membresía ve CERO actividad con cientos de renovaciones y la
+-- pantalla antifraude es ciega. Con la SUMA ancha, en cambio, el consumo de una gift card
+-- cancelaría lo otorgado y el fraude se autoborraría del reporte — que es lo que la 0015 vino a
+-- impedir. Por eso son dos filtros distintos sobre la misma pasada, y no un WHERE compartido.
+count(*) filter (where tp.tipo in ('acreditacion','uso','renovacion'))          as operaciones,
+coalesce(sum(tp.puntos_delta) filter (where tp.tipo = 'acreditacion'), 0)       as puntos_otorgados,
+count(distinct tp.tarjeta_id) filter (where tp.tipo in ('acreditacion','uso','renovacion')) as clientes_unicos
 ```
+
+Los tres campos derivados siguen la misma regla: **lo que cuenta ACTIVIDAD se ensancha; lo que
+suma VALOR no se toca.** `clientes_unicos` y `visitas` son actividad, así que se ensanchan;
+`puntos_otorgados`, `puntos_totales` y `puntos_ajustados` son valor, y quedan como están.
 
 `scripts/verificar-0033.ts` (solo lectura, salvo el sondeo del CHECK) verifica la columna nueva y
 que una función de reporte cuente una fila `renovacion`.
@@ -208,7 +266,7 @@ que una función de reporte cuente una fila `renovacion`.
 
 | Dónde | Hoy | Pasa a |
 |---|---|---|
-| `panel/page.tsx` métrica | suma global + `esSellos ? 'Puntos' : 'Sellos'` | una línea por programa activo con `describirFila`/`describirSaldo`; ver decisión 2 |
+| `panel/page.tsx` métrica | suma global + `esSellos ? 'Puntos' : 'Sellos'` | una carta por programa activo con `resumenPrograma`; ver decisión 2 |
 | `clientes/[tarjetaId]/page.tsx` historial | `+{delta}` / `queda {saldo}` crudos | `describirCosto(tipo, …)`; en contador `'ninguno'` no se imprime número |
 | `mi-tarjeta/PortalCliente.tsx` movimientos | idem, **al cliente** | idem |
 | `registro/[comercioSlug]/RegistroCliente.tsx` | `<b>0</b><span>Puntos</span>`, `"Tarjeta de lealtad"` y un degradado marrón fijo, sin recibir tipo ni marca | ver Grupo 1-bis |
@@ -255,6 +313,18 @@ son los que cambian:
 | cupón | Definí cuántos días vale el cupón | Escribí los términos de tu cupón | `cupon_vigencia_dias` / `terminos_uso` |
 | descuento | Cargá tus niveles de descuento | Escribí los términos | `niveles_descuento` / `terminos_uso` |
 
+**El `hecho` de `terminos_uso` se lee con la MISMA herencia que usa el pase**
+(`reversoEfectivo`), no con la columna del programa a secas: en modo negocio el editor de Marca
+escribe `comercios.terminos_uso` y con un programa seleccionado escribe el del programa. Leyendo
+solo la columna del programa, el dueño que escribió sus términos en modo negocio —el flujo por
+defecto, porque el selector aparece recién con dos tarjetas— quedaría clavado en "3 de 4": el
+defecto 1, otra vez.
+
+**Cada paso lleva su `href`**, y son los que ya existen: `/comercio/programas` para la
+configuración por tipo y los niveles de descuento, `/comercio/reglas` para puntos y sellos,
+`/comercio/recompensas` para el premio, `/comercio/branding` para los términos, y
+`/comercio/programas` para el primer cliente (donde está el QR).
+
 **Ningún paso puede colgar de `nombre_pase`.** Es opcional por la decisión 6, y un paso opcional
 como condición de completitud dejaría al dueño clavado en "3 de 4" para siempre: exactamente el
 defecto 1 que este trabajo cierra. Todos los criterios de la tabla son configuración que el tipo de
@@ -267,14 +337,27 @@ lo esconde para seis de los ocho, que es lo que rompe el tutorial).
 
 ### Grupo 3 — Reportes que cuentan operaciones (decisión 4)
 
-Migración de las funciones + UI que rotula por tipo. Donde el monto no signifique nada (contador
-`'ninguno'`), la columna se omite en vez de mostrar cero o vacío.
+Es el grupo con más superficie y el único que toca SQL de producción:
+
+1. Migración: borrar y recrear las cuatro funciones con columna `acreditaciones`, con sus `grant` y
+   sus `revoke`, y ensanchar el conteo de `visitas` de `reporte_top_clientes` sin tocar su suma.
+2. `lib/supabase/types.ts`: los tipos de `Functions` se transcriben a mano en este repositorio.
+3. `lib/reportes/reportes.ts` y `lib/reportes/agregados.ts` con sus pruebas.
+4. Las tres pantallas que lo leen: reportes del dueño, reportes por cajero y el panel de FM.
+5. La UI rotula por tipo: donde el monto no signifique nada (contador `'ninguno'`) la columna se
+   omite entera, en vez de imprimir cero o dejar dos separadores pegados.
+
+**Cambio visible que hay que anunciar:** un comercio de gift card o de prepago va a ver subir sus
+conteos de actividad, porque sus consumos hoy no se cuentan. Puntos y sellos no se mueven.
 
 ### Grupo 4 — Secciones muertas (decisión 5)
 
-- `navegacion.ts`: `enlacesBarraPorRol(rol)` gana el tipo. Con contador `'ninguno'`, Premios sale y
-  entra Programas, **en la misma posición**, para que Escanear siga en el centro. Prueba: la barra
-  tiene siempre cinco destinos y Escanear siempre en el índice 2.
+- `navegacion.ts`: `enlacesBarraPorRol` **y** `enlacesMenuPorRol` ganan el tipo. Con contador
+  `'ninguno'`, Premios y Programas intercambian superficie **en la misma posición**, para que
+  Escanear siga en el centro. La invariante que se prueba es **"Escanear queda al centro del
+  arreglo devuelto"**, NO "cinco destinos": el cajero recibe tres y un rol desconocido uno, y las
+  pruebas vigentes ya lo afirman. `navegacion.test.ts` tiene nueve pruebas, y las que escriben los
+  hrefs literales en orden necesitan el argumento nuevo.
 - `escanear/actions.ts`: no se traen recompensas cuando el tipo no puede canjearlas. Hoy el cajero
   ve la lista completa con el botón deshabilitado y "le faltan " colgado.
 - `recompensas/page.tsx`: con contador `'ninguno'`, un aviso como el que ya tiene Reglas, en vez de
@@ -284,8 +367,14 @@ Migración de las funciones + UI que rotula por tipo. Donde el monto no signifiq
 - `avisoInactividad.ts`: **membresía y cupón necesitan lo OPUESTO ante una fecha vencida**, y por
   eso NO se unifican bajo `usaVigencia`. Un cupón vencido se saltea (hoy ya se hace: el cajero no
   lo va a poder canjear, invitarlo sería mandarlo a un rechazo). Un socio con la membresía vencida
-  es justamente a quien hay que escribirle, con un mensaje de renovación. Un `if (usaVigencia)
-  saltear vencidos` silenciaría al único público que este aviso debería alcanzar.
+  es justamente a quien hay que escribirle. Un `if (usaVigencia) saltear vencidos` silenciaría al
+  único público que este aviso debería alcanzar.
+
+  **Alcance acotado a propósito:** el disparador sigue siendo la inactividad y el mensaje sigue
+  siendo el único que el comercio configura (no hay columna nueva ni campaña por vencimiento). Lo
+  que cambia es el TEXTO POR DEFECTO que se propone en la pantalla, por tabla por tipo: en
+  membresía habla de renovar, no de seguir sumando. Una campaña disparada por el vencimiento es
+  otra funcionalidad y queda fuera de alcance, anotada abajo.
 
 ### Grupo 5 — Nombre del pase y vigencia (decisiones 6 y 7)
 
@@ -296,8 +385,9 @@ Migración de las funciones + UI que rotula por tipo. Donde el monto no signifiq
   pase vencido se vea vencido.
 - `datosPassDeTarjeta` lleva `vigencia_hasta` y `nombre_pase` a `DatosPass`.
 - La vista previa del editor los muestra, porque comparte `frentePase`.
-- **Cache-busting de Google**: los dos campos entran en `versionHero` igual que el encuadre, o el
-  pase guardado se queda con el nombre viejo.
+- **`versionHero` NO se toca** (ver decisión 6): versiona la URL de una imagen y estos campos no
+  dibujan nada. Lo que hace falta es que el objeto de Google se re-sincronice cuando cambian, que
+  es lo que ya hace `propagarMarcaPrograma` al guardar la marca.
 
 ### Grupo 6 — Textos (decisión 8)
 
@@ -313,6 +403,13 @@ entrada del portal. Cada uno por tabla por tipo o derivado de `unidadPrograma`/`
 - `expirationDate` de Apple (haría que un pase vencido se archive solo). Se muestra la fecha; no se
   cambia el ciclo de vida del pase.
 - Traducciones y multi-idioma.
+- **Una campaña disparada por el VENCIMIENTO** (avisarle al socio unos días antes de que se le
+  venza la membresía). Es lo que de verdad necesita un negocio de membresías, pero es una
+  funcionalidad nueva con su propio disparador y su propio mensaje, no un arreglo de coherencia.
+- **`reporte_fm_comercios.saldo_circulante`**, que suma `puntos_actuales` de todos los comercios y
+  todos los tipos: es el defecto 2 a escala de plataforma, en el panel de FM. Se anota acá para que
+  no se pierda; arreglarlo bien pide decidir qué significa "saldo" cuando se agregan comercios de
+  tipos distintos, y esa pregunta no tiene una respuesta obvia.
 
 ## Orden de trabajo
 
