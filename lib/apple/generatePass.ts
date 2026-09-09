@@ -40,6 +40,24 @@ export interface DatosPass {
   authenticationToken: string;
   tipoTarjeta: string;
   selloMeta: number | null;
+  // `tarjetas.vigencia_hasta` (AAAA-MM-DD) y `tarjetas.usado_en`: el estado de un cupón o una
+  // membresía es una FECHA, no un número, y sin ellos el frente de esos dos tipos salía VACÍO
+  // —solo logo, franja y nombre del cliente— mientras el borrador de términos que la app genera
+  // prometía "hasta la fecha que aparece en la tarjeta".
+  //
+  // OJO, asimetría conocida con Google y documentada a propósito: acá NO se manda `expirationDate`
+  // (fuera de alcance), así que iOS no marca el pase como vencido; el texto se refresca cuando
+  // llega el push, que hoy ocurre al OPERAR la tarjeta. O sea que el pase de una membresía vencida
+  // va a seguir diciendo "Activa hasta el 3 de agosto de 2026" hasta el próximo escaneo. Es
+  // aceptable —el cajero ve el estado real al escanear— pero tiene que estar escrito.
+  vigenciaHasta: string | null;
+  usadoEn: string | null;
+  // `programas_tarjeta.nombre_pase`: cómo se llama la tarjeta para el cliente. null = el pase sale
+  // sin headerField, como hasta ahora.
+  nombrePase: string | null;
+  // El "hoy" del COMERCIO (hoyEnZona(comercio.zona_horaria)), no el del servidor: decide si la
+  // membresía dice "Activa hasta" o "Vencida el", y con UTC el borde se corre un día entero.
+  hoyIso: string;
   stripUrl: string | null;
   selloIconoUrl: string | null;
   heroUrl: string | null;
@@ -170,7 +188,19 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
     puntos: datos.puntos,
     selloMeta: datos.selloMeta,
     hayGrilla: esSellos && strips !== null && !datos.stripUrl,
+    vigenciaHasta: datos.vigenciaHasta,
+    usadoEn: datos.usadoEn,
+    nombrePase: datos.nombrePase,
+    hoyIso: datos.hoyIso,
   });
+
+  // El NOMBRE del pase, arriba a la derecha (headerFields es el único slot libre del modelo). Sin
+  // etiqueta: es un nombre propio, no un dato con unidad, y un "TARJETA" encima en letra chica solo
+  // le robaría ancho al nombre en la esquina más apretada del pass.
+  if (frente.encabezado) {
+    pass.headerFields.push({ key: 'nombre_pase', value: frente.encabezado });
+  }
+
   if (frente.secundario) {
     pass.secondaryFields.push({
       key: 'puntos',

@@ -5,6 +5,7 @@ import { construirReverso, resolverAviso } from './construirReverso';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
 import { brandingEfectivo, reversoEfectivo } from '../comercio/brandingEfectivo';
 import { encuadreDelComercio, encuadreDelPrograma } from '../comercio/encuadreFranja';
+import { hoyEnZona } from '../tarjetas/vigencia';
 
 export async function datosPassDeTarjeta(
   supabase: SupabaseClient<Database>,
@@ -26,7 +27,7 @@ export async function datosPassDeTarjeta(
   const { data: tarjeta } = await supabase
     .from('tarjetas')
     .select(
-      '*, comercios(*), clientes(nombre), programas_tarjeta(tipo_tarjeta, sello_meta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, reverso_propio, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona)',
+      '*, comercios(*), clientes(nombre), programas_tarjeta(tipo_tarjeta, sello_meta, nombre_pase, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, reverso_propio, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona)',
     )
     .eq('apple_serial_number', serialNumber)
     .maybeSingle();
@@ -46,6 +47,10 @@ export async function datosPassDeTarjeta(
   }
   const tipoTarjeta = programa ? programa.tipo_tarjeta : tarjeta.comercios.tipo_tarjeta;
   const selloMeta = programa ? programa.sello_meta : tarjeta.comercios.sello_meta;
+  // `nombre_pase` vive SOLO en programas_tarjeta: `comercios` no tiene columna equivalente ni la va
+  // a tener (es identidad del PROGRAMA, no del negocio, que ya está en el logo). Sin programa el
+  // pase sale sin encabezado, igual que antes de la 0033.
+  const nombrePase = programa ? programa.nombre_pase : null;
 
   // Branding por programa (0027). A DIFERENCIA de tipo/meta, acá la herencia SÍ es campo por campo:
   // el programa define lo que quiera y el resto viene del comercio. Toda esa lógica vive en
@@ -151,13 +156,13 @@ export async function datosPassDeTarjeta(
     console.warn('[apple] no se pudieron leer las recompensas para el reverso:', recompensas.error.message);
   }
 
-  const hoyIso = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date());
-  // UTC acá, no la zona del comercio: a diferencia de una campaña de geopush (que vive en
-  // sucursales y ya resuelve con la zona del comercio en listarUbicacionesGeopush), este aviso es
-  // un campo de LA TARJETA sin zona horaria propia asociada, y el borde de un día de diferencia
-  // en el peor caso es "el aviso se ve un día de más/de menos" — no vale la pena la consulta
-  // extra a comercios.zona_horaria solo para esto. Si en el futuro importa más precisión, seguir
-  // el mismo patrón que listarUbicacionesGeopush.
+  // El "hoy" del COMERCIO, no el del servidor. Hasta el 2026-09-09 esto era UTC, con el argumento
+  // de que un día de corrimiento en el aviso del reverso no valía una consulta extra. Ese argumento
+  // caducó: `comercios(*)` ya trae la zona, y desde esta entrega el frente del pase dice "Activa
+  // hasta el …" / "Vencida el …" — ahí un día de más le cierra la membresía al socio antes de
+  // tiempo, o le deja el cupón vivo un día después de vencido. Con la zona a mano no hay motivo
+  // para seguir midiendo el día en Londres.
+  const hoyIso = hoyEnZona(c.zona_horaria);
 
   return {
     authTokenAlmacenado: tarjeta.apple_auth_token,
@@ -174,6 +179,13 @@ export async function datosPassDeTarjeta(
       colorLabel: marca.colorLabel ?? 'rgb(255, 255, 255)',
       tipoTarjeta,
       selloMeta,
+      // Identidad y vigencia del frente (0033). `vigencia_hasta` y `usado_en` ya venían en el `*`
+      // de tarjetas: lo que faltaba era LLEVARLOS, y por eso el frente de una membresía salía con
+      // el logo, la franja y nada más.
+      vigenciaHasta: tarjeta.vigencia_hasta,
+      usadoEn: tarjeta.usado_en,
+      nombrePase,
+      hoyIso,
       stripUrl: marca.stripUrl,
       selloIconoUrl: marca.selloIconoUrl,
       heroUrl: marca.heroUrl,

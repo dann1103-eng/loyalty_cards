@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { verifyFmAdmin } from '@/lib/fm/verifyFmAdmin';
 import { createServiceClient } from '@/lib/supabase/server';
+import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import FormularioComercio from '../FormularioComercio';
 import { accionCrearComercio } from '../actions';
 
@@ -26,7 +27,15 @@ export default async function PaginaNuevoComercio() {
           ← Volver
         </Link>
       </div>
-      <FormularioComercio accion={accionCrearComercio} textoBoton="Crear comercio" cuentas={cuentas ?? []} />
+      {/* El comercio todavía no existe, así que no hay zona horaria suya: hoyEnZona(null) cae a
+          El Salvador, que es el mercado. Se resuelve acá y no en el formulario porque ese es
+          'use client' y un new Date() adentro daría mismatch de hidratación. */}
+      <FormularioComercio
+        accion={accionCrearComercio}
+        textoBoton="Crear comercio"
+        cuentas={cuentas ?? []}
+        hoyIso={hoyEnZona(null)}
+      />
     </main>
   );
 }

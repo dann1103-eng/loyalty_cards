@@ -5,6 +5,7 @@ import { idObjetoGoogle } from './ids';
 import { construirObjeto } from './construirRecursos';
 import { urlHeroTarjeta, versionHero } from './heroUrl';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
+import { hoyEnZona } from '../tarjetas/vigencia';
 import { brandingEfectivo } from '../comercio/brandingEfectivo';
 import { encuadreDelComercio, encuadreDelPrograma } from '../comercio/encuadreFranja';
 
@@ -23,7 +24,7 @@ export async function syncObjetoTarjeta(
     // columnas homónimas de comercios quedaron legadas. Sin este join, la tarjeta de un programa
     // secundario se sincronizaba a Google con el tipo del COMERCIO — la misma falla que tenía el
     // lado de Apple (ver datosPassDeTarjeta.ts).
-    .select('qr_token, puntos_actuales, google_object_id, comercio_id, programas_tarjeta(tipo_tarjeta, sello_meta, google_class_id, branding_propio, color_fondo, color_label, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(google_class_id, tipo_tarjeta, sello_meta, color_fondo, color_label, sello_icono_url, hero_url, strip_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja)')
+    .select('qr_token, puntos_actuales, vigencia_hasta, usado_en, google_object_id, comercio_id, programas_tarjeta(tipo_tarjeta, sello_meta, nombre_pase, google_class_id, branding_propio, color_fondo, color_label, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(google_class_id, zona_horaria, tipo_tarjeta, sello_meta, color_fondo, color_label, sello_icono_url, hero_url, strip_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
@@ -43,6 +44,9 @@ export async function syncObjetoTarjeta(
   }
   const tipoTarjeta = programa ? programa.tipo_tarjeta : tarjeta.comercios.tipo_tarjeta;
   const selloMeta = programa ? programa.sello_meta : tarjeta.comercios.sello_meta;
+  // `nombre_pase` vive SOLO en el programa: `comercios` no tiene columna equivalente (es identidad
+  // del PROGRAMA, no del negocio, que ya está en el logo de la clase).
+  const nombrePase = programa ? programa.nombre_pase : null;
 
   // El branding EFECTIVO alimenta el hash del cache-busting, y tiene que ser EL MISMO que usa
   // /api/tarjetas/<id>/hero.png para dibujar. Si divergen, la URL cambia, Google re-descarga y
@@ -94,7 +98,17 @@ export async function syncObjetoTarjeta(
       puntosActuales: tarjeta.puntos_actuales,
       tipoTarjeta,
       selloMeta,
+      // Identidad y vigencia del frente (0033). El "hoy" sale de la zona del COMERCIO: con UTC, la
+      // membresía de un socio se ve vencida un día antes.
+      vigenciaHasta: tarjeta.vigencia_hasta,
+      usadoEn: tarjeta.usado_en,
+      nombrePase,
+      hoyIso: hoyEnZona(tarjeta.comercios.zona_horaria),
       ubicaciones,
+      // OJO: ni `nombre_pase` ni la vigencia entran en versionHero, y no es un olvido. Ese hash
+      // versiona la URL de una IMAGEN y resume todo lo que ALTERA esa imagen; estos dos viajan en
+      // textModulesData y validTimeInterval, campos JSON del patch que no cambian un solo píxel.
+      // Meterlos ahí haría rotar la URL del hero de cada tarjeta al cambiar el día.
       heroImageUrl: urlHeroTarjeta(
         tarjetaId,
         versionHero({

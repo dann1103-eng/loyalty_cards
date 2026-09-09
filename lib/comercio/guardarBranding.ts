@@ -3,6 +3,7 @@ import type { Database } from '../supabase/types';
 import { validarColorRgb } from '../comercios/validarColorRgb';
 import { NIVELES_DIFUMINADO } from '../apple/difuminadoFranja';
 import { validarEncuadre } from './encuadreFranja';
+import { validarNombrePase } from './nombrePase';
 
 export interface DatosBranding {
   color_fondo: string;
@@ -14,6 +15,11 @@ export interface DatosBranding {
   // NIVELES_DIFUMINADO (migración 0007) — misma constante que valida el pass real, así el
   // <select> del formulario y este check nunca pueden divergir.
   difuminado_franja: string;
+  // El nombre que el cliente ve arriba en su tarjeta (0033). null = sin nombre, que es como nace
+  // todo programa: el pase sale como hasta ahora. NO es branding heredable — es identidad del
+  // PROGRAMA, igual que sello_meta, y por eso se escribe en programas_tarjeta y no en comercios
+  // (que ni siquiera tiene la columna).
+  nombre_pase: string | null;
   // El encuadre de la foto de la franja, crudo desde el formulario. null = no llegó (un formulario
   // roto): las columnas del comercio son NOT NULL, así que acá null es un ERROR, no "heredá". El
   // formulario del negocio manda los cuatro campos SIEMPRE (haya foto o no).
@@ -45,6 +51,11 @@ export async function guardarBranding(
   if (datos.sello_meta !== null && (!Number.isInteger(datos.sello_meta) || datos.sello_meta <= 0)) {
     return { ok: false, error: 'La meta de sellos debe ser un número entero mayor que cero.' };
   }
+
+  // La base tiene un CHECK, pero devuelve un 23514 mudo que acá se traduciría a "No se pudo
+  // guardar el branding": el dueño no sabría qué campo corregir. Mismo criterio que el difuminado.
+  const errorNombre = validarNombrePase(datos.nombre_pase);
+  if (errorNombre) return { ok: false, error: errorNombre };
 
   if (!(NIVELES_DIFUMINADO as readonly string[]).includes(datos.difuminado_franja)) {
     // Mismo motivo que sello_meta/tipo_tarjeta en otros formularios: sin esto, un valor inválido
@@ -95,9 +106,14 @@ export async function guardarBranding(
   //
   // Va al principal porque este formulario es del COMERCIO: no tiene selector de programa. Cuando
   // exista branding por programa, la meta de cada uno se edita en su propia pantalla.
+  //
+  // `nombre_pase` (0033) viaja en la MISMA sentencia y por el mismo motivo, con una diferencia que
+  // lo hace todavía más claro: `comercios` no tiene columna equivalente, así que este UPDATE es el
+  // ÚNICO lugar donde el nombre se escribe desde el modo negocio. Se guarda RECORTADO — es el texto
+  // que va al headerField de Apple y al textModulesData de Google.
   const { error: errorPrograma } = await supabase
     .from('programas_tarjeta')
-    .update({ sello_meta: datos.sello_meta })
+    .update({ sello_meta: datos.sello_meta, nombre_pase: datos.nombre_pase?.trim() ?? null })
     .eq('comercio_id', comercioId)
     .eq('es_principal', true);
   if (errorPrograma) {

@@ -77,8 +77,13 @@ describe('presupuesto de peso del .pkpass', () => {
       reverso: [],
       // El presupuesto de peso se mide sin geopush a propósito: `locations` son unos pocos cientos
       // de bytes de JSON y el peor caso que esta prueba acota es el de las IMÁGENES, que es donde
-      // el .pkpass se dispara de verdad (1763 KB → 516 KB, 2026-07-26).
+      // el .pkpass se dispara de verdad (1763 KB → 516 KB, 2026-07-26). Mismo criterio para la
+      // identidad y la vigencia del frente: son unas decenas de bytes de JSON.
       ubicaciones: [],
+      vigenciaHasta: null,
+      usadoEn: null,
+      nombrePase: null,
+      hoyIso: '2026-09-09',
     });
 
     const kb = buffer.length / 1024;

@@ -25,6 +25,7 @@ import { hexDesdeRgb, rgbDesdeTexto } from '@/lib/comercio/colorHex';
 // previa tenía su propio if/else y una membresía veía "PUNTOS 0", que en el pass no existe.
 import { frentePase } from '@/lib/tarjetas/frentePase';
 import { tipoOPuntos } from '@/lib/tarjetas/tipos';
+import { LARGO_MAXIMO_NOMBRE_PASE } from '@/lib/comercio/nombrePase';
 import {
   ENCUADRE_POR_DEFECTO,
   MARCO_FRANJA,
@@ -65,12 +66,16 @@ type Props = {
      si hay meta de sellos. Antes era un booleano `esSellos` y todo lo que no fuera sellos se dibujaba
      como puntos — una membresía mostraba "PUNTOS 0". */
   tipoTarjeta: string;
+  /* El "hoy" del comercio (hoyEnZona(comercio.zona_horaria)), resuelto en el SERVIDOR y bajado como
+     prop igual que los colores. Este componente es 'use client': un new Date() acá daría mismatch
+     de hidratación, y en UTC correría el vencimiento un día. */
+  hoyIso: string;
   /* null = se está diseñando la marca del NEGOCIO (la base que heredan todas las tarjetas). Con id,
      el diseño de esa tarjeta sola. Es la única diferencia entre los dos modos de esta pantalla. */
   programaId: string | null;
   /* Cómo se llama lo que se está diseñando, para los textos: el comercio o el programa. */
   nombreTarjeta: string;
-  inicial: Colores & { sello_meta: string };
+  inicial: Colores & { sello_meta: string; nombre_pase: string };
   /* Lo que esta tarjeta toma del negocio en cada campo que quede vacío. null en modo negocio, donde
      no hay de quién heredar. Se muestra como placeholder gris: el dueño VE qué está usando hoy en
      vez de una caja vacía que no le dice si hereda o si no hay nada configurado. */
@@ -108,6 +113,7 @@ const CAMPOS_COLOR = [
 export default function FormularioBranding({
   nombreComercio,
   tipoTarjeta,
+  hoyIso,
   programaId,
   nombreTarjeta,
   inicial,
@@ -132,11 +138,12 @@ export default function FormularioBranding({
     color_texto: inicial.color_texto,
     color_label: inicial.color_label,
     sello_meta: inicial.sello_meta,
+    nombre_pase: inicial.nombre_pase,
     difuminado_franja: inicial.difuminado_franja,
   });
 
   const cambiarTexto =
-    (campo: 'color_fondo' | 'color_texto' | 'color_label' | 'sello_meta') =>
+    (campo: 'color_fondo' | 'color_texto' | 'color_label' | 'sello_meta' | 'nombre_pase') =>
     (e: ChangeEvent<HTMLInputElement>) =>
       setValores((v) => ({ ...v, [campo]: e.target.value }));
 
@@ -280,6 +287,15 @@ export default function FormularioBranding({
     puntos: esSellos ? llenos : 0,
     selloMeta: esSellos ? metaConfigurada : null,
     hayGrilla: esSellos && metaConfigurada !== null && !hayStrip,
+    // Acá NO hay ninguna tarjeta emitida, así que la vista previa no inventa una fecha: con
+    // `vigenciaHasta: null` describirSaldo dice "Sin activar" (membresía) o "Disponible" (cupón)
+    // sin mirar el reloj — que es EXACTAMENTE el estado de una tarjeta recién registrada. El dueño
+    // ve lo que su cliente va a ver el primer día, no un caso inventado.
+    vigenciaHasta: null,
+    usadoEn: null,
+    // Este sí es en vivo: es el campo que el dueño está escribiendo abajo.
+    nombrePase: valores.nombre_pase,
+    hoyIso,
   });
 
   return (
@@ -316,13 +332,23 @@ export default function FormularioBranding({
             border: '1px solid var(--linea-fuerte)',
           }}
         >
-          {/* Cabecera: logo (o el nombre como logoText, igual que el pass real sin logo). */}
-          <div style={{ display: 'flex', alignItems: 'center', padding: '12px 14px', minHeight: 52 }}>
+          {/* Cabecera: logo a la izquierda (o el nombre como logoText, igual que el pass real sin
+              logo) y, a la derecha, el NOMBRE DEL PASE — que es donde Apple dibuja los headerFields
+              y donde el cliente lee cuál de sus tarjetas es esta. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', minHeight: 52 }}>
             {urls.logo ? (
               // eslint-disable-next-line @next/next/no-img-element -- vista previa simple
               <img src={urls.logo} alt={`Logo de ${nombreComercio}`} style={{ height: 34, maxWidth: 140, objectFit: 'contain' }} />
             ) : (
               <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '1.05rem' }}>{nombreComercio}</span>
+            )}
+            {/* Sale de `frente.encabezado` y no de `valores.nombre_pase` a pelo: así lo que se ve
+                acá pasa por la MISMA normalización que el pase (un nombre en blanco no dibuja un
+                campo vacío). */}
+            {frente.encabezado && (
+              <span style={{ fontSize: '0.85rem', textAlign: 'right', opacity: 0.92, overflowWrap: 'anywhere' }}>
+                {frente.encabezado}
+              </span>
             )}
           </div>
 
@@ -461,14 +487,21 @@ export default function FormularioBranding({
             )}
 
             {/* El campo primario va SOBRE la franja, abajo a la izquierda: ahí dibuja Apple los
-                primaryFields de un storeCard. Los tipos sin contador (cupón, membresía, descuento) no
-                lo tienen, y con grilla de sellos tampoco — el texto taparía los círculos. */}
+                primaryFields de un storeCard. Con grilla de sellos NO lo hay —el texto taparía los
+                círculos— y tampoco en descuento, cuyo estado es un porcentaje que esta pantalla no
+                conoce. Cupón y membresía SÍ lo tienen desde la 0033: su estado es la vigencia. */}
             {frente.primario && (
-              <div style={{ position: 'absolute', left: 16, bottom: 10, pointerEvents: 'none' }}>
+              <div style={{ position: 'absolute', left: 16, right: 16, bottom: 10, pointerEvents: 'none' }}>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: label }}>
                   {frente.primario.etiqueta}
                 </div>
-                <div style={{ fontSize: '1.7rem', lineHeight: 1.2, color: texto }}>{frente.primario.valor}</div>
+                {/* Desde que cupón y membresía dicen su vigencia acá, este campo puede ser una FRASE
+                    ("Activa hasta el 12 de octubre de 2026") y no solo "$25.00". A los 1.7rem se
+                    saldría de la franja; iOS también achica el primaryField para que entre, así que
+                    bajar el cuerpo es lo que hace la réplica más fiel, no menos. */}
+                <div style={{ fontSize: frente.primario.valor.length > 14 ? '1.05rem' : '1.7rem', lineHeight: 1.2, color: texto }}>
+                  {frente.primario.valor}
+                </div>
               </div>
             )}
           </div>
@@ -586,6 +619,30 @@ export default function FormularioBranding({
               )}
             </div>
           )}
+
+          {/* El NOMBRE DEL PASE (migración 0033). Va junto a la meta de sellos y por el mismo
+              motivo: no es diseño, es identidad de la tarjeta, y esta es la pantalla donde el dueño
+              decide cómo se ve y cómo se llama lo que su cliente lleva en la billetera.
+              A diferencia de los colores, NO se hereda ni tiene placeholder de herencia: el nombre
+              de una tarjeta no se puede tomar prestado del negocio, que ya está en el logo.
+              Se muestra para los OCHO tipos: cualquier tarjeta puede tener nombre. */}
+          <div className="field">
+            <label htmlFor="nombre_pase">Nombre del pase (opcional)</label>
+            <input
+              id="nombre_pase"
+              name="nombre_pase"
+              value={valores.nombre_pase}
+              onChange={cambiarTexto('nombre_pase')}
+              // El mismo tope que valida el servidor y que exige el CHECK de la base: acá solo
+              // ahorra el viaje, no reemplaza la validación (un formulario se puede manipular).
+              maxLength={LARGO_MAXIMO_NOMBRE_PASE}
+              placeholder="Socio Oro"
+              style={{ width: '100%' }}
+            />
+            <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>
+              Lo que tu cliente ve arriba en su tarjeta. Dejalo vacío y solo se ve tu logo.
+            </p>
+          </div>
 
           {/* Todo lo que decide CÓMO SE VE la foto de fondo, junto: encuadre, posición, zoom y
               difuminado. El difuminado vivía suelto y quedaba a dos secciones del control que lo

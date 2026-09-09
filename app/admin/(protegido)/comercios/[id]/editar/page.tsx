@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { notFound } from 'next/navigation';
 import { verifyFmAdmin } from '@/lib/fm/verifyFmAdmin';
 import { createServiceClient } from '@/lib/supabase/server';
+import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import FormularioComercio from '../../FormularioComercio';
 import BotonEliminar from '../../BotonEliminar';
 import FormularioAccesoDueno from '../../FormularioAccesoDueno';
@@ -141,7 +142,7 @@ export default async function PaginaEditarComercio({
           <FormularioAccesoDueno accion={generarAcceso} duenos={duenos ?? []} />
         </div>
       </section>
-      <FormularioComercio accion={accion} inicial={inicial} textoBoton="Guardar cambios" cuentas={cuentas ?? []} esEdicion />
+      <FormularioComercio accion={accion} inicial={inicial} textoBoton="Guardar cambios" cuentas={cuentas ?? []} hoyIso={hoyEnZona(comercio.zona_horaria)} esEdicion />
       <BotonEliminar accion={eliminar} nombre={comercio.nombre} />
     </main>
   );

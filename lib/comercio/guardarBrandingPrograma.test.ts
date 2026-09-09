@@ -47,6 +47,7 @@ const BRANDING_VACIO = {
   difuminadoFranja: null,
   encuadreFranja: null,
   selloMeta: null,
+  nombrePase: null,
 };
 
 describe('guardarBrandingPrograma', () => {
@@ -342,6 +343,52 @@ describe('volverAHeredarMarca', () => {
 // Puro: la regla que decide el interruptor a partir de lo que el dueño cargó. Existe para que el
 // dueño NUNCA tenga que ver ni entender `branding_propio` — el editor viejo se lo mostraba como
 // casilla "Usar marca propia" y no se entendió.
+// El NOMBRE DEL PASE (0033) por programa. No es branding y NO se rige por `brandingPropio`: es
+// identidad del programa, como sello_meta, y el pase lo lee siempre de programas_tarjeta.
+describe('guardarBrandingPrograma — nombre del pase', () => {
+  it('guarda el nombre recortado y NO enciende branding_propio (no es marca, es identidad)', async () => {
+    const { comercioId, cuponId } = await comercioConDosProgramas();
+
+    const res = await guardarBrandingPrograma(supabase, comercioId, cuponId, {
+      ...BRANDING_VACIO,
+      nombrePase: '  2x1 de bienvenida  ',
+    });
+
+    expect(res.ok).toBe(true);
+    const { data } = await supabase
+      .from('programas_tarjeta')
+      .select('nombre_pase, branding_propio')
+      .eq('id', cuponId)
+      .single();
+    expect(data!.nombre_pase).toBe('2x1 de bienvenida');
+    // MUTACIÓN: meter nombrePase en hayMarcaPropia haría que ponerle nombre a una tarjeta la
+    // sacara del diseño del negocio sin que el dueño lo pidiera — el pase entero cambiaría de color.
+    expect(data!.branding_propio, 'ponerle nombre a la tarjeta no la saca del diseño del negocio').toBe(false);
+  });
+
+  it('nombrePase null BORRA el anterior: el dueño puede volver al pase sin nombre', async () => {
+    const { comercioId, cuponId } = await comercioConDosProgramas();
+    await guardarBrandingPrograma(supabase, comercioId, cuponId, { ...BRANDING_VACIO, nombrePase: 'Temporada' });
+
+    const res = await guardarBrandingPrograma(supabase, comercioId, cuponId, { ...BRANDING_VACIO, nombrePase: null });
+
+    expect(res.ok).toBe(true);
+    const { data } = await supabase.from('programas_tarjeta').select('nombre_pase').eq('id', cuponId).single();
+    expect(data!.nombre_pase).toBeNull();
+  });
+
+  it('rechaza un nombre más largo que el tope con el mensaje de validarNombrePase', async () => {
+    // MUTACIÓN: sin la validación, el CHECK de la 0033 devuelve un 23514 mudo y el dueño ve
+    // "No se pudo guardar la marca del programa." sin saber qué campo corregir.
+    const { comercioId, cuponId } = await comercioConDosProgramas();
+    const res = await guardarBrandingPrograma(supabase, comercioId, cuponId, {
+      ...BRANDING_VACIO,
+      nombrePase: 'a'.repeat(41),
+    });
+    expect(res).toEqual({ ok: false, error: 'El nombre del pase no puede pasar de 40 caracteres.' });
+  });
+});
+
 describe('hayMarcaPropia', () => {
   const NADA = {
     colorFondo: null,
@@ -380,6 +427,7 @@ describe('brandingProgramaDesdeFormulario', () => {
       difuminadoFranja: '',
       encuadre: { modo: '', focoX: '', focoY: '', zoom: '' },
       selloMeta: '',
+      nombrePase: '  Socio Oro  ',
     });
 
     expect(datos.colorFondo).toBe('rgb(10, 20, 30)');
@@ -387,6 +435,20 @@ describe('brandingProgramaDesdeFormulario', () => {
     expect(datos.colorLabel).toBeNull();
     expect(datos.difuminadoFranja).toBeNull();
     expect(datos.selloMeta).toBeNull();
+    expect(datos.nombrePase, 'el nombre llega recortado, que es como se guarda').toBe('Socio Oro');
+  });
+
+  it('el nombre del pase vacío es null: BORRAR el nombre, no guardar una cadena vacía', () => {
+    // Acá `null` no significa "heredar" (el nombre no se hereda: es identidad del programa), sino
+    // "esta tarjeta no tiene nombre propio en el pase" — y el CHECK de la base rechaza el ''.
+    const datos = brandingProgramaDesdeFormulario({
+      brandingPropio: false,
+      colorFondo: '', colorTexto: '', colorLabel: '', difuminadoFranja: '',
+      encuadre: { modo: '', focoX: '', focoY: '', zoom: '' },
+      selloMeta: '',
+      nombrePase: '   ',
+    });
+    expect(datos.nombrePase).toBeNull();
   });
 
   it('un sello_meta con basura queda NaN para que la validación lo rechace, no 12 en silencio', () => {
@@ -399,13 +461,14 @@ describe('brandingProgramaDesdeFormulario', () => {
       difuminadoFranja: '',
       encuadre: { modo: '', focoX: '', focoY: '', zoom: '' },
       selloMeta: '12a',
+      nombrePase: '',
     });
 
     expect(Number.isNaN(datos.selloMeta)).toBe(true);
   });
 
   describe('encuadre', () => {
-    const base = { brandingPropio: false, colorFondo: '', colorTexto: '', colorLabel: '', difuminadoFranja: '', selloMeta: '' };
+    const base = { brandingPropio: false, colorFondo: '', colorTexto: '', colorLabel: '', difuminadoFranja: '', selloMeta: '', nombrePase: '' };
     it('cuatro vacíos → null', () => {
       expect(brandingProgramaDesdeFormulario({ ...base, encuadre: { modo: '', focoX: '', focoY: '', zoom: '' } }).encuadreFranja).toBeNull();
     });

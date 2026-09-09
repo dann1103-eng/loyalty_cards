@@ -40,17 +40,30 @@ function VistaTarjeta({
   tipoTarjeta,
   selloMeta,
   marca,
+  hoyIso,
 }: {
   nombreComercio: string;
   tipoTarjeta: string;
   selloMeta: number | null;
   marca: MarcaRegistro;
+  hoyIso: string;
 }) {
   // `hayGrilla: false` es literal, no una simplificación: esta tarjeta de muestra no dibuja la
   // grilla de sellos. Con la grilla ausente, `frentePase` baja la palabra al valor ("0 de 10
   // sellos") porque el número solo no dice qué se está contando —— exactamente lo que hace el pase
   // real cuando la franja no pudo componerse. `puntos: 0` porque la tarjeta acaba de nacer.
-  const frente = frentePase({ tipoTarjeta, puntos: 0, selloMeta, hayGrilla: false });
+  // `vigenciaHasta`/`usadoEn` en null: acá NO hay ninguna tarjeta emitida todavía, y ahí
+  // describirSaldo dice "Sin activar" (membresía) o "Disponible" (cupón) sin mirar el reloj — que
+  // es exactamente el estado que va a tener la tarjeta el primer día. `nombrePase` tampoco viaja:
+  // esta pantalla ya rotula la tarjeta con `rotuloTarjeta` arriba.
+  //
+  // `hoyIso` igual llega desde el SERVIDOR y no de un new Date() acá: este componente es
+  // 'use client' montado desde una página de servidor, y un reloj propio daría mismatch de
+  // hidratación. La regla vale aunque hoy el valor no se llegue a leer.
+  const frente = frentePase({
+    tipoTarjeta, puntos: 0, selloMeta, hayGrilla: false,
+    vigenciaHasta: null, usadoEn: null, nombrePase: null, hoyIso,
+  });
 
   // Mismos respaldos que la cara de la tarjeta del portal (mi-tarjeta/PortalCliente.tsx): un
   // comercio sin colores cargados cae al fondo oscuro del sistema, no a un café inventado.
@@ -100,6 +113,7 @@ export default function RegistroCliente({
   tipoTarjeta,
   selloMeta,
   marca,
+  hoyIso,
 }: {
   comercioSlug: string;
   // null = el programa principal (migración 0024) — ver app/registro/[comercioSlug]/page.tsx.
@@ -111,6 +125,8 @@ export default function RegistroCliente({
   tipoTarjeta: string;
   selloMeta: number | null;
   marca: MarcaRegistro;
+  // El "hoy" del comercio, resuelto en el servidor (hoyEnZona). Baja hasta la tarjeta de muestra.
+  hoyIso: string;
 }) {
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
@@ -161,6 +177,7 @@ export default function RegistroCliente({
               tipoTarjeta={tipoTarjeta}
               selloMeta={selloMeta}
               marca={marca}
+              hoyIso={hoyIso}
             />
             <a className="wallet-btn" href={`/api/tarjetas/${tarjetaId}/pass.pkpass`}>
               <IconoWallet />

@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server';
+import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import { resolverProgramaPorSlug } from '@/lib/comercio/programas';
 import { marcaDelRegistro } from '../marcaDelRegistro';
 import RegistroCliente from '../RegistroCliente';
@@ -16,7 +17,7 @@ export default async function PaginaRegistroPrograma({
   const supabase = createServiceClient();
   const { data: comercio } = await supabase
     .from('comercios')
-    .select('id, nombre')
+    .select('id, nombre, zona_horaria')
     .eq('slug', comercioSlug)
     .maybeSingle();
 
@@ -51,6 +52,9 @@ export default async function PaginaRegistroPrograma({
       tipoTarjeta={programa.tipoTarjeta}
       selloMeta={programa.selloMeta}
       marca={marca}
+      // El "hoy" del COMERCIO, resuelto acá: la tarjeta de muestra es 'use client' y un new Date()
+      // adentro daría mismatch de hidratación (y en UTC correría el vencimiento un día).
+      hoyIso={hoyEnZona(comercio.zona_horaria)}
     />
   );
 }

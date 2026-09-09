@@ -34,6 +34,12 @@ function datosBase() {
     // propias pruebas más abajo, porque lo que hay que verificar es distinto — que `locations` y
     // `maxDistance` NO aparezcan cuando no hay ubicaciones, y que aparezcan bien cuando las hay.
     ubicaciones: [],
+    // Identidad y vigencia del pase. Los cuatro son OBLIGATORIOS en DatosPass a propósito (igual
+    // que `reverso` y `ubicaciones`): que el compilador obligue a cada ruta de emisión a decidir.
+    vigenciaHasta: null,
+    usadoEn: null,
+    nombrePase: null,
+    hoyIso: '2026-09-09',
   };
 }
 
@@ -403,5 +409,91 @@ describe('generarPassApple — geopush', () => {
     const largo = 'x'.repeat(200);
     const passJson = await passJsonDe([{ ...UBICACION, mensajeCercania: largo }]);
     expect(passJson.locations[0].relevantText).toHaveLength(128);
+  });
+});
+
+// El defecto que cierra este grupo: el frente del pase de una membresía mostraba SOLO el logo, la
+// franja y el nombre del cliente. Ni cómo se llama la tarjeta ni hasta cuándo está activa — mientras
+// el borrador de términos que la propia app genera prometía "hasta la fecha que aparece en la
+// tarjeta", una fecha que no aparecía en ninguna parte del pase.
+describe('generarPassApple — identidad y vigencia del pase', () => {
+  it('membresía vigente: el primaryField dice hasta cuándo está activa', async () => {
+    // MUTACIÓN: quitar `vigenciaHasta` de la llamada a frentePase (o volver a devolver null para
+    // membresía) deja `primaryFields` vacío y reproduce exactamente el pase casi en blanco.
+    const buffer = await generarPassApple({
+      ...datosBase(),
+      serialNumber: 'test-serial-membresia',
+      qrToken: 'mem001',
+      puntos: 0,
+      tipoTarjeta: 'membresia',
+      selloMeta: null,
+      stripUrl: null,
+      vigenciaHasta: '2026-10-12',
+      hoyIso: '2026-09-09',
+    });
+
+    const zip = await JSZip.loadAsync(buffer);
+    const passJson = JSON.parse(await zip.file('pass.json')!.async('string'));
+    expect(passJson.storeCard.primaryFields[0]).toMatchObject({
+      label: 'MEMBRESÍA',
+      value: 'Activa hasta el 12 de octubre de 2026',
+    });
+    // Y SIN numberStyle: no es un número, y aplicárselo haría que iOS intente reformatear el texto.
+    expect(passJson.storeCard.primaryFields[0].numberStyle).toBeUndefined();
+  });
+
+  it('membresía vencida: lo dice el texto — Apple no la marca vencida sola (asimetría con Google)', async () => {
+    // Está escrito acá porque es lo que un iPhone real muestra: sin `expirationDate` (fuera de
+    // alcance), iOS no mueve el pase a "caducados"; el texto se refresca con el push, que llega al
+    // OPERAR la tarjeta. Google, en cambio, sí lo marca con validTimeInterval.
+    const buffer = await generarPassApple({
+      ...datosBase(),
+      serialNumber: 'test-serial-membresia-vencida',
+      qrToken: 'mem002',
+      puntos: 0,
+      tipoTarjeta: 'membresia',
+      selloMeta: null,
+      stripUrl: null,
+      vigenciaHasta: '2026-08-03',
+      hoyIso: '2026-09-09',
+    });
+
+    const zip = await JSZip.loadAsync(buffer);
+    const passJson = JSON.parse(await zip.file('pass.json')!.async('string'));
+    expect(passJson.storeCard.primaryFields[0].value).toBe('Vencida el 3 de agosto de 2026');
+    expect(passJson.expirationDate).toBeUndefined();
+  });
+
+  it('el nombre del pase va a headerFields; sin nombre, el pase sale sin ese campo', async () => {
+    const conNombre = await generarPassApple({
+      ...datosBase(),
+      serialNumber: 'test-serial-nombre-pase',
+      qrToken: 'nom001',
+      puntos: 0,
+      tipoTarjeta: 'membresia',
+      selloMeta: null,
+      stripUrl: null,
+      nombrePase: 'Socio Oro',
+    });
+    const passConNombre = JSON.parse(
+      await (await JSZip.loadAsync(conNombre)).file('pass.json')!.async('string'),
+    );
+    expect(passConNombre.storeCard.headerFields).toEqual([
+      { key: 'nombre_pase', value: 'Socio Oro' },
+    ]);
+
+    const sinNombre = await generarPassApple({
+      ...datosBase(),
+      serialNumber: 'test-serial-sin-nombre-pase',
+      qrToken: 'nom002',
+      puntos: 0,
+      tipoTarjeta: 'membresia',
+      selloMeta: null,
+      stripUrl: null,
+    });
+    const passSinNombre = JSON.parse(
+      await (await JSZip.loadAsync(sinNombre)).file('pass.json')!.async('string'),
+    );
+    expect(passSinNombre.storeCard.headerFields ?? []).toEqual([]);
   });
 });

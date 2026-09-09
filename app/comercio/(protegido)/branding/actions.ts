@@ -43,12 +43,16 @@ export async function accionGuardarBranding(
   const { comercioId } = await verifyComercioOwner();
 
   const montoMeta = String(formData.get('sello_meta') ?? '').trim();
+  // '' ⇒ null: dejar el campo vacío BORRA el nombre y el pase vuelve a salir sin él. Un '' no puede
+  // guardarse — el CHECK de la 0033 lo rechaza, y ese estado ya lo expresa null.
+  const nombrePase = String(formData.get('nombre_pase') ?? '').trim();
   const res = await guardarBranding(createServiceClient(), comercioId, {
     color_fondo: String(formData.get('color_fondo') ?? ''),
     color_texto: String(formData.get('color_texto') ?? ''),
     color_label: String(formData.get('color_label') ?? ''),
     // '' → null; "12" → 12; "12a" → NaN, que guardarBranding rechaza con mensaje claro.
     sello_meta: montoMeta === '' ? null : Number(montoMeta),
+    nombre_pase: nombrePase === '' ? null : nombrePase,
     difuminado_franja: String(formData.get('difuminado_franja') ?? 'medio'),
     // Los cuatro campos van SIEMPRE en el formulario del negocio (haya foto o no): sus columnas son
     // NOT NULL. Si no llegaran, encuadreDesdeFormulario devuelve null y guardarBranding lo rechaza
@@ -275,6 +279,9 @@ export async function accionGuardarBrandingDePrograma(
       zoom: String(formData.get('zoom_franja') ?? ''),
     },
     selloMeta: String(formData.get('sello_meta') ?? ''),
+    // El nombre del pase NO es marca (no entra en hayMarcaPropia, más abajo): es identidad del
+    // programa, como la meta. Vacío ⇒ null ⇒ el pase de esta tarjeta vuelve a salir sin nombre.
+    nombrePase: String(formData.get('nombre_pase') ?? ''),
   });
 
   // Las imágenes NO las escribe este formulario (cada una es su propio Server Action de subida), así

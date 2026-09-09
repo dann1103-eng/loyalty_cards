@@ -9,6 +9,7 @@ import { syncClasePrograma } from './syncClasePrograma';
 import { syncObjetoTarjeta } from './syncObjeto';
 import { urlHeroTarjeta, versionHero, heroUrlDeClase } from './heroUrl';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
+import { hoyEnZona } from '../tarjetas/vigencia';
 import { brandingEfectivo } from '../comercio/brandingEfectivo';
 import { encuadreDelComercio, encuadreDelPrograma } from '../comercio/encuadreFranja';
 
@@ -28,7 +29,7 @@ export async function generarLinkGuardar(
     // procesar el JWT, ese cuerpo PISABA al que syncObjetoTarjeta acababa de escribir bien unas
     // líneas más abajo. O sea que el camino "Agregar a Google Wallet" reintroducía en silencio el
     // bug que el resto del sistema ya tenía arreglado.
-    .select('comercio_id, qr_token, puntos_actuales, programas_tarjeta(id, tipo_tarjeta, sello_meta, google_class_id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(nombre, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, google_class_id, tipo_tarjeta, sello_meta)')
+    .select('comercio_id, qr_token, puntos_actuales, vigencia_hasta, usado_en, programas_tarjeta(id, tipo_tarjeta, sello_meta, nombre_pase, google_class_id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(nombre, zona_horaria, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, google_class_id, tipo_tarjeta, sello_meta)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
@@ -41,6 +42,8 @@ export async function generarLinkGuardar(
   const programa = tarjeta.programas_tarjeta;
   const tipoTarjeta = programa ? programa.tipo_tarjeta : tarjeta.comercios.tipo_tarjeta;
   const selloMeta = programa ? programa.sello_meta : tarjeta.comercios.sello_meta;
+  // `nombre_pase` vive SOLO en el programa (identidad del programa, no del negocio).
+  const nombrePase = programa ? programa.nombre_pase : null;
 
   // Autorreparación: la sincronización de /api/registro (o de un guardado de branding) puede
   // haber fallado en silencio (best-effort, ej. un cold start lento) dejando la clase o el
@@ -141,6 +144,13 @@ export async function generarLinkGuardar(
     puntosActuales: tarjeta.puntos_actuales,
     tipoTarjeta,
     selloMeta,
+    // Identidad y vigencia del frente (0033). Tienen que ir SÍ O SÍ también acá: Google hace upsert
+    // por id al procesar el JWT, así que un cuerpo sin estos campos PISARÍA al que syncObjetoTarjeta
+    // acaba de escribir bien unas líneas más arriba — la misma falla del 2026-07-30 con el tipo.
+    vigenciaHasta: tarjeta.vigencia_hasta,
+    usadoEn: tarjeta.usado_en,
+    nombrePase,
+    hoyIso: hoyEnZona(tarjeta.comercios.zona_horaria),
     // Las mismas del bloque de arriba: Google pide las ubicaciones en la clase Y en el objeto.
     ubicaciones,
     heroImageUrl: urlHeroTarjeta(

@@ -6,6 +6,7 @@ import { brandingDeProgramas, hayMarcaPropia } from '@/lib/comercio/guardarBrand
 import { reversoDePrograma, hayReversoPropio } from '@/lib/comercio/guardarReversoPrograma';
 import { tipoOPuntos } from '@/lib/tarjetas/tipos';
 import { encuadreDelComercio } from '@/lib/comercio/encuadreFranja';
+import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import FormularioBranding from './FormularioBranding';
 import FormularioReverso from './FormularioReverso';
 import SubidaImagen from './SubidaImagen';
@@ -36,7 +37,7 @@ export default async function PaginaBranding({
   const [{ data: c }, programas] = await Promise.all([
     supabase
       .from('comercios')
-      .select('nombre, tipo_tarjeta, color_fondo, color_texto, color_label, sello_meta, logo_url, strip_url, hero_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona')
+      .select('nombre, zona_horaria, tipo_tarjeta, color_fondo, color_texto, color_label, sello_meta, logo_url, strip_url, hero_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona')
       .eq('id', comercioId)
       .maybeSingle(),
     // Solo los activos: darle diseño propio a una tarjeta desactivada no se ve en ningún lado, y su
@@ -103,6 +104,11 @@ export default async function PaginaBranding({
   // los ocho tipos (una membresía no lleva contador; una gift card muestra saldo en dólares). Con
   // `esSellos` a secas, todo lo que no fuera sellos se dibujaba como "PUNTOS 0".
   const tipoTarjeta = programaDeReferencia?.tipoTarjeta ?? c.tipo_tarjeta ?? 'puntos';
+  // El "hoy" del COMERCIO, resuelto en el SERVIDOR. FormularioBranding es 'use client' montado
+  // desde acá: un new Date() adentro daría mismatch de hidratación, y en UTC correría el
+  // vencimiento un día. `zona_horaria` hubo que agregarla al select de arriba — hoyEnZona(null)
+  // degrada en silencio a El Salvador, así que olvidarse no rompía nada visible.
+  const hoyIso = hoyEnZona(c.zona_horaria);
   const esSellos = tipoOPuntos(tipoTarjeta).valor === 'sellos';
   const nombreTarjeta = seleccionado ? seleccionado.nombre : c.nombre;
 
@@ -222,6 +228,7 @@ export default async function PaginaBranding({
       <FormularioBranding
         nombreComercio={c.nombre}
         tipoTarjeta={tipoTarjeta}
+        hoyIso={hoyIso}
         programaId={seleccionado?.id ?? null}
         nombreTarjeta={nombreTarjeta}
         inicial={
@@ -232,6 +239,9 @@ export default async function PaginaBranding({
                 color_texto: marca?.colorTexto ?? '',
                 color_label: marca?.colorLabel ?? '',
                 sello_meta: marca?.selloMeta != null ? String(marca.selloMeta) : '',
+                // Del programa ELEGIDO. No se hereda del negocio: el nombre del pase es identidad
+                // de ESTA tarjeta, no un color que se pueda tomar prestado.
+                nombre_pase: seleccionado?.nombrePase ?? '',
                 difuminado_franja: marca?.difuminadoFranja ?? '',
               }
             : {
@@ -245,6 +255,9 @@ export default async function PaginaBranding({
                     : c.sello_meta != null
                       ? String(c.sello_meta)
                       : '',
+                // Del programa PRINCIPAL, que es la fila que guardarBranding escribe y la que lee
+                // el pase. `comercios` ni siquiera tiene esta columna: acá no hay a qué caer.
+                nombre_pase: principal?.nombrePase ?? '',
               }
         }
         heredado={seleccionado ? marcaComercio : null}

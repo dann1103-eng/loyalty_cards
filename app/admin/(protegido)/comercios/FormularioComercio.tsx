@@ -48,12 +48,16 @@ export default function FormularioComercio({
   inicial,
   textoBoton,
   cuentas,
+  hoyIso,
   esEdicion = false,
 }: {
   accion: (estado: EstadoFormulario, formData: FormData) => Promise<EstadoFormulario>;
   inicial?: Partial<DatosComercio>;
   textoBoton: string;
   cuentas: { id: string; nombre: string }[];
+  // El "hoy" resuelto en el SERVIDOR (hoyEnZona). Este formulario es 'use client' montado desde una
+  // página de servidor: un new Date() acá daría mismatch de hidratación.
+  hoyIso: string;
   esEdicion?: boolean;
 }) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoFormulario, FormData>(
@@ -90,6 +94,13 @@ export default function FormularioComercio({
     // valor ("0 de 10 sellos") y quedaría repetida y, a los 2.2rem de mono de .cardface-points b,
     // más ancha que la tarjeta —— que recorta con overflow:hidden.
     hayGrilla: true,
+    // Un comercio que se está dando de alta todavía no tiene ninguna tarjeta emitida: sin fecha de
+    // vigencia, describirSaldo dice "Sin activar" (membresía) o "Disponible" (cupón) —— el estado
+    // real del primer cliente. Y `nombrePase` no se pregunta en el alta: lo elige el dueño en Marca.
+    vigenciaHasta: null,
+    usadoEn: null,
+    nombrePase: null,
+    hoyIso,
   });
 
   // La tarjeta de FM tiene UN solo renglón de contador, así que da lo mismo en qué campo lo haya
