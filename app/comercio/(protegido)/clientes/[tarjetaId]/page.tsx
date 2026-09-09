@@ -12,6 +12,7 @@ import { resolverProgramaDeTarjeta } from '@/lib/comercio/programas';
 import { describirFila } from '@/lib/tarjetas/estadoTarjeta';
 import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import { listarNiveles } from '@/lib/tarjetas/descuento';
+import { etiquetaAtajoEscaner } from '@/lib/tarjetas/etiquetaEscaner';
 import { ZONA_HORARIA_DEFAULT } from '@/lib/comercio/zonasHorarias';
 
 export const dynamic = 'force-dynamic';
@@ -128,7 +129,10 @@ export default async function PaginaFichaCliente({
           href={`/comercio/escanear?token=${encodeURIComponent(tarjeta.qr_token)}`}
         >
           <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">add_circle</span>
-          Acreditar / Canjear / Corregir
+          {/* `conCorregir` porque esta ficha es de DUEÑO y corregir es operación de dueño. En los
+              tipos sin contador el atajo no promete ni canje ni corrección: el escáner no se los
+              ofrece (ver lib/tarjetas/etiquetaEscaner.ts). */}
+          {etiquetaAtajoEscaner(tipoTarjeta, { conCorregir: true })}
         </Link>
       </section>
 

@@ -3,7 +3,8 @@ import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { TIPOS_RECOMPENSA } from '@/lib/comercio/recompensas';
 import { listarProgramas } from '@/lib/comercio/programas';
-import { unidadPrograma } from '@/lib/tarjetas/unidadPrograma';
+import { unidadPrograma, describirCosto } from '@/lib/tarjetas/unidadPrograma';
+import { tipoOPuntos } from '@/lib/tarjetas/tipos';
 import FormularioRecompensa from './FormularioRecompensa';
 import BotonDesactivarRecompensa from './BotonDesactivarRecompensa';
 import FotoRecompensa from './FotoRecompensa';
@@ -21,7 +22,13 @@ export default async function PaginaRecompensas() {
   // cargaba su premio leyendo una moneda que su propio programa no usa.
   const programas = await listarProgramas(supabase, comercioId);
   const principal = (programas ?? []).find((p) => p.esPrincipal) ?? null;
-  const unidad = unidadPrograma(principal?.tipoTarjeta ?? 'puntos');
+  const tipoPrincipal = principal?.tipoTarjeta ?? 'puntos';
+  const unidad = unidadPrograma(tipoPrincipal);
+  // Un premio se canjea descontando `puntos_actuales`, y en cupón, membresía y descuento ese
+  // contador es 0 siempre (su estado es una fecha o un nivel). O sea que un premio cargado acá NO
+  // se podría canjear nunca —— y la pantalla igual ofrecía el formulario. Mismo criterio que
+  // reglas/page.tsx con el formulario de acumulación: se dice por qué y se manda a donde sí hay algo.
+  const puedeCanjear = tipoOPuntos(tipoPrincipal).contador !== 'ninguno';
 
   const { data: recompensas, error } = await supabase
     .from('recompensas')
@@ -33,6 +40,7 @@ export default async function PaginaRecompensas() {
   if (error) console.error('[comercio] falló la consulta de recompensas:', error);
 
   const etiquetaTipo = (tipo: string) => TIPOS_RECOMPENSA.find((t) => t.valor === tipo)?.etiqueta ?? tipo;
+  const costoTexto = (costo: number) => describirCosto(tipoPrincipal, costo);
 
   return (
     <main className="admin-main" style={{ maxWidth: 640 }}>
@@ -44,7 +52,15 @@ export default async function PaginaRecompensas() {
       <AvisoComercioActivo />
 
       <div className="reveal d2">
-        <FormularioRecompensa unidad={unidad} />
+        {puedeCanjear ? (
+          <FormularioRecompensa unidad={unidad} />
+        ) : (
+          <p className="admin-vacio">
+            Tu tarjeta no acumula un contador del que descontar, así que un premio cargado acá no
+            se podría canjear nunca. Lo que gana tu cliente se define en{' '}
+            <Link href="/comercio/programas">Programas de tarjeta</Link>.
+          </p>
+        )}
       </div>
 
       <div className="admin-lista reveal d3" style={{ marginTop: 22 }}>
@@ -66,8 +82,18 @@ export default async function PaginaRecompensas() {
                   </span>
                   <div style={{ minWidth: 0 }}>
                     <div className="admin-fila-nombre">{r.nombre}</div>
+                    {/* describirCosto y no el entero pelado: en gift card y cashback el costo son
+                        CENTAVOS, así que un premio de 250 se leía "250" en vez de "$2.50". Y en los
+                        tipos sin contador devuelve cadena vacía —— antes quedaba "8  · Artículo
+                        gratis", con el doble espacio de la unidad que no existe. */}
                     <div className="admin-fila-slug">
-                      <span className="dato-mono">{r.costo_puntos}</span> {unidad?.plural ?? ''} · {etiquetaTipo(r.tipo)}
+                      {costoTexto(r.costo_puntos) && (
+                        <>
+                          <span className="dato-mono">{costoTexto(r.costo_puntos)}</span>
+                          {' · '}
+                        </>
+                      )}
+                      {etiquetaTipo(r.tipo)}
                       {r.descripcion ? ` · ${r.descripcion}` : ''}
                     </div>
                   </div>

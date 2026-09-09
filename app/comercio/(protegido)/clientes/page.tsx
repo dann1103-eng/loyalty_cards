@@ -6,12 +6,13 @@ import { listarProgramas } from '@/lib/comercio/programas';
 import { describirFila, type NivelDeDescuento } from '@/lib/tarjetas/estadoTarjeta';
 import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import { listarNiveles } from '@/lib/tarjetas/descuento';
+import { etiquetaAtajoEscaner } from '@/lib/tarjetas/etiquetaEscaner';
 
 export const dynamic = 'force-dynamic';
 
 // El QR de cada cliente codifica EXACTAMENTE su qr_token — el mismo valor que lleva el barcode
-// del pass en su billetera. Así, cuando exista el escáner del cajero (Fase 4), leer este QR
-// impreso o leer el pass da idéntico resultado.
+// del pass en su billetera. Así, en el escáner del cajero, leer este QR impreso o leer el pass da
+// idéntico resultado.
 async function qrDeTarjeta(qrToken: string): Promise<string> {
   return QRCode.toDataURL(qrToken, {
     width: 320,
@@ -26,8 +27,8 @@ export default async function PaginaClientes({
   searchParams: Promise<{ q?: string }>;
 }) {
   // Gate COMPARTIDO (plan 2026-07-25 §4.8): el cajero usa el directorio para la asignación manual
-  // de puntos — el botón "Acreditar / Canjear" entra al escáner, cuyas acciones ya re-verifican con
-  // gate compartido y atribución server-side. Esta página es de solo lectura (sin Server Actions).
+  // de puntos — el botón de cada fila entra al escáner, cuyas acciones ya re-verifican con gate
+  // compartido y atribución server-side. Esta página es de solo lectura (sin Server Actions).
   const { comercioId, rol } = await verifyComercioAcceso();
   const { q } = await searchParams;
   const busqueda = (q ?? '').trim();
@@ -77,6 +78,11 @@ export default async function PaginaClientes({
     const p = programaPorId.get(t.programa_id);
     return describirFila(t, p?.tipoTarjeta ?? 'puntos', p?.selloMeta ?? null, niveles, hoyIso);
   };
+
+  // El tipo es de CADA tarjeta, no del comercio: en un comercio con dos programas activos, la misma
+  // lista mezcla filas de tipos distintos, y el botón de cada una tiene que decir lo que el escáner
+  // de verdad le va a ofrecer.
+  const tipoDeTarjeta = (programaId: string) => programaPorId.get(programaId)?.tipoTarjeta ?? 'puntos';
 
   return (
     <main className="admin-main" style={{ maxWidth: 640 }}>
@@ -176,7 +182,7 @@ export default async function PaginaClientes({
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 10, flexWrap: 'wrap' }}>
                   <Link className="btn-borde" href={`/comercio/escanear?token=${encodeURIComponent(t.qr_token)}`}>
                     <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">add_circle</span>
-                    Acreditar / Canjear
+                    {etiquetaAtajoEscaner(tipoDeTarjeta(t.programa_id))}
                   </Link>
                   {/* Solo al dueño: la ficha tiene gate de owner, así que mostrarle el enlace al
                       cajero sería enseñarle una puerta cerrada (misma política que RUTAS_CAJERO). */}
@@ -201,9 +207,13 @@ export default async function PaginaClientes({
         )}
       </div>
 
+      {/* Antes decía "cuando llegue el escáner del cajero, cualquiera de los dos suma sellos o
+          puntos": el escáner ya existe desde hace tiempo, y "suma sellos o puntos" es falso en los
+          seis tipos que no cuentan sellos ni puntos. Se dice lo que sí vale para todos —— que los
+          dos códigos son el mismo —— sin nombrar una mecánica. */}
       <p className="nota reveal d4">
-        El QR de cada cliente es el mismo que lleva su pass: cuando llegue el escáner del cajero,
-        cualquiera de los dos suma sellos o puntos.
+        El QR de cada cliente es el mismo que lleva su pass: en el escáner del cajero, leer este
+        código impreso o leer su tarjeta en la billetera da idéntico resultado.
       </p>
     </main>
   );

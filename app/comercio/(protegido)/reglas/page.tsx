@@ -100,7 +100,7 @@ export default async function PaginaReglas() {
 
       {avisoInactividad && (
         <div className="reveal d2" style={{ marginTop: 22 }}>
-          <FormularioAvisoInactividad configuracion={avisoInactividad} />
+          <FormularioAvisoInactividad configuracion={avisoInactividad} tipoTarjeta={tipoPrincipal} />
         </div>
       )}
 

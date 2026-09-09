@@ -251,8 +251,16 @@ export default function PortalCliente() {
       <div className="stack">
         <p className="kicker reveal d1">Cardly SV</p>
         <h1 className="title reveal d2">Mi tarjeta</h1>
+        {/* Acá NO hay un tipo del que sacar el texto, y no es que falte consultarlo: esta es la
+            puerta de entrada, antes de saber quién es la persona. Cuando conteste, sus tarjetas
+            pueden ser de comercios distintos y de tipos distintos —— la lista de arriba las muestra
+            juntas —— así que ni siquiera después hay UN tipo. Por eso la frase no nombra ninguna
+            mecánica: decía "tus puntos, tus sellos y las recompensas que puedes canjear", que es
+            falso para quien tiene una gift card, un cupón o una membresía (esos tres además nunca
+            canjean nada). Se promete lo único cierto para los ocho: ver sus tarjetas y cómo va en
+            cada una. Tuteo, como toda la pantalla del CLIENTE. */}
         <p className="lede reveal d2">
-          Ingresa tu teléfono para ver tus puntos, tus sellos y las recompensas que puedes canjear.
+          Ingresa tu teléfono para ver tus tarjetas y cómo vas en cada una.
         </p>
 
         <form className="panel reveal d3" onSubmit={handleSubmit}>

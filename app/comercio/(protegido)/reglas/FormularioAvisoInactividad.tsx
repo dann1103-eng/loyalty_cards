@@ -3,11 +3,17 @@
 import { useActionState } from 'react';
 import { accionGuardarAvisoInactividad, type EstadoAvisoInactividad } from './actions';
 import type { ConfiguracionAvisoInactividad } from '@/lib/comercio/avisoInactividad';
+import { placeholderInactividad } from '@/lib/tarjetas/textosPorTipo';
 
+// `tipoTarjeta` es el del programa PRINCIPAL, y entra por prop porque el placeholder del mensaje es
+// lo que la mayoría de los dueños termina copiando tal cual: el que estaba cableado ("seguí
+// sumando") le hacía prometer acumulación a quien vende membresías o cupones.
 export default function FormularioAvisoInactividad({
   configuracion,
+  tipoTarjeta,
 }: {
   configuracion: ConfiguracionAvisoInactividad;
+  tipoTarjeta: string;
 }) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoAvisoInactividad, FormData>(
     accionGuardarAvisoInactividad,
@@ -56,7 +62,7 @@ export default function FormularioAvisoInactividad({
           id="aviso_inactividad_mensaje"
           name="aviso_inactividad_mensaje"
           rows={3}
-          placeholder="Te extrañamos! Volvé pronto y seguí sumando."
+          placeholder={placeholderInactividad(tipoTarjeta)}
           defaultValue={configuracion.mensaje ?? ''}
         />
       </div>

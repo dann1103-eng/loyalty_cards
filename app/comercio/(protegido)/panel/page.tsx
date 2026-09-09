@@ -7,22 +7,32 @@ import { TIPOS_TARJETA } from '@/lib/comercios/guardarComercio';
 import { reporteSucursales } from '@/lib/reportes/reportes';
 import { listarProgramas } from '@/lib/comercio/programas';
 import { primerosPasos } from '@/lib/comercio/primerosPasos';
+import { textoAtajoEscanear, textoAtajoReglas } from '@/lib/tarjetas/textosPorTipo';
 import PrimerosPasos from './PrimerosPasos';
 
 export const dynamic = 'force-dynamic';
 
-const ATAJOS = [
-  { href: '/comercio/escanear', icono: 'qr_code_scanner', tono: 'acento', titulo: 'Escanear tarjeta', sub: 'Sumá sellos/puntos o canjeá premios' },
-  { href: '/comercio/branding', icono: 'palette', tono: 'acento', titulo: 'Identidad visual', sub: 'Colores, imágenes y sellos' },
-  { href: '/comercio/reglas', icono: 'rule', tono: 'menta', titulo: 'Reglas del programa', sub: 'Cómo se ganan los puntos/sellos' },
-  { href: '/comercio/programas', icono: 'style', tono: 'acento', titulo: 'Programas de tarjeta', sub: 'Tipo, configuración y QR de cada uno' },
-  { href: '/comercio/notificaciones', icono: 'campaign', tono: 'menta', titulo: 'Notificaciones', sub: 'Campañas manuales y aviso de inactividad' },
-  { href: '/comercio/recompensas', icono: 'redeem', tono: 'acento', titulo: 'Recompensas activas', sub: 'Catálogo de premios canjeables' },
-  { href: '/comercio/sucursales', icono: 'store', tono: 'menta', titulo: 'Sucursales', sub: 'Locales que comparten tu tarjeta' },
-  { href: '/comercio/cajeros', icono: 'badge', tono: 'acento', titulo: 'Cajeros', sub: 'Cuentas del personal por sucursal' },
-  { href: '/comercio/clientes', icono: 'group', tono: 'neutro', titulo: 'Directorio de clientes', sub: 'Quiénes tienen tu tarjeta' },
-  { href: '/comercio/reportes', icono: 'insights', tono: 'menta', titulo: 'Reportes', sub: 'Actividad por sucursal y clientes frecuentes' },
-] as const;
+// Los atajos dependen del TIPO del programa principal: los tres primeros subtítulos describían una
+// mecánica de sellos o de puntos a los ocho tipos ("Sumá sellos/puntos o canjeá premios" a un
+// comercio de membresía, que al escanear lo único que hace es renovar). Los que sí valen para todos
+// —programas, notificaciones, sucursales— siguen siendo texto fijo, y eso no es inconsistencia:
+// solo cambia lo que de verdad cambia con la tarjeta.
+function atajosPara(tipoTarjeta: string) {
+  return [
+    { href: '/comercio/escanear', icono: 'qr_code_scanner', tono: 'acento', titulo: 'Escanear tarjeta', sub: textoAtajoEscanear(tipoTarjeta) },
+    // Sin tabla por tipo a propósito: esta pantalla ya esconde la sección de sellos cuando el tipo
+    // no los usa, así que basta con no prometerlos. La frase vale para los ocho.
+    { href: '/comercio/branding', icono: 'palette', tono: 'acento', titulo: 'Identidad visual', sub: 'Colores, imágenes y cómo se ve tu tarjeta' },
+    { href: '/comercio/reglas', icono: 'rule', tono: 'menta', titulo: 'Reglas del programa', sub: textoAtajoReglas(tipoTarjeta) },
+    { href: '/comercio/programas', icono: 'style', tono: 'acento', titulo: 'Programas de tarjeta', sub: 'Tipo, configuración y QR de cada uno' },
+    { href: '/comercio/notificaciones', icono: 'campaign', tono: 'menta', titulo: 'Notificaciones', sub: 'Campañas manuales y aviso de inactividad' },
+    { href: '/comercio/recompensas', icono: 'redeem', tono: 'acento', titulo: 'Recompensas activas', sub: 'Catálogo de premios canjeables' },
+    { href: '/comercio/sucursales', icono: 'store', tono: 'menta', titulo: 'Sucursales', sub: 'Locales que comparten tu tarjeta' },
+    { href: '/comercio/cajeros', icono: 'badge', tono: 'acento', titulo: 'Cajeros', sub: 'Cuentas del personal por sucursal' },
+    { href: '/comercio/clientes', icono: 'group', tono: 'neutro', titulo: 'Directorio de clientes', sub: 'Quiénes tienen tu tarjeta' },
+    { href: '/comercio/reportes', icono: 'insights', tono: 'menta', titulo: 'Reportes', sub: 'Actividad por sucursal y clientes frecuentes' },
+  ];
+}
 
 // El cajero solo ve los atajos de SUS secciones (las demás lo rebotarían en su gate de página).
 const RUTAS_ATAJOS_CAJERO = ['/comercio/escanear', '/comercio/clientes'];
@@ -36,7 +46,6 @@ export default async function PaginaPanel() {
   // siguen detrás de verifyComercioOwner en sus propias páginas.
   const { comercioId, rol, sucursalActiva } = await verifyComercioAcceso();
   const esOwner = rol === 'owner';
-  const atajos = esOwner ? ATAJOS : ATAJOS.filter((a) => RUTAS_ATAJOS_CAJERO.includes(a.href));
 
   const supabase = createServiceClient();
   const { data: comercio } = await supabase
@@ -50,6 +59,12 @@ export default async function PaginaPanel() {
   const programas = await listarProgramas(supabase, comercioId);
   const principal = (programas ?? []).find((p) => p.esPrincipal) ?? null;
   const tipoValor = principal?.tipoTarjeta ?? comercio?.tipo_tarjeta;
+
+  // Los atajos se arman DESPUÉS del tipo: sus subtítulos salen de él.
+  const todosLosAtajos = atajosPara(tipoValor ?? 'puntos');
+  const atajos = esOwner
+    ? todosLosAtajos
+    : todosLosAtajos.filter((a) => RUTAS_ATAJOS_CAJERO.includes(a.href));
 
   // El tutorial. Solo para el DUEÑO: el cajero no puede tocar marca, reglas ni recompensas, así que
   // una lista de pasos que no puede completar sería una lista de reproches.

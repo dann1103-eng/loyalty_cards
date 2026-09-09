@@ -497,8 +497,12 @@ export default function FormularioBranding({
             </div>
           </div>
         </div>
+        {/* La meta de sellos SOLO se nombra si este tipo la tiene: esta pantalla ya le esconde esa
+            sección a los otros siete, así que prometerla en el pie era ofrecerle al dueño de una
+            gift card una perilla que no va a encontrar. */}
         <p className="nota" style={{ textAlign: 'center' }}>
-          Réplica del pass real: Apple define la estructura; vos definís colores, imágenes y sellos.
+          Réplica del pass real: Apple define la estructura; vos definís colores, imágenes
+          {esSellos ? ' y sellos.' : ' y encuadre.'}
         </p>
       </div>
 

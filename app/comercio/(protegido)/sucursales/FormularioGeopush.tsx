@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { accionGuardarGeopush, type EstadoGeopush } from './actions';
 import { LARGO_MAXIMO_MENSAJE_CERCANIA } from '@/lib/comercio/geopush';
+import { placeholderCercania } from '@/lib/tarjetas/textosPorTipo';
 
 // Campos NO controlados con `key` derivada de lo guardado, igual que FormularioControles: es un
 // formulario de EDICIÓN, y con estado controlado el reset que hace Next al terminar un Server
@@ -20,7 +21,17 @@ export interface SucursalGeopush {
   geopushActivo: boolean;
 }
 
-export default function FormularioGeopush({ sucursal }: { sucursal: SucursalGeopush }) {
+// `tipoTarjeta` es el del programa PRINCIPAL del comercio (el aviso por cercanía es del LOCAL, no
+// de un programa). Entra por prop para el placeholder del mensaje: el que estaba cableado —— "Pasá
+// por tu café, ya tenés sellos acumulados" —— es lo que la mayoría de los dueños copia tal cual, y
+// le hacía prometer sellos a quien vende gift cards o membresías.
+export default function FormularioGeopush({
+  sucursal,
+  tipoTarjeta,
+}: {
+  sucursal: SucursalGeopush;
+  tipoTarjeta: string;
+}) {
   const accion = accionGuardarGeopush.bind(null, sucursal.id);
   const [estado, ejecutar, pendiente] = useActionState<EstadoGeopush, FormData>(accion, undefined);
 
@@ -75,7 +86,7 @@ export default function FormularioGeopush({ sucursal }: { sucursal: SucursalGeop
             name="mensaje_cercania"
             type="text"
             maxLength={LARGO_MAXIMO_MENSAJE_CERCANIA}
-            placeholder="Pasá por tu café, ya tenés sellos acumulados"
+            placeholder={placeholderCercania(tipoTarjeta)}
             defaultValue={sucursal.mensajeCercania ?? ''}
           />
           {/* Honestidad sobre la asimetría, que es la política del proyecto: prometerle al dueño que

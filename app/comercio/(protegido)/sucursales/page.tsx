@@ -3,6 +3,7 @@ import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { listarSucursales } from '@/lib/comercio/sucursales';
 import { cupoDeCuenta } from '@/lib/comercios/cuentas';
+import { listarProgramas } from '@/lib/comercio/programas';
 import FormularioSucursal from './FormularioSucursal';
 import ModalAgregarLocal from './ModalAgregarLocal';
 import BotonEstadoSucursal from './BotonEstadoSucursal';
@@ -24,6 +25,12 @@ export default async function PaginaSucursales({
 
   // listarSucursales trae activas e inactivas: el dueño necesita ver las apagadas para reactivarlas.
   const sucursales = await listarSucursales(supabase, comercioId);
+
+  // El tipo del programa PRINCIPAL, solo para el placeholder del mensaje por cercanía. Es el
+  // criterio de reglas/page.tsx: el aviso es del LOCAL y no de un programa, así que cuando hay
+  // varios el ejemplo se escribe sobre el que rige a la mayoría de las tarjetas entregadas.
+  const programas = await listarProgramas(supabase, comercioId);
+  const tipoPrincipal = (programas ?? []).find((p) => p.esPrincipal)?.tipoTarjeta ?? 'puntos';
 
   // Cupo del plan: si la cuenta está llena, el alta se reemplaza por el aviso (crear igual
   // rechazaría — esto lo dice ANTES y sin formulario inútil). Comercio sin cuenta (legado): sin
@@ -115,6 +122,7 @@ export default async function PaginaSucursales({
                   campanaHasta: s.campanaHasta,
                   geopushActivo: s.geopushActivo,
                 }}
+                tipoTarjeta={tipoPrincipal}
               />
             </div>
           ))
