@@ -72,26 +72,31 @@ const ATAJO_REGLAS: Record<string, string> = {
 // la tarjeta de muestra, y una frase con el nombre adentro se rompe con un comercio de nombre
 // largo.
 
+// OJO CON EL TRATO: estas dos tablas y solo estas dos van en TUTEO ("Regístrate", "Agrégala").
+// El resto del módulo vosea, igual que todo el panel del dueño. No es un descuido: las pantallas
+// que ve el CLIENTE FINAL (registro y portal) tutean desde siempre, y el usuario lo confirmó
+// como decisión el 2026-09-08. Mezclar los dos registros en la misma pantalla se nota y queda
+// mal, así que si algún día se unifica hay que cambiar la pantalla entera, no una frase suelta.
 const PROMESA_REGISTRO: Record<string, string> = {
-  puntos: 'Registrate una vez y sumá puntos en cada visita.',
-  sellos: 'Registrate una vez y juntá tus sellos en cada visita.',
-  prepago: 'Registrate una vez y llevá la cuenta de tus visitas.',
-  gift_card: 'Registrate una vez y llevá tu saldo siempre a mano.',
-  cashback: 'Registrate una vez y recuperá una parte de cada compra.',
-  cupon: 'Registrate una vez y llevá tu cupón en el teléfono.',
-  membresia: 'Registrate una vez y llevá tu membresía en el teléfono.',
-  descuento: 'Registrate una vez y ganá tu descuento por lo que comprás.',
+  puntos: 'Regístrate una vez y suma puntos en cada visita.',
+  sellos: 'Regístrate una vez y junta tus sellos en cada visita.',
+  prepago: 'Regístrate una vez y lleva la cuenta de tus visitas.',
+  gift_card: 'Regístrate una vez y lleva tu saldo siempre a mano.',
+  cashback: 'Regístrate una vez y recupera una parte de cada compra.',
+  cupon: 'Regístrate una vez y lleva tu cupón en el teléfono.',
+  membresia: 'Regístrate una vez y lleva tu membresía en el teléfono.',
+  descuento: 'Regístrate una vez y gana tu descuento por lo que compras.',
 };
 
 const PROMESA_TARJETA_LISTA: Record<string, string> = {
-  puntos: 'Agregala a tu Apple Wallet y empezá a sumar puntos hoy.',
-  sellos: 'Agregala a tu Apple Wallet y empezá a juntar tus sellos hoy.',
-  prepago: 'Agregala a tu Apple Wallet y mirá tus visitas cuando querás.',
-  gift_card: 'Agregala a tu Apple Wallet y mirá tu saldo cuando querás.',
-  cashback: 'Agregala a tu Apple Wallet y mirá tu saldo cuando querás.',
-  cupon: 'Agregala a tu Apple Wallet y mostrá tu cupón cuando lo uses.',
-  membresia: 'Agregala a tu Apple Wallet y mostrala cada vez que vengas.',
-  descuento: 'Agregala a tu Apple Wallet y mostrala en cada compra.',
+  puntos: 'Agrégala a tu Apple Wallet y empieza a sumar puntos hoy.',
+  sellos: 'Agrégala a tu Apple Wallet y empieza a juntar tus sellos hoy.',
+  prepago: 'Agrégala a tu Apple Wallet y mira tus visitas cuando quieras.',
+  gift_card: 'Agrégala a tu Apple Wallet y mira tu saldo cuando quieras.',
+  cashback: 'Agrégala a tu Apple Wallet y mira tu saldo cuando quieras.',
+  cupon: 'Agrégala a tu Apple Wallet y muestra tu cupón cuando lo uses.',
+  membresia: 'Agrégala a tu Apple Wallet y muéstrala cada vez que vengas.',
+  descuento: 'Agrégala a tu Apple Wallet y muéstrala en cada compra.',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
