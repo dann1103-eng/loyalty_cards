@@ -1,7 +1,13 @@
 import Link from 'next/link';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
-import { historialTarjeta, etiquetaClase } from '@/lib/comercio/historial';
+import {
+  historialTarjeta,
+  etiquetaClase,
+  describirDeltaMovimiento,
+  describirSaldoMovimiento,
+  type ClaseMovimiento,
+} from '@/lib/comercio/historial';
 import { resolverProgramaDeTarjeta } from '@/lib/comercio/programas';
 import { describirFila } from '@/lib/tarjetas/estadoTarjeta';
 import { hoyEnZona } from '@/lib/tarjetas/vigencia';
@@ -9,6 +15,26 @@ import { listarNiveles } from '@/lib/tarjetas/descuento';
 import { ZONA_HORARIA_DEFAULT } from '@/lib/comercio/zonasHorarias';
 
 export const dynamic = 'force-dynamic';
+
+// Ícono y tono de cada clase. Records y no ternarios encadenados: el `else` final pintaba de menta
+// y con el ícono de sumar TODO lo que no fuera ajuste ni canje, así que un consumo de gift card
+// salía con la insignia verde de una acreditación. Con el Record, una clase nueva no compila hasta
+// que alguien decida cómo se ve.
+const ICONO_CLASE: Record<ClaseMovimiento, string> = {
+  acreditacion: 'add_circle',
+  ajuste: 'undo',
+  canje: 'redeem',
+  uso: 'remove_circle',
+  renovacion: 'autorenew',
+};
+
+const TONO_CLASE: Record<ClaseMovimiento, string> = {
+  acreditacion: 'menta',
+  ajuste: 'neutro',
+  canje: 'neutro',
+  uso: 'neutro',
+  renovacion: 'menta',
+};
 
 // Ficha forense de un cliente: cada movimiento con su hora, su sucursal, su cajero y su motivo.
 // Es la pantalla que contesta "¿quién le puso estos cinco sellos y cuándo?".
@@ -74,7 +100,6 @@ export default async function PaginaFichaCliente({
   const niveles = tipoTarjeta === 'descuento' ? ((await listarNiveles(supabase, comercioId)) ?? []) : [];
 
   const selloMeta = programa?.selloMeta ?? null;
-  const esSellos = tipoTarjeta === 'sellos';
   const saldoTexto = describirFila(
     tarjeta,
     tipoTarjeta,
@@ -121,64 +146,71 @@ export default async function PaginaFichaCliente({
           <p className="admin-vacio">Este cliente todavía no tiene movimientos.</p>
         ) : (
           <div className="admin-lista">
-            {movimientos.map((m) => (
-              <div key={m.id} className="admin-fila" style={{ alignItems: 'flex-start' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flex: 1, minWidth: 0 }}>
-                  <span
-                    className={`icono-circulo ${m.clase === 'ajuste' ? 'neutro' : m.clase === 'canje' ? 'neutro' : 'menta'}`}
-                    aria-hidden="true"
-                  >
-                    <span className="icono">
-                      {m.clase === 'ajuste' ? 'undo' : m.clase === 'canje' ? 'redeem' : 'add_circle'}
+            {movimientos.map((m) => {
+              // El delta y el saldo, en la unidad de ESTE programa. Vacíos en cupón, membresía y
+              // descuento: ahí el contador es 0 siempre y el estado real es una fecha o un nivel,
+              // así que la columna entera se omite en vez de decir "+0" y "queda 0".
+              const deltaTexto = describirDeltaMovimiento(tipoTarjeta, m.delta);
+              const saldoMovimiento = describirSaldoMovimiento(tipoTarjeta, m.saldoResultante, selloMeta);
+              return (
+                <div key={m.id} className="admin-fila" style={{ alignItems: 'flex-start' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flex: 1, minWidth: 0 }}>
+                    <span className={`icono-circulo ${TONO_CLASE[m.clase]}`} aria-hidden="true">
+                      <span className="icono">{ICONO_CLASE[m.clase]}</span>
                     </span>
-                  </span>
-                  <div style={{ minWidth: 0 }}>
-                    <div className="admin-fila-nombre">
-                      {etiquetaClase(m.clase)}
-                      {m.recompensaNombre ? `: ${m.recompensaNombre}` : ''}
-                      {m.forzado && (
-                        <span
-                          className="admin-fila-slug"
-                          style={{
-                            marginLeft: 8,
-                            color: 'var(--acento)',
-                            border: '1px solid var(--acento)',
-                            borderRadius: 999,
-                            padding: '1px 8px',
-                            fontSize: '0.7rem',
-                          }}
-                        >
-                          Autorizada
-                        </span>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="admin-fila-nombre">
+                        {etiquetaClase(m.clase)}
+                        {m.recompensaNombre ? `: ${m.recompensaNombre}` : ''}
+                        {m.forzado && (
+                          <span
+                            className="admin-fila-slug"
+                            style={{
+                              marginLeft: 8,
+                              color: 'var(--acento)',
+                              border: '1px solid var(--acento)',
+                              borderRadius: 999,
+                              padding: '1px 8px',
+                              fontSize: '0.7rem',
+                            }}
+                          >
+                            Autorizada
+                          </span>
+                        )}
+                      </div>
+                      <div className="admin-fila-slug dato-mono">{formatoFecha.format(new Date(m.ocurrioEn))}</div>
+                      <div className="admin-fila-slug">
+                        {m.sucursalNombre ?? 'Sin sucursal'}
+                        {m.cajeroEmail ? ` · ${m.cajeroEmail}` : ' · sin cajero registrado'}
+                        {m.monto !== null && ` · compra $${m.monto.toFixed(2)}`}
+                      </div>
+                      {m.motivo && (
+                        <div className="admin-fila-slug" style={{ fontStyle: 'italic', marginTop: 2 }}>
+                          “{m.motivo}”
+                        </div>
                       )}
                     </div>
-                    <div className="admin-fila-slug dato-mono">{formatoFecha.format(new Date(m.ocurrioEn))}</div>
-                    <div className="admin-fila-slug">
-                      {m.sucursalNombre ?? 'Sin sucursal'}
-                      {m.cajeroEmail ? ` · ${m.cajeroEmail}` : ' · sin cajero registrado'}
-                      {m.monto !== null && ` · compra $${m.monto.toFixed(2)}`}
+                  </div>
+                  {(deltaTexto || saldoMovimiento) && (
+                    <div style={{ textAlign: 'right', flexShrink: 0, paddingLeft: 10 }}>
+                      {deltaTexto && (
+                        <div
+                          className="admin-fila-nombre dato-mono"
+                          style={{ color: m.delta < 0 ? 'var(--texto)' : 'var(--menta)' }}
+                        >
+                          {deltaTexto}
+                        </div>
+                      )}
+                      {saldoMovimiento && (
+                        <div className="admin-fila-slug dato-mono">
+                          queda{m.saldoResultante === 1 ? '' : 'n'} {saldoMovimiento}
+                        </div>
+                      )}
                     </div>
-                    {m.motivo && (
-                      <div className="admin-fila-slug" style={{ fontStyle: 'italic', marginTop: 2 }}>
-                        “{m.motivo}”
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
-                <div style={{ textAlign: 'right', flexShrink: 0, paddingLeft: 10 }}>
-                  <div
-                    className="admin-fila-nombre dato-mono"
-                    style={{ color: m.delta < 0 ? 'var(--texto)' : 'var(--menta)' }}
-                  >
-                    {m.delta > 0 ? `+${m.delta}` : m.delta}
-                  </div>
-                  <div className="admin-fila-slug dato-mono">
-                    queda {m.saldoResultante}
-                    {esSellos && selloMeta ? `/${selloMeta}` : ''}
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

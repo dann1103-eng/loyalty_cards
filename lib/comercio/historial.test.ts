@@ -4,7 +4,12 @@ import { crearEntorno } from '../../test/fixtures/entornoComercio';
 import { acreditarPuntos, acreditarForzado } from './acreditar';
 import { quitarPuntos } from './ajuste';
 import { canjearRecompensa } from './canje';
-import { historialTarjeta } from './historial';
+import {
+  historialTarjeta,
+  etiquetaClase,
+  describirDeltaMovimiento,
+  describirSaldoMovimiento,
+} from './historial';
 
 const supabase = createServiceClient();
 const entorno = crearEntorno(supabase);
@@ -195,6 +200,32 @@ describe('historialTarjeta', () => {
     expect(movimientos).toEqual([]);
   });
 
+  it('conserva las CUATRO clases del ledger: usar y renovar no son acreditaciones', async () => {
+    // EL defecto que cierra este cambio (2026-09-08). `normalizarClase` colapsaba en 'acreditacion'
+    // todo lo que no fuera 'ajuste' ni 'canje', pero el CHECK del ledger admite cuatro tipos desde
+    // la migración 0019: acreditacion, ajuste, uso y renovacion. Consecuencia, en la ficha que ve
+    // el DUEÑO y en el portal que ve el CLIENTE: una renovación de membresía se leía
+    // "Acreditación +0" y un cobro de gift card, "Acreditación -1250". Un hecho falso.
+    //
+    // MUTACIÓN (verificada el 2026-09-08): volver a
+    // `return valor === 'ajuste' || valor === 'canje' ? valor : 'acreditacion';`
+    // hace fallar esta prueba con
+    // `expected [ 'acreditacion', 'acreditacion', …] to deeply equal [ 'acreditacion', 'uso', 'renovacion' ]`.
+    const comercioId = await entorno.crearComercio();
+    const { id } = await entorno.crearTarjeta(comercioId, 0);
+
+    const base = Date.now() - 10 * 60 * 60 * 1000;
+    // Los deltas son los reales de cada operación: renovar una membresía no mueve el contador
+    // (0019/0031) y consumir una visita de prepago lo baja en uno (0020).
+    await ledgerEnFecha(id, 0, new Date(base), { tipo: 'renovacion' });
+    await ledgerEnFecha(id, -1, new Date(base + 60_000), { tipo: 'uso' });
+    await ledgerEnFecha(id, 3, new Date(base + 120_000));
+
+    const movimientos = await historialTarjeta(supabase, comercioId, id);
+
+    expect(movimientos!.map((m) => m.clase)).toEqual(['acreditacion', 'uso', 'renovacion']);
+  });
+
   it('devuelve una lista vacía (no null) para una tarjeta sin movimientos', async () => {
     // La distinción que hace útil el `T[] | null`: "no hay movimientos" NO es "no se pudieron leer".
     const comercioId = await entorno.crearComercio();
@@ -204,5 +235,54 @@ describe('historialTarjeta', () => {
 
     expect(movimientos).toEqual([]);
     expect(movimientos).not.toBeNull();
+  });
+});
+
+// Las tres pruebas de abajo son PURAS (no tocan la BD): describen cómo se LEE cada movimiento en
+// las dos pantallas que lo muestran — la ficha del dueño y el portal del cliente. Van acá y no en
+// un archivo aparte porque protegen el mismo defecto que la prueba de las clases.
+describe('etiquetaClase', () => {
+  it('nombra las cinco clases sin llamar acreditación a un uso ni a una renovación', () => {
+    // MUTACIÓN: devolver 'Acreditación' para 'uso' o 'renovacion' rompe esta prueba. Era
+    // literalmente lo que hacía el `return 'Acreditación'` final del if encadenado.
+    expect(etiquetaClase('acreditacion')).toBe('Acreditación');
+    expect(etiquetaClase('ajuste')).toBe('Corrección');
+    expect(etiquetaClase('canje')).toBe('Canje');
+    expect(etiquetaClase('uso')).toBe('Uso');
+    expect(etiquetaClase('renovacion')).toBe('Renovación');
+  });
+});
+
+describe('describirDeltaMovimiento', () => {
+  it('dice el delta en la unidad del programa, con el signo AFUERA del número', () => {
+    // El signo se arma aparte y la magnitud se pide en absoluto: describirCosto('prepago', -1)
+    // diría "-1 visitas" (plural, porque -1 no es 1) y en gift card metería el menos adentro del
+    // dinero. MUTACIÓN: pasarle el delta con signo a describirCosto rompe las dos de abajo.
+    expect(describirDeltaMovimiento('sellos', 3)).toBe('+3 sellos');
+    expect(describirDeltaMovimiento('prepago', -1)).toBe('-1 visita');
+    expect(describirDeltaMovimiento('gift_card', -1250)).toBe('-$12.50');
+    expect(describirDeltaMovimiento('puntos', 10)).toBe('+10 puntos');
+  });
+
+  it('los tres tipos sin contador no imprimen NINGÚN número, ni delta ni saldo', () => {
+    // El caso que destapó todo: la renovación de una membresía mueve el contador en 0 y se
+    // mostraba como "Acreditación +0". Vacío para que la pantalla pueda omitir la línea entera —
+    // imprimir "+0" es peor que no imprimir nada, y "queda " colgado es peor todavía.
+    for (const tipo of ['cupon', 'membresia', 'descuento']) {
+      expect(describirDeltaMovimiento(tipo, 0), tipo).toBe('');
+      expect(describirDeltaMovimiento(tipo, -1), tipo).toBe('');
+      expect(describirSaldoMovimiento(tipo, 0), tipo).toBe('');
+    }
+  });
+});
+
+describe('describirSaldoMovimiento', () => {
+  it('el saldo sale en la unidad del programa y en sellos lleva la meta', () => {
+    expect(describirSaldoMovimiento('sellos', 3, 8)).toBe('3 de 8 sellos');
+    // Sin meta cargada no se inventa un "/0": queda el número con su unidad.
+    expect(describirSaldoMovimiento('sellos', 3, null)).toBe('3 sellos');
+    // MUTACIÓN: devolver el contador crudo acá le muestra "1250" a quien tiene $12.50.
+    expect(describirSaldoMovimiento('gift_card', 1250)).toBe('$12.50');
+    expect(describirSaldoMovimiento('prepago', 1)).toBe('1 visita');
   });
 });

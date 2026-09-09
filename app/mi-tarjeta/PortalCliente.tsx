@@ -4,6 +4,11 @@ import { useState, type FormEvent } from 'react';
 import { PAISES, PAIS_DEFAULT, buscarPaisPorClave } from '@/lib/clientes/paises';
 import type { ResultadoConsulta, TarjetaPortal } from '@/lib/portal/buscarTarjetas';
 import { describirCosto } from '@/lib/tarjetas/unidadPrograma';
+import {
+  etiquetaClase,
+  describirDeltaMovimiento,
+  describirSaldoMovimiento,
+} from '@/lib/comercio/historial';
 
 function CaraTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
   // Usa los colores reales del comercio (como el pass). Fallback al fondo oscuro del sistema v2
@@ -34,6 +39,11 @@ function DetalleTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
           <p className="portal-subtitulo">Recompensas</p>
           {tarjeta.recompensas.map((r, i) => {
             const falta = r.costoPuntos - tarjeta.puntosActuales;
+            // En cupón, membresía y descuento describirCosto devuelve vacío (no hay contador del
+            // que descontar), y ahí no se imprime el número NI la palabra que lo introduce: sin
+            // esto al cliente le quedaba un "Te faltan " sin nada detrás.
+            const faltaTexto = describirCosto(tarjeta.tipoTarjeta, falta);
+            const costoTexto = describirCosto(tarjeta.tipoTarjeta, r.costoPuntos);
             return (
               <div className="portal-recompensa" key={`${r.nombre}-${i}`}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
@@ -58,13 +68,15 @@ function DetalleTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
                 <div className="portal-recompensa-estado">
                   {falta <= 0 ? (
                     <span className="portal-canjeable">Ya puedes canjearla</span>
-                  ) : (
-                    <span className="portal-falta">Te faltan {describirCosto(tarjeta.tipoTarjeta, falta)}</span>
-                  )}
+                  ) : faltaTexto ? (
+                    <span className="portal-falta">
+                      Te falta{falta === 1 ? '' : 'n'} {faltaTexto}
+                    </span>
+                  ) : null}
                   {/* En la moneda de SU programa. Decia "{costo} pts" a todos: a alguien con una
                       gift card le mostraba "250 pts" sobre un premio que cuesta $2.50, y a alguien
                       de prepago sus visitas llamadas puntos. Lo lee el CLIENTE FINAL. */}
-                  <span className="portal-costo">{describirCosto(tarjeta.tipoTarjeta, r.costoPuntos)}</span>
+                  {costoTexto && <span className="portal-costo">{costoTexto}</span>}
                 </div>
               </div>
             );
@@ -79,30 +91,46 @@ function DetalleTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
       {tarjeta.movimientos.length > 0 && (
         <div className="portal-recompensas">
           <p className="portal-subtitulo">Movimientos recientes</p>
-          {tarjeta.movimientos.map((m) => (
-            <div className="portal-recompensa" key={m.id}>
-              <div>
-                <div className="portal-recompensa-nombre">
-                  {m.clase === 'canje'
-                    ? `Canje${m.recompensaNombre ? `: ${m.recompensaNombre}` : ''}`
-                    : m.clase === 'ajuste'
-                      ? 'Corrección'
-                      : 'Acreditación'}
+          {tarjeta.movimientos.map((m) => {
+            // Los mismos textos que la ficha del dueño, porque es el MISMO movimiento: hasta el
+            // 2026-09-08 acá se leía "Acreditación +0" cuando el comercio renovaba una membresía y
+            // "Acreditación -1250" cuando cobraba $12.50 de una gift card. Los dos vacíos son
+            // deliberados: en cupón, membresía y descuento no hay contador que mostrar, y un
+            // "quedaron" sin número es peor que no mostrar la columna.
+            const deltaTexto = describirDeltaMovimiento(tarjeta.tipoTarjeta, m.delta);
+            const saldoTexto = describirSaldoMovimiento(
+              tarjeta.tipoTarjeta,
+              m.saldoResultante,
+              tarjeta.selloMeta,
+            );
+            return (
+              <div className="portal-recompensa" key={m.id}>
+                <div>
+                  <div className="portal-recompensa-nombre">
+                    {etiquetaClase(m.clase)}
+                    {m.recompensaNombre ? `: ${m.recompensaNombre}` : ''}
+                  </div>
+                  <div className="portal-recompensa-desc">
+                    {new Date(m.ocurrioEn).toLocaleString('es-SV', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                    {m.sucursalNombre ? ` · ${m.sucursalNombre}` : ''}
+                  </div>
                 </div>
-                <div className="portal-recompensa-desc">
-                  {new Date(m.ocurrioEn).toLocaleString('es-SV', {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                  })}
-                  {m.sucursalNombre ? ` · ${m.sucursalNombre}` : ''}
-                </div>
+                {(deltaTexto || saldoTexto) && (
+                  <div className="portal-recompensa-estado">
+                    {deltaTexto && <span className="portal-costo">{deltaTexto}</span>}
+                    {saldoTexto && (
+                      <span className="portal-falta">
+                        {m.saldoResultante === 1 ? 'quedó' : 'quedaron'} {saldoTexto}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="portal-recompensa-estado">
-                <span className="portal-costo">{m.delta > 0 ? `+${m.delta}` : m.delta}</span>
-                <span className="portal-falta">quedaron {m.saldoResultante}</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
