@@ -218,21 +218,21 @@ describe('reporteSucursales', () => {
     const a = filas.find((f) => f.sucursal_id === sucA)!;
     expect(a.sucursal_nombre).toBe('Sucursal A');
     expect(a.sucursal_activa).toBe(true);
-    expect(a.acreditaciones).toBe(2);
+    expect(a.operaciones).toBe(2);
     expect(a.puntos_otorgados).toBe(13);
     expect(a.canjes).toBe(1);
     expect(a.clientes_unicos).toBe(2);
 
     const b = filas.find((f) => f.sucursal_id === sucB)!;
     expect(b.sucursal_nombre).toBe('Sucursal B');
-    expect(b.acreditaciones).toBe(1);
+    expect(b.operaciones).toBe(1);
     expect(b.puntos_otorgados).toBe(5);
     expect(b.canjes).toBe(0);
     expect(b.clientes_unicos).toBe(1);
 
     const sinSucursal = filas.find((f) => f.sucursal_id === null)!;
     expect(sinSucursal.sucursal_nombre).toBeNull();
-    expect(sinSucursal.acreditaciones).toBe(1);
+    expect(sinSucursal.operaciones).toBe(1);
     expect(sinSucursal.puntos_otorgados).toBe(4);
     expect(sinSucursal.canjes).toBe(0);
     expect(sinSucursal.clientes_unicos).toBe(1);
@@ -301,12 +301,12 @@ describe('reporteTendencia', () => {
 
     // La serie cubre exactamente N días, ordenada, e incluye días en 0 (zero-fill).
     expect(serie).toHaveLength(dias);
-    const totalAcred = serie.reduce((s, r) => s + r.acreditaciones, 0);
+    const totalAcred = serie.reduce((s, r) => s + r.operaciones, 0);
     const totalCanjes = serie.reduce((s, r) => s + r.canjes, 0);
     expect(totalAcred).toBe(2);
     expect(totalCanjes).toBe(1);
     // El último día de la serie es hoy y concentra la actividad recién sembrada.
-    expect(serie[serie.length - 1].acreditaciones).toBe(2);
+    expect(serie[serie.length - 1].operaciones).toBe(2);
     expect(serie[serie.length - 1].canjes).toBe(1);
   });
 });
@@ -330,7 +330,7 @@ describe('reporteFmComercios', () => {
     expect(fila.cuenta_id).toBe(cuentaId);
     expect(fila.cuenta_nombre).toContain('Cuenta QA');
     expect(fila.clientes).toBe(2); // dos tarjetas
-    expect(fila.acreditaciones).toBe(2); // dos filas en transacciones_puntos
+    expect(fila.operaciones).toBe(2); // dos filas en transacciones_puntos
     expect(fila.canjes).toBe(1);
     expect(fila.saldo_circulante).toBe(11); // 7 + 4
   });

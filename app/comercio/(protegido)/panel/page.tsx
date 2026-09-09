@@ -86,12 +86,12 @@ export default async function PaginaPanel() {
   // Contexto de sucursal (owner): actividad de ESA sucursal, con los reportes por sucursal ya
   // existentes. Sin contexto no se consulta nada extra. Una sucursal sin actividad todavía no
   // aparece en el reporte → carta en cero (no "sin carta": el contexto elegido siempre se ve).
-  let actividadSucursal: { acreditaciones: number; canjes: number; clientes_unicos: number } | null = null;
+  let actividadSucursal: { operaciones: number; canjes: number; clientes_unicos: number } | null = null;
   if (esOwner && sucursalActiva) {
     const filas = await reporteSucursales(supabase, comercioId);
     const fila = filas.find((f) => f.sucursal_id === sucursalActiva.id);
     actividadSucursal = {
-      acreditaciones: fila?.acreditaciones ?? 0,
+      operaciones: fila?.operaciones ?? 0,
       canjes: fila?.canjes ?? 0,
       clientes_unicos: fila?.clientes_unicos ?? 0,
     };
@@ -157,7 +157,7 @@ export default async function PaginaPanel() {
           <div style={{ display: 'flex', gap: 28 }}>
             {[
               [actividadSucursal.clientes_unicos, 'Clientes'],
-              [actividadSucursal.acreditaciones, 'Visitas'],
+              [actividadSucursal.operaciones, 'Operaciones'],
               [actividadSucursal.canjes, 'Premios'],
             ].map(([valor, etiqueta]) => (
               <div key={etiqueta}>

@@ -50,7 +50,7 @@ function CartaSucursal({ fila, esPrincipal }: { fila: FilaReporteSucursal; esPri
       </div>
       <div style={{ display: 'flex', gap: 28 }}>
         <Estadistica valor={fila.clientes_unicos} etiqueta="Clientes" />
-        <Estadistica valor={fila.acreditaciones} etiqueta="Visitas" />
+        <Estadistica valor={fila.operaciones} etiqueta="Operaciones" />
         <Estadistica valor={fila.canjes} etiqueta="Premios" />
       </div>
     </div>
@@ -111,7 +111,7 @@ export default async function PaginaReportes({
   const filasVisibles = sucursalFiltrada
     ? datos[0].sucursales.filter((f) => f.sucursal_id === sucursalFiltrada.id)
     : datos.flatMap((d) => d.sucursales);
-  const totalVisitas = filasVisibles.reduce((suma, f) => suma + f.acreditaciones, 0);
+  const totalOperaciones = filasVisibles.reduce((suma, f) => suma + f.operaciones, 0);
 
   // El tipo de CADA comercio del alcance, no uno solo: esta pantalla agrega el conglomerado del
   // dueno y cada negocio puede tener un tipo distinto. Se usa para decir los acumulados en la unidad
@@ -128,8 +128,8 @@ export default async function PaginaReportes({
   const totalPremios = filasVisibles.reduce((suma, f) => suma + f.canjes, 0);
 
   const tendencia = sucursalFiltrada ? [] : sumarTendencias(datos.map((d) => d.tendencia));
-  const maxDia = Math.max(1, ...tendencia.map((d) => d.acreditaciones + d.canjes));
-  const hayActividad = totalVisitas + totalPremios > 0;
+  const maxDia = Math.max(1, ...tendencia.map((d) => d.operaciones + d.canjes));
+  const hayActividad = totalOperaciones + totalPremios > 0;
   const topGlobal = sucursalFiltrada
     ? []
     : fusionarTopClientes(
@@ -211,12 +211,15 @@ export default async function PaginaReportes({
       <section className="metric-pila reveal d2">
         <div className="metric-carta naranja">
           <div className="metric-etiqueta">
-            <span>Visitas acreditadas</span>
+            <span>Operaciones</span>
             <span className="icono" aria-hidden="true">sensors</span>
           </div>
           <div>
-            <div className="metric-valor">{totalVisitas}</div>
-            <div className="metric-sub">veces que le sumaste a un cliente</div>
+            <div className="metric-valor">{totalOperaciones}</div>
+            {/* "Operaciones" y no "Visitas acreditadas" desde la 0033: el conteo incluye ahora los
+                usos (cupón, visita de prepago, cobro de gift card) y las renovaciones de membresía,
+                que antes no se contaban y dejaban a esos comercios con el reporte en cero. */}
+            <div className="metric-sub">veces que atendiste a un cliente</div>
           </div>
         </div>
         <div className="metric-carta menta">
@@ -307,7 +310,7 @@ export default async function PaginaReportes({
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {tendencia.map((d) => {
-                  const total = d.acreditaciones + d.canjes;
+                  const total = d.operaciones + d.canjes;
                   const pct = Math.round((total / maxDia) * 100);
                   return (
                     <div key={d.dia} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -318,7 +321,7 @@ export default async function PaginaReportes({
                         <div style={{ width: `${pct}%`, height: '100%', background: 'var(--acento)' }} />
                       </div>
                       <span className="dato-mono" style={{ width: 58, textAlign: 'right', fontSize: '0.72rem', color: 'var(--texto-2)' }}>
-                        {d.acreditaciones}/{d.canjes}
+                        {d.operaciones}/{d.canjes}
                       </span>
                     </div>
                   );

@@ -18,6 +18,7 @@
 //   - supabase/migrations/0028_disenos_cartel.sql (tabla disenos_cartel: cartel/QR imprimible por programa)
 //   - supabase/migrations/0030_elementos_cartel.sql (columna elementos jsonb en disenos_cartel)
 //   - supabase/migrations/0032_encuadre_franja.sql (encuadre_franja/foco_franja_x/foco_franja_y/zoom_franja en comercios y programas_tarjeta)
+//   - supabase/migrations/0033_operaciones_y_nombre_pase.sql (nombre_pase en programas_tarjeta; las funciones de reporte renombran acreditaciones -> operaciones y cuentan tambien uso y renovacion)
 //   - supabase/migrations/0029_reverso_por_programa.sql (reverso por programa en programas_tarjeta)
 //   - supabase/migrations/0027_branding_por_programa.sql (branding por programa en programas_tarjeta)
 //   - supabase/migrations/0026_notificaciones_push.sql (tablas difusiones y notificaciones_enviadas; tarjetas.aviso_texto/aviso_hasta/aviso_inactividad_enviado_en; comercios.aviso_inactividad_activo/dias/mensaje)
@@ -940,6 +941,10 @@ export type Database = {
           strip_url: string | null;
           sello_icono_url: string | null;
           difuminado_franja: string | null;
+          // El nombre que el cliente ve en su pase (migración 0033). null = el pase sale como
+          // antes. NO es `nombre`, que es el rótulo interno del dueño y en el programa principal
+          // nace igual al del comercio (0024). CHECK en la base: no vacío y hasta 40 caracteres.
+          nombre_pase: string | null;
           // Encuadre propio (0032). Las cuatro se leen como unidad: una null = sin encuadre propio.
           encuadre_franja: string | null;
           foco_franja_x: number | null;
@@ -981,6 +986,7 @@ export type Database = {
           strip_url?: string | null;
           sello_icono_url?: string | null;
           difuminado_franja?: string | null;
+          nombre_pase?: string | null;
           encuadre_franja?: string | null;
           foco_franja_x?: number | null;
           foco_franja_y?: number | null;
@@ -1017,6 +1023,7 @@ export type Database = {
           strip_url?: string | null;
           sello_icono_url?: string | null;
           difuminado_franja?: string | null;
+          nombre_pase?: string | null;
           encuadre_franja?: string | null;
           foco_franja_x?: number | null;
           foco_franja_y?: number | null;
@@ -1266,7 +1273,7 @@ export type Database = {
           sucursal_id: string | null;
           sucursal_nombre: string | null;
           sucursal_activa: boolean | null;
-          acreditaciones: number;
+          operaciones: number;
           puntos_otorgados: number;
           canjes: number;
           clientes_unicos: number;
@@ -1291,7 +1298,7 @@ export type Database = {
         };
         Returns: {
           dia: string;
-          acreditaciones: number;
+          operaciones: number;
           canjes: number;
         }[];
       };
@@ -1303,7 +1310,7 @@ export type Database = {
           cuenta_id: string | null;
           cuenta_nombre: string | null;
           clientes: number;
-          acreditaciones: number;
+          operaciones: number;
           canjes: number;
           saldo_circulante: number;
         }[];
@@ -1450,7 +1457,7 @@ export type Database = {
           cajero_usuario_id: string | null;
           cajero_email: string | null;
           cajero_activo: boolean | null;
-          acreditaciones: number;
+          operaciones: number;
           puntos_otorgados: number;
           monto_total: number;
           forzadas: number;

@@ -13,7 +13,7 @@ export function sumarTendencias(series: FilaTendencia[][]): FilaTendencia[] {
     for (const fila of serie) {
       const acumulado = porDia.get(fila.dia);
       if (acumulado) {
-        acumulado.acreditaciones += fila.acreditaciones;
+        acumulado.operaciones += fila.operaciones;
         acumulado.canjes += fila.canjes;
       } else {
         porDia.set(fila.dia, { ...fila }); // copia: no mutar la fila de entrada

@@ -120,7 +120,7 @@ export default async function PaginaReporteCajeros({
                       )}
                     </div>
                     <div className="admin-fila-slug">
-                      <span className="dato-mono">{f.acreditaciones}</span> acreditaciones ·{' '}
+                      <span className="dato-mono">{f.operaciones}</span> operaciones ·{' '}
                       <span className="dato-mono">{describirCosto(tipoPrincipal, f.puntos_otorgados)}</span> ·{' '}
                       <span className="dato-mono">{f.clientes_unicos}</span> clientes ·{' '}
                       <span className="dato-mono">{f.canjes}</span> canjes

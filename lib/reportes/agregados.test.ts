@@ -9,17 +9,17 @@ import { sumarTendencias, fusionarTopClientes, resolverFiltrosReportes } from '.
 describe('sumarTendencias', () => {
   it('suma día a día entre series y ordena ascendente', () => {
     const a = [
-      { dia: '2026-07-24', acreditaciones: 2, canjes: 1 },
-      { dia: '2026-07-25', acreditaciones: 3, canjes: 0 },
+      { dia: '2026-07-24', operaciones: 2, canjes: 1 },
+      { dia: '2026-07-25', operaciones: 3, canjes: 0 },
     ];
     const b = [
-      { dia: '2026-07-25', acreditaciones: 1, canjes: 2 },
-      { dia: '2026-07-23', acreditaciones: 5, canjes: 0 },
+      { dia: '2026-07-25', operaciones: 1, canjes: 2 },
+      { dia: '2026-07-23', operaciones: 5, canjes: 0 },
     ];
     expect(sumarTendencias([a, b])).toEqual([
-      { dia: '2026-07-23', acreditaciones: 5, canjes: 0 },
-      { dia: '2026-07-24', acreditaciones: 2, canjes: 1 },
-      { dia: '2026-07-25', acreditaciones: 4, canjes: 2 },
+      { dia: '2026-07-23', operaciones: 5, canjes: 0 },
+      { dia: '2026-07-24', operaciones: 2, canjes: 1 },
+      { dia: '2026-07-25', operaciones: 4, canjes: 2 },
     ]);
   });
 
@@ -28,9 +28,9 @@ describe('sumarTendencias', () => {
   });
 
   it('no muta las series de entrada', () => {
-    const a = [{ dia: '2026-07-25', acreditaciones: 1, canjes: 1 }];
+    const a = [{ dia: '2026-07-25', operaciones: 1, canjes: 1 }];
     sumarTendencias([a, a]);
-    expect(a[0]).toEqual({ dia: '2026-07-25', acreditaciones: 1, canjes: 1 });
+    expect(a[0]).toEqual({ dia: '2026-07-25', operaciones: 1, canjes: 1 });
   });
 });
 

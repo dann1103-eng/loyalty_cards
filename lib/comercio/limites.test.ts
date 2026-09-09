@@ -341,7 +341,7 @@ describe('los ajustes no contaminan los reportes', () => {
     });
     const fila = sucursales!.find((s) => s.sucursal_id === sucursalId);
     expect(fila).toBeDefined();
-    expect(fila!.acreditaciones).toBe(1);
+    expect(fila!.operaciones).toBe(1);
     // Bruto, no neto: el fraude no se autoborra del reporte. El saldo real (3) vive en la tarjeta.
     expect(fila!.puntos_otorgados).toBe(5);
 

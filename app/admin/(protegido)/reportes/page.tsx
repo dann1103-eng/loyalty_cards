@@ -92,7 +92,7 @@ export default async function PaginaReportesFm() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 18, flexShrink: 0 }}>
-                    <EstadisticaMini valor={c.acreditaciones} etiqueta="Visitas" />
+                    <EstadisticaMini valor={c.operaciones} etiqueta="Operaciones" />
                     <EstadisticaMini valor={c.canjes} etiqueta="Premios" />
                     <EstadisticaMini valor={c.saldo_circulante} etiqueta="Circulante" />
                   </div>
