@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState } from 'react';
 import { accionGuardarControles, type EstadoControles } from './actions';
 import { ZONAS_HORARIAS } from '@/lib/comercio/zonasHorarias';
@@ -49,6 +50,7 @@ export default function FormularioControles({
   controles,
   unidad,
   esDePuntos,
+  aplicanLimites,
 }: {
   controles: ControlesAcreditacion;
   // Cómo se llama lo que cuenta ESTE programa. Reemplaza al viejo booleano `esDePuntos` para los
@@ -61,6 +63,15 @@ export default function FormularioControles({
   // los demás, cada operación vale exactamente una, así que el techo por transacción sería una
   // perilla que no hace nada.
   esDePuntos: boolean;
+  // ¿Alguna operación de este tipo pasa por `acreditar_atomico`? Los cuatro límites de abajo viven
+  // DENTRO de esa función (migración 0015) y ninguna otra los consulta, así que en cupón, membresía
+  // y descuento el dueño estaba llenando perillas que su tarjeta no lee nunca. Ver
+  // `aplicanControlesAcreditacion` en lib/tarjetas/tipos.ts, que trae la verificación RPC por RPC.
+  //
+  // La zona horaria y el monto de la compra NO se esconden con ellos: la zona es lo que decide a
+  // qué hora vence un cupón en el mostrador (hoyEnZona), o sea que es MÁS importante justo en los
+  // tipos donde los límites no aplican, y este formulario es el único lugar donde se puede elegir.
+  aplicanLimites: boolean;
 }) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoControles, FormData>(
     accionGuardarControles,
@@ -84,75 +95,101 @@ export default function FormularioControles({
 
   return (
     <form key={clave} className="panel" style={{ marginTop: 0 }} action={ejecutar}>
-      <h2 className="subtitle" style={{ marginTop: 0 }}>Control de {palabra.plural}</h2>
+      <h2 className="subtitle" style={{ marginTop: 0 }}>
+        {aplicanLimites ? `Control de ${palabra.plural}` : 'Ajustes del mostrador'}
+      </h2>
       <p className="admin-fila-slug" style={{ marginTop: -6, marginBottom: 18 }}>
-        Dejá un campo vacío para no poner ese límite. Si alcanza un límite, el cajero queda
-        bloqueado y solo vos podés autorizar la acreditación escribiendo un motivo.
+        {aplicanLimites
+          ? 'Dejá un campo vacío para no poner ese límite. Si alcanza un límite, el cajero queda bloqueado y solo vos podés autorizar la acreditación escribiendo un motivo.'
+          : 'A qué hora corta el día de tu negocio y qué le pedís al cajero en cada escaneo.'}
       </p>
 
-      <div className="field">
-        <label htmlFor="tope_acreditaciones_dia">Máximo de {palabra.plural} por cliente al día</label>
-        <input
-          id="tope_acreditaciones_dia"
-          name="tope_acreditaciones_dia"
-          type="number"
-          min="1"
-          step="1"
-          inputMode="numeric"
-          placeholder="Sin límite"
-          defaultValue={aTexto(controles.topeAcreditacionesDia)}
-        />
-      </div>
-
-      <div className="field">
-        <label htmlFor="espera_minima_minutos">Minutos mínimos entre {palabra.plural} al mismo cliente</label>
-        <input
-          id="espera_minima_minutos"
-          name="espera_minima_minutos"
-          type="number"
-          min="1"
-          step="1"
-          inputMode="numeric"
-          placeholder="Sin espera"
-          defaultValue={aTexto(controles.esperaMinimaMinutos)}
-        />
-        {/* Es la perilla que de verdad ataja "le puso 5 seguidos": un tope diario de 2 no impide
-            ponerlos en diez segundos. */}
-        <p className="admin-fila-slug" style={{ marginTop: 6 }}>
-          Un cliente que compra en la mañana y vuelve en la tarde pasa sin problema. Lo que esto
-          evita es que se carguen varios de una sola vez.
+      {!aplicanLimites && (
+        <p className="admin-vacio">
+          Tu tarjeta no se acredita: lo que hace tu cajero al escanear no pasa por estos límites, así
+          que ponerlos acá no frenaría nada. Lo que define la mecánica de tu tarjeta está en{' '}
+          <Link href="/comercio/programas">Programas de tarjeta</Link>.
         </p>
-      </div>
+      )}
 
-      {esDePuntos && (
+      {aplicanLimites && (
         <>
           <div className="field">
-            <label htmlFor="techo_puntos_acreditacion">Máximo de puntos en una sola transacción</label>
+            <label htmlFor="tope_acreditaciones_dia">Máximo de {palabra.plural} por cliente al día</label>
             <input
-              id="techo_puntos_acreditacion"
-              name="techo_puntos_acreditacion"
-              type="number"
-              min="1"
-              step="1"
-              inputMode="numeric"
-              placeholder="Sin techo"
-              defaultValue={aTexto(controles.techoPuntosAcreditacion)}
-            />
-          </div>
-
-          <div className="field">
-            <label htmlFor="tope_puntos_dia">Máximo de puntos por cliente al día</label>
-            <input
-              id="tope_puntos_dia"
-              name="tope_puntos_dia"
+              id="tope_acreditaciones_dia"
+              name="tope_acreditaciones_dia"
               type="number"
               min="1"
               step="1"
               inputMode="numeric"
               placeholder="Sin límite"
-              defaultValue={aTexto(controles.topePuntosDia)}
+              defaultValue={aTexto(controles.topeAcreditacionesDia)}
             />
           </div>
+
+          <div className="field">
+            <label htmlFor="espera_minima_minutos">Minutos mínimos entre {palabra.plural} al mismo cliente</label>
+            <input
+              id="espera_minima_minutos"
+              name="espera_minima_minutos"
+              type="number"
+              min="1"
+              step="1"
+              inputMode="numeric"
+              placeholder="Sin espera"
+              defaultValue={aTexto(controles.esperaMinimaMinutos)}
+            />
+            {/* Es la perilla que de verdad ataja "le puso 5 seguidos": un tope diario de 2 no impide
+                ponerlos en diez segundos. */}
+            <p className="admin-fila-slug" style={{ marginTop: 6 }}>
+              Un cliente que compra en la mañana y vuelve en la tarde pasa sin problema. Lo que esto
+              evita es que se carguen varios de una sola vez.
+            </p>
+          </div>
+
+          {esDePuntos && (
+            <>
+              <div className="field">
+                <label htmlFor="techo_puntos_acreditacion">Máximo de puntos en una sola transacción</label>
+                <input
+                  id="techo_puntos_acreditacion"
+                  name="techo_puntos_acreditacion"
+                  type="number"
+                  min="1"
+                  step="1"
+                  inputMode="numeric"
+                  placeholder="Sin techo"
+                  defaultValue={aTexto(controles.techoPuntosAcreditacion)}
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="tope_puntos_dia">Máximo de puntos por cliente al día</label>
+                <input
+                  id="tope_puntos_dia"
+                  name="tope_puntos_dia"
+                  type="number"
+                  min="1"
+                  step="1"
+                  inputMode="numeric"
+                  placeholder="Sin límite"
+                  defaultValue={aTexto(controles.topePuntosDia)}
+                />
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {/* Los límites no se dibujan, pero SÍ viajan: el Server Action lee los seis campos del
+          formulario y lo que no llega se guarda como null. Sin estos, un dueño de membresía que
+          entra a cambiar su zona horaria le borraría en silencio los topes que tenía puestos —— y
+          los volvería a necesitar el día que su programa principal pase a ser de sellos. */}
+      {!aplicanLimites && (
+        <>
+          <input type="hidden" name="tope_acreditaciones_dia" value={aTexto(controles.topeAcreditacionesDia)} />
+          <input type="hidden" name="espera_minima_minutos" value={aTexto(controles.esperaMinimaMinutos)} />
         </>
       )}
 

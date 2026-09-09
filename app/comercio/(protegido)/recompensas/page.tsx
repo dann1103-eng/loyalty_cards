@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { TIPOS_RECOMPENSA } from '@/lib/comercio/recompensas';
 import { listarProgramas } from '@/lib/comercio/programas';
 import { unidadPrograma, describirCosto } from '@/lib/tarjetas/unidadPrograma';
-import { tipoOPuntos } from '@/lib/tarjetas/tipos';
+import { puedeCanjearRecompensas } from '@/lib/tarjetas/tipos';
 import FormularioRecompensa from './FormularioRecompensa';
 import BotonDesactivarRecompensa from './BotonDesactivarRecompensa';
 import FotoRecompensa from './FotoRecompensa';
@@ -28,7 +28,7 @@ export default async function PaginaRecompensas() {
   // contador es 0 siempre (su estado es una fecha o un nivel). O sea que un premio cargado acá NO
   // se podría canjear nunca —— y la pantalla igual ofrecía el formulario. Mismo criterio que
   // reglas/page.tsx con el formulario de acumulación: se dice por qué y se manda a donde sí hay algo.
-  const puedeCanjear = tipoOPuntos(tipoPrincipal).contador !== 'ninguno';
+  const puedeCanjear = puedeCanjearRecompensas(tipoPrincipal);
 
   const { data: recompensas, error } = await supabase
     .from('recompensas')

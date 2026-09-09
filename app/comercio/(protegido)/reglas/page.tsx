@@ -11,6 +11,7 @@ import { leerControles } from '@/lib/comercio/controlesAcreditacion';
 import { leerConfiguracionAvisoInactividad } from '@/lib/comercio/avisoInactividad';
 import { listarProgramas } from '@/lib/comercio/programas';
 import { unidadPrograma } from '@/lib/tarjetas/unidadPrograma';
+import { aplicanControlesAcreditacion } from '@/lib/tarjetas/tipos';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,10 @@ export default async function PaginaReglas() {
   const principal = (programas ?? []).find((p) => p.esPrincipal) ?? null;
   const tipoPrincipal = principal?.tipoTarjeta ?? 'puntos';
   const unidad = unidadPrograma(tipoPrincipal);
+  // Los cuatro límites antifraude viven DENTRO de acreditar_atomico (0015). En cupón, membresía y
+  // descuento la operación del mostrador es otra función (0019, 0023) que no los consulta: el
+  // dueño estaba configurando perillas que su tarjeta nunca lee.
+  const aplicanLimites = aplicanControlesAcreditacion(tipoPrincipal);
 
   if (error) console.error('[comercio] falló la consulta de reglas:', error);
 
@@ -94,6 +99,7 @@ export default async function PaginaReglas() {
             // seis tipos que no son de puntos — a una membresía, entre otros.
             unidad={unidad}
             esDePuntos={tipoPrincipal === 'puntos'}
+            aplicanLimites={aplicanLimites}
           />
         ) : (
           <p className="admin-error" role="alert">

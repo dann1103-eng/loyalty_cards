@@ -10,7 +10,7 @@ import { sucursalPerteneceAComercio } from '@/lib/comercio/sucursales';
 import { resolverProgramaDeTarjeta } from '@/lib/comercio/programas';
 import { notificarCambioTarjeta } from '@/lib/apple/notificarCambioTarjeta';
 import { syncObjetoTarjeta } from '@/lib/google/syncObjeto';
-import { tipoOPuntos, describirSaldo, centavosDesdeTexto, nivelParaAcumulado, type AccionPrincipal } from '@/lib/tarjetas/tipos';
+import { tipoOPuntos, describirSaldo, centavosDesdeTexto, nivelParaAcumulado, puedeCanjearRecompensas, type AccionPrincipal } from '@/lib/tarjetas/tipos';
 import { usarCupon, renovarMembresia, hoyEnZona } from '@/lib/tarjetas/vigencia';
 import { unidadPrograma, describirCosto, mensajeAcreditacion, type Unidad } from '@/lib/tarjetas/unidadPrograma';
 import { usarVisita, venderPaquete } from '@/lib/tarjetas/prepago';
@@ -92,17 +92,35 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
   // programas de tipos distintos a la vez, y la meta es justamente lo que dibuja la grilla del pase.
   // `pedir_monto_compra` SÍ sigue siendo del comercio: es una perilla antifraude (Tanda 1) y es
   // política del local, no del programa.
-  const [{ data: comercio }, programa, { data: estado }, { data: recompensas }] = await Promise.all([
+  const [{ data: comercio }, programa, { data: estado }] = await Promise.all([
     supabase.from('comercios').select('pedir_monto_compra, zona_horaria').eq('id', comercioId).maybeSingle(),
     resolverProgramaDeTarjeta(supabase, comercioId, tarjeta.tarjetaId),
     // Estado propio de los tipos con vigencia o con nivel. Se lee acá y no en buscarTarjetaPorToken
     // para no cargar de columnas el camino que usan los tipos con contador.
     supabase.from('tarjetas').select('vigencia_hasta, usado_en, acumulado_centavos').eq('id', tarjeta.tarjetaId).maybeSingle(),
-    supabase.from('recompensas').select('id, nombre, costo_puntos, foto_url').eq('comercio_id', comercioId).eq('activa', true).order('costo_puntos'),
   ]);
 
   const tipoValor = programa?.tipoTarjeta ?? 'puntos';
   const tipo = tipoOPuntos(tipoValor);
+
+  // Las recompensas salieron del Promise.all de arriba a propósito: para saber si vale la pena
+  // traerlas hay que conocer primero el tipo. Un premio se canjea descontando `puntos_actuales`, y
+  // en cupón, membresía y descuento ese contador es 0 para siempre —— el cajero veía el bloque
+  // "Canjear recompensa" completo con el botón deshabilitado en TODOS los premios, en la pantalla
+  // más usada del mostrador y sin ninguna forma de que eso cambie nunca.
+  //
+  // El costo es un round-trip en serie en los tipos que sí canjean. Se paga: la alternativa era
+  // traer siempre una lista que en tres de los ocho tipos solo sirve para estorbar.
+  const recompensas = puedeCanjearRecompensas(tipo.valor)
+    ? (
+        await supabase
+          .from('recompensas')
+          .select('id, nombre, costo_puntos, foto_url')
+          .eq('comercio_id', comercioId)
+          .eq('activa', true)
+          .order('costo_puntos')
+      ).data
+    : null;
 
   // El nivel de descuento se calcula acá, al leer, nunca se guarda: cambiar los umbrales tiene que
   // reordenar a todos los clientes de inmediato.

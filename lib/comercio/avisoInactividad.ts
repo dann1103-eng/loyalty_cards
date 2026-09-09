@@ -145,6 +145,18 @@ export async function procesarAvisosInactividad(
       // La comparación es por TEXTO contra la fecha local del comercio, igual que sigueVigente y que
       // el propio RPC: "vence el 30" significa el 30 completo en el local, y comparar instantes lo
       // mataría a medianoche UTC — las seis de la tarde del 29 en El Salvador.
+      //
+      // ══ POR QUÉ LA GUARDA DICE 'cupon' Y NO `usaVigencia` ══
+      // Los dos tipos con vigencia necesitan lo OPUESTO ante una fecha vencida, y la MISMA columna
+      // (`vigencia_hasta`) los describe a los dos:
+      //   - cupón vencido    → SALTEAR. `usar_cupon_atomico` lo rechaza con 'cupon_vencido', así que
+      //                        invitarlo a volver es mandarlo a un rechazo en el mostrador.
+      //   - membresía vencida → AVISAR. Una membresía vencida se RENUEVA: ese socio es justamente el
+      //                        único público al que este aviso le sirve de verdad.
+      // Escribir `if (tipoOPuntos(t.tipoTarjeta).usaVigencia)` parece la limpieza obvia —— los dos
+      // tipos con vigencia bajo una sola condición —— y silencia al destinatario que más importa.
+      // La prueba "el que dejó vencer su membresía es a quien más querés recordarle" existe para
+      // atrapar exactamente esa refactorización; se verificó que falla con ella aplicada.
       if (t.tipoTarjeta === 'cupon') {
         if (fila.usado_en !== null) continue;
         if (fila.vigencia_hasta !== null && !sigueVigente(fila.vigencia_hasta, hoyDelComercio)) continue;

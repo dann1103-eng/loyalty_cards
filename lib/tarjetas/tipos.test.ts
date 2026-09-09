@@ -8,6 +8,8 @@ import {
   describirSaldo,
   sigueVigente,
   nivelParaAcumulado,
+  puedeCanjearRecompensas,
+  aplicanControlesAcreditacion,
 } from './tipos';
 
 // Módulo puro. Lo que se prueba acá es lo que, si falla, le muestra plata equivocada a un cliente.
@@ -176,5 +178,66 @@ describe('nivelParaAcumulado', () => {
   it('no depende del orden en que vengan los niveles', () => {
     const desordenados = [niveles[2], niveles[0], niveles[1]];
     expect(nivelParaAcumulado(60000, desordenados)).toBe(15);
+  });
+});
+
+describe('puedeCanjearRecompensas', () => {
+  // Un premio se canjea DESCONTANDO `puntos_actuales` (canjear_recompensa_atomico, 0009). En cupón,
+  // membresía y descuento ese contador es 0 para siempre —— su estado es una fecha o un nivel ——
+  // así que el botón "Canjear" del escáner sale deshabilitado en TODOS los premios, siempre, y el
+  // cajero se queda con una lista que nunca va a poder usar en la pantalla más usada del mostrador.
+  it('solo los tipos con contador pueden canjear un premio', () => {
+    const pueden = TIPOS.filter((t) => puedeCanjearRecompensas(t.valor)).map((t) => t.valor).sort();
+    expect(pueden).toEqual(['cashback', 'gift_card', 'prepago', 'puntos', 'sellos']);
+  });
+
+  it('cupón, membresía y descuento no: su contador no se mueve nunca', () => {
+    for (const valor of ['cupon', 'membresia', 'descuento']) {
+      expect(puedeCanjearRecompensas(valor), `"${valor}" no tiene contador del que descontar`).toBe(false);
+    }
+  });
+
+  it('un tipo desconocido degrada a puntos, que sí puede', () => {
+    // Misma política que el resto del módulo: una fila vieja no deja al cajero sin la lista.
+    expect(puedeCanjearRecompensas('lo-que-sea')).toBe(true);
+  });
+});
+
+describe('aplicanControlesAcreditacion', () => {
+  // Los cuatro límites antifraude (tope diario, espera mínima, techo por transacción, tope diario
+  // de puntos) viven DENTRO de acreditar_atomico (0015) y ninguna otra función los consulta ——
+  // verificado leyendo 0019 (usar_cupon_atomico / renovar_membresia_atomico), 0020
+  // (usar_visita_atomico), 0022 (consumir_saldo_atomico) y 0023 (registrar_compra_atomico).
+  it('exactamente los tipos que tienen ALGUNA operación por acreditar_atomico', () => {
+    const aplican = TIPOS.filter((t) => aplicanControlesAcreditacion(t.valor)).map((t) => t.valor).sort();
+    // prepago y gift_card entran por su SEGUNDA operación (vender paquete, cargar saldo), que sí
+    // acredita: el techo por transacción es lo único que impide que un cajero regale una gift card
+    // de $500. Sacarlos de la lista dejaría esa carga sin ningún límite configurable.
+    expect(aplican).toEqual(['cashback', 'gift_card', 'prepago', 'puntos', 'sellos']);
+  });
+
+  it('cupón, membresía y descuento no consultan ninguna de las cuatro perillas', () => {
+    for (const valor of ['cupon', 'membresia', 'descuento']) {
+      expect(aplicanControlesAcreditacion(valor), `"${valor}" no pasa por acreditar_atomico`).toBe(false);
+    }
+  });
+
+  it('la respuesta sale del CATÁLOGO, no de una lista escrita aparte', () => {
+    // Un noveno tipo no compila sin declarar el campo, así que no puede heredar "sí, aplican" por
+    // descuido —— que es exactamente cómo membresía y cupón llegaron a ofrecer estas perillas.
+    for (const tipo of TIPOS) {
+      expect(typeof tipo.aplicanControlesAcreditacion, tipo.valor).toBe('boolean');
+      expect(aplicanControlesAcreditacion(tipo.valor)).toBe(tipo.aplicanControlesAcreditacion);
+    }
+  });
+
+  it('hoy coincide con puedeCanjearRecompensas, y es una COINCIDENCIA', () => {
+    // Se derivan de cosas distintas: una pregunta si hay contador del que descontar, la otra por
+    // qué RPC viaja la operación. Que hoy den la misma lista no autoriza a fusionarlas —— un tipo
+    // nuevo que renueve por acreditar_atomico sin contador las separaría, y fusionadas le daría al
+    // cajero una lista de premios incanjeable o al dueño unas perillas muertas, según cuál ganara.
+    for (const tipo of TIPOS) {
+      expect(aplicanControlesAcreditacion(tipo.valor), tipo.valor).toBe(puedeCanjearRecompensas(tipo.valor));
+    }
   });
 });

@@ -25,6 +25,18 @@ export interface TipoTarjeta {
   requiereMonto: boolean;
   // Si es true, el estado de la tarjeta es una fecha, no un número.
   usaVigencia: boolean;
+  // ¿Alguna operación de este tipo pasa por `acreditar_atomico`? Es LA pregunta que decide si las
+  // cuatro perillas antifraude del comercio (tope diario, espera mínima, techo por transacción,
+  // tope diario de puntos) tienen dónde aplicarse: viven DENTRO de esa función (migración 0015) y
+  // NINGUNA otra las consulta —— se verificó una por una en 0019 (usar_cupon_atomico,
+  // renovar_membresia_atomico), 0020 (usar_visita_atomico), 0022 (consumir_saldo_atomico) y 0023
+  // (registrar_compra_atomico).
+  //
+  // Es un campo del catálogo y no una lista aparte por lo mismo que `unidadPrograma` deriva del
+  // `contador`: un noveno tipo no compila hasta que alguien decida su valor, así que no puede
+  // heredar "sí, aplican" por descuido —— que es justo cómo cupón y membresía terminaron
+  // ofreciéndole al dueño perillas que su tarjeta nunca consulta.
+  aplicanControlesAcreditacion: boolean;
 }
 
 export const TIPOS: readonly TipoTarjeta[] = [
@@ -36,6 +48,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     accionPrincipal: 'acreditar',
     requiereMonto: false,
     usaVigencia: false,
+    // Su operación principal ES acreditar_atomico.
+    aplicanControlesAcreditacion: true,
   },
   {
     valor: 'sellos',
@@ -45,6 +59,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     accionPrincipal: 'acreditar',
     requiereMonto: false,
     usaVigencia: false,
+    // Su operación principal ES acreditar_atomico.
+    aplicanControlesAcreditacion: true,
   },
   {
     valor: 'prepago',
@@ -54,6 +70,9 @@ export const TIPOS: readonly TipoTarjeta[] = [
     accionPrincipal: 'consumir',
     requiereMonto: false,
     usaVigencia: false,
+    // Consume por usar_visita_atomico (0020), que no mira las perillas —— pero VENDER el
+    // paquete reusa acreditarPuntos, así que los límites siguen siendo la defensa de esa carga.
+    aplicanControlesAcreditacion: true,
   },
   {
     valor: 'gift_card',
@@ -63,6 +82,10 @@ export const TIPOS: readonly TipoTarjeta[] = [
     accionPrincipal: 'consumir',
     requiereMonto: true,
     usaVigencia: false,
+    // Cobra por consumir_saldo_atomico (0022), que no mira las perillas —— pero CARGAR saldo
+    // reusa acreditarPuntos, y el techo por transacción es lo único que impide que un cajero
+    // regale una gift card de $500.
+    aplicanControlesAcreditacion: true,
   },
   {
     valor: 'cashback',
@@ -72,6 +95,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     accionPrincipal: 'acreditar',
     requiereMonto: true,
     usaVigencia: false,
+    // La devolución se acredita por acreditar_atomico.
+    aplicanControlesAcreditacion: true,
   },
   {
     valor: 'cupon',
@@ -81,6 +106,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     accionPrincipal: 'usar',
     requiereMonto: false,
     usaVigencia: true,
+    // usar_cupon_atomico (0019) no consulta ninguna perilla, y no hay segunda operación.
+    aplicanControlesAcreditacion: false,
   },
   {
     valor: 'membresia',
@@ -90,6 +117,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     accionPrincipal: 'renovar',
     requiereMonto: false,
     usaVigencia: true,
+    // renovar_membresia_atomico (0019) no consulta ninguna perilla, y no hay segunda operación.
+    aplicanControlesAcreditacion: false,
   },
   {
     valor: 'descuento',
@@ -99,6 +128,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     accionPrincipal: 'registrar',
     requiereMonto: true,
     usaVigencia: false,
+    // registrar_compra_atomico (0023) no consulta ninguna perilla, y no hay segunda operación.
+    aplicanControlesAcreditacion: false,
   },
 ] as const;
 
@@ -111,6 +142,28 @@ export function buscarTipo(valor: string): TipoTarjeta | null {
 // simple y conservador.
 export function tipoOPuntos(valor: string): TipoTarjeta {
   return buscarTipo(valor) ?? TIPOS[0];
+}
+
+// ¿Tiene sentido ofrecerle premios a este tipo? Un premio se canjea DESCONTANDO `puntos_actuales`
+// (canjear_recompensa_atomico, 0009), así que sin contador no hay de dónde descontar: en cupón,
+// membresía y descuento el botón "Canjear" del escáner sale deshabilitado en todos los premios,
+// siempre.
+//
+// Existe como función y no como `tipo.contador !== 'ninguno'` escrito a mano porque la decisión ya
+// estaba en TRES pantallas (el escáner, la pantalla de recompensas y el atajo de la ficha del
+// cliente), y tres copias de una regla son tres oportunidades de que una se quede vieja.
+export function puedeCanjearRecompensas(tipoTarjeta: string): boolean {
+  return tipoOPuntos(tipoTarjeta).contador !== 'ninguno';
+}
+
+// ¿Sirve de algo configurarle a este comercio las perillas antifraude? Ver el campo homónimo del
+// catálogo: la respuesta es "alguna de sus operaciones pasa por acreditar_atomico".
+//
+// NO se fusiona con puedeCanjearRecompensas aunque hoy devuelvan lo mismo: una pregunta si hay
+// contador del que descontar y la otra por qué RPC viaja la operación. Un tipo nuevo que renueve
+// por acreditar_atomico sin contador las separaría.
+export function aplicanControlesAcreditacion(tipoTarjeta: string): boolean {
+  return tipoOPuntos(tipoTarjeta).aplicanControlesAcreditacion;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

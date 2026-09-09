@@ -1,4 +1,4 @@
-import { tipoOPuntos, type AccionPrincipal } from './tipos';
+import { tipoOPuntos, puedeCanjearRecompensas, type AccionPrincipal } from './tipos';
 
 // Cómo se llama el botón que lleva del directorio de clientes (o de su ficha) AL ESCÁNER.
 //
@@ -39,7 +39,7 @@ export function etiquetaAtajoEscaner(
   const partes = [VERBO[tipo.accionPrincipal]];
   // Sin contador no hay nada que descontar: ni un premio ni una corrección. Prometerlos manda al
   // dueño a una pantalla donde esos botones no existen.
-  if (tipo.contador !== 'ninguno') {
+  if (puedeCanjearRecompensas(tipoTarjeta)) {
     partes.push('Canjear');
     if (opciones.conCorregir) partes.push('Corregir');
   }
