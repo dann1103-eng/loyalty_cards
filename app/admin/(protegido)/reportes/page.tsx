@@ -51,9 +51,11 @@ export default async function PaginaReportesFm() {
 
       {/* Métricas de la cartera FM (mismas tarjetas C2). `metric-pila` es una grilla de DOS columnas
           desde 760px: con una sola tarjeta quedaba la mitad derecha vacía, así que ocupa la fila
-          entera. En móvil la pila es flex y `gridColumn` no hace nada. */}
+          entera. En móvil la pila es flex y `gridColumn` no hace nada. Sin la inclinación de 0.6°: es
+          del PAR de tarjetas (una para cada lado), y a todo el ancho —medido a 1100px, 1046px de
+          tarjeta— dejaba un borde 11px más alto que el otro. */}
       <section className="metric-pila reveal d2">
-        <div className="metric-carta naranja" style={{ gridColumn: '1 / -1' }}>
+        <div className="metric-carta naranja" style={{ gridColumn: '1 / -1', transform: 'none' }}>
           <div className="metric-etiqueta">
             <span>Comercios</span>
             <span className="icono" aria-hidden="true">storefront</span>
