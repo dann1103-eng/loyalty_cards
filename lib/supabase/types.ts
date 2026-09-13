@@ -19,6 +19,7 @@
 //   - supabase/migrations/0030_elementos_cartel.sql (columna elementos jsonb en disenos_cartel)
 //   - supabase/migrations/0032_encuadre_franja.sql (encuadre_franja/foco_franja_x/foco_franja_y/zoom_franja en comercios y programas_tarjeta)
 //   - supabase/migrations/0033_operaciones_y_nombre_pase.sql (nombre_pase en programas_tarjeta; las funciones de reporte renombran acreditaciones -> operaciones y cuentan tambien uso y renovacion)
+//   - supabase/migrations/0034_aviso_vencimiento.sql (aviso_vencimiento_activo/dias/mensaje en programas_tarjeta; tarjetas.aviso_vencimiento_para; notificaciones_enviadas.origen admite 'vencimiento')
 //   - supabase/migrations/0029_reverso_por_programa.sql (reverso por programa en programas_tarjeta)
 //   - supabase/migrations/0027_branding_por_programa.sql (branding por programa en programas_tarjeta)
 //   - supabase/migrations/0026_notificaciones_push.sql (tablas difusiones y notificaciones_enviadas; tarjetas.aviso_texto/aviso_hasta/aviso_inactividad_enviado_en; comercios.aviso_inactividad_activo/dias/mensaje)
@@ -309,6 +310,9 @@ export type Database = {
           // Cuándo se mandó el último aviso de inactividad a ESTA tarjeta, para no repetirlo cada
           // día una vez cruzado el umbral.
           aviso_inactividad_enviado_en: string | null;
+          // PARA QUÉ vencimiento ya se avisó (0034). Fecha y no booleano: al renovar,
+          // vigencia_hasta cambia y el aviso del período siguiente sale solo.
+          aviso_vencimiento_para: string | null;
         };
         Insert: {
           id?: string;
@@ -327,6 +331,7 @@ export type Database = {
           aviso_texto?: string | null;
           aviso_hasta?: string | null;
           aviso_inactividad_enviado_en?: string | null;
+          aviso_vencimiento_para?: string | null;
         };
         Update: {
           id?: string;
@@ -345,6 +350,7 @@ export type Database = {
           aviso_texto?: string | null;
           aviso_hasta?: string | null;
           aviso_inactividad_enviado_en?: string | null;
+          aviso_vencimiento_para?: string | null;
         };
         // FKs inline en la migración 0001 (`references comercios(id)` / `references clientes(id)`)
         // — Postgres las nombra `tarjetas_comercio_id_fkey` / `tarjetas_cliente_id_fkey`. Necesarias
@@ -945,6 +951,10 @@ export type Database = {
           // antes. NO es `nombre`, que es el rótulo interno del dueño y en el programa principal
           // nace igual al del comercio (0024). CHECK en la base: no vacío y hasta 40 caracteres.
           nombre_pase: string | null;
+          // Aviso antes del vencimiento (0034), por programa: el mensaje depende del tipo.
+          aviso_vencimiento_activo: boolean;
+          aviso_vencimiento_dias: number | null;
+          aviso_vencimiento_mensaje: string | null;
           // Encuadre propio (0032). Las cuatro se leen como unidad: una null = sin encuadre propio.
           encuadre_franja: string | null;
           foco_franja_x: number | null;
@@ -987,6 +997,9 @@ export type Database = {
           sello_icono_url?: string | null;
           difuminado_franja?: string | null;
           nombre_pase?: string | null;
+          aviso_vencimiento_activo?: boolean;
+          aviso_vencimiento_dias?: number | null;
+          aviso_vencimiento_mensaje?: string | null;
           encuadre_franja?: string | null;
           foco_franja_x?: number | null;
           foco_franja_y?: number | null;
@@ -1024,6 +1037,9 @@ export type Database = {
           sello_icono_url?: string | null;
           difuminado_franja?: string | null;
           nombre_pase?: string | null;
+          aviso_vencimiento_activo?: boolean;
+          aviso_vencimiento_dias?: number | null;
+          aviso_vencimiento_mensaje?: string | null;
           encuadre_franja?: string | null;
           foco_franja_x?: number | null;
           foco_franja_y?: number | null;
