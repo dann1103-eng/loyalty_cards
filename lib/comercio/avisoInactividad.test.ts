@@ -1,6 +1,8 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, beforeEach, vi } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '../supabase/types';
 import { createServiceClient } from '../supabase/server';
-import { crearEntorno } from '../../test/fixtures/entornoComercio';
+import { crearEntorno, type EntornoComercio } from '../../test/fixtures/entornoComercio';
 import {
   leerConfiguracionAvisoInactividad,
   guardarConfiguracionAvisoInactividad,
@@ -8,13 +10,144 @@ import {
   procesarAvisosInactividad,
   DURACION_AVISO_INACTIVIDAD_DIAS,
 } from './avisoInactividad';
-import { crearPrograma } from './programas';
+import { crearPrograma, tarjetasActivasDelComercio } from './programas';
 import { acreditarPuntos } from './acreditar';
+import { enviarMensajeTarjeta } from './enviarMensajeTarjeta';
+
+// ══ POR QUÉ ESTE ARCHIVO NO PUEDE TOCAR NADA QUE NO HAYA CREADO ══
+// procesarAvisosInactividad recorre TODOS los comercios de la base con el aviso encendido, y la base
+// de las pruebas es la REAL. Hasta el 2026-09-13 este archivo lo llamaba sin ningún mock: el día que
+// un comercio de verdad encendiera su aviso, cada corrida de la suite les mandaba un push por APNs y
+// por Google a sus clientes, les sobrescribía el aviso del reverso, y les marcaba
+// `aviso_inactividad_enviado_en` — con lo que el cron de verdad, al día siguiente, ya no les mandaba
+// el aviso legítimo. No pasó (ningún comercio real lo tenía encendido), pero el dueño está por
+// encenderlo.
+//
+// Hacen falta DOS cercos, porque son dos escrituras distintas:
+//   1. enviarMensajeTarjeta se reemplaza ENTERA (mismo criterio que avisoVencimiento.test.ts). El
+//      doble solo escribe el aviso —lo mismo que el paso 1 de la función real, que las pruebas
+//      necesitan para leer `aviso_hasta`— en las tarjetas que creó ESTE archivo. Para cualquier otra
+//      contesta "no alcanzó ningún canal" y no toca nada.
+//   2. tarjetasActivasDelComercio devuelve [] para los comercios que no creó este archivo. Con el
+//      primer cerco solo NO alcanza: procesarAvisosInactividad graba `aviso_inactividad_enviado_en`
+//      por su cuenta, se haya entregado o no, así que seguiría marcando las tarjetas de los comercios
+//      reales. Para los comercios de la prueba delega en la función de verdad.
+// El `beforeAll` de abajo aborta el archivo entero si alguno de los dos mocks se cae.
+const doble = vi.hoisted(() => {
+  const comerciosPropios = new Set<string>();
+  const tarjetasPropias = new Set<string>();
+  const entregables = new Set<string>();
+  const enviar = vi.fn(
+    async (
+      supabase: SupabaseClient<Database>,
+      tarjetaId: string,
+      mensaje: string,
+      vigenteHasta: string,
+      _origen: 'campana' | 'inactividad' | 'vencimiento',
+      _difusionId?: string,
+    ) => {
+      if (!tarjetasPropias.has(tarjetaId)) return { enviadoApple: false, enviadoGoogle: false };
+      const { error } = await supabase
+        .from('tarjetas')
+        .update({ aviso_texto: mensaje, aviso_hasta: vigenteHasta })
+        .eq('id', tarjetaId);
+      if (error) throw error;
+      return { enviadoApple: entregables.has(tarjetaId), enviadoGoogle: false };
+    },
+  );
+  return { comerciosPropios, tarjetasPropias, entregables, enviar };
+});
+
+vi.mock('./enviarMensajeTarjeta', () => ({ enviarMensajeTarjeta: doble.enviar }));
+
+vi.mock('./programas', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./programas')>();
+  return {
+    ...original,
+    tarjetasActivasDelComercio: vi.fn(
+      async (...args: Parameters<typeof original.tarjetasActivasDelComercio>) =>
+        doble.comerciosPropios.has(args[1]) ? original.tarjetasActivasDelComercio(...args) : [],
+    ),
+  };
+});
 
 const supabase = createServiceClient();
-const entorno = crearEntorno(supabase);
+// `base` crea sin registrar: lo usa solo la prueba que simula un comercio AJENO. Todo lo demás pasa
+// por `entorno`, que anota lo que crea para que los dos cercos lo dejen pasar.
+const base = crearEntorno(supabase);
+const entorno: EntornoComercio = {
+  ...base,
+  async crearComercio(campos) {
+    const id = await base.crearComercio(campos);
+    doble.comerciosPropios.add(id);
+    return id;
+  },
+  async crearTarjeta(comercioId, puntos, opciones) {
+    const tarjeta = await base.crearTarjeta(comercioId, puntos, opciones);
+    doble.tarjetasPropias.add(tarjeta.id);
+    return tarjeta;
+  },
+};
 
-afterEach(() => entorno.limpiar());
+beforeAll(() => {
+  if (!vi.isMockFunction(enviarMensajeTarjeta) || !vi.isMockFunction(tarjetasActivasDelComercio)) {
+    throw new Error(
+      '[test] avisoInactividad.test.ts corre contra la base REAL: sin los mocks de enviarMensajeTarjeta y ' +
+        'tarjetasActivasDelComercio les mandaría push a clientes de verdad. Ver el comentario del principio.',
+    );
+  }
+});
+beforeEach(() => {
+  doble.entregables.clear();
+  doble.enviar.mockClear();
+});
+afterEach(async () => {
+  await entorno.limpiar();
+  doble.comerciosPropios.clear();
+  doble.tarjetasPropias.clear();
+});
+
+describe('el cerco: nada de lo que no creó la prueba se toca', () => {
+  it('el doble no escribe sobre una tarjeta ajena ni dice haberla alcanzado', async () => {
+    // MUTACIÓN: sin el `tarjetasPropias.has` del doble, esta prueba FALLA (le escribe el aviso).
+    const comercioAjeno = await base.crearComercio();
+    const ajena = await base.crearTarjeta(comercioAjeno);
+
+    const envio = await enviarMensajeTarjeta(supabase, ajena.id, 'No debería llegar', '2099-01-01', 'inactividad');
+
+    expect(envio).toEqual({ enviadoApple: false, enviadoGoogle: false });
+    const { data } = await supabase.from('tarjetas').select('aviso_texto, aviso_hasta').eq('id', ajena.id).single();
+    expect(data, 'el doble le escribió el aviso a una tarjeta que la prueba no creó').toEqual({
+      aviso_texto: null,
+      aviso_hasta: null,
+    });
+  });
+
+  it('el recorrido no marca ni avisa a las tarjetas de un comercio que la prueba no creó', async () => {
+    // Simula un comercio REAL con el aviso encendido y un cliente inactivo. MUTACIÓN: sin el filtro
+    // de tarjetasActivasDelComercio esta prueba FALLA — verificado: el recorrido la cuenta como
+    // avisada, y le graba `aviso_inactividad_enviado_en` aunque el doble no entregue nada.
+    const comercioAjeno = await base.crearComercio();
+    await guardarConfiguracionAvisoInactividad(supabase, comercioAjeno, { activo: true, dias: 30, mensaje: 'Volvé' });
+    const ajena = await base.crearTarjeta(comercioAjeno, 0, {
+      createdAt: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+
+    const resumen = await procesarAvisosInactividad(supabase);
+
+    expect(resumen.avisadas).not.toContain(ajena.id);
+    expect(doble.enviar.mock.calls.filter((c) => c[1] === ajena.id)).toHaveLength(0);
+    const { data } = await supabase
+      .from('tarjetas')
+      .select('aviso_inactividad_enviado_en, aviso_hasta')
+      .eq('id', ajena.id)
+      .single();
+    expect(data, 'marcó como avisada la tarjeta de un comercio ajeno').toEqual({
+      aviso_inactividad_enviado_en: null,
+      aviso_hasta: null,
+    });
+  });
+});
 
 describe('guardarConfiguracionAvisoInactividad / leerConfiguracionAvisoInactividad', () => {
   it('guarda y relee la configuración', async () => {
