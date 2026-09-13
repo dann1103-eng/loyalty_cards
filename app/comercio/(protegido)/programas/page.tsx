@@ -5,6 +5,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { listarProgramas, MAXIMO_PROGRAMAS_ACTIVOS } from '@/lib/comercio/programas';
 import { urlRegistroPrograma } from '@/lib/comercio/urlRegistroPrograma';
 import { tipoOPuntos } from '@/lib/tarjetas/tipos';
+import { hoyEnZona, sumarDias } from '@/lib/tarjetas/vigencia';
 import { listarNiveles } from '@/lib/tarjetas/descuento';
 import AvisoComercioActivo from '../AvisoComercioActivo';
 import FormularioNuevoPrograma from './FormularioNuevoPrograma';
@@ -22,9 +23,15 @@ export default async function PaginaProgramas() {
   // (colores, imágenes y reverso) vive en Marca, que es donde está la vista previa en vivo —
   // duplicar el editor acá lo dejaba sin ella.
   const [{ data: comercio }, programas] = await Promise.all([
-    supabase.from('comercios').select('slug').eq('id', comercioId).maybeSingle(),
+    supabase.from('comercios').select('slug, zona_horaria').eq('id', comercioId).maybeSingle(),
     listarProgramas(supabase, comercioId, { soloActivos: false }),
   ]);
+
+  // La fecha de ejemplo de la vista previa del aviso antes del vencimiento: dentro de una semana,
+  // contada en el "hoy" del comercio. Se calcula acá, en el servidor, para que el formulario (que es
+  // de cliente) dibuje el mismo texto al servirse y al hidratarse. Es solo ilustrativa: cada cliente
+  // recibe su propia fecha de vencimiento.
+  const fechaEjemploAviso = sumarDias(hoyEnZona(comercio?.zona_horaria ?? null), 7);
 
   // Los niveles son del COMERCIO (0018), así que se leen una sola vez y solo si hay un programa de
   // descuento: casi ningún comercio usa el tipo y sería una consulta al pedo en el resto.
@@ -85,7 +92,9 @@ export default async function PaginaProgramas() {
                   )}
                 </div>
 
-                {programa.activo && <FormularioConfiguracionPrograma programa={programa} />}
+                {programa.activo && (
+                  <FormularioConfiguracionPrograma programa={programa} fechaEjemplo={fechaEjemploAviso} />
+                )}
 
                 {/* El descuento no se configura con un campo suelto sino con una escalera de
                     umbrales, así que tiene su propia sección en vez de una fila del formulario. */}

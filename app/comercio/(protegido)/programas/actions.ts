@@ -20,6 +20,9 @@ function configuracionDeFormData(formData: FormData) {
     multipassVisitas: String(formData.get('multipass_visitas') ?? ''),
     membresiaDias: String(formData.get('membresia_dias') ?? ''),
     cuponVigenciaDias: String(formData.get('cupon_vigencia_dias') ?? ''),
+    avisoVencimientoActivo: String(formData.get('aviso_vencimiento_activo') ?? ''),
+    avisoVencimientoDias: String(formData.get('aviso_vencimiento_dias') ?? ''),
+    avisoVencimientoMensaje: String(formData.get('aviso_vencimiento_mensaje') ?? ''),
   });
 }
 

@@ -32,6 +32,11 @@ function datos(tipoTarjeta: string, nombre: string, overrides: Partial<DatosNuev
   };
 }
 
+// El aviso antes del vencimiento tal como NACE un programa (defaults de la 0034): apagado y vacío. Lo
+// usan los llamadores que prueban otra cosa: `guardarConfiguracionPrograma` escribe las tres columnas
+// siempre, así que todo llamador tiene que decir qué aviso manda.
+const SIN_AVISO = { avisoVencimientoActivo: false, avisoVencimientoDias: null, avisoVencimientoMensaje: null };
+
 async function filaPrograma(programaId: string) {
   const { data, error } = await supabase
     .from('programas_tarjeta')
@@ -142,6 +147,7 @@ describe('guardarConfiguracionPrograma', () => {
       multipassVisitas: null,
       membresiaDias: null,
       cuponVigenciaDias: null,
+      ...SIN_AVISO,
     });
     expect(res.ok).toBe(true);
 
@@ -160,6 +166,7 @@ describe('guardarConfiguracionPrograma', () => {
       multipassVisitas: null,
       membresiaDias: null,
       cuponVigenciaDias: null,
+      ...SIN_AVISO,
     });
     expect(res.ok).toBe(false);
   });
@@ -176,12 +183,219 @@ describe('guardarConfiguracionPrograma', () => {
       multipassVisitas: null,
       membresiaDias: null,
       cuponVigenciaDias: null,
+      ...SIN_AVISO,
     });
     expect(res.ok).toBe(false);
 
     // Y el programa de B queda intacto — no se filtró el update por fuera del scope.
     const fila = await filaPrograma(deB.id);
     expect(Number(fila.cashback_porcentaje)).toBe(3);
+  });
+});
+
+// ══ El aviso antes del vencimiento, guardado por el MISMO escritor que el resto de la configuración ══
+// La pantalla tiene un único formulario con un único `action`, y guardarConfiguracionPrograma escribe
+// sus columnas incondicionalmente: el aviso entra por acá o no entra (spec 2026-09-09, "La interfaz").
+// Todos estos programas se configuran con crearPrograma/guardarConfiguracionPrograma, el camino de
+// producción, nunca con un insert a mano ni con la columna del comercio.
+describe('guardarConfiguracionPrograma — el aviso antes del vencimiento', () => {
+  async function membresia(comercioId: string, dias: number) {
+    const creado = await crearPrograma(supabase, comercioId, datos('membresia', 'Socios', { membresiaDias: dias }));
+    if (!creado.ok) throw new Error(`[test] no se pudo crear la membresía: ${creado.error}`);
+    return creado.id;
+  }
+
+  const configMembresia = (membresiaDias: number, aviso: { activo: boolean; dias: number | null; mensaje: string | null }) => ({
+    cashbackPorcentaje: null,
+    multipassVisitas: null,
+    membresiaDias,
+    cuponVigenciaDias: null,
+    avisoVencimientoActivo: aviso.activo,
+    avisoVencimientoDias: aviso.dias,
+    avisoVencimientoMensaje: aviso.mensaje,
+  });
+
+  it('guarda los tres campos, y la lectura del programa los devuelve', async () => {
+    const comercioId = await entorno.crearComercio();
+    const programaId = await membresia(comercioId, 30);
+
+    const res = await guardarConfiguracionPrograma(
+      supabase,
+      comercioId,
+      programaId,
+      configMembresia(30, { activo: true, dias: 5, mensaje: 'Pasá a renovar, te esperamos' }),
+    );
+    expect(res).toEqual({ ok: true });
+
+    // Se relee por obtenerPrograma, la misma lectura que arma el `Programa` de la pantalla: una
+    // columna que se escribe pero no se lee dejaría el formulario mostrando el aviso apagado.
+    const programa = await obtenerPrograma(supabase, comercioId, programaId);
+    expect(programa?.avisoVencimientoActivo).toBe(true);
+    expect(programa?.avisoVencimientoDias).toBe(5);
+    expect(programa?.avisoVencimientoMensaje).toBe('Pasá a renovar, te esperamos');
+  });
+
+  it('un programa recién creado tiene el aviso apagado y vacío', async () => {
+    const comercioId = await entorno.crearComercio();
+    const programaId = await membresia(comercioId, 30);
+
+    const programa = await obtenerPrograma(supabase, comercioId, programaId);
+
+    expect(programa?.avisoVencimientoActivo).toBe(false);
+    expect(programa?.avisoVencimientoDias).toBeNull();
+    expect(programa?.avisoVencimientoMensaje).toBeNull();
+  });
+
+  it('rechaza avisar con tantos días de anticipación como dura la membresía, y no escribe nada', async () => {
+    // Decisión 8: renovar deja vigencia_hasta = hoy + 30, así que un aviso a 30 días le llegaría al
+    // socio al día siguiente de pagar.
+    //
+    // MUTACIÓN verificada: quitar la llamada a validarAvisoVencimiento dentro de validarConfiguracion
+    // (programas.ts) hace fallar esta prueba — el guardado devuelve ok y el aviso queda encendido.
+    const comercioId = await entorno.crearComercio();
+    const programaId = await membresia(comercioId, 30);
+
+    const res = await guardarConfiguracionPrograma(
+      supabase,
+      comercioId,
+      programaId,
+      configMembresia(30, { activo: true, dias: 30, mensaje: null }),
+    );
+
+    expect(res).toEqual({
+      ok: false,
+      error:
+        'El aviso tiene que salir con menos de 30 días de anticipación: cada renovación dura 30 días, así que avisar 30 días antes le diría "está por vencer" al socio apenas termina de pagar.',
+    });
+    expect((await obtenerPrograma(supabase, comercioId, programaId))?.avisoVencimientoActivo).toBe(false);
+  });
+
+  it('cruza contra la duración que llega en el MISMO envío, no contra la que estaba guardada', async () => {
+    // El dueño tenía membresía de 30 días con aviso a 20, y ahora acorta la duración a 15 sin tocar
+    // el aviso. Contra la base (30) pasaría; contra lo que está guardando (15) no.
+    //
+    // MUTACIÓN verificada: validar contra `membresia_dias` leído de la BASE en
+    // guardarConfiguracionPrograma, en vez del que llega en `datos`, hace fallar esta prueba.
+    const comercioId = await entorno.crearComercio();
+    const programaId = await membresia(comercioId, 30);
+    const previo = await guardarConfiguracionPrograma(
+      supabase,
+      comercioId,
+      programaId,
+      configMembresia(30, { activo: true, dias: 20, mensaje: null }),
+    );
+    expect(previo).toEqual({ ok: true });
+
+    const res = await guardarConfiguracionPrograma(
+      supabase,
+      comercioId,
+      programaId,
+      configMembresia(15, { activo: true, dias: 20, mensaje: null }),
+    );
+
+    expect(res).toEqual({
+      ok: false,
+      error:
+        'El aviso tiene que salir con menos de 15 días de anticipación: cada renovación dura 15 días, así que avisar 20 días antes le diría "está por vencer" al socio apenas termina de pagar.',
+    });
+    // Y no se escribió la mitad: la duración sigue en 30.
+    expect((await obtenerPrograma(supabase, comercioId, programaId))?.membresiaDias).toBe(30);
+  });
+
+  it('y al revés: alargar la duración y encender el aviso en el mismo envío se acepta', async () => {
+    // La otra cara de la prueba anterior: con 10 días guardados, un aviso a 20 solo es válido por la
+    // duración de 60 que viene en este mismo envío. Validar contra la base lo rechazaría.
+    const comercioId = await entorno.crearComercio();
+    const programaId = await membresia(comercioId, 10);
+
+    const res = await guardarConfiguracionPrograma(
+      supabase,
+      comercioId,
+      programaId,
+      configMembresia(60, { activo: true, dias: 20, mensaje: null }),
+    );
+
+    expect(res).toEqual({ ok: true });
+    const programa = await obtenerPrograma(supabase, comercioId, programaId);
+    expect(programa?.membresiaDias).toBe(60);
+    expect(programa?.avisoVencimientoDias).toBe(20);
+  });
+
+  it('en un cupón cruza contra los días que vale el cupón', async () => {
+    const comercioId = await entorno.crearComercio();
+    const creado = await crearPrograma(supabase, comercioId, datos('cupon', 'Cupón', { cuponVigenciaDias: 10 }));
+    if (!creado.ok) throw new Error(creado.error);
+    const cupon = (avisoDias: number) => ({
+      ...datos('cupon', 'Cupón', { cuponVigenciaDias: 10 }),
+      avisoVencimientoActivo: true,
+      avisoVencimientoDias: avisoDias,
+      avisoVencimientoMensaje: null,
+    });
+
+    expect(await guardarConfiguracionPrograma(supabase, comercioId, creado.id, cupon(10))).toEqual({
+      ok: false,
+      error:
+        'El aviso tiene que salir con menos de 10 días de anticipación: el cupón vale 10 días desde que se entrega, así que avisar 10 días antes le diría "está por vencer" al cliente apenas lo recibe.',
+    });
+    expect(await guardarConfiguracionPrograma(supabase, comercioId, creado.id, cupon(3))).toEqual({ ok: true });
+    expect((await obtenerPrograma(supabase, comercioId, creado.id))?.avisoVencimientoDias).toBe(3);
+  });
+
+  it('un cupón SIN días de vigencia no vence nunca: no puede encender el aviso', async () => {
+    const comercioId = await entorno.crearComercio();
+    const creado = await crearPrograma(supabase, comercioId, datos('cupon', 'Cupón sin fecha'));
+    if (!creado.ok) throw new Error(creado.error);
+
+    const res = await guardarConfiguracionPrograma(supabase, comercioId, creado.id, {
+      ...datos('cupon', 'Cupón sin fecha'),
+      avisoVencimientoActivo: true,
+      avisoVencimientoDias: 3,
+      avisoVencimientoMensaje: null,
+    });
+
+    expect(res).toEqual({
+      ok: false,
+      error:
+        'Este cupón no vence nunca (no tiene días de vigencia), así que no hay vencimiento que avisar. Poné los días de vigencia o apagá el aviso.',
+    });
+    expect((await obtenerPrograma(supabase, comercioId, creado.id))?.avisoVencimientoActivo).toBe(false);
+  });
+
+  it('un tipo SIN vigencia guarda su configuración con el aviso apagado y vacío', async () => {
+    // Es lo que manda su formulario, que no dibuja el bloque del aviso: nada que perder, porque en
+    // estos tipos el aviso nace apagado y en null y ninguna pantalla lo puede encender.
+    const comercioId = await entorno.crearComercio();
+    const creado = await crearPrograma(supabase, comercioId, datos('cashback', 'Cashback', { cashbackPorcentaje: 3 }));
+    if (!creado.ok) throw new Error(creado.error);
+
+    const res = await guardarConfiguracionPrograma(supabase, comercioId, creado.id, {
+      ...datos('cashback', 'Cashback', { cashbackPorcentaje: 7.5 }),
+      ...SIN_AVISO,
+    });
+
+    expect(res).toEqual({ ok: true });
+    const programa = await obtenerPrograma(supabase, comercioId, creado.id);
+    expect(programa?.cashbackPorcentaje).toBe(7.5);
+    expect(programa?.avisoVencimientoActivo).toBe(false);
+    expect(programa?.avisoVencimientoDias).toBeNull();
+  });
+
+  it('y un envío armado a mano no le puede encender el aviso a un tipo sin vigencia', async () => {
+    const comercioId = await entorno.crearComercio();
+    const creado = await crearPrograma(supabase, comercioId, datos('cashback', 'Cashback', { cashbackPorcentaje: 3 }));
+    if (!creado.ok) throw new Error(creado.error);
+
+    const res = await guardarConfiguracionPrograma(supabase, comercioId, creado.id, {
+      ...datos('cashback', 'Cashback', { cashbackPorcentaje: 3 }),
+      avisoVencimientoActivo: true,
+      avisoVencimientoDias: 3,
+      avisoVencimientoMensaje: null,
+    });
+
+    expect(res).toEqual({
+      ok: false,
+      error: 'Este tipo de tarjeta no tiene fecha de vencimiento: no hay aviso que mandar.',
+    });
   });
 });
 
@@ -345,12 +559,16 @@ describe('configuracionProgramaDesdeFormulario', () => {
       multipassVisitas: '',
       membresiaDias: '',
       cuponVigenciaDias: '',
+      avisoVencimientoActivo: '',
+      avisoVencimientoDias: '',
+      avisoVencimientoMensaje: '',
     });
     expect(res).toEqual({
       cashbackPorcentaje: null,
       multipassVisitas: null,
       membresiaDias: null,
       cuponVigenciaDias: null,
+      ...SIN_AVISO,
     });
   });
 
@@ -360,6 +578,9 @@ describe('configuracionProgramaDesdeFormulario', () => {
       multipassVisitas: '',
       membresiaDias: '',
       cuponVigenciaDias: '',
+      avisoVencimientoActivo: '',
+      avisoVencimientoDias: '',
+      avisoVencimientoMensaje: '',
     });
     expect(res.cashbackPorcentaje).toBe(5.5);
   });
@@ -370,8 +591,40 @@ describe('configuracionProgramaDesdeFormulario', () => {
       multipassVisitas: '',
       membresiaDias: '',
       cuponVigenciaDias: '',
+      avisoVencimientoActivo: '',
+      avisoVencimientoDias: '',
+      avisoVencimientoMensaje: '',
     });
     expect(Number.isNaN(res.cashbackPorcentaje)).toBe(true);
+  });
+
+  it('el aviso: la casilla marcada llega como "on", y un mensaje de puros espacios es null', () => {
+    const res = configuracionProgramaDesdeFormulario({
+      cashbackPorcentaje: '',
+      multipassVisitas: '',
+      membresiaDias: '30',
+      cuponVigenciaDias: '',
+      avisoVencimientoActivo: 'on',
+      avisoVencimientoDias: '5',
+      avisoVencimientoMensaje: '   ',
+    });
+    expect(res.avisoVencimientoActivo).toBe(true);
+    expect(res.avisoVencimientoDias).toBe(5);
+    expect(res.avisoVencimientoMensaje).toBeNull();
+  });
+
+  it('el aviso: el mensaje se guarda sin los espacios de las puntas', () => {
+    const res = configuracionProgramaDesdeFormulario({
+      cashbackPorcentaje: '',
+      multipassVisitas: '',
+      membresiaDias: '30',
+      cuponVigenciaDias: '',
+      avisoVencimientoActivo: '',
+      avisoVencimientoDias: '',
+      avisoVencimientoMensaje: '  Te esperamos  ',
+    });
+    expect(res.avisoVencimientoActivo).toBe(false);
+    expect(res.avisoVencimientoMensaje).toBe('Te esperamos');
   });
 });
 

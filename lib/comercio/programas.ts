@@ -2,6 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { TIPOS, tipoOPuntos } from '../tarjetas/tipos';
 import { slugificarNombre } from '../comercios/slugComercio';
+// De avisoVencimientoConfiguracion.ts y no de avisoVencimiento.ts: este módulo lo importan el
+// registro, el escáner y casi todo el panel, y aquel arrastra las dos billeteras.
+import { validarAvisoVencimiento } from './avisoVencimientoConfiguracion';
 
 // Capa de datos de programas de tarjeta (migración 0024). Un comercio puede tener varios programas
 // a la vez — sellos permanente, cupón de campaña — cada uno con su tipo, su configuración y su
@@ -39,6 +42,12 @@ export interface Programa {
   multipassVisitas: number | null;
   membresiaDias: number | null;
   cuponVigenciaDias: number | null;
+  // El aviso antes del vencimiento (0034), configurado por programa. Viaja en el `Programa` porque
+  // el formulario de configuración lo muestra, y un campo que se guarda pero no se relee es un
+  // formulario que vuelve a mostrar el aviso apagado.
+  avisoVencimientoActivo: boolean;
+  avisoVencimientoDias: number | null;
+  avisoVencimientoMensaje: string | null;
 }
 
 export interface DatosNuevoPrograma {
@@ -55,13 +64,19 @@ export interface DatosConfiguracionPrograma {
   multipassVisitas: number | null;
   membresiaDias: number | null;
   cuponVigenciaDias: number | null;
+  // Obligatorios y no opcionales A PROPÓSITO: guardarConfiguracionPrograma escribe las tres columnas
+  // siempre (es el ÚNICO escritor del aviso, porque la pantalla es un solo formulario con un solo
+  // `action`), así que un llamador que no los mande tiene que no compilar en vez de apagar el aviso.
+  avisoVencimientoActivo: boolean;
+  avisoVencimientoDias: number | null;
+  avisoVencimientoMensaje: string | null;
 }
 
 export type ResultadoPrograma = { ok: true; id: string } | { ok: false; error: string };
 export type ResultadoAccion = { ok: true } | { ok: false; error: string };
 
 const CAMPOS_PROGRAMA =
-  'id, nombre, slug, tipo_tarjeta, es_principal, activo, sello_meta, nombre_pase, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias';
+  'id, nombre, slug, tipo_tarjeta, es_principal, activo, sello_meta, nombre_pase, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias, aviso_vencimiento_activo, aviso_vencimiento_dias, aviso_vencimiento_mensaje';
 
 type FilaPrograma = {
   id: string;
@@ -76,6 +91,9 @@ type FilaPrograma = {
   multipass_visitas: number | null;
   membresia_dias: number | null;
   cupon_vigencia_dias: number | null;
+  aviso_vencimiento_activo: boolean;
+  aviso_vencimiento_dias: number | null;
+  aviso_vencimiento_mensaje: string | null;
 };
 
 function filaAPrograma(fila: FilaPrograma): Programa {
@@ -94,6 +112,9 @@ function filaAPrograma(fila: FilaPrograma): Programa {
     multipassVisitas: fila.multipass_visitas,
     membresiaDias: fila.membresia_dias,
     cuponVigenciaDias: fila.cupon_vigencia_dias,
+    avisoVencimientoActivo: fila.aviso_vencimiento_activo,
+    avisoVencimientoDias: fila.aviso_vencimiento_dias,
+    avisoVencimientoMensaje: fila.aviso_vencimiento_mensaje,
   };
 }
 
@@ -135,6 +156,32 @@ function validarConfiguracion(tipoTarjeta: string, datos: DatosConfiguracionProg
     }
   }
 
+  // El aviso antes del vencimiento se cruza contra el plazo que llega en ESTE MISMO envío (`datos`),
+  // nunca contra el guardado en la base: si el dueño acorta la membresía de 30 a 15 días y deja el
+  // aviso en 20, lo que va a quedar escrito es 15 contra 20, y eso es lo que hay que rechazar. Leer
+  // el plazo de la fila validaría una combinación que ya no va a existir.
+  //
+  // Va DESPUÉS de validar el plazo propio a propósito: con la duración vacía o fuera de rango, el
+  // dueño tiene que leer ese error, no uno del aviso que depende de ella.
+  const problemaAviso = validarAvisoVencimiento(
+    {
+      activo: datos.avisoVencimientoActivo,
+      dias: datos.avisoVencimientoDias,
+      mensaje: datos.avisoVencimientoMensaje,
+    },
+    tipo.valor,
+    plazoDelAviso(tipo.valor, datos),
+  );
+  if (problemaAviso) return problemaAviso;
+
+  return null;
+}
+
+// El plazo que se está por vencer, según el tipo: cuánto dura cada renovación, o cuánto vale el
+// cupón. Los demás tipos no tienen fecha (null), y validarAvisoVencimiento no los deja encenderlo.
+function plazoDelAviso(tipoTarjeta: string, datos: DatosConfiguracionPrograma): number | null {
+  if (tipoTarjeta === 'membresia') return datos.membresiaDias;
+  if (tipoTarjeta === 'cupon') return datos.cuponVigenciaDias;
   return null;
 }
 
@@ -241,7 +288,16 @@ export async function crearPrograma(
     return { ok: false, error: 'El tipo de tarjeta no es válido.' };
   }
 
-  const problema = validarConfiguracion(datos.tipoTarjeta, datos);
+  // Un programa NACE con el aviso antes del vencimiento apagado y vacío: el insert de abajo no
+  // escribe esas columnas y quedan en los defaults de la 0034. Se valida exactamente eso —y no lo que
+  // mande el formulario de creación, que no tiene el bloque— y el aviso se configura después, en la
+  // tarjeta del programa, donde el dueño ve el plazo que se está por vencer.
+  const problema = validarConfiguracion(datos.tipoTarjeta, {
+    ...datos,
+    avisoVencimientoActivo: false,
+    avisoVencimientoDias: null,
+    avisoVencimientoMensaje: null,
+  });
   if (problema) return { ok: false, error: problema };
 
   const { count, error: errorConteo } = await supabase
@@ -310,6 +366,14 @@ export async function guardarConfiguracionPrograma(
   const problema = validarConfiguracion(actual.tipo_tarjeta, datos);
   if (problema) return { ok: false, error: problema };
 
+  // Las columnas se escriben TODAS, siempre, con lo que llegó. Incluidas las del aviso en los tipos
+  // que no tienen vencimiento (cashback, prepago): su formulario no dibuja el bloque, así que llegan
+  // false/null y eso se escribe. No borra nada: en esos tipos el aviso nace apagado y en null
+  // (defaults de la 0034) y validarConfiguracion no deja encenderlo. Es la MISMA regla que ya rige
+  // para `cashback_porcentaje` en una membresía. Lo que sí sería un defecto es que un formulario
+  // de membresía o cupón dejara de mandar alguno de los tres campos: la próxima vez que el dueño
+  // guardara la duración, el aviso se apagaría solo. Lo prueba programas/actions.test.ts, que arma
+  // el envío desde el HTML real del formulario.
   const { error } = await supabase
     .from('programas_tarjeta')
     .update({
@@ -317,6 +381,9 @@ export async function guardarConfiguracionPrograma(
       multipass_visitas: datos.multipassVisitas,
       membresia_dias: datos.membresiaDias,
       cupon_vigencia_dias: datos.cuponVigenciaDias,
+      aviso_vencimiento_activo: datos.avisoVencimientoActivo,
+      aviso_vencimiento_dias: datos.avisoVencimientoDias,
+      aviso_vencimiento_mensaje: datos.avisoVencimientoMensaje,
     })
     .eq('id', programaId)
     .eq('comercio_id', comercioId);
@@ -420,11 +487,17 @@ export async function resolverProgramaDeTarjeta(
 
 // Convierte lo que llega del formulario. Cadena vacía ⇒ null. Mismo criterio que
 // configuracionDesdeFormulario (configuracionTipo.ts).
+//
+// La casilla del aviso llega como 'on' si está marcada y como '' si no (el navegador no manda las
+// casillas desmarcadas). El mensaje vacío o de puros espacios es null: el texto por defecto del tipo.
 export function configuracionProgramaDesdeFormulario(campos: {
   cashbackPorcentaje: string;
   multipassVisitas: string;
   membresiaDias: string;
   cuponVigenciaDias: string;
+  avisoVencimientoActivo: string;
+  avisoVencimientoDias: string;
+  avisoVencimientoMensaje: string;
 }): DatosConfiguracionPrograma {
   const aNumero = (valor: string): number | null => {
     const limpio = valor.trim().replace(',', '.');
@@ -439,6 +512,9 @@ export function configuracionProgramaDesdeFormulario(campos: {
     multipassVisitas: aNumero(campos.multipassVisitas),
     membresiaDias: aNumero(campos.membresiaDias),
     cuponVigenciaDias: aNumero(campos.cuponVigenciaDias),
+    avisoVencimientoActivo: campos.avisoVencimientoActivo === 'on',
+    avisoVencimientoDias: aNumero(campos.avisoVencimientoDias),
+    avisoVencimientoMensaje: campos.avisoVencimientoMensaje.trim() || null,
   };
 }
 
