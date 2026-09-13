@@ -1,10 +1,13 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { accionRegistrarComercio, type EstadoRegistro } from './actions';
 import { TIPOS_TARJETA } from '@/lib/comercios/guardarComercio';
 import { PLANES } from '@/lib/comercios/cuentas';
 import { LARGO_MINIMO_CLAVE } from '@/lib/comercios/altaAutoservicio';
+import { dispararEventoUnico } from '@/lib/marketing/eventosMeta';
 
 // El formulario de alta. La vara de diseño es explícita: alguien de 50 años, solo, sin que nadie le
 // explique nada. De ahí tres decisiones:
@@ -35,6 +38,36 @@ export default function FormularioRegistro({ planInicial }: { planInicial?: stri
   );
 
   const tipoElegido = TIPOS_TARJETA.find((t) => t.valor === tipo);
+  const router = useRouter();
+
+  // Cuenta creada: CompleteRegistration de Meta y ADENTRO, en ese orden. El evento sale desde esta
+  // página pública porque el panel no carga el píxel; `replace` para que "atrás" no vuelva a un
+  // formulario ya enviado.
+  //
+  // Una sola vez por COMERCIO creado, guardado en el navegador: si el efecto corriera de nuevo (el
+  // doble montaje de desarrollo, o volver a esta pantalla con el mismo estado) no se cuenta dos
+  // veces. El plan viaja como dato del evento: es lo que eligió en la portada, no un dato suyo.
+  useEffect(() => {
+    if (!estado || !('ok' in estado)) return;
+    dispararEventoUnico('CompleteRegistration', estado.comercioId, {
+      content_name: 'Cuenta de comercio',
+      plan,
+    });
+    router.replace(estado.destino);
+  }, [estado, plan, router]);
+
+  if (estado && 'ok' in estado) {
+    // Casi nadie ve esto: con JavaScript el efecto de arriba navega enseguida. Es para quien envió
+    // el formulario sin JavaScript, que antes entraba con el redirect del servidor.
+    return (
+      <div className="panel" role="status" style={{ marginTop: 0, textAlign: 'center' }}>
+        <p className="lede" style={{ marginTop: 0 }}>Tu cuenta está lista.</p>
+        <Link className="btn-primary" href={estado.destino} style={{ display: 'inline-block', marginTop: 12 }}>
+          Continuar
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <form action={ejecutar} className="panel" style={{ marginTop: 0, textAlign: 'left' }}>

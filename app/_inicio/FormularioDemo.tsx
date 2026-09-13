@@ -6,6 +6,7 @@ import { enviarSolicitudDemo, type EstadoDemo } from './acciones';
 import { CAMPO_TRAMPA } from './campos';
 import { LARGOS_MAXIMOS } from '@/lib/prospectos/guardarProspecto';
 import { MARCA } from '@/lib/marca';
+import { dispararEvento, idEventoAleatorio } from '@/lib/marketing/eventosMeta';
 
 export default function FormularioDemo() {
   const [estado, accion, pendiente] = useActionState<EstadoDemo, FormData>(
@@ -24,6 +25,20 @@ export default function FormularioDemo() {
     const valor = parametros.get('origen') ?? parametros.get('utm_source');
     if (valor) origen.current.value = valor;
   }, []);
+
+  // Lead de Meta: una vez por envío EXITOSO. Cada envío deja un objeto de estado nuevo, así que la
+  // guarda es "este estado ya se midió", no un booleano: un segundo envío en la misma visita (otra
+  // persona del mismo negocio, por ejemplo) es otro lead. No hay página de confirmación que
+  // recargar: el éxito vive en memoria, y al recargar vuelve el formulario vacío.
+  //
+  // Un envío que cayó en la trampa de bots también llega como `ok` (acciones.ts lo explica: es a
+  // propósito). Se acepta ese costo: la trampa la llenan bots, que casi nunca ejecutan el píxel.
+  const estadoMedido = useRef<EstadoDemo>(undefined);
+  useEffect(() => {
+    if (!estado || !('ok' in estado) || estadoMedido.current === estado) return;
+    estadoMedido.current = estado;
+    dispararEvento('Lead', { content_name: 'Demo' }, { eventID: idEventoAleatorio('Lead') });
+  }, [estado]);
 
   if (estado && 'ok' in estado) {
     return (

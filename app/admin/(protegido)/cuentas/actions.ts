@@ -1,6 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { after } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { verifyFmAdmin } from '@/lib/fm/verifyFmAdmin';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -12,6 +13,7 @@ import {
 } from '@/lib/comercios/cuentas';
 import type { DatosCuenta } from '@/lib/comercios/cuentas';
 import { registrarCobro } from '@/lib/comercios/cobros';
+import { notificarPagoAMeta } from '@/lib/marketing/conversionesMeta';
 
 export type EstadoFormulario = { error: string } | undefined;
 
@@ -112,10 +114,12 @@ export async function accionRegistrarCobro(
   const estadoCobro = String(formData.get('estado_cobro') ?? 'pendiente');
   const pagadoEn = String(formData.get('pagado_en') ?? '').trim();
 
-  const res = await registrarCobro(createServiceClient(), cuentaId, {
+  const supabase = createServiceClient();
+  const monto = Number(String(formData.get('monto') ?? '').trim());
+  const res = await registrarCobro(supabase, cuentaId, {
     periodoDesde: String(formData.get('periodo_desde') ?? ''),
     periodoHasta: String(formData.get('periodo_hasta') ?? ''),
-    monto: Number(String(formData.get('monto') ?? '').trim()),
+    monto,
     estado: estadoCobro,
     metodo: String(formData.get('metodo') ?? '') || null,
     nota: String(formData.get('nota') ?? '') || null,
@@ -124,6 +128,14 @@ export async function accionRegistrarCobro(
     pagadoEn: estadoCobro === 'pagado' ? pagadoEn || null : null,
   });
   if (!res.ok) return { error: res.error };
+
+  // Pago confirmado = Subscribe para Meta, por la API de conversiones (el porqué, en
+  // conversionesMeta.ts). Una vez por cobro: cada cobro pagado nace UNA vez acá, y el `event_id` sale
+  // del id del cobro, así que un reintento Meta lo descarta. Con `after` para que FM no espere a Meta,
+  // y sin poder fallar: notificarPagoAMeta no lanza. Un cobro pendiente no avisa nada.
+  if (estadoCobro === 'pagado') {
+    after(() => notificarPagoAMeta(supabase, { cuentaId, cobroId: res.id, monto }));
+  }
 
   revalidatePath(`/admin/cuentas/${cuentaId}`);
   return { ok: true };

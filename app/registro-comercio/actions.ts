@@ -1,7 +1,6 @@
 'use server';
 
 import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClienteServidor, createServiceClient } from '@/lib/supabase/server';
 import { crearCuentaAutoservicio } from '@/lib/comercios/altaAutoservicio';
@@ -11,7 +10,15 @@ import {
   opcionesCookieComercio,
 } from '@/lib/comercio/cookieComercio';
 
-export type EstadoRegistro = { error: string } | undefined;
+// `ok` trae A DÓNDE seguir, y la navegación la hace el formulario. Hasta el 2026-09-13 esta acción
+// terminaba con `redirect()`; se cambió por el píxel de Meta: CompleteRegistration tiene que salir
+// desde ESTA página pública, antes de entrar al panel, donde el píxel no se carga (ver
+// lib/marketing/pixelMeta.ts). Con `redirect()` el navegador llegaba al panel sin que el formulario
+// se enterara nunca del éxito.
+export type EstadoRegistro =
+  | { ok: true; comercioId: string; destino: string }
+  | { error: string }
+  | undefined;
 
 // Alta self-service desde el sitio público. Crea todo y DEJA AL DUEÑO ADENTRO: no le pide que vaya
 // a buscar un correo ni que vuelva a teclear la clave que acaba de elegir. Ese salto es donde se
@@ -46,18 +53,17 @@ export async function accionRegistrarComercio(
   const cookieStore = await cookies();
   revalidatePath('/comercio', 'layout');
 
-  // redirect() funciona LANZANDO NEXT_REDIRECT: las tres llamadas de abajo van fuera de cualquier
-  // try/catch o el redirect queda desactivado (regla de la casa, ver CLAUDE.md).
   if (eSesion) {
     // La cuenta SÍ quedó creada: decirle "no se pudo registrar" sería mentirle y lo llevaría a
     // intentar de nuevo con un correo que ahora ya existe. Se lo manda a entrar con lo que eligió.
+    // Para Meta es un registro completo igual: la cuenta existe.
     console.error('[alta] la cuenta se creó pero no se pudo iniciar sesión:', eSesion.message);
-    redirect('/comercio/login?recien=1');
+    return { ok: true, comercioId: alta.comercioId, destino: '/comercio/login?recien=1' };
   }
 
   // Comercio activo = el que acaba de crear. Es el único que tiene, pero fijarlo acá evita que el
   // panel tenga que resolverlo y que la cookie de OTRA sesión en el mismo navegador se cuele.
   cookieStore.set(COOKIE_COMERCIO_ACTIVO, alta.comercioId, opcionesCookieComercio());
   cookieStore.delete(COOKIE_SUCURSAL_ACTIVA);
-  redirect('/comercio/panel?bienvenida=1');
+  return { ok: true, comercioId: alta.comercioId, destino: '/comercio/panel?bienvenida=1' };
 }

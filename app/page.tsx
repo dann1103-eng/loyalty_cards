@@ -4,6 +4,8 @@ import Link from 'next/link';
 import estilos from './_inicio/inicio.module.css';
 import FormularioDemo from './_inicio/FormularioDemo';
 import PegatinasParallax from './_inicio/PegatinasParallax';
+import MedirVistaPlanes from './_inicio/MedirVistaPlanes';
+import EnlaceWhatsApp from './_inicio/EnlaceWhatsApp';
 import { STICKERS, type Sticker } from './_inicio/stickers';
 import {
   IconoPersonas,
@@ -59,6 +61,14 @@ export const metadata: Metadata = {
   // página sin `og:image`. Ver el encabezado de lib/metadatosOg.ts — ya pasó una vez.
   openGraph: openGraphDe({ titulo: TITULO, descripcion: DESCRIPCION, url: '/' }),
   twitter: twitterDe({ titulo: TITULO, descripcion: DESCRIPCION }),
+  // Verificación del dominio en Meta Business. Va en la metadata ESTÁTICA de esta página y no en un
+  // script: el rastreador de Meta no ejecuta JavaScript, así que la etiqueta tiene que venir en el
+  // <head> del HTML que manda el servidor. Una `metadata` exportada como objeto no se transmite en
+  // diferido (eso solo le pasa a `generateMetadata`), así que llega en el <head> para cualquier
+  // agente, bot o no. El token es público por diseño: cualquiera lo lee en el código fuente.
+  verification: {
+    other: { 'facebook-domain-verification': 'sf0fzw67mjy5evifbhrki6fk8b764b' },
+  },
 };
 
 // Los stickers son decorativos y siempre se pintan igual: un solo componente evita repetir el
@@ -576,6 +586,7 @@ export default function Inicio() {
           </div>
 
           <Pegatina sticker={STICKERS.woah} clase={estilos.stickerPlanesUno} />
+          <MedirVistaPlanes idSeccion="precios" />
         </section>
 
         <section id="preguntas" className={`${estilos.seccion} ${estilos.bandaOscura}`}>
@@ -621,6 +632,7 @@ export default function Inicio() {
                   <li>
                     ¿Preferís escribir vos?{' '}
                     <a href={`mailto:${MARCA.correoSoporte}`}>{MARCA.correoSoporte}</a>
+                    <EnlaceWhatsApp prefijo=" o por ">WhatsApp</EnlaceWhatsApp>
                   </li>
                 </ul>
                 <Image
@@ -712,12 +724,25 @@ export default function Inicio() {
               © {new Date().getFullYear()} {MARCA.nombre}. Tarjetas de lealtad digitales en El
               Salvador.
             </span>
-            {/* Íconos decorativos, sin <a>: todavía no hay cuentas sociales reales de Cardly SV
-                para enlazar (ver el comentario de .pieRedes en el CSS). */}
-            <span className={estilos.pieRedes} aria-hidden="true">
-              <IconoInstagram />
-              <IconoTikTok />
-              <IconoWhatsApp />
+            <span className={estilos.pieRedes}>
+              {/* Instagram y TikTok siguen decorativos, sin <a>: todavía no hay cuentas sociales
+                  reales de Cardly SV para enlazar (ver el comentario de .pieRedes en el CSS). */}
+              <span className={estilos.pieRedes} aria-hidden="true">
+                <IconoInstagram />
+                <IconoTikTok />
+              </span>
+              {/* WhatsApp es enlace de verdad SOLO si está NEXT_PUBLIC_WHATSAPP_CARDLY (y mide
+                  Contact de Meta); sin el número queda decorativo, como los otros dos. */}
+              <EnlaceWhatsApp
+                etiqueta="Escribinos por WhatsApp"
+                alternativa={
+                  <span className={estilos.pieRedes} aria-hidden="true">
+                    <IconoWhatsApp />
+                  </span>
+                }
+              >
+                <IconoWhatsApp />
+              </EnlaceWhatsApp>
             </span>
           </div>
         </div>

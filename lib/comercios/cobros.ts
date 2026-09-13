@@ -34,6 +34,10 @@ export interface DatosCobro {
 
 export type ResultadoCobro = { ok: true } | { ok: false; error: string };
 
+// El alta devuelve el id del cobro creado: quien registra un pago lo necesita para avisarle a Meta
+// (Subscribe, ver lib/marketing/conversionesMeta.ts) con un `event_id` que no se repita.
+export type ResultadoRegistroCobro = { ok: true; id: string } | { ok: false; error: string };
+
 const FORMATO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 function validar(datos: DatosCobro): string | null {
@@ -121,11 +125,11 @@ export async function registrarCobro(
   supabase: SupabaseClient<Database>,
   cuentaId: string,
   datos: DatosCobro,
-): Promise<ResultadoCobro> {
+): Promise<ResultadoRegistroCobro> {
   const problema = validar(datos);
   if (problema) return { ok: false, error: problema };
 
-  const { error } = await supabase.from('cobros').insert({
+  const { data, error } = await supabase.from('cobros').insert({
     cuenta_id: cuentaId,
     periodo_desde: datos.periodoDesde,
     periodo_hasta: datos.periodoHasta,
@@ -134,15 +138,19 @@ export async function registrarCobro(
     metodo: datos.metodo?.trim() || null,
     nota: datos.nota?.trim() || null,
     pagado_en: datos.pagadoEn,
-  });
+  }).select('id').single();
 
-  if (error) {
+  if (error || !data) {
     console.error('[cobros] no se pudo registrar el cobro:', error);
     return { ok: false, error: 'No se pudo registrar el cobro.' };
   }
-  return { ok: true };
+  return { ok: true, id: data.id };
 }
 
+// OJO (2026-09-13): hoy no la llama ninguna pantalla; los pagos entran por registrarCobro con estado
+// `pagado`. Si algún día se conecta, tiene que avisarle a Meta igual que accionRegistrarCobro
+// (notificarPagoAMeta), y SOLO si el cobro no estaba pagado ya: si no, Subscribe se perdería o se
+// contaría dos veces.
 export async function marcarCobroPagado(
   supabase: SupabaseClient<Database>,
   cobroId: string,

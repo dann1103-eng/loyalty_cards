@@ -954,3 +954,47 @@ sección del 2026-09-09). Suite al cierre: **1302 verdes en 118 archivos**.
 - **QA en teléfono real**: encender el aviso en una membresía con una tarjeta que venza dentro de la
   ventana, disparar el cron y confirmar que llega el push con la fecha bien escrita, en iPhone y
   Android. Y la del nombre del pase, que sigue pendiente.
+
+## 2026-09-13 (tarde) — Verificación de dominio y píxel de Meta
+
+Pedido del dueño: verificar el dominio en Meta, instalar el píxel y medir seis eventos, sin mandar a
+Meta nada del panel del negocio ni de los clientes de los comercios.
+
+### Qué quedó
+
+- **Verificación de dominio**: `verification.other` en la `metadata` estática de `app/page.tsx`. Sale
+  en el `<head>` del HTML del servidor (medido con curl, con agente de navegador y con
+  `facebookexternalhit`), solo en la portada.
+- **Píxel** (`app/_ui/PixelMeta.tsx`, en el layout raíz): se instala solo si la ruta lo admite.
+  `lib/marketing/pixelMeta.ts` excluye `/registro`, `/mi-tarjeta`, `/comercio` (login y activar
+  incluidos: la URL de activar lleva un token de un solo uso) y `/admin`. PageView a mano por cambio de
+  ruta; `disablePushState`, `autoConfig` apagado y `allowDuplicatePageViews` (el porqué de cada uno,
+  en `instalarPixel`).
+- **Eventos**: ViewContent (sección `#precios` visible, una vez por carga), Lead (envío exitoso de la
+  demo), CompleteRegistration (alta de cuenta, una vez por comercio en ese navegador), Contact (clic
+  en WhatsApp, solo existe con `NEXT_PUBLIC_WHATSAPP_CARDLY`), Subscribe (servidor, ver abajo).
+- **El alta dejó de terminar con `redirect()`**: devuelve `{ ok, destino }` y el formulario mide y
+  navega. El panel no carga el píxel, así que el evento tiene que salir antes de entrar. Sin
+  JavaScript queda un botón "Continuar".
+- **Subscribe va por la API de conversiones** (`lib/marketing/conversionesMeta.ts`): no hay pasarela y
+  el pago lo confirma FM al registrar un cobro `pagado`. Manda el monto en USD y el correo de los dueños
+  activos de la cuenta cifrado con SHA-256; `event_id` = hash del id del cobro. `registrarCobro`
+  ahora devuelve el id. Sin `META_CAPI_TOKEN`, no hace nada.
+
+### Lo que se aprendió midiendo
+
+1. **`fbq('consent', 'revoke')` RETIENE, no descarta**: un `track` hecho a mano en una ruta excluida
+   salió al volver a la portada. La defensa real es que `dispararEvento` no llama al píxel fuera de las
+   rutas que lo admiten.
+2. **Por defecto el píxel ignora un PageView con la misma URL que el anterior**: la vuelta a la portada
+   desde "Buscá tu tarjeta" no se contaba.
+3. **En una pestaña oculta Chrome no corre los IntersectionObserver**: ViewContent no sale hasta que la
+   página se ve. Probarlo con la pestaña al frente.
+
+### Pendiente
+
+- En el Administrador de eventos: **apagar la coincidencia avanzada automática** y "Rastrear eventos
+  automáticamente sin código". El código apaga lo segundo; lo primero se configura allá, y leería los
+  campos de los formularios de las páginas con píxel.
+- `marcarCobroPagado` no la llama nadie; si se conecta, tiene que avisar a Meta solo en la transición a
+  pagado.

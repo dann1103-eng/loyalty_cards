@@ -4,6 +4,7 @@ import localFont from "next/font/local";
 import { SCRIPT_TEMA, TEMA_POR_DEFECTO } from "@/lib/tema";
 import { MARCA } from "@/lib/marca";
 import { DESCRIPCION_SITIO, facebookDe, openGraphDe, twitterDe } from "@/lib/metadatosOg";
+import PixelMeta from "@/app/_ui/PixelMeta";
 import "./globals.css";
 
 // Sistema Stitch (docs/design/C1-C7): Outfit para display/marca, Hanken Grotesk para cuerpo,
@@ -137,7 +138,11 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Píxel de Meta: el componente decide por la ruta dónde se instala (ver PixelMeta). */}
+        <PixelMeta />
+      </body>
     </html>
   );
 }
