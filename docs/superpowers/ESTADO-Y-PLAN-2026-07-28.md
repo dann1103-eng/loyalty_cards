@@ -889,8 +889,9 @@ Cierra el trabajo abierto el 2026-09-08. **Migración 0033 APLICADA y verificada
 
 Spec: `specs/2026-09-09-aviso-antes-del-vencimiento-design.md`. Plan:
 `plans/2026-09-13-aviso-vencimiento-y-pendientes.md`. **Migración 0034 APLICADA y verificada**
-(`scripts/verificar-0034.ts`). **La 0035 (retirar `saldo_circulante`) va DESPUÉS del deploy**: es
-sustractiva, ver la nota 3 de la sección del 2026-09-09.
+(`scripts/verificar-0034.ts`). **Migración 0035 (retirar `saldo_circulante`) APLICADA y verificada**
+(`scripts/verificar-0035.ts`), DESPUÉS del deploy de 29c92e7 como pide una sustractiva (nota 3 de la
+sección del 2026-09-09). Suite al cierre: **1302 verdes en 118 archivos**.
 
 ### Lo que entró
 
@@ -944,8 +945,6 @@ sustractiva, ver la nota 3 de la sección del 2026-09-09.
 
 ### Pendiente, anotado para no perderlo
 
-- **Migración 0035**: `drop` + `create` de `reporte_fm_comercios()` sin `saldo_circulante`, con los
-  `revoke` Y los `grant`. Después, sacar `saldo_circulante` de `lib/supabase/types.ts`.
 - **Sellos, en el servidor**: la cantidad de la operación principal la manda el cliente. Una petición
   manipulada podría sumar varios sellos de una vez, frenada solo por el tope por transacción. Ya
   pasaba antes; es un endurecimiento aparte.
