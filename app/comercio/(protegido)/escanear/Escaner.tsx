@@ -6,9 +6,10 @@ import {
   accionBuscarPorToken,
   accionOperacionPrincipal,
   accionOperacionSecundaria,
-  accionAcreditarForzado,
+  accionAutorizarOperacion,
   accionQuitar,
   accionCanjear,
+  type OperacionEscaner,
   type ResultadoEscaneo,
 } from './actions';
 import { LARGO_MAXIMO_MOTIVO } from '@/lib/comercio/motivo';
@@ -21,10 +22,16 @@ type Modo = 'camara' | 'sin-camara' | 'buscando' | 'resultado';
 // (resolverSucursalDeAccion): para el cajero el valor que mande este cliente se ignora.
 export type SucursalOpcion = { id: string; nombre: string };
 
-// Lo que quedó bloqueado por una perilla antifraude y espera autorización del dueño. Se guarda el
-// `delta` con el que se INTENTÓ acreditar, no se recalcula desde el input al autorizar: entre el
-// bloqueo y la autorización el cajero pudo tocar el campo, y se estaría autorizando otra cosa.
-type Bloqueo = { mensaje: string; delta: number; monto: number | null };
+// Lo que quedó bloqueado por una perilla antifraude y espera autorización del dueño. Se guarda QUÉ
+// OPERACIÓN se intentó, con lo que el cajero tecleó en ese momento, y el servidor la repite forzada.
+//
+// No se guarda un delta: cuánto vale la operación (las visitas del paquete, los centavos de la
+// carga, el porcentaje del cashback) lo sabe el servidor. Guardar acá un `delta` fue el defecto que
+// autorizaba un paquete de 10 visitas como 1 visita y $25.00 de gift card como 1 centavo.
+//
+// Y no se relee el input al autorizar: entre el bloqueo y la autorización el cajero pudo tocar el
+// campo, y se estaría autorizando otra cosa.
+type Bloqueo = { mensaje: string; operacion: OperacionEscaner; etiqueta: string };
 
 export default function Escaner({
   tokenInicial,
@@ -153,13 +160,6 @@ export default function Escaner({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al montar
   }, []);
 
-  // Monto tecleado por el cajero, o null si el comercio no lo pide (o lo dejó vacío).
-  const montoNumerico = () => {
-    if (!resultado?.pedirMontoCompra) return null;
-    const n = Number(montoCompra.trim());
-    return Number.isFinite(n) && n > 0 ? n : null;
-  };
-
   const aplicarExito = (res: { puntosActuales: number; saldoTexto: string; mensaje: string }) => {
     setSaldoTexto(res.saldoTexto);
     setResultado((r) => (r ? { ...r, puntosActuales: res.puntosActuales } : r));
@@ -175,8 +175,13 @@ export default function Escaner({
   // tarjeta. Asi el navegador no puede pedir "consumir saldo" sobre una tarjeta de sellos.
   const operacionPrincipal = () => {
     if (!resultado?.tarjetaId) return;
-    const delta =
+    const cantidad =
       resultado.tipoTarjeta === 'puntos' ? Math.max(1, Math.floor(Number(deltaPuntos) || 1)) : 1;
+    const operacion: OperacionEscaner = { tipo: 'principal', cantidad, montoTexto: montoCompra };
+    const etiqueta =
+      resultado.tipoTarjeta === 'puntos'
+        ? `${resultado.etiquetaAccion} (${cantidad})`
+        : (resultado.etiquetaAccion ?? 'Acreditar');
     setMensaje(null);
     setError(null);
     setBloqueo(null);
@@ -184,15 +189,15 @@ export default function Escaner({
       const res = await accionOperacionPrincipal(
         resultado.tarjetaId!,
         sucursalIdCliente,
-        delta,
-        montoCompra,
+        operacion.cantidad,
+        operacion.montoTexto,
       );
       if (res.ok) {
         aplicarExito(res);
       } else if (res.bloqueoLimite) {
         // No es un fallo: es una perilla del dueno haciendo su trabajo. Se guarda el intento para
         // que el pueda autorizarlo sin que el cajero tenga que volver a teclear nada.
-        setBloqueo({ mensaje: res.error, delta, monto: montoNumerico() });
+        setBloqueo({ mensaje: res.error, operacion, etiqueta });
       } else {
         setError(res.error);
       }
@@ -202,6 +207,8 @@ export default function Escaner({
   // Solo gift card (cargar saldo) y prepago (vender paquete) tienen una segunda operacion.
   const operacionSecundaria = () => {
     if (!resultado?.tarjetaId) return;
+    const operacion: OperacionEscaner = { tipo: 'secundaria', montoTexto: montoCompra };
+    const etiqueta = resultado.etiquetaSecundaria ?? 'Acreditar';
     setMensaje(null);
     setError(null);
     setBloqueo(null);
@@ -209,10 +216,10 @@ export default function Escaner({
       const res = await accionOperacionSecundaria(
         resultado.tarjetaId!,
         sucursalIdCliente,
-        montoCompra,
+        operacion.montoTexto,
       );
       if (res.ok) aplicarExito(res);
-      else if (res.bloqueoLimite) setBloqueo({ mensaje: res.error, delta: 1, monto: montoNumerico() });
+      else if (res.bloqueoLimite) setBloqueo({ mensaje: res.error, operacion, etiqueta });
       else setError(res.error);
     });
   };
@@ -221,12 +228,11 @@ export default function Escaner({
     if (!resultado?.tarjetaId || !bloqueo) return;
     setError(null);
     iniciarTransicion(async () => {
-      const res = await accionAcreditarForzado(
+      const res = await accionAutorizarOperacion(
         resultado.tarjetaId!,
-        bloqueo.delta,
+        bloqueo.operacion,
         motivoForzado,
         sucursalIdCliente,
-        bloqueo.monto,
       );
       if (res.ok) aplicarExito(res);
       else setError(res.error);
@@ -472,7 +478,7 @@ export default function Escaner({
                   onClick={autorizar}
                   disabled={pendiente || !motivoForzado.trim()}
                 >
-                  {pendiente ? 'Autorizando…' : `Autorizar y acreditar ${bloqueo.delta}`}
+                  {pendiente ? 'Autorizando…' : `Autorizar: ${bloqueo.etiqueta}`}
                 </button>
                 <button className="btn-borde" onClick={() => setBloqueo(null)} disabled={pendiente}>
                   Cancelar

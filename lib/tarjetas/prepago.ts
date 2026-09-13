@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
-import { acreditarPuntos, type OpcionesAcreditar } from '../comercio/acreditar';
+import { acreditarPuntos, type Acreditador, type OpcionesAcreditar } from '../comercio/acreditar';
 import { resolverProgramaDeTarjeta } from '../comercio/programas';
 
 // Prepago: el cliente compra un paquete de visitas y las va usando.
@@ -65,11 +65,16 @@ export type ResultadoPaquete =
 // Vender un paquete es SUMAR al contador, así que reusa acreditarPuntos tal cual: mismo RPC, misma
 // atribución de sucursal y cajero, mismos cuatro límites antifraude. Escribir una función propia
 // habría duplicado esas reglas, y dos copias de una regla terminan divergiendo.
+//
+// `acreditar` es quién escribe (ver Acreditador en lib/comercio/acreditar.ts): cuando el dueño
+// autoriza un paquete bloqueado por una perilla, se llama a ESTA función con el escritor forzado,
+// para que las visitas salgan del programa igual que en la venta normal.
 export async function venderPaquete(
   supabase: SupabaseClient<Database>,
   comercioId: string,
   tarjetaId: string,
   opciones?: OpcionesAcreditar,
+  acreditar: Acreditador = acreditarPuntos,
 ): Promise<ResultadoPaquete> {
   // Del PROGRAMA de la tarjeta, NUNCA de comercios.multipass_visitas. Esa columna quedó legada con
   // la migración 0024 y hoy no la escribe nadie: la pantalla que edita este número es Programas, y
@@ -87,7 +92,7 @@ export async function venderPaquete(
     };
   }
 
-  const res = await acreditarPuntos(supabase, comercioId, tarjetaId, visitas, opciones);
+  const res = await acreditar(supabase, comercioId, tarjetaId, visitas, opciones);
   if (!res.ok) return { ok: false, error: res.error, bloqueoLimite: res.bloqueoLimite };
 
   return {

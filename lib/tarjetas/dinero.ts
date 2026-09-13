@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
-import { acreditarPuntos, type OpcionesAcreditar } from '../comercio/acreditar';
+import { acreditarPuntos, type Acreditador, type OpcionesAcreditar } from '../comercio/acreditar';
 import { resolverProgramaDeTarjeta } from '../comercio/programas';
 import { formatearCentavos } from './tipos';
 
@@ -28,12 +28,17 @@ export function calcularCashback(montoCentavos: number, porcentaje: number): num
 
 // Acredita el cashback de una compra. El monto es OBLIGATORIO: sin él no hay porcentaje que
 // calcular, y acreditar cero sería peor que fallar — el cajero creería que quedó registrado.
+//
+// `acreditar` es quién escribe (ver Acreditador en lib/comercio/acreditar.ts). La autorización del
+// dueño llama a ESTA función con el escritor forzado: el porcentaje sale del programa y el cálculo es
+// el mismo que en la acreditación normal, en vez de un delta armado en el navegador.
 export async function acreditarCashback(
   supabase: SupabaseClient<Database>,
   comercioId: string,
   tarjetaId: string,
   montoCompraCentavos: number,
   opciones?: OpcionesAcreditar,
+  acreditar: Acreditador = acreditarPuntos,
 ): Promise<ResultadoDinero> {
   if (!Number.isInteger(montoCompraCentavos) || montoCompraCentavos <= 0) {
     return { ok: false, error: 'Escribí el monto de la compra para calcular el cashback.' };
@@ -60,7 +65,7 @@ export async function acreditarCashback(
 
   // El monto de la compra se guarda en el ledger junto con el cashback acreditado. Es lo que después
   // permite auditar "cuánto se vendió por cada dólar devuelto".
-  const res = await acreditarPuntos(supabase, comercioId, tarjetaId, devolucion, {
+  const res = await acreditar(supabase, comercioId, tarjetaId, devolucion, {
     ...opciones,
     montoCompra: montoCompraCentavos / 100,
   });
@@ -75,19 +80,21 @@ export async function acreditarCashback(
 
 // Carga saldo en una gift card. Reusa acreditarPuntos, o sea que el techo por transacción del
 // comercio (en centavos) aplica solo: si el cajero intenta cargar más, queda bloqueado y solo el
-// dueño puede autorizarlo con motivo.
+// dueño puede autorizarlo con motivo — y esa autorización vuelve a pasar por acá con el escritor
+// forzado (`acreditar`), así que carga los MISMOS centavos que se intentaron.
 export async function cargarGiftCard(
   supabase: SupabaseClient<Database>,
   comercioId: string,
   tarjetaId: string,
   centavos: number,
   opciones?: OpcionesAcreditar,
+  acreditar: Acreditador = acreditarPuntos,
 ): Promise<ResultadoDinero> {
   if (!Number.isInteger(centavos) || centavos <= 0) {
     return { ok: false, error: 'Escribí cuánto saldo cargar.' };
   }
 
-  const res = await acreditarPuntos(supabase, comercioId, tarjetaId, centavos, opciones);
+  const res = await acreditar(supabase, comercioId, tarjetaId, centavos, opciones);
   if (!res.ok) return { ok: false, error: res.error, bloqueoLimite: res.bloqueoLimite };
 
   return {

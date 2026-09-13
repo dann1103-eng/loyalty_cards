@@ -2,7 +2,8 @@
 
 import { verifyComercioAcceso } from '@/lib/comercio/verifyComercioAcceso';
 import { createServiceClient } from '@/lib/supabase/server';
-import { buscarTarjetaPorToken, acreditarPuntos, acreditarForzado } from '@/lib/comercio/acreditar';
+import { buscarTarjetaPorToken, acreditarPuntos, acreditadorForzado } from '@/lib/comercio/acreditar';
+import { validarMotivo } from '@/lib/comercio/motivo';
 import { canjearRecompensa } from '@/lib/comercio/canje';
 import { quitarPuntos } from '@/lib/comercio/ajuste';
 import { resolverSucursalDeAccion } from '@/lib/comercio/atribucionEscaner';
@@ -248,7 +249,24 @@ export async function accionAcreditar(
   };
 }
 
-// Acredita SALTÁNDOSE las perillas antifraude. Solo el dueño.
+// Qué operación del escáner se intentó, con lo que el cajero TECLEÓ para ella. El cliente dice cuál
+// botón apretó; qué hace ese botón lo decide el servidor según el tipo de la tarjeta.
+//
+// Es también lo que el escáner GUARDA cuando una perilla antifraude bloquea, para que el dueño
+// autorice esa misma operación (accionAutorizarOperacion) y no un número suelto.
+export type OperacionEscaner =
+  | { tipo: 'principal'; cantidad: number; montoTexto: string }
+  | { tipo: 'secundaria'; montoTexto: string };
+
+// Autoriza una operación que una perilla antifraude bloqueó, SALTÁNDOSE las perillas. Solo el dueño.
+//
+// No recibe un delta: recibe QUÉ operación era y la REPITE en el servidor con el escritor forzado
+// (ver Acreditador en lib/comercio/acreditar.ts). Corre la misma función que la operación normal
+// (ejecutarOperacion), así que las visitas del paquete y el porcentaje de cashback salen del
+// PROGRAMA y los centavos salen del monto, exactamente igual. Antes esta acción recibía un `delta`
+// crudo que calculaba el navegador y que valía 1 en todo lo que no fuera puntos: el dueño autorizaba
+// un paquete de 10 visitas y se acreditaba 1 visita; $25.00 de gift card, 1 centavo. El cliente
+// pagaba y recibía casi nada, sin ningún error a la vista.
 //
 // El gate es verifyComercioAcceso() + chequeo explícito de rol, y NO verifyComercioOwner(): ese
 // redirige a un cajero a /comercio/escanear (verifyComercioOwner.ts:24), o sea a la página en la
@@ -257,38 +275,30 @@ export async function accionAcreditar(
 //
 // Este es el primero de dos candados independientes: el segundo es que el RPC del camino normal
 // (acreditar_atomico) es físicamente incapaz de escribir forzado=true.
-export async function accionAcreditarForzado(
+export async function accionAutorizarOperacion(
   tarjetaId: string,
-  delta: number,
+  operacion: OperacionEscaner,
   motivo: string,
   sucursalIdCliente: string | null,
-  montoCompra: number | null = null,
 ): Promise<RespuestaOperacion> {
   const sesion = await verifyComercioAcceso();
   if (sesion.rol !== 'owner') {
     return { ok: false, error: 'Solo el dueño puede autorizar una acreditación por encima del límite.' };
   }
-  const supabase = createServiceClient();
 
-  const atribucion = await resolverSucursalAtribuida(supabase, sesion, sucursalIdCliente);
-  if (atribucion.ok === false) return { ok: false, error: atribucion.error };
+  // Antes de tocar nada: sin motivo no hay autorización. acreditarForzado lo vuelve a validar, y el
+  // RPC una tercera vez, pero acá el error no depende de hasta dónde llegue cada operación.
+  const revision = validarMotivo(motivo, 'la autorización');
+  if (!revision.ok) return { ok: false, error: revision.error };
 
-  const res = await acreditarForzado(supabase, sesion.comercioId, tarjetaId, delta, motivo, {
-    sucursalId: atribucion.valor,
-    cajeroUsuarioId: sesion.usuarioComercioId,
-    montoCompra,
+  const res = await ejecutarOperacion(sesion, tarjetaId, sucursalIdCliente, operacion, {
+    motivo: revision.motivo,
   });
   if (!res.ok) return { ok: false, error: res.error };
 
-  await notificarCambioTarjeta(supabase, tarjetaId);
-  await syncObjetoTarjeta(supabase, tarjetaId);
-
-  return {
-    ok: true,
-    puntosActuales: res.puntosActuales,
-    saldoTexto: await saldoTextoActual(sesion.comercioId, tarjetaId),
-    mensaje: 'Autorizado y acreditado. Queda registrado en el historial del cliente.',
-  };
+  // El mensaje de la operación va ADENTRO ("Paquete de 10 visitas cargado…"): el dueño lee lo que
+  // efectivamente se acreditó, no una confirmación genérica que taparía un monto equivocado.
+  return { ...res, mensaje: `Autorizado. ${res.mensaje} Queda registrado en el historial del cliente.` };
 }
 
 // Quita sellos/puntos con motivo obligatorio. Gate COMPARTIDO (owner O cajero): el cajero que se
@@ -404,79 +414,7 @@ export async function accionOperacionPrincipal(
   montoTexto: string,
 ): Promise<RespuestaOperacion> {
   const sesion = await verifyComercioAcceso();
-  const supabase = createServiceClient();
-
-  const atribucion = await resolverSucursalAtribuida(supabase, sesion, sucursalIdCliente);
-  if (atribucion.ok === false) return { ok: false, error: atribucion.error };
-
-  const programa = await resolverProgramaDeTarjeta(supabase, sesion.comercioId, tarjetaId);
-  const tipo = tipoOPuntos(programa?.tipoTarjeta ?? 'puntos');
-
-  const opciones = {
-    sucursalId: atribucion.valor,
-    cajeroUsuarioId: sesion.usuarioComercioId,
-  };
-
-  // El monto se convierte UNA vez, acá, con la función que no pasa por punto flotante.
-  const centavos = montoTexto.trim() ? centavosDesdeTexto(montoTexto) : null;
-  if (tipo.requiereMonto && centavos === null) {
-    return { ok: false, error: 'Escribí el monto de la compra (por ejemplo 19.99).' };
-  }
-
-  let resultado: { ok: true; mensaje: string } | { ok: false; error: string; bloqueoLimite?: boolean };
-
-  switch (tipo.valor) {
-    case 'cashback':
-      resultado = await acreditarCashback(supabase, sesion.comercioId, tarjetaId, centavos!, opciones);
-      break;
-    case 'gift_card':
-      resultado = await consumirSaldo(supabase, sesion.comercioId, tarjetaId, centavos!, opciones);
-      break;
-    case 'descuento':
-      resultado = await registrarCompra(supabase, sesion.comercioId, tarjetaId, centavos!, opciones);
-      break;
-    case 'prepago':
-      resultado = await usarVisita(supabase, sesion.comercioId, tarjetaId, opciones);
-      break;
-    case 'cupon':
-      resultado = await usarCupon(supabase, sesion.comercioId, tarjetaId, opciones);
-      break;
-    case 'membresia':
-      resultado = await renovarMembresia(supabase, sesion.comercioId, tarjetaId, opciones);
-      break;
-    default: {
-      // puntos y sellos: el camino de siempre. El monto viaja si el comercio lo pide (Tanda 1),
-      // aunque este tipo no lo necesite para calcular nada.
-      const res = await acreditarPuntos(supabase, sesion.comercioId, tarjetaId, cantidad, {
-        ...opciones,
-        montoCompra: centavos !== null ? centavos / 100 : null,
-      });
-      resultado = res.ok
-        ? { ok: true, mensaje: mensajeAcreditacion(tipo.valor, cantidad) }
-        : { ok: false, error: res.error, bloqueoLimite: res.bloqueoLimite };
-    }
-  }
-
-  if (!resultado.ok) {
-    return { ok: false, error: resultado.error, bloqueoLimite: resultado.bloqueoLimite };
-  }
-
-  // El pass del cliente se refresca solo, igual que en cualquier movimiento de saldo.
-  await notificarCambioTarjeta(supabase, tarjetaId);
-  await syncObjetoTarjeta(supabase, tarjetaId);
-
-  const { data: t } = await supabase
-    .from('tarjetas')
-    .select('puntos_actuales')
-    .eq('id', tarjetaId)
-    .maybeSingle();
-
-  return {
-    ok: true,
-    puntosActuales: t?.puntos_actuales ?? 0,
-    saldoTexto: await saldoTextoActual(sesion.comercioId, tarjetaId),
-    mensaje: resultado.mensaje,
-  };
+  return ejecutarOperacion(sesion, tarjetaId, sucursalIdCliente, { tipo: 'principal', cantidad, montoTexto }, null);
 }
 
 // La segunda operación, que solo tienen dos tipos: cargar saldo en una gift card y vender un paquete
@@ -488,6 +426,36 @@ export async function accionOperacionSecundaria(
   montoTexto: string,
 ): Promise<RespuestaOperacion> {
   const sesion = await verifyComercioAcceso();
+  return ejecutarOperacion(sesion, tarjetaId, sucursalIdCliente, { tipo: 'secundaria', montoTexto }, null);
+}
+
+type SesionEscaner = Awaited<ReturnType<typeof verifyComercioAcceso>>;
+
+// La autorización del dueño, con el motivo ya validado. null = la operación normal del mostrador,
+// con las cuatro perillas antifraude.
+type Autorizacion = { motivo: string } | null;
+
+type ResultadoMotor = { ok: true; mensaje: string } | { ok: false; error: string; bloqueoLimite?: boolean };
+
+// Las operaciones con RPC propio (gastar saldo, usar una visita o un cupón, renovar, registrar una
+// compra) no pasan por acreditar_atomico: ninguna perilla las bloquea. Correrlas "autorizadas" las
+// ejecutaría de verdad bajo un motivo de autorización que no levantó ningún límite.
+const SIN_LIMITE_QUE_AUTORIZAR: ResultadoMotor = {
+  ok: false,
+  error: 'Esa operación no tiene ningún límite que autorizar.',
+};
+
+// El cuerpo compartido de la operación normal y de la autorizada. Lo ÚNICO que cambia entre las dos
+// es QUIÉN escribe (`acreditar`); cuánto se acredita lo decide la misma rama en los dos casos. Tener
+// dos copias de este switch es cómo nació el defecto de la autorización: una de las copias vivía en
+// el navegador y decía `1`.
+async function ejecutarOperacion(
+  sesion: SesionEscaner,
+  tarjetaId: string,
+  sucursalIdCliente: string | null,
+  operacion: OperacionEscaner,
+  autorizacion: Autorizacion,
+): Promise<RespuestaOperacion> {
   const supabase = createServiceClient();
 
   const atribucion = await resolverSucursalAtribuida(supabase, sesion, sucursalIdCliente);
@@ -496,23 +464,82 @@ export async function accionOperacionSecundaria(
   const programa = await resolverProgramaDeTarjeta(supabase, sesion.comercioId, tarjetaId);
   const tipo = tipoOPuntos(programa?.tipoTarjeta ?? 'puntos');
 
+  // La atribución sale SIEMPRE de la sesión, también en la autorizada: queda a nombre de quien
+  // autorizó y de la sucursal donde se hizo.
   const opciones = {
     sucursalId: atribucion.valor,
     cajeroUsuarioId: sesion.usuarioComercioId,
   };
 
-  let resultado: { ok: true; mensaje: string } | { ok: false; error: string; bloqueoLimite?: boolean };
+  const acreditar = autorizacion ? acreditadorForzado(autorizacion.motivo) : acreditarPuntos;
 
-  if (tipo.valor === 'gift_card') {
-    const centavos = centavosDesdeTexto(montoTexto);
-    if (centavos === null) {
-      return { ok: false, error: 'Escribí cuánto saldo cargar (por ejemplo 25.00).' };
+  let resultado: ResultadoMotor;
+
+  if (operacion.tipo === 'principal') {
+    const { cantidad, montoTexto } = operacion;
+
+    // El monto se convierte UNA vez, acá, con la función que no pasa por punto flotante.
+    const centavos = montoTexto.trim() ? centavosDesdeTexto(montoTexto) : null;
+    if (tipo.requiereMonto && centavos === null) {
+      return { ok: false, error: 'Escribí el monto de la compra (por ejemplo 19.99).' };
     }
-    resultado = await cargarGiftCard(supabase, sesion.comercioId, tarjetaId, centavos, opciones);
-  } else if (tipo.valor === 'prepago') {
-    resultado = await venderPaquete(supabase, sesion.comercioId, tarjetaId, opciones);
+
+    switch (tipo.valor) {
+      case 'cashback':
+        resultado = await acreditarCashback(supabase, sesion.comercioId, tarjetaId, centavos!, opciones, acreditar);
+        break;
+      case 'gift_card':
+        resultado = autorizacion
+          ? SIN_LIMITE_QUE_AUTORIZAR
+          : await consumirSaldo(supabase, sesion.comercioId, tarjetaId, centavos!, opciones);
+        break;
+      case 'descuento':
+        resultado = autorizacion
+          ? SIN_LIMITE_QUE_AUTORIZAR
+          : await registrarCompra(supabase, sesion.comercioId, tarjetaId, centavos!, opciones);
+        break;
+      case 'prepago':
+        resultado = autorizacion
+          ? SIN_LIMITE_QUE_AUTORIZAR
+          : await usarVisita(supabase, sesion.comercioId, tarjetaId, opciones);
+        break;
+      case 'cupon':
+        resultado = autorizacion
+          ? SIN_LIMITE_QUE_AUTORIZAR
+          : await usarCupon(supabase, sesion.comercioId, tarjetaId, opciones);
+        break;
+      case 'membresia':
+        resultado = autorizacion
+          ? SIN_LIMITE_QUE_AUTORIZAR
+          : await renovarMembresia(supabase, sesion.comercioId, tarjetaId, opciones);
+        break;
+      default: {
+        // puntos y sellos: el camino de siempre. El monto viaja si el comercio lo pide (Tanda 1),
+        // aunque este tipo no lo necesite para calcular nada.
+        const res = await acreditar(supabase, sesion.comercioId, tarjetaId, cantidad, {
+          ...opciones,
+          montoCompra: centavos !== null ? centavos / 100 : null,
+        });
+        resultado = res.ok
+          ? { ok: true, mensaje: mensajeAcreditacion(tipo.valor, cantidad) }
+          : { ok: false, error: res.error, bloqueoLimite: res.bloqueoLimite };
+      }
+    }
+  } else if (operacion.tipo === 'secundaria') {
+    if (tipo.valor === 'gift_card') {
+      const centavos = centavosDesdeTexto(operacion.montoTexto);
+      if (centavos === null) {
+        return { ok: false, error: 'Escribí cuánto saldo cargar (por ejemplo 25.00).' };
+      }
+      resultado = await cargarGiftCard(supabase, sesion.comercioId, tarjetaId, centavos, opciones, acreditar);
+    } else if (tipo.valor === 'prepago') {
+      resultado = await venderPaquete(supabase, sesion.comercioId, tarjetaId, opciones, acreditar);
+    } else {
+      // Defensa por si el cliente pidiera esta acción en un tipo que no la tiene.
+      return { ok: false, error: 'Esta tarjeta no admite esa operación.' };
+    }
   } else {
-    // Defensa por si el cliente pidiera esta acción en un tipo que no la tiene.
+    // `operacion` viene del navegador: un `tipo` que no es ninguno de los dos no ejecuta nada.
     return { ok: false, error: 'Esta tarjeta no admite esa operación.' };
   }
 
@@ -520,6 +547,7 @@ export async function accionOperacionSecundaria(
     return { ok: false, error: resultado.error, bloqueoLimite: resultado.bloqueoLimite };
   }
 
+  // El pass del cliente se refresca solo, igual que en cualquier movimiento de saldo.
   await notificarCambioTarjeta(supabase, tarjetaId);
   await syncObjetoTarjeta(supabase, tarjetaId);
 

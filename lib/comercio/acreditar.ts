@@ -138,6 +138,25 @@ export async function acreditarForzado(
   return interpretar(data, error, 'acreditar_forzado_atomico');
 }
 
+// La función que ESCRIBE una acreditación, separada de la regla que decide CUÁNTO acreditar. Las
+// operaciones que suman valor (vender un paquete, cargar una gift card, acreditar cashback) la
+// reciben como parámetro con `acreditarPuntos` por default, y así la autorización del dueño repite
+// la MISMA operación cambiando solo el escritor.
+//
+// Existe por un defecto de dinero: antes el dueño no autorizaba la operación sino un `delta` que
+// calculaba el escáner en el navegador, y que valía 1 en todo lo que no fuera puntos — un paquete de
+// 10 visitas se autorizaba como 1 visita, $25.00 de gift card como 1 centavo. Con el escritor
+// inyectado, el delta forzado sale de la misma línea que el normal y no puede divergir.
+//
+// El default es el camino NORMAL a propósito: un llamador que se olvide de pasar el escritor queda
+// frenado otra vez por las perillas, que es el lado seguro. Forzar exige pedirlo explícitamente.
+export type Acreditador = typeof acreditarPuntos;
+
+export function acreditadorForzado(motivo: string): Acreditador {
+  return (supabase, comercioId, tarjetaId, delta, opciones) =>
+    acreditarForzado(supabase, comercioId, tarjetaId, delta, motivo, opciones);
+}
+
 // Traduce la fila de estado del RPC a un ResultadoAcreditar. Compartida por los dos caminos para
 // que un estado nuevo no quede mapeado en uno y sin mapear en el otro.
 function interpretar(
