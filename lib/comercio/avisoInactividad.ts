@@ -133,7 +133,7 @@ export async function procesarAvisosInactividad(
       // Cupón ya usado: no tiene "volver" — ver decisión 5 / la nota de "cupón ya usado" del spec.
       const { data: fila } = await supabase
         .from('tarjetas')
-        .select('created_at, usado_en, vigencia_hasta, aviso_inactividad_enviado_en')
+        .select('created_at, usado_en, vigencia_hasta, aviso_hasta, aviso_inactividad_enviado_en')
         .eq('id', t.id)
         .single();
       if (!fila) continue;
@@ -161,6 +161,29 @@ export async function procesarAvisosInactividad(
         if (fila.usado_en !== null) continue;
         if (fila.vigencia_hasta !== null && !sigueVigente(fila.vigencia_hasta, hoyDelComercio)) continue;
       }
+
+      // ══ UN AVISO VIGENTE EN EL REVERSO NO SE PISA (decisión 7 del spec 2026-09-09) ══
+      // Hay UN solo par aviso_texto/aviso_hasta por tarjeta, y enviarMensajeTarjeta lo sobrescribe sin
+      // mirar. Si el reverso todavía muestra un aviso —el de vencimiento, con la fecha de ESTE socio,
+      // o la campaña del dueño—, mandar este lo borra y le suma un segundo push. Se saltea mientras
+      // `aviso_hasta` sea hoy o futuro: la misma comparación por texto con la que el reverso decide si
+      // lo muestra (resolverAviso), así que "hasta el X" frena el X completo.
+      //
+      // Se apaga SOLA cuando el aviso caduca, sin marca que limpiar. Y no hace falta más: el aviso de
+      // vencimiento nunca queda vigente más allá de la fecha que anuncia (`vigenciaDelAviso`), así que
+      // el día después de vencer, este aviso ya puede salir.
+      //
+      // ══ POR QUÉ NO SE SALTEA POR `aviso_vencimiento_para` ══
+      // Parece lo mismo ("ya se le mandó el de vencimiento") y es el error opuesto: esa marca NO se
+      // limpia hasta la próxima renovación, así que silenciaría PARA SIEMPRE al socio que dejó vencer
+      // la membresía — el destinatario que la guarda de cupón de arriba protege a propósito. La prueba
+      // "el que dejó vencer su membresía es a quien más querés recordarle" tiene la marca puesta para
+      // atrapar exactamente esa refactorización; se verificó que falla con ella aplicada.
+      //
+      // Tampoco alcanza "no los dos el mismo día": el de vencimiento sale el día 1 y el de inactividad
+      // lo pisaría el día 2. Por eso el cron corre el de vencimiento PRIMERO (/api/cron/avisos): así
+      // esta condición se evalúa con el aviso del día ya escrito.
+      if (sigueVigente(fila.aviso_hasta, hoyDelComercio)) continue;
 
       const { data: ultimaTransaccion } = await supabase
         .from('transacciones_puntos')

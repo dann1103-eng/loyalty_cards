@@ -13,6 +13,9 @@ import {
 import { crearPrograma, tarjetasActivasDelComercio } from './programas';
 import { acreditarPuntos } from './acreditar';
 import { enviarMensajeTarjeta } from './enviarMensajeTarjeta';
+import { procesarAvisosVencimiento, textoAviso } from './avisoVencimiento';
+import { crearDifusion } from './difusiones';
+import { hoyEnZona, sumarDias } from '../tarjetas/vigencia';
 
 // ══ POR QUÉ ESTE ARCHIVO NO PUEDE TOCAR NADA QUE NO HAYA CREADO ══
 // procesarAvisosInactividad recorre TODOS los comercios de la base con el aviso encendido, y la base
@@ -370,10 +373,160 @@ describe('una membresía VENCIDA sí recibe el aviso', () => {
       programaId: membresia.id,
       createdAt: hace40dias,
     });
-    await supabase.from('tarjetas').update({ vigencia_hasta: '2020-01-01' }).eq('id', tarjeta.id);
+    // Con la historia completa del socio vencido: el aviso de vencimiento YA SALIÓ para esa fecha (la
+    // marca queda puesta hasta la próxima renovación, que acá no llegó) y ya caducó en el reverso.
+    // Sin estas dos columnas la prueba no distinguía la regla de la decisión 7 de la refactorización
+    // tentadora "saltear si ya se le mandó el de vencimiento": con la marca en null, las dos pasaban.
+    // MUTACIÓN: saltear por `aviso_vencimiento_para` no nulo hace FALLAR esta prueba — verificado.
+    await supabase
+      .from('tarjetas')
+      .update({
+        vigencia_hasta: '2020-01-01',
+        aviso_vencimiento_para: '2020-01-01',
+        aviso_texto: 'Tu membresía está por vencer. Renovala en el local. Vence el 1 de enero de 2020.',
+        aviso_hasta: '2020-01-01',
+      })
+      .eq('id', tarjeta.id);
 
     const resumen = await procesarAvisosInactividad(supabase);
 
     expect(resumen.avisadas, 'no le avisó a alguien con la membresía vencida').toContain(tarjeta.id);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Decisión 7: mientras haya un aviso VIGENTE en el reverso, el de inactividad no manda
+// ─────────────────────────────────────────────────────────────────────────────
+// Hay UN solo par aviso_texto/aviso_hasta por tarjeta y enviarMensajeTarjeta lo sobrescribe sin
+// mirar. Sin la regla, el de inactividad le pisa al socio la fecha de su vencimiento (o la campaña
+// del dueño) y le manda un segundo push.
+
+const ZONA = 'America/El_Salvador';
+const HACE_40_DIAS = () => new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
+
+function llamadasA(tarjetaId: string) {
+  return doble.enviar.mock.calls.filter((c) => c[1] === tarjetaId);
+}
+
+async function filaAviso(tarjetaId: string) {
+  const { data, error } = await supabase
+    .from('tarjetas')
+    .select('aviso_texto, aviso_hasta, aviso_vencimiento_para, aviso_inactividad_enviado_en')
+    .eq('id', tarjetaId)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Los dos pases en el orden de /api/cron/avisos (route.test.ts cuida que la ruta lo respete).
+async function correrLosDosPases() {
+  const vencimiento = await procesarAvisosVencimiento(supabase);
+  const inactividad = await procesarAvisosInactividad(supabase);
+  return { vencimiento, inactividad };
+}
+
+// Un socio que no viene hace 40 días (aviso de inactividad a 30) y cuya membresía vence dentro de
+// `diasParaVencer` (aviso de vencimiento a 10): le tocan LOS DOS. La configuración del aviso de
+// vencimiento va en el PROGRAMA, como la escribe la pantalla; el comercio queda con la legada.
+async function membresiaInactivaPorVencer(diasParaVencer: number) {
+  const comercioId = await entorno.crearComercio({ zona_horaria: ZONA });
+  await guardarConfiguracionAvisoInactividad(supabase, comercioId, { activo: true, dias: 30, mensaje: 'Volvé' });
+  const { error } = await supabase
+    .from('programas_tarjeta')
+    .update({
+      tipo_tarjeta: 'membresia',
+      membresia_dias: 30,
+      aviso_vencimiento_activo: true,
+      aviso_vencimiento_dias: 10,
+      aviso_vencimiento_mensaje: null,
+    })
+    .eq('id', entorno.obtenerProgramaPrincipal(comercioId));
+  if (error) throw error;
+
+  const hoy = hoyEnZona(ZONA);
+  const vence = sumarDias(hoy, diasParaVencer);
+  const { id: tarjetaId } = await entorno.crearTarjeta(comercioId, 0, { createdAt: HACE_40_DIAS() });
+  const { error: errorVigencia } = await supabase.from('tarjetas').update({ vigencia_hasta: vence }).eq('id', tarjetaId);
+  if (errorVigencia) throw errorVigencia;
+  // Tiene el pase instalado: el de vencimiento le llega y graba su marca, como en la vida real.
+  doble.entregables.add(tarjetaId);
+  return { tarjetaId, hoy, vence };
+}
+
+describe('un aviso vigente en el reverso frena al de inactividad', () => {
+  it('una membresía inactiva Y por vencer recibe UN solo aviso: el de vencimiento', async () => {
+    // MUTACIÓN: sin la regla de `aviso_hasta` en procesarAvisosInactividad esta prueba FALLA —
+    // verificado: el de inactividad sale detrás y le pisa la fecha al reverso.
+    const { tarjetaId, vence } = await membresiaInactivaPorVencer(5);
+
+    const { vencimiento, inactividad } = await correrLosDosPases();
+
+    expect(vencimiento.avisadas).toContain(tarjetaId);
+    expect(inactividad.avisadas, 'el de inactividad salió encima del aviso de vencimiento').not.toContain(tarjetaId);
+    expect(llamadasA(tarjetaId).map((c) => c[4])).toEqual(['vencimiento']);
+    const fila = await filaAviso(tarjetaId);
+    expect(fila.aviso_texto, 'el reverso perdió la fecha del vencimiento').toBe(textoAviso(null, 'membresia', vence));
+    expect(fila.aviso_hasta).toBe(vence);
+    expect(fila.aviso_inactividad_enviado_en).toBeNull();
+
+    // La corrida siguiente: el de vencimiento ya no reenvía (su marca), y el de inactividad sigue
+    // frenado. Una regla de "no los dos en la MISMA corrida" pasaría la primera mitad y caería acá.
+    doble.enviar.mockClear();
+    const segunda = await correrLosDosPases();
+
+    expect(segunda.inactividad.avisadas, 'en la corrida siguiente el de inactividad pisó al de vencimiento').not.toContain(tarjetaId);
+    expect(llamadasA(tarjetaId)).toHaveLength(0);
+  });
+
+  it('cuando ese aviso caduca, el de inactividad vuelve a poder salir', async () => {
+    const { tarjetaId, hoy, vence } = await membresiaInactivaPorVencer(5);
+    await correrLosDosPases();
+    expect((await filaAviso(tarjetaId)).aviso_vencimiento_para).toBe(vence);
+
+    // El ÚLTIMO día del aviso todavía frena: "hasta el X" es el X completo, igual que lo lee el
+    // reverso (resolverAviso). MUTACIÓN: comparando con `>` en vez de `>=` esta mitad FALLA.
+    await supabase.from('tarjetas').update({ aviso_hasta: hoy }).eq('id', tarjetaId);
+    doble.enviar.mockClear();
+    const ultimoDia = await correrLosDosPases();
+    expect(ultimoDia.inactividad.avisadas, 'salió el último día en que el reverso todavía mostraba el aviso').not.toContain(tarjetaId);
+    expect(llamadasA(tarjetaId)).toHaveLength(0);
+
+    // Pasó el vencimiento y con él el aviso. La marca del vencimiento SIGUE puesta (no se limpia hasta
+    // renovar) y no tiene que frenar nada: ese socio vencido es el público del aviso de inactividad.
+    const ayer = sumarDias(hoy, -1);
+    await supabase
+      .from('tarjetas')
+      .update({ vigencia_hasta: ayer, aviso_vencimiento_para: ayer, aviso_hasta: ayer })
+      .eq('id', tarjetaId);
+    doble.enviar.mockClear();
+
+    const despues = await correrLosDosPases();
+
+    expect(despues.inactividad.avisadas, 'caducado el aviso, el de inactividad no volvió a salir').toContain(tarjetaId);
+    expect(llamadasA(tarjetaId).map((c) => c[4])).toEqual(['inactividad']);
+    const fila = await filaAviso(tarjetaId);
+    expect(fila.aviso_texto).toBe('Volvé');
+    expect(fila.aviso_inactividad_enviado_en).not.toBeNull();
+  });
+
+  it('un aviso de CAMPAÑA manual vigente también frena al de inactividad', async () => {
+    // La campaña escribe las mismas dos columnas por la misma función: el mensaje del dueño no se
+    // pisa con un "volvé" automático mientras siga vigente. MUTACIÓN: sin la regla, FALLA.
+    const comercioId = await entorno.crearComercio({ zona_horaria: ZONA });
+    await guardarConfiguracionAvisoInactividad(supabase, comercioId, { activo: true, dias: 30, mensaje: 'Volvé' });
+    const { id: tarjetaId } = await entorno.crearTarjeta(comercioId, 0, { createdAt: HACE_40_DIAS() });
+    const usuarioId = await entorno.crearCajero(comercioId);
+    const campana = await crearDifusion(supabase, comercioId, usuarioId, {
+      mensaje: 'Promo de septiembre',
+      vigenteHasta: sumarDias(hoyEnZona(ZONA), 3),
+      programaId: null,
+    });
+    expect(campana.ok).toBe(true);
+
+    const resumen = await procesarAvisosInactividad(supabase);
+
+    expect(resumen.avisadas, 'el de inactividad pisó la campaña del dueño').not.toContain(tarjetaId);
+    expect(llamadasA(tarjetaId).map((c) => c[4])).toEqual(['campana']);
+    expect((await filaAviso(tarjetaId)).aviso_texto).toBe('Promo de septiembre');
   });
 });
