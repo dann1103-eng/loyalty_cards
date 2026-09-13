@@ -54,16 +54,31 @@ export function hoyEnZona(zonaHoraria: string | null): string {
   }).format(new Date());
 }
 
-export type ResultadoVigencia =
-  | { ok: true; fecha: string | null; mensaje: string }
-  | { ok: false; error: string };
-
-function formatearFecha(iso: string | null): string {
+// AAAA-MM-DD → "12 de octubre de 2026". EL formateador de fechas para una persona: lo usan los
+// mensajes del cajero de este archivo, `describirSaldo` (tipos.ts) y el aviso de vencimiento.
+//
+// Vive acá y no en tipos.ts porque este es el módulo de los días de calendario (sumarDias,
+// hoyEnZona), y el truco que lo hace correcto es el mismo que explica sumarDias. Había dos copias
+// privadas idénticas; una tercera para el aviso era la oportunidad de que alguna se desalineara.
+// tipos.ts la importa de acá: vigencia.ts no tiene imports de runtime (los de Supabase son
+// `import type`), así que tipos.ts sigue sin arrastrar nada al bundle del navegador.
+//
+// El MEDIODÍA UTC es a propósito. `Intl` sin `timeZone` formatea en la zona del proceso, y a
+// medianoche UTC toda América todavía está en el día ANTERIOR: "vence el 12" se leería "vence el
+// 11" en la máquina del dueño. A las 12:00Z, cualquier zona entre UTC-11 y UTC+11 cae en el mismo
+// día. Probado en formatearFecha.test.ts, que fuerza la zona porque en UTC el corrimiento no se ve.
+//
+// Acepta null (⇒ '') porque las filas de los RPC traen la fecha como nullable.
+export function formatearFecha(iso: string | null): string {
   if (!iso) return '';
   return new Intl.DateTimeFormat('es-SV', { dateStyle: 'long' }).format(
     new Date(`${iso.slice(0, 10)}T12:00:00Z`),
   );
 }
+
+export type ResultadoVigencia =
+  | { ok: true; fecha: string | null; mensaje: string }
+  | { ok: false; error: string };
 
 export async function usarCupon(
   supabase: SupabaseClient<Database>,

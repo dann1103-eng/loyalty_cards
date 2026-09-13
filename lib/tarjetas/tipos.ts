@@ -9,6 +9,9 @@
 //
 // La defensa es que haya un solo formateador y que sepa todo lo que necesita saber.
 
+// Las fechas se formatean con el de vigencia.ts, que es el único (ver ahí por qué el mediodía UTC).
+import { formatearFecha } from './vigencia';
+
 export type Contador = 'ninguno' | 'entero' | 'centavos';
 
 // Qué hace el cajero con esta tarjeta cuando escanea. Es lo que decide qué botón ve.
@@ -202,12 +205,6 @@ export interface EstadoTarjeta {
   usadoEn?: string | null;
   // Para 'descuento': el porcentaje ya resuelto desde niveles_descuento. null = todavía sin nivel.
   porcentajeDescuento?: number | null;
-}
-
-function formatearFecha(iso: string): string {
-  return new Intl.DateTimeFormat('es-SV', { dateStyle: 'long' }).format(
-    new Date(`${iso.slice(0, 10)}T12:00:00Z`),
-  );
 }
 
 // ¿Sigue vigente una fecha AAAA-MM-DD? Se compara como TEXTO contra la fecha de hoy, no como Date:
