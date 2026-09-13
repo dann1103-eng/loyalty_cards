@@ -270,7 +270,7 @@ desde un subagente):
      la 5ª campaña del mes se rechaza con el mensaje del tope.
   3. Con una tarjeta real instalada (Apple o Google): confirmar que el aviso llega de verdad al
      reverso del pase / como notificación push, no solo al historial.
-  4. `curl -i https://www.cardly-sv.site/api/cron/inactividad` debe devolver `401`, no `500`
+  4. `curl -i https://www.cardly-sv.site/api/cron/avisos` (se llamaba `/api/cron/inactividad` hasta el 2026-09-13) debe devolver `401`, no `500`
      (confirma que `CRON_SECRET` está configurado en producción).
 - Esta rama (`claude/post-mvp-features-3f6590`) todavía no se fusionó a `master` — "en producción"
   aplica recién después del merge y de que el usuario recorra los 4 puntos de arriba.
@@ -359,7 +359,7 @@ clase `<emisor>.prueba_mover_clase_2026_07_30` quedó para siempre.
 - Confirmar el **geopush en Android** ahora que las ubicaciones están en el objeto. Requiere
   "Permitir siempre" + ubicación precisa, y el interruptor de pases cercanos POR PASE (los pases ya
   guardados no se inscriben solos).
-- `curl -i https://www.cardly-sv.site/api/cron/inactividad` → debe dar `401`, no `500`.
+- `curl -i https://www.cardly-sv.site/api/cron/avisos` (se llamaba `/api/cron/inactividad` hasta el 2026-09-13) → debe dar `401`, no `500`.
 - **El cupón no tiene campo de valor.** Solo vigencia; qué ofrece el cupón vive en el texto del pase
   y el sistema no lo entiende. Decisión de producto pendiente.
 - **`/comercio/notificaciones` dice "N tarjetas alcanzadas"** — ya corregido para contar solo
@@ -460,7 +460,7 @@ Quedó viejo tras el rediseño de la pantalla de Marca (branding por programa). 
 - Que una **franja puesta encima del QR** no impida escanear el cartel impreso (el diseño lo
   garantiza; falta la prueba con papel y teléfono).
 - Confirmar en un **iPhone** que la campaña se lee en la pantalla de bloqueo.
-- `curl -i https://www.cardly-sv.site/api/cron/inactividad` → debe dar `401`, no `500`.
+- `curl -i https://www.cardly-sv.site/api/cron/avisos` (se llamaba `/api/cron/inactividad` hasta el 2026-09-13) → debe dar `401`, no `500`.
 
 ---
 
@@ -884,3 +884,74 @@ Cierra el trabajo abierto el 2026-09-08. **Migración 0033 APLICADA y verificada
   y todos los tipos: el defecto de la métrica del panel, a escala de plataforma.
 - **QA en teléfono real**: escribir un nombre de pase, publicar, y confirmar en un iPhone y un
   Android que aparece arriba y que la fecha se lee bien.
+
+## 2026-09-13 — Aviso antes del vencimiento, y los tres pendientes de la entrega 2
+
+Spec: `specs/2026-09-09-aviso-antes-del-vencimiento-design.md`. Plan:
+`plans/2026-09-13-aviso-vencimiento-y-pendientes.md`. **Migración 0034 APLICADA y verificada**
+(`scripts/verificar-0034.ts`). **La 0035 (retirar `saldo_circulante`) va DESPUÉS del deploy**: es
+sustractiva, ver la nota 3 de la sección del 2026-09-09.
+
+### Lo que entró
+
+- **Aviso antes del vencimiento, por programa** (membresía y cupón). El dueño lo enciende en la
+  tarjeta del programa, en Programas: días de anticipación y un mensaje opcional; la FECHA la agrega
+  la app con la de cada cliente, y hay vista previa en vivo con la misma función que usa el cron
+  (`textoAviso`). Idempotencia con `tarjetas.aviso_vencimiento_para` (una fecha, no un booleano: al
+  renovar cambia `vigencia_hasta` y el aviso del período siguiente sale solo).
+- **El cron `/api/cron/inactividad` pasó a llamarse `/api/cron/avisos`** y corre los dos pases:
+  primero vencimiento, después inactividad. `vercel.json` sigue con dos entradas.
+- **`usaMontoDeCompra`** en el catálogo: la casilla "pedir monto" deja de ofrecerse en cupón,
+  membresía y prepago, donde el monto se descartaba.
+- **El panel de FM deja de mostrar el saldo circulante** (sumaba sellos + centavos + visitas).
+- **Defecto de dinero en la autorización del dueño, arreglado.** Autorizar una operación bloqueada
+  por una perilla acreditaba 1: un paquete de 10 visitas quedaba en 1 visita, $25.00 de gift card en
+  1 centavo, el cashback en 1 centavo. Ahora el escáner guarda QUÉ operación se bloqueó y
+  `accionAutorizarOperacion` la repite en el servidor con el escritor forzado (`acreditadorForzado`).
+  Se retiraron `accionAcreditarForzado` y `accionAcreditar`: dos Server Actions exportadas que
+  aceptaban un delta crudo del navegador.
+- **Las pruebas del aviso de inactividad ya no pueden avisarle a clientes reales** (ver nota 1).
+
+### Lo que NO es obvio y hay que recordar
+
+1. **Una prueba que llama a un RECORRIDO de toda la base, sin mocks, manda push a clientes reales.**
+   `avisoInactividad.test.ts` llamaba a `procesarAvisosInactividad` con la `enviarMensajeTarjeta` de
+   verdad: el día que un comercio real encendiera el aviso, cada corrida de la suite les mandaba un
+   push y les marcaba la tarjeta como avisada, silenciando el aviso legítimo del cron. No pasó (se
+   verificó con una consulta de solo lectura: cero comercios con el aviso encendido, cero envíos en la
+   auditoría). Hacen DOS cercos, porque son dos escrituras: el doble de `enviarMensajeTarjeta` y
+   `tarjetasActivasDelComercio` filtrada a los comercios de la prueba — el recorrido graba
+   `aviso_inactividad_enviado_en` por su cuenta, se haya entregado o no. Un `beforeAll` aborta el
+   archivo si los mocks se caen.
+2. **El de inactividad saltea por `aviso_hasta` vigente, NUNCA por `aviso_vencimiento_para`.** Hay un
+   solo par `aviso_texto`/`aviso_hasta` por tarjeta y `enviarMensajeTarjeta` lo pisa. Saltear por la
+   marca de vencimiento parece lo mismo y es lo opuesto: la marca no se limpia hasta la renovación,
+   así que silenciaría para siempre al socio con la membresía vencida. La prueba de ese socio tiene la
+   marca puesta para atrapar esa refactorización. Y el ORDEN del cron importa: vencimiento primero.
+3. **Los días de anticipación se cruzan contra el plazo que llega en el MISMO envío**, no contra el de
+   la base: si el dueño acorta la membresía de 30 a 15 y deja el aviso en 20, es 15 contra 20.
+4. **`avisoVencimiento.ts` no se puede importar desde el navegador**: arrastra Apple y `googleapis`
+   por `enviarMensajeTarjeta`. Los topes, el texto y la validación viven en
+   `avisoVencimientoConfiguracion.ts` (reexportados desde `avisoVencimiento.ts`); el formulario y
+   `programas.ts` importan de ahí.
+5. **El escritor inyectado tiene el default NORMAL a propósito.** `venderPaquete`, `cargarGiftCard` y
+   `acreditarCashback` reciben `acreditar = acreditarPuntos`: un llamador que se olvide del escritor
+   forzado vuelve a chocar con el tope, que es el lado seguro. Las operaciones con RPC propio (gastar
+   saldo, usar visita o cupón, renovar, registrar compra) no pasan por ninguna perilla, así que
+   "autorizarlas" devuelve error y no ejecuta nada.
+6. **Una tarjeta de métrica sola a todo el ancho va sin la inclinación** de `.metric-carta`: el
+   `rotate(0.6deg)` es del par, y a 1046px dejaba un borde 11px más alto que el otro.
+
+### Pendiente, anotado para no perderlo
+
+- **Migración 0035**: `drop` + `create` de `reporte_fm_comercios()` sin `saldo_circulante`, con los
+  `revoke` Y los `grant`. Después, sacar `saldo_circulante` de `lib/supabase/types.ts`.
+- **Sellos, en el servidor**: la cantidad de la operación principal la manda el cliente. Una petición
+  manipulada podría sumar varios sellos de una vez, frenada solo por el tope por transacción. Ya
+  pasaba antes; es un endurecimiento aparte.
+- **`procesarAvisosInactividad` graba `aviso_inactividad_enviado_en` aunque no haya entregado nada**;
+  el de vencimiento solo marca si alcanzó un canal.
+- **Si `procesarAvisosVencimiento` lanza, ese día no corre el de inactividad** (la ruta no los aísla).
+- **QA en teléfono real**: encender el aviso en una membresía con una tarjeta que venza dentro de la
+  ventana, disparar el cron y confirmar que llega el push con la fecha bien escrita, en iPhone y
+  Android. Y la del nombre del pase, que sigue pendiente.
