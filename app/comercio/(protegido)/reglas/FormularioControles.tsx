@@ -51,6 +51,7 @@ export default function FormularioControles({
   unidad,
   esDePuntos,
   aplicanLimites,
+  usaMontoDeCompra,
 }: {
   controles: ControlesAcreditacion;
   // Cómo se llama lo que cuenta ESTE programa. Reemplaza al viejo booleano `esDePuntos` para los
@@ -71,7 +72,14 @@ export default function FormularioControles({
   // La zona horaria y el monto de la compra NO se esconden con ellos: la zona es lo que decide a
   // qué hora vence un cupón en el mostrador (hoyEnZona), o sea que es MÁS importante justo en los
   // tipos donde los límites no aplican, y este formulario es el único lugar donde se puede elegir.
+  // El monto tiene su propia pregunta (`usaMontoDeCompra`, abajo), que no separa los mismos tipos:
+  // descuento recibe el monto sin pasar por acreditar_atomico.
   aplicanLimites: boolean;
+  // ¿La operación del programa PRINCIPAL recibe el monto de la compra? En cupón, membresía y prepago
+  // no (ver `usaMontoDeCompra` en lib/tarjetas/tipos.ts, con la verificación RPC por RPC): el cajero
+  // tecleaba un monto que se descartaba. Mira el principal como el resto de esta pantalla; el
+  // escáner, en cambio, decide por el tipo de cada tarjeta escaneada.
+  usaMontoDeCompra: boolean;
 }) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoControles, FormData>(
     accionGuardarControles,
@@ -205,21 +213,36 @@ export default function FormularioControles({
         </p>
       </div>
 
-      <div className="field">
-        <label htmlFor="pedir_monto_compra" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <input
-            id="pedir_monto_compra"
-            name="pedir_monto_compra"
-            type="checkbox"
-            defaultChecked={controles.pedirMontoCompra}
-          />
-          Pedir el monto de la compra al acreditar
-        </label>
-        <p className="admin-fila-slug" style={{ marginTop: 6 }}>
-          Suma un paso al mostrador, pero te deja ver cuánto se vendió por cada {palabra.singular}.
-          Es lo que convierte una sospecha en evidencia.
-        </p>
-      </div>
+      {usaMontoDeCompra ? (
+        <div className="field">
+          <label htmlFor="pedir_monto_compra" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <input
+              id="pedir_monto_compra"
+              name="pedir_monto_compra"
+              type="checkbox"
+              defaultChecked={controles.pedirMontoCompra}
+            />
+            Pedir el monto de la compra al acreditar
+          </label>
+          <p className="admin-fila-slug" style={{ marginTop: 6 }}>
+            Suma un paso al mostrador, pero te deja ver cuánto se vendió por cada {palabra.singular}.
+            Es lo que convierte una sospecha en evidencia.
+          </p>
+        </div>
+      ) : (
+        <>
+          <p className="admin-vacio">
+            Tu tarjeta no guarda el monto de la compra: lo que hace tu cajero al escanear no lo
+            registra, así que pedírselo sería un paso de más sin nada que ver después.
+          </p>
+          {/* Misma mordida que los límites de arriba: la casilla no se dibuja, pero el Server Action
+              la lee igual y lo que no llega lo guarda como false. Sin esto, el dueño que entra a
+              cambiar la zona horaria le apagaría en silencio la perilla a su programa de puntos
+              secundario —— el escáner sigue pidiendo el monto en esas tarjetas. "on" es lo que
+              manda una casilla marcada; vacío se lee como apagada. */}
+          <input type="hidden" name="pedir_monto_compra" value={controles.pedirMontoCompra ? 'on' : ''} />
+        </>
+      )}
 
       <button className="btn-primary" type="submit" disabled={pendiente}>
         {pendiente ? 'Guardando…' : 'Guardar control'}

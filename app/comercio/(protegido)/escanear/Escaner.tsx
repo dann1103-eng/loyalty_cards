@@ -374,8 +374,9 @@ export default function Escaner({
         )}
 
         {/* El monto es OBLIGATORIO en cashback, gift card y descuento -- sin el no hay porcentaje
-            que calcular, saldo que descontar ni gasto que acumular -- y opcional en el resto si el
-            dueno activo pedir_monto_compra (Tanda 1). */}
+            que calcular, saldo que descontar ni gasto que acumular -- y opcional en puntos y sellos
+            si el dueno activo pedir_monto_compra (Tanda 1). En cupon, membresia y prepago no sale:
+            `pedirMontoCompra` ya viene en false del servidor, que mira el tipo de ESTA tarjeta. */}
         {(resultado.requiereMonto || resultado.pedirMontoCompra) && (
           <div className="field" style={{ marginTop: 14, textAlign: 'left' }}>
             <label htmlFor="monto-compra">

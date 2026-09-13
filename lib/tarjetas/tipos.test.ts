@@ -10,6 +10,7 @@ import {
   nivelParaAcumulado,
   puedeCanjearRecompensas,
   aplicanControlesAcreditacion,
+  usaMontoDeCompra,
 } from './tipos';
 
 // Módulo puro. Lo que se prueba acá es lo que, si falla, le muestra plata equivocada a un cliente.
@@ -239,5 +240,48 @@ describe('aplicanControlesAcreditacion', () => {
     for (const tipo of TIPOS) {
       expect(aplicanControlesAcreditacion(tipo.valor), tipo.valor).toBe(puedeCanjearRecompensas(tipo.valor));
     }
+  });
+});
+
+describe('usaMontoDeCompra', () => {
+  // La casilla `pedir_monto_compra` le hace teclear al cajero el monto de la compra. Solo sirve si
+  // alguna operación de la tarjeta se lo ENTREGA a su RPC —— verificado firma por firma: 0015
+  // (acreditar_atomico, p_monto_compra), 0019 (usar_cupon_atomico / renovar_membresia_atomico, sin
+  // monto), 0020 (usar_visita_atomico, sin monto), 0022 (consumir_saldo_atomico, p_monto) y 0023
+  // (registrar_compra_atomico, p_monto_centavos). Donde no llega, el cajero escribía un dato que se
+  // tiraba a la basura.
+  //
+  // MUTACIÓN verificada: `usaMontoDeCompra: true` en membresía hace fallar las dos primeras.
+  it('exactamente los tipos cuya operación le entrega el monto a su RPC', () => {
+    const usan = TIPOS.filter((t) => usaMontoDeCompra(t.valor)).map((t) => t.valor).sort();
+    expect(usan).toEqual(['cashback', 'descuento', 'gift_card', 'puntos', 'sellos']);
+  });
+
+  it('cupón, membresía y prepago no: ninguna de sus operaciones recibe el monto', () => {
+    // prepago es el que no se ve a simple vista: usar una visita no recibe monto (0020), y vender el
+    // paquete pasa por acreditar_atomico —que sí tiene p_monto_compra— pero el escáner nunca se lo
+    // pasa. Hoy el dato se descarta igual que en cupón y membresía.
+    for (const valor of ['cupon', 'membresia', 'prepago']) {
+      expect(usaMontoDeCompra(valor), `"${valor}" descarta el monto de la compra`).toBe(false);
+    }
+  });
+
+  it('todo tipo que EXIGE el monto también lo usa', () => {
+    // La implicación que tiene que valer siempre: si el escáner obliga a teclearlo, no puede ser para
+    // tirarlo. Al revés no vale —— puntos y sellos lo usan sin exigirlo —— y por eso son dos campos.
+    for (const tipo of TIPOS) {
+      if (tipo.requiereMonto) expect(tipo.usaMontoDeCompra, tipo.valor).toBe(true);
+    }
+  });
+
+  it('la respuesta sale del CATÁLOGO, no de una lista escrita aparte', () => {
+    for (const tipo of TIPOS) {
+      expect(typeof tipo.usaMontoDeCompra, tipo.valor).toBe('boolean');
+      expect(usaMontoDeCompra(tipo.valor)).toBe(tipo.usaMontoDeCompra);
+    }
+  });
+
+  it('un tipo desconocido degrada a puntos, que sí lo usa', () => {
+    expect(usaMontoDeCompra('lo-que-sea')).toBe(true);
   });
 });

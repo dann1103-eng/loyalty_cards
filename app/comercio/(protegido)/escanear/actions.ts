@@ -10,7 +10,7 @@ import { sucursalPerteneceAComercio } from '@/lib/comercio/sucursales';
 import { resolverProgramaDeTarjeta } from '@/lib/comercio/programas';
 import { notificarCambioTarjeta } from '@/lib/apple/notificarCambioTarjeta';
 import { syncObjetoTarjeta } from '@/lib/google/syncObjeto';
-import { tipoOPuntos, describirSaldo, centavosDesdeTexto, nivelParaAcumulado, puedeCanjearRecompensas, type AccionPrincipal } from '@/lib/tarjetas/tipos';
+import { tipoOPuntos, describirSaldo, centavosDesdeTexto, nivelParaAcumulado, puedeCanjearRecompensas, usaMontoDeCompra, type AccionPrincipal } from '@/lib/tarjetas/tipos';
 import { usarCupon, renovarMembresia, hoyEnZona } from '@/lib/tarjetas/vigencia';
 import { unidadPrograma, describirCosto, mensajeAcreditacion, type Unidad } from '@/lib/tarjetas/unidadPrograma';
 import { usarVisita, venderPaquete } from '@/lib/tarjetas/prepago';
@@ -40,7 +40,8 @@ export interface ResultadoEscaneo {
   // enteros (dinero o sin contador), y entonces no hay nada que corregir a mano.
   unidad?: Unidad | null;
   recompensas?: RecompensaEscaner[];
-  // Si el comercio activó pedir_monto_compra, el escáner muestra el campo de monto (Tanda 1).
+  // Si el comercio activó pedir_monto_compra Y la operación de ESTA tarjeta recibe el monto, el
+  // escáner muestra el campo de monto (Tanda 1).
   pedirMontoCompra?: boolean;
   // Mecánica del tipo de tarjeta (migraciones 0018-0023). El escáner dibuja SUS botones a partir de
   // esto en vez de tener un `if` por tipo repartido por el componente.
@@ -171,7 +172,11 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
       costoTexto: describirCosto(tipo.valor, r.costo_puntos),
       fotoUrl: r.foto_url,
     })),
-    pedirMontoCompra: comercio?.pedir_monto_compra ?? false,
+    // La perilla es del comercio, pero el campo es de ESTA tarjeta: un comercio de puntos con la
+    // perilla prendida puede tener también un programa de cupón o membresía, cuya operación no
+    // recibe monto (ver `usaMontoDeCompra` en lib/tarjetas/tipos.ts). Sin el tipo, el cajero
+    // tecleaba sobre el cupón un monto que se descartaba.
+    pedirMontoCompra: (comercio?.pedir_monto_compra ?? false) && usaMontoDeCompra(tipo.valor),
   };
 }
 

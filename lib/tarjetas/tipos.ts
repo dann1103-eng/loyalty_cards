@@ -40,6 +40,20 @@ export interface TipoTarjeta {
   // heredar "sí, aplican" por descuido —— que es justo cómo cupón y membresía terminaron
   // ofreciéndole al dueño perillas que su tarjeta nunca consulta.
   aplicanControlesAcreditacion: boolean;
+  // ¿Alguna operación de este tipo le ENTREGA el monto de la compra a su RPC? Es LA pregunta que
+  // decide si la perilla `pedir_monto_compra` sirve de algo: si la respuesta es no, el cajero teclea
+  // un dato que se tira a la basura. Se verificó firma por firma: acreditar_atomico (0015) recibe
+  // p_monto_compra y lo graba en el ledger; consumir_saldo_atomico (0022) recibe p_monto;
+  // registrar_compra_atomico (0023) recibe p_monto_centavos; usar_cupon_atomico y
+  // renovar_membresia_atomico (0019, redefinida en 0031 con la misma firma) y usar_visita_atomico
+  // (0020) NO reciben ningún monto.
+  //
+  // No es `requiereMonto`: ese es "lo EXIGE", y puntos y sellos lo usan sin exigirlo. No es
+  // `aplicanControlesAcreditacion`: descuento no pasa por acreditar_atomico y sí usa el monto. Y no
+  // es `usaVigencia`, aunque hoy separe casi lo mismo: una pregunta si el estado es una fecha y la
+  // otra qué recibe la función del mostrador. Un campo propio por la misma razón que el anterior:
+  // un noveno tipo no compila hasta que alguien decida si su operación recibe el monto.
+  usaMontoDeCompra: boolean;
 }
 
 export const TIPOS: readonly TipoTarjeta[] = [
@@ -53,6 +67,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     usaVigencia: false,
     // Su operación principal ES acreditar_atomico.
     aplicanControlesAcreditacion: true,
+    // acreditar_atomico (0015) recibe p_monto_compra; el escáner se lo pasa cuando viene tecleado.
+    usaMontoDeCompra: true,
   },
   {
     valor: 'sellos',
@@ -64,6 +80,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     usaVigencia: false,
     // Su operación principal ES acreditar_atomico.
     aplicanControlesAcreditacion: true,
+    // Mismo camino que puntos: acreditar_atomico (0015) recibe p_monto_compra.
+    usaMontoDeCompra: true,
   },
   {
     valor: 'prepago',
@@ -76,6 +94,11 @@ export const TIPOS: readonly TipoTarjeta[] = [
     // Consume por usar_visita_atomico (0020), que no mira las perillas —— pero VENDER el
     // paquete reusa acreditarPuntos, así que los límites siguen siendo la defensa de esa carga.
     aplicanControlesAcreditacion: true,
+    // El que NO se ve a simple vista. usar_visita_atomico (0020) no recibe monto, y vender el
+    // paquete pasa por acreditar_atomico —que sí tiene p_monto_compra— pero accionOperacionSecundaria
+    // llama a venderPaquete solo con sucursal y cajero: el monto no llega nunca. Si algún día se
+    // cablea en la venta, este valor cambia junto con esa llamada, no antes.
+    usaMontoDeCompra: false,
   },
   {
     valor: 'gift_card',
@@ -89,6 +112,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     // reusa acreditarPuntos, y el techo por transacción es lo único que impide que un cajero
     // regale una gift card de $500.
     aplicanControlesAcreditacion: true,
+    // consumir_saldo_atomico (0022) recibe p_monto: el monto ES lo que se descuenta del saldo.
+    usaMontoDeCompra: true,
   },
   {
     valor: 'cashback',
@@ -100,6 +125,9 @@ export const TIPOS: readonly TipoTarjeta[] = [
     usaVigencia: false,
     // La devolución se acredita por acreditar_atomico.
     aplicanControlesAcreditacion: true,
+    // acreditarCashback calcula el porcentaje sobre el monto y se lo pasa a acreditar_atomico (0015)
+    // como p_monto_compra.
+    usaMontoDeCompra: true,
   },
   {
     valor: 'cupon',
@@ -111,6 +139,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     usaVigencia: true,
     // usar_cupon_atomico (0019) no consulta ninguna perilla, y no hay segunda operación.
     aplicanControlesAcreditacion: false,
+    // usar_cupon_atomico (0019) recibe comercio, tarjeta, sucursal y cajero. Ningún monto.
+    usaMontoDeCompra: false,
   },
   {
     valor: 'membresia',
@@ -122,6 +152,9 @@ export const TIPOS: readonly TipoTarjeta[] = [
     usaVigencia: true,
     // renovar_membresia_atomico (0019) no consulta ninguna perilla, y no hay segunda operación.
     aplicanControlesAcreditacion: false,
+    // renovar_membresia_atomico (0019, y la 0031 la redefine con la MISMA firma) recibe comercio,
+    // tarjeta, sucursal y cajero. Ningún monto: la renovación no guarda cuánto se cobró.
+    usaMontoDeCompra: false,
   },
   {
     valor: 'descuento',
@@ -133,6 +166,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     usaVigencia: false,
     // registrar_compra_atomico (0023) no consulta ninguna perilla, y no hay segunda operación.
     aplicanControlesAcreditacion: false,
+    // registrar_compra_atomico (0023) recibe p_monto_centavos: el monto ES lo que acumula el nivel.
+    usaMontoDeCompra: true,
   },
 ] as const;
 
@@ -167,6 +202,16 @@ export function puedeCanjearRecompensas(tipoTarjeta: string): boolean {
 // por acreditar_atomico sin contador las separaría.
 export function aplicanControlesAcreditacion(tipoTarjeta: string): boolean {
   return tipoOPuntos(tipoTarjeta).aplicanControlesAcreditacion;
+}
+
+// ¿Tiene sentido pedirle al cajero el monto de la compra en este tipo? Ver el campo homónimo del
+// catálogo: la respuesta es "alguna de sus operaciones se lo entrega a su RPC".
+//
+// Hay DOS preguntas distintas que la usan y no hay que confundirlas: Reglas pregunta por el programa
+// PRINCIPAL (si ofrecerle la perilla al dueño), y el escáner pregunta por la TARJETA escaneada (si
+// mostrar el campo), porque un comercio de puntos puede tener además un programa de cupón.
+export function usaMontoDeCompra(tipoTarjeta: string): boolean {
+  return tipoOPuntos(tipoTarjeta).usaMontoDeCompra;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

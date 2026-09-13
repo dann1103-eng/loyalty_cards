@@ -101,3 +101,47 @@ describe('accionBuscarPorToken — las recompensas que se le muestran al cajero'
     expect(resultado.saldoTexto).toBe('Disponible');
   });
 });
+
+// `pedir_monto_compra` es del COMERCIO, pero el campo del monto es de la TARJETA: un comercio de
+// puntos con la perilla prendida puede tener además un programa de cupón, y usar_cupon_atomico (0019)
+// no recibe monto. Antes el escáner leía la perilla sin mirar el tipo, y el cajero tecleaba sobre el
+// cupón un monto que se descartaba. Se mide sobre la acción, no sobre `usaMontoDeCompra`: el defecto
+// vivía en esta consulta, no en el catálogo.
+describe('accionBuscarPorToken — si al cajero se le pide el monto de la compra', () => {
+  async function comercioDePuntosConCupon() {
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'puntos', pedir_monto_compra: true });
+    sesion.comercioId = comercioId;
+    const cupon = await crearPrograma(supabase, comercioId, {
+      nombre: 'Bienvenida',
+      tipoTarjeta: 'cupon',
+      cashbackPorcentaje: null,
+      multipassVisitas: null,
+      membresiaDias: null,
+      cuponVigenciaDias: 30,
+    });
+    if (!cupon.ok) throw new Error(`[test] no se pudo crear el cupón: ${cupon.error}`);
+    return { comercioId, cuponId: cupon.id };
+  }
+
+  it('sobre el CUPÓN de un comercio de puntos con la perilla prendida, no se pide', async () => {
+    const { comercioId, cuponId } = await comercioDePuntosConCupon();
+    const tarjeta = await entorno.crearTarjeta(comercioId, 0, { programaId: cuponId });
+
+    const resultado = await accionBuscarPorToken(tarjeta.qrToken);
+
+    expect(resultado.tipoTarjeta).toBe('cupon');
+    expect(resultado.pedirMontoCompra, 'usar un cupón no recibe monto: el campo sería de adorno').toBe(false);
+  });
+
+  it('sobre la tarjeta de PUNTOS del mismo comercio, sí', async () => {
+    // La otra mitad, la que discrimina: si la acción apagara el campo para todos, la prueba de arriba
+    // pasaría igual y el dueño perdería la evidencia que prendió la perilla para juntar.
+    const { comercioId } = await comercioDePuntosConCupon();
+    const tarjeta = await entorno.crearTarjeta(comercioId, 5);
+
+    const resultado = await accionBuscarPorToken(tarjeta.qrToken);
+
+    expect(resultado.tipoTarjeta).toBe('puntos');
+    expect(resultado.pedirMontoCompra).toBe(true);
+  });
+});
