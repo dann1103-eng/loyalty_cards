@@ -18,7 +18,9 @@ export async function enviarMensajeTarjeta(
   tarjetaId: string,
   mensaje: string,
   vigenteHasta: string,
-  origen: 'campana' | 'inactividad',
+  // 'vencimiento' (0034): el aviso antes de que venza la tarjeta. Sin la migración, el insert de la
+  // auditoría falla con 23514 y el push sale igual, sin rastro.
+  origen: 'campana' | 'inactividad' | 'vencimiento',
   difusionId?: string,
 ): Promise<ResultadoEnvio> {
   // 1. Estado actual del aviso — esto es lo que construirReverso lee de ahora en más, en
