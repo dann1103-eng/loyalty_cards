@@ -24,8 +24,12 @@ export default async function PaginaReportesFm() {
   const supabase = createServiceClient();
   const comercios = await reporteFmComercios(supabase);
 
-  // Totales de la cartera para las métricas de cabecera.
-  const totalCirculante = comercios.reduce((suma, c) => suma + c.saldo_circulante, 0);
+  // Acá había un "saldo circulante" de toda la cartera: la suma de `puntos_actuales` de todos los
+  // comercios y todos los tipos, o sea sellos más centavos más visitas. No era un número en ninguna
+  // unidad, y rotularlo "referencial" no lo volvía legible, así que se dejó de mostrar (spec
+  // 2026-09-09, pendiente B). El saldo de UN comercio, bien calculado por tipo, está en su panel
+  // (`resumenPrograma`). La columna todavía sale de `reporte_fm_comercios()` hasta la 0035: este
+  // archivo dejó de leerla ANTES a propósito, porque retirarla primero de la base rompía la página.
 
   // Agrupación por cuenta. La función ya ordena por (cuenta_id is null), cuenta_nombre, comercio_nombre,
   // así que las filas de una misma cuenta llegan consecutivas → se agrupan comparando con la anterior.
@@ -45,9 +49,11 @@ export default async function PaginaReportesFm() {
         <h1 className="title" style={{ margin: 0 }}>Reportes</h1>
       </div>
 
-      {/* Métricas de la cartera FM (mismas tarjetas C2). */}
+      {/* Métricas de la cartera FM (mismas tarjetas C2). `metric-pila` es una grilla de DOS columnas
+          desde 760px: con una sola tarjeta quedaba la mitad derecha vacía, así que ocupa la fila
+          entera. En móvil la pila es flex y `gridColumn` no hace nada. */}
       <section className="metric-pila reveal d2">
-        <div className="metric-carta naranja">
+        <div className="metric-carta naranja" style={{ gridColumn: '1 / -1' }}>
           <div className="metric-etiqueta">
             <span>Comercios</span>
             <span className="icono" aria-hidden="true">storefront</span>
@@ -55,16 +61,6 @@ export default async function PaginaReportesFm() {
           <div>
             <div className="metric-valor">{comercios.length}</div>
             <div className="metric-sub">en la cartera</div>
-          </div>
-        </div>
-        <div className="metric-carta menta">
-          <div className="metric-etiqueta">
-            <span>Saldo circulante</span>
-            <span className="icono" aria-hidden="true">account_balance_wallet</span>
-          </div>
-          <div>
-            <div className="metric-valor">{totalCirculante}</div>
-            <div className="metric-sub">puntos/sellos sin canjear</div>
           </div>
         </div>
       </section>
@@ -94,7 +90,6 @@ export default async function PaginaReportesFm() {
                   <div style={{ display: 'flex', gap: 18, flexShrink: 0 }}>
                     <EstadisticaMini valor={c.operaciones} etiqueta="Operaciones" />
                     <EstadisticaMini valor={c.canjes} etiqueta="Premios" />
-                    <EstadisticaMini valor={c.saldo_circulante} etiqueta="Circulante" />
                   </div>
                 </div>
               ))}

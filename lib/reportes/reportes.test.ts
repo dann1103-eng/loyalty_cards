@@ -312,13 +312,13 @@ describe('reporteTendencia', () => {
 });
 
 describe('reporteFmComercios', () => {
-  it('agrega por comercio con su cuenta, clientes, movimientos y saldo circulante', async () => {
+  it('agrega por comercio con su cuenta, clientes y movimientos', async () => {
     const cuentaId = await crearCuenta(`Cuenta QA ${sufijo()}`);
     const comercioId = await crearComercio(cuentaId);
     const t1 = await crearTarjeta(comercioId, 0);
     const t2 = await crearTarjeta(comercioId, 0);
     const recompensa = await crearRecompensa(comercioId, 3);
-    // t1: acredita 10 y canjea 3 → saldo 7. t2: acredita 4 → saldo 4. Circulante total = 11.
+    // t1: acredita 10 y canjea 3. t2: acredita 4. → 2 clientes, 2 operaciones, 1 canje.
     expect((await acreditarPuntos(supabase, comercioId, t1, 10)).ok).toBe(true);
     expect((await acreditarPuntos(supabase, comercioId, t2, 4)).ok).toBe(true);
     expect((await canjearRecompensa(supabase, comercioId, t1, recompensa)).ok).toBe(true);
@@ -332,6 +332,10 @@ describe('reporteFmComercios', () => {
     expect(fila.clientes).toBe(2); // dos tarjetas
     expect(fila.operaciones).toBe(2); // dos filas en transacciones_puntos
     expect(fila.canjes).toBe(1);
-    expect(fila.saldo_circulante).toBe(11); // 7 + 4
+    // Ya NO se asierta el saldo circulante. La columna todavía existe en la base (la retira la 0035,
+    // DESPUÉS del deploy), pero ningún código la consume: sumaba `puntos_actuales` de todos los tipos
+    // — sellos, centavos y visitas — y el panel de FM dejó de mostrarla (spec 2026-09-09, pendiente B).
+    // Fijar su valor acá sería proteger un número que nadie lee, y esta prueba se rompería sola al
+    // aplicar la 0035 aunque la pantalla siguiera funcionando.
   });
 });
