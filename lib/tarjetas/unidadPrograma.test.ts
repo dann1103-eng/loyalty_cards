@@ -172,10 +172,12 @@ describe('el escáner no arma la confirmación a mano', () => {
     );
   });
 
-  it('los DOS sitios de acreditación pasan por mensajeAcreditacion', () => {
-    // Dos y no uno: accionAcreditar (la acreditación normal) y el default del switch por tipo.
-    // Contarlos es lo que atrapa el arreglo a medias, que es como nació el defecto.
+  it('el sitio de acreditación pasa por mensajeAcreditacion', () => {
+    // Eran DOS sitios (accionAcreditar y el default del switch por tipo) y contarlos atrapaba el
+    // arreglo a medias. Desde el 2026-09-13 queda UNO: accionAcreditar se retiró y la operación
+    // normal y la autorizada comparten ejecutarOperacion. Si vuelve a aparecer una segunda copia de
+    // la acreditación, este conteo lo dice.
     const usos = fuente.match(/mensajeAcreditacion\(/g) ?? [];
-    expect(usos.length, 'falta alguno de los dos sitios de acreditación').toBe(2);
+    expect(usos.length, 'la acreditación del escáner dejó de pasar por mensajeAcreditacion, o se duplicó').toBe(1);
   });
 });

@@ -209,45 +209,12 @@ async function resolverSucursalAtribuida(
   return { ok: true, valor: sucursalId };
 }
 
-// Suma sellos/puntos a la tarjeta escaneada y empuja la actualización al pass del cliente. Gate
-// COMPARTIDO (owner O cajero). La atribución (sucursal + cajero) se arma acá, en el servidor, NUNCA
-// se confía en el cliente para ella: resolverSucursalDeAccion fuerza la sucursal de la sesión para
-// un cajero, y el cajero_usuario_id sale SIEMPRE de sesion.usuarioComercioId.
-export async function accionAcreditar(
-  tarjetaId: string,
-  delta: number,
-  sucursalIdCliente: string | null,
-  montoCompra: number | null = null,
-): Promise<RespuestaOperacion> {
-  const sesion = await verifyComercioAcceso();
-  const supabase = createServiceClient();
-
-  const atribucion = await resolverSucursalAtribuida(supabase, sesion, sucursalIdCliente);
-  if (atribucion.ok === false) return { ok: false, error: atribucion.error };
-
-  const res = await acreditarPuntos(supabase, sesion.comercioId, tarjetaId, delta, {
-    sucursalId: atribucion.valor,
-    cajeroUsuarioId: sesion.usuarioComercioId,
-    montoCompra,
-  });
-  if (!res.ok) return { ok: false, error: res.error, bloqueoLimite: res.bloqueoLimite };
-
-  // El pass del cliente se refresca solo (mismo push que usa el cambio de branding).
-  await notificarCambioTarjeta(supabase, tarjetaId);
-  await syncObjetoTarjeta(supabase, tarjetaId);
-
-  // El tipo del PROGRAMA de esta tarjeta, que es lo que decide en qué palabra se confirma la
-  // operación. Se resuelve después de acreditar para no pagar la consulta cuando la acreditación
-  // se rechaza (tope diario, espera mínima).
-  const programa = await resolverProgramaDeTarjeta(supabase, sesion.comercioId, tarjetaId);
-
-  return {
-    ok: true,
-    puntosActuales: res.puntosActuales,
-    saldoTexto: await saldoTextoActual(sesion.comercioId, tarjetaId),
-    mensaje: mensajeAcreditacion(programa?.tipoTarjeta ?? 'puntos', delta),
-  };
-}
+// (Acá vivía `accionAcreditar`, retirada el 2026-09-13. Nadie la llamaba desde que el escáner pasó a
+// accionOperacionPrincipal, pero una Server Action exportada es un endpoint vivo aunque ningún botón
+// la use: recibía un `delta` crudo del navegador y lo acreditaba en CUALQUIER tipo de tarjeta —en una
+// gift card, centavos arbitrarios sin pasar por cargarGiftCard—. La misma trampa que
+// accionAcreditarForzado. Toda acreditación del mostrador entra por ejecutarOperacion, donde cuánto
+// vale la operación lo decide el servidor.)
 
 // Qué operación del escáner se intentó, con lo que el cajero TECLEÓ para ella. El cliente dice cuál
 // botón apretó; qué hace ese botón lo decide el servidor según el tipo de la tarjeta.
@@ -338,7 +305,7 @@ export async function accionQuitar(
 }
 
 // Canjea una recompensa: descuenta el costo y deja el registro en el historial de canjes. Gate
-// COMPARTIDO (owner O cajero) y misma atribución server-side que accionAcreditar.
+// COMPARTIDO (owner O cajero) y misma atribución server-side que ejecutarOperacion.
 export async function accionCanjear(
   tarjetaId: string,
   recompensaId: string,
