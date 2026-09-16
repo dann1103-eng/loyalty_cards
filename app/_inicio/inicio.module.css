@@ -54,6 +54,12 @@
   --violeta-realce: #8f86e0; /* Soft */
   --frosted: #b1e4f9; /* Frosted */
   --teal: #234b59; /* Teal */
+
+  /* Fondo de las fichas de plan (Starter y Pro). Blanco sobre la banda clara. Es variable y no un
+     #ffffff fijo en .plan porque el alto contraste lo tiene que poder cambiar: con el blanco fijo,
+     ese tema pintaba el texto blanco sobre la ficha blanca y los dos planes quedaban en blanco
+     (visto en producción el 2026-09-16). */
+  --ficha: #ffffff;
 }
 
 :global(:root[data-tema='alto-contraste']) .pagina {
@@ -70,11 +76,22 @@
   --sobre-claro-2: #ededed;
   --linea-clara: rgba(255, 255, 255, 0.82);
 
-  --violeta: #000000;
+  /* --violeta es TINTA (el remate manuscrito de los títulos, el "+ 6" de los modelos, el foco), no
+     fondo: en negro sobre una banda que acá también es negra desaparecía. Toma el mismo amarillo
+     que el remate de las bandas oscuras, así todos los acentos de la página son uno solo. */
+  --violeta: #ffcc33;
   --violeta-tarjeta: #000000;
   --violeta-realce: #d9b8ff;
   --frosted: #9fd9ff;
   --teal: #000000;
+  --ficha: #000000;
+}
+
+/* Growth no tiene borde en el diseño de marca (lo destaca el violeta). Acá su fondo es el mismo
+   negro que la sección y que las otras dos fichas, así que sin borde se perdía: el amarillo le
+   devuelve la jerarquía que en el afiche pone el color. */
+:global(:root[data-tema='alto-contraste']) .planDestacado {
+  border-color: var(--realce);
 }
 
 .envoltura {
@@ -1021,9 +1038,9 @@
   padding: clamp(22px, 3vw, 30px);
   border: 1px solid var(--linea-clara);
   border-radius: var(--radius);
-  /* Blanco fijo, misma razón que en .tipoFicha: esta ficha vive en .bandaClara, que ignora el
-     tema del dispositivo, y --superficie-0 no. */
-  background: #ffffff;
+  /* --ficha y no --superficie-0: esta ficha vive en .bandaClara, que ignora el tema del
+     dispositivo, y --superficie-0 no. Ver la declaración de --ficha en .pagina. */
+  background: var(--ficha);
 }
 
 .planDestacado {
