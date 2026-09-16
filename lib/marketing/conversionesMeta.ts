@@ -117,6 +117,12 @@ export async function enviarSubscribe(
       console.error('[meta] Subscribe rechazado:', respuesta.status, detalle);
       return 'error';
     }
+    // El éxito TAMBIÉN queda en el log (2026-09-16). La primera prueba real no mostró el evento en
+    // "Probar eventos" y no había forma de saber si Meta lo había recibido: un envío mudo cuando sale
+    // bien es indistinguible de uno que nunca salió. Meta responde `events_received` y un
+    // `fbtrace_id` (lo que pide su soporte); nada de eso lleva el token ni el correo.
+    const resumen = (await respuesta.text().catch(() => '')).slice(0, 500);
+    console.info('[meta] Subscribe aceptado:', resumen);
     return 'enviado';
   } catch (error) {
     console.error('[meta] Subscribe no se pudo enviar:', error instanceof Error ? error.message : 'error de red');
@@ -152,7 +158,7 @@ export async function notificarPagoAMeta(
 ): Promise<ResultadoEnvio> {
   try {
     const correos = await correosDeDuenos(supabase, pago.cuentaId);
-    return await enviarSubscribe(
+    const resultado = await enviarSubscribe(
       { cobroId: pago.cobroId, monto: pago.monto, correos, ahora: new Date() },
       {
         token: process.env.META_CAPI_TOKEN,
@@ -160,6 +166,13 @@ export async function notificarPagoAMeta(
         codigoPrueba: process.env.META_CAPI_TEST_EVENT_CODE,
       },
     );
+    // 'enviado' y 'error' ya dejaron su línea. Los otros dos son silenciosos por naturaleza (no hubo
+    // envío) y son justo los que confunden: una variable que no llegó al deploy, o una cuenta sin
+    // dueño activo. Solo el resultado y el id de la cuenta; el correo, nunca.
+    if (resultado === 'sin-configurar' || resultado === 'sin-datos') {
+      console.warn('[meta] Subscribe no enviado:', resultado, 'cuenta', pago.cuentaId);
+    }
+    return resultado;
   } catch (error) {
     console.error('[meta] Subscribe falló antes de enviar:', error instanceof Error ? error.message : error);
     return 'error';

@@ -99,6 +99,18 @@ describe('enviarSubscribe', () => {
     expect(JSON.parse(init.body)).toEqual(construirEventoSubscribe(DATOS, 'TEST123'));
   });
 
+  // Un éxito mudo no se distingue de un envío que nunca salió: la respuesta de Meta queda en el log.
+  it('un envío aceptado deja en el log la respuesta de Meta, sin el token', async () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const respuesta = '{"events_received":1,"messages":[],"fbtrace_id":"AbC123"}';
+    const fetchFalso = vi.fn().mockResolvedValue(new Response(respuesta, { status: 200 }));
+    expect(await enviarSubscribe(DATOS, ENTORNO, fetchFalso)).toBe('enviado');
+
+    expect(infoSpy).toHaveBeenCalledWith('[meta] Subscribe aceptado:', respuesta);
+    expect(JSON.stringify(infoSpy.mock.calls)).not.toContain('token-secreto');
+    infoSpy.mockRestore();
+  });
+
   // Medir nunca puede romper el registro del pago: un error de Meta se reporta, no se lanza.
   it('una respuesta de error o una red caída devuelven "error" sin lanzar', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
