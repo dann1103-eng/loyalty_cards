@@ -331,11 +331,16 @@ una prueba fija que un apellido en blanco llega como null.
 - **`hero.png` sirve los bytes crudos de la franja propia con `Content-Type: image/png`** aunque el
   archivo sea JPG o WebP. En sellos ya pasaba; en los demás tipos es nuevo. Y Google rechaza el
   patch ENTERO si no puede cargar la imagen: una franja que no acepte no deja "sin franja", deja el
-  objeto sin crear o sin actualizar el saldo. La fase `objetos` del script lo delata (fallos por
-  comercio) antes del deploy B; además se verifica en Android con un tipo que no sea sellos.
+  objeto sin crear o sin actualizar el saldo. **El riesgo arranca con el deploy A** (que es el que
+  activa el hero con franja propia en todos los tipos), no con el B. Antes del deploy A, el
+  controlador lista en producción (solo lectura) los programas que NO son de sellos y tienen franja
+  propia efectiva y tarjetas con objeto en Google, y el tipo de archivo de esas franjas: si hay
+  alguno, se prueba esa URL de `hero.png` contra Google con su tarjeta antes de publicar.
 - **Objeto creado solo por el JWT** (cuando `syncObjetoTarjeta` falló en `linkGuardar`): existe en
   Google con `google_object_id` null en la base, el script no lo ve y queda con filas vacías tras el
-  deploy B hasta su próxima operación. Hueco conocido, fuera de esta entrega.
+  deploy B. No se arregla solo: al operar, `syncObjetoTarjeta` intenta crearlo con el mismo id fijo,
+  Google responde que ya existe y el error se atrapa. Queda así hasta repararlo aparte; hueco
+  conocido, fuera de esta entrega.
 - **Esquina del logo en Apple**: un logo muy ancho recorta el estado. La fecha corta existe para eso.
 
 ## Fuera de alcance
