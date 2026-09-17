@@ -4,7 +4,7 @@ import { requireEnv } from '@/lib/env';
 import { componerStrips, descargarImagen } from './stripPass';
 import { redimensionarLogo } from './imagenesPass';
 import type { CampoReverso } from './construirReverso';
-import { frentePase } from '@/lib/tarjetas/frentePase';
+import { frentePase, PIE_CODIGO, type Franja } from '@/lib/tarjetas/frentePase';
 import type { Encuadre } from '@/lib/comercio/encuadreFranja';
 import {
   MAXIMO_UBICACIONES_APPLE,
@@ -26,12 +26,32 @@ function cargarCertificados() {
   };
 }
 
+// Qué hay DE VERDAD en la franja de ESTE pase (spec 2026-09-17, "La franja, en tres estados"). Se
+// decide con `hayStrips` —si componerStrips devolvió algo— y no solo con lo que subió el comercio:
+// si la franja propia no se pudo bajar, el pase sale SIN franja, y tratarlo como 'propia' lo dejaría
+// también sin el nombre del pase hasta la próxima operación del cliente.
+function franjaDelPase(
+  d: { tipoTarjeta: string; selloMeta: number | null; stripUrl: string | null },
+  hayStrips: boolean,
+): Franja {
+  if (d.stripUrl && hayStrips) return 'propia';
+  // Misma condición de grilla que usa stripPass para componerla.
+  const sellosConMeta = d.tipoTarjeta === 'sellos' && d.selloMeta != null && d.selloMeta > 0;
+  if (sellosConMeta && !d.stripUrl && hayStrips) return 'grilla';
+  return 'banda';
+}
+
 export interface DatosPass {
   serialNumber: string;
   qrToken: string;
   puntos: number;
-  // Titular de la tarjeta (clientes.nombre). null si no se pudo resolver: el pass sale sin el campo.
+  // Titular de la tarjeta: NOMBRE a la izquierda y APELLIDO a la derecha, debajo de la franja.
+  // `clientes.nombre`: null si no se pudo resolver, y entonces el pass sale sin NINGUNO de los dos
+  // (un APELLIDO solo no nombra a nadie).
   nombreCliente: string | null;
+  // `clientes.apellido` (0036). null en los clientes registrados antes de la 0036 y en los que se
+  // dieron de alta por teléfono sin apellido: el pass sale solo con NOMBRE.
+  apellidoCliente: string | null;
   nombreComercio: string;
   colorFondo: string;
   colorTexto: string;
@@ -48,15 +68,15 @@ export interface DatosPass {
   // OJO, asimetría conocida con Google y documentada a propósito: acá NO se manda `expirationDate`
   // (fuera de alcance), así que iOS no marca el pase como vencido; el texto se refresca cuando
   // llega el push, que hoy ocurre al OPERAR la tarjeta. O sea que el pase de una membresía vencida
-  // va a seguir diciendo "Activa hasta el 3 de agosto de 2026" hasta el próximo escaneo. Es
+  // va a seguir diciendo "VÁLIDO HASTA 03/08/2026" hasta el próximo escaneo. Es
   // aceptable —el cajero ve el estado real al escanear— pero tiene que estar escrito.
   vigenciaHasta: string | null;
   usadoEn: string | null;
-  // `programas_tarjeta.nombre_pase`: cómo se llama la tarjeta para el cliente. null = el pase sale
-  // sin headerField, como hasta ahora.
+  // `programas_tarjeta.nombre_pase`: cómo se llama la tarjeta para el cliente. Se escribe SOBRE la
+  // franja, y solo cuando la franja es la banda lisa (ver `franjaDelPase`). null = nada encima.
   nombrePase: string | null;
   // El "hoy" del COMERCIO (hoyEnZona(comercio.zona_horaria)), no el del servidor: decide si la
-  // membresía dice "Activa hasta" o "Vencida el", y con UTC el borde se corre un día entero.
+  // membresía dice "VÁLIDO HASTA" o "VENCIÓ EL", y con UTC el borde se corre un día entero.
   hoyIso: string;
   stripUrl: string | null;
   selloIconoUrl: string | null;
@@ -178,60 +198,67 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
     pass.addBuffer('logo@3x.png', logo3x);
   }
 
-  // Qué va en el frente del pass lo decide frentePase, compartido con la vista previa del editor de
-  // marca: así la vista previa no puede decir algo distinto del pass ni en una palabra. `hayGrilla`
-  // es "la composición tuvo éxito y no hay franja propia": con franja del comercio o composición
-  // fallida, el texto vuelve al campo primario (mismo fallback seguro de siempre).
-  const esSellos = datos.tipoTarjeta === 'sellos' && datos.selloMeta != null && datos.selloMeta > 0;
+  // Qué va en el frente del pass lo decide frentePase, compartido con Google y con la vista previa
+  // del editor de marca: así ninguno puede decir algo distinto del pass ni en una palabra. La franja
+  // se le pasa YA RESUELTA contra lo que de verdad llegó al pase (ver `franjaDelPase`).
   const frente = frentePase({
     tipoTarjeta: datos.tipoTarjeta,
     puntos: datos.puntos,
     selloMeta: datos.selloMeta,
-    hayGrilla: esSellos && strips !== null && !datos.stripUrl,
+    franja: franjaDelPase(datos, strips !== null),
     vigenciaHasta: datos.vigenciaHasta,
     usadoEn: datos.usadoEn,
     nombrePase: datos.nombrePase,
+    nombreCliente: datos.nombreCliente,
+    apellidoCliente: datos.apellidoCliente,
     hoyIso: datos.hoyIso,
   });
 
-  // El NOMBRE del pase, arriba a la derecha (headerFields es el único slot libre del modelo). Sin
-  // etiqueta: es un nombre propio, no un dato con unidad, y un "TARJETA" encima en letra chica solo
-  // le robaría ancho al nombre en la esquina más apretada del pass.
-  if (frente.encabezado) {
-    pass.headerFields.push({ key: 'nombre_pase', value: frente.encabezado });
-  }
-
-  if (frente.secundario) {
-    pass.secondaryFields.push({
-      key: 'puntos',
-      label: frente.secundario.etiqueta,
-      value: frente.secundario.valor,
-    });
-  }
-  if (frente.primario) {
-    pass.primaryFields.push({
-      key: 'puntos',
-      label: frente.primario.etiqueta,
-      // Número pelado → va como number CON numberStyle, para que iOS le ponga los separadores de
-      // miles del teléfono. Valor ya formateado ("$25.00") → va como string y sin numberStyle:
-      // aplicárselo haría que iOS intente reformatear lo que ya está formateado.
-      ...(frente.primario.numero !== null
-        ? { value: frente.primario.numero, numberStyle: 'PKNumberStyleDecimal' as const }
-        : { value: frente.primario.valor }),
+  // El frente, como los diseños (spec 2026-09-17, "El frente, lugar por lugar"):
+  //
+  //   [logo]                 ESTADO      ← headerFields: arriba a la derecha, al lado del logo
+  //   [ franja  nombre_pase           ]  ← primaryFields: SOLO sobre la banda lisa
+  //   NOMBRE                 APELLIDO    ← secondaryFields: debajo de la franja
+  //            [QR]
+  //      Powered by Cardly               ← altText del código
+  //
+  // El ESTADO: el contador del tipo o, en cupón y membresía, la fecha corta ("VÁLIDO HASTA
+  // 16/10/2026"). Nada en descuento. Número pelado → va como number CON numberStyle, para que iOS le
+  // ponga los separadores de miles del teléfono. Valor ya formateado ("$25.00", "7 de 10",
+  // "16/10/2026") → va como string y sin numberStyle: aplicárselo haría que iOS intente reformatear
+  // lo que ya está formateado.
+  if (frente.estado) {
+    pass.headerFields.push({
+      key: 'estado',
+      label: frente.estado.etiqueta,
+      ...(frente.estado.numero !== null
+        ? { value: frente.estado.numero, numberStyle: 'PKNumberStyleDecimal' as const }
+        : { value: frente.estado.valor }),
     });
   }
 
-  // El TITULAR de la tarjeta, alineado a la derecha de la misma fila que el contador. Es el nombre
-  // que el cliente escribió al registrarse — como una tarjeta de socio física, que lleva el nombre
-  // de quien la usa. El nombre del COMERCIO no va acá: ya está arriba (logo, o logoText cuando no
-  // hay logo) y repetirlo dejaba la tarjeta sin decir de quién es.
-  // Se omite si falta: una tarjeta sin nombre es mejor que una que diga "null".
-  if (datos.nombreCliente) {
-    pass.secondaryFields.push({
-      key: 'titular',
-      value: datos.nombreCliente,
-      textAlignment: 'PKTextAlignmentRight',
-    });
+  // El NOMBRE del pase, sobre la franja. Sin etiqueta: es un nombre propio, no un dato con unidad.
+  // frentePase ya lo devuelve null sobre una franja propia (la imagen trae su texto dibujado) y sobre
+  // la grilla (taparía los círculos).
+  if (frente.sobreFranja) {
+    pass.primaryFields.push({ key: 'nombre_pase', value: frente.sobreFranja });
+  }
+
+  // El TITULAR de la tarjeta, como una de socio física: NOMBRE a la izquierda y APELLIDO a la
+  // derecha, cada uno con su rótulo. El nombre del COMERCIO no va acá: ya está arriba (logo, o
+  // logoText cuando no hay logo) y repetirlo dejaba la tarjeta sin decir de quién es.
+  // Sin nombre no hay ninguno de los dos, y sin apellido va solo NOMBRE: una tarjeta sin el campo es
+  // mejor que una que diga "null".
+  if (frente.titular) {
+    pass.secondaryFields.push({ key: 'nombre', label: 'NOMBRE', value: frente.titular.nombre });
+    if (frente.titular.apellido) {
+      pass.secondaryFields.push({
+        key: 'apellido',
+        label: 'APELLIDO',
+        value: frente.titular.apellido,
+        textAlignment: 'PKTextAlignmentRight',
+      });
+    }
   }
 
   // El REVERSO (lo que ve el cliente al tocar la "i"), ya armado por construirReverso. De a uno y
@@ -242,7 +269,21 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
     pass.backFields.push(campo);
   }
 
-  pass.setBarcodes(datos.qrToken);
+  // UN solo código, QR, con "Powered by Cardly" debajo (altText). Con TODOS los campos explícitos:
+  // en passkit-generator 3.5.7 la forma con objeto pasa por `Schemas.filterValid`, que DESCARTA en
+  // silencio (console.warn, sin lanzar) un código mal formado — el pase saldría sin QR y sin error.
+  // `format` y `message` son obligatorios en su esquema; `messageEncoding` tiene default, pero se
+  // escribe para que el pass.json no dependa de un default de la librería.
+  //
+  // Antes era `setBarcodes(qrToken)`: el string genera CUATRO formatos (QR, PDF417, Aztec, Code128)
+  // sin altText. Wallet muestra el primero que soporta —QR—, así que quedarse solo con QR no cambia
+  // lo que escanea el cajero.
+  pass.setBarcodes({
+    format: 'PKBarcodeFormatQR',
+    message: datos.qrToken,
+    messageEncoding: 'iso-8859-1',
+    altText: PIE_CODIGO,
+  });
 
   return pass.getAsBuffer();
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import JSZip from 'jszip';
 import sharp from 'sharp';
 import { randomBytes } from 'node:crypto';
@@ -6,6 +6,7 @@ import { generarPassApple } from './generatePass';
 import { ALTOS_LOGO } from './imagenesPass';
 import type { UbicacionGeopush } from '@/lib/comercio/geopush';
 import { ENCUADRE_POR_DEFECTO } from '@/lib/comercio/encuadreFranja';
+import { PIE_CODIGO } from '@/lib/tarjetas/frentePase';
 
 // PNG de 1×1 para probar la franja subida por el comercio sin depender de la red: fetch() de Node
 // soporta data: URLs, así el test compara los bytes exactos que "subió" el comercio.
@@ -15,7 +16,8 @@ const PNG_1PX_B64 =
 function datosBase() {
   return {
     nombreComercio: 'Cafetería Piloto',
-    nombreCliente: 'María Rivera',
+    nombreCliente: 'María',
+    apellidoCliente: 'Rivera',
     colorFondo: 'rgb(35, 24, 18)',
     colorTexto: 'rgb(255, 255, 255)',
     colorLabel: 'rgb(255, 255, 255)',
@@ -62,7 +64,8 @@ describe('generarPassApple', () => {
 
     const passJson = JSON.parse(await zip.file('pass.json')!.async('string'));
     expect(passJson.serialNumber).toBe('test-serial-001');
-    expect(passJson.storeCard.primaryFields[0].value).toBe(10);
+    // Los puntos son el ESTADO: arriba a la derecha, al lado del logo (spec 2026-09-17).
+    expect(passJson.storeCard.headerFields[0].value).toBe(10);
     expect(passJson.barcodes[0].message).toBe('abc123');
     expect(passJson.webServiceURL).toBe('https://example.com/api/apple');
     expect(passJson.authenticationToken).toBe('0123456789abcdef0123456789abcdef');
@@ -74,20 +77,18 @@ describe('generarPassApple', () => {
 
     // El TITULAR: la tarjeta dice de quién es, como una de socio física. Antes acá iba el nombre
     // del COMERCIO, que ya está arriba en el logo — repetirlo dejaba la tarjeta sin dueño.
-    const titular = passJson.storeCard.secondaryFields?.find(
-      (f: { key: string }) => f.key === 'titular',
-    );
-    expect(titular?.value).toBe('María Rivera');
-    expect(titular?.textAlignment).toBe('PKTextAlignmentRight');
+    const claves = passJson.storeCard.secondaryFields.map((f: { key: string }) => f.key);
+    expect(claves).toEqual(['nombre', 'apellido']);
   });
 
-  it('sin nombre de cliente el pass sale SIN el campo del titular (nunca con "null")', async () => {
+  it('sin nombre de cliente el pass sale SIN NOMBRE ni APELLIDO (nunca con "null")', async () => {
     // nombreCliente puede faltar si el join del cliente falla o su fila se borró: el pass tiene que
     // generarse igual. Un campo con la palabra "null" en la billetera del cliente sería peor que
-    // no tener campo.
+    // no tener campo. Y un APELLIDO solo, sin nombre, no nombra a nadie: tampoco va.
     const buffer = await generarPassApple({
       ...datosBase(),
       nombreCliente: null,
+      apellidoCliente: 'Rivera',
       serialNumber: 'test-serial-sin-cliente',
       qrToken: 'abc123',
       puntos: 3,
@@ -98,8 +99,7 @@ describe('generarPassApple', () => {
 
     const zip = await JSZip.loadAsync(buffer);
     const passJson = JSON.parse(await zip.file('pass.json')!.async('string'));
-    const claves = (passJson.storeCard.secondaryFields ?? []).map((f: { key: string }) => f.key);
-    expect(claves).not.toContain('titular');
+    expect(passJson.storeCard.secondaryFields ?? []).toEqual([]);
   });
 
   it('el passTypeIdentifier y teamIdentifier del pass firmado vienen de env (fuente única)', async () => {
@@ -122,10 +122,10 @@ describe('generarPassApple', () => {
     expect(passJson.teamIdentifier).toBe(process.env.APPLE_TEAM_ID);
   });
 
-  it('sellos con meta: la grilla va en la franja y el contador debajo (secondary)', async () => {
+  it('sellos con meta: la grilla va en la franja, NADA encima, y el contador arriba (header)', async () => {
     // Evolución del contrato original ("texto en primaryFields"): ahora que next/og puede
-    // componer imágenes, la grilla de sellos SE VE en el strip. El texto encima de la grilla
-    // taparía los círculos, así que el contador baja a secondaryFields.
+    // componer imágenes, la grilla de sellos SE VE en el strip. Cualquier texto encima de la grilla
+    // taparía los círculos; desde el 2026-09-17 el contador va arriba a la derecha, como todo estado.
     const buffer = await generarPassApple({
       ...datosBase(),
       serialNumber: 'test-serial-sellos',
@@ -142,8 +142,9 @@ describe('generarPassApple', () => {
       expect.arrayContaining(['strip.png', 'strip@2x.png', 'strip@3x.png']),
     );
     expect(passJson.storeCard.primaryFields ?? []).toHaveLength(0);
-    expect(passJson.storeCard.secondaryFields[0].label).toBe('SELLOS');
-    expect(passJson.storeCard.secondaryFields[0].value).toBe('7 de 10');
+    expect(passJson.storeCard.headerFields).toEqual([
+      { key: 'estado', label: 'SELLOS', value: '7 de 10' },
+    ]);
   });
 
   it('vuelve al número si tipo=sellos pero sello_meta es null (fallback seguro)', async () => {
@@ -161,7 +162,7 @@ describe('generarPassApple', () => {
 
     const zip = await JSZip.loadAsync(buffer);
     const passJson = JSON.parse(await zip.file('pass.json')!.async('string'));
-    expect(passJson.storeCard.primaryFields[0].value).toBe(7);
+    expect(passJson.storeCard.headerFields[0].value).toBe(7);
   });
 
   it('usa la franja subida por el comercio cuando existe (bytes exactos)', async () => {
@@ -412,88 +413,247 @@ describe('generarPassApple — geopush', () => {
   });
 });
 
-// El defecto que cierra este grupo: el frente del pase de una membresía mostraba SOLO el logo, la
-// franja y el nombre del cliente. Ni cómo se llama la tarjeta ni hasta cuándo está activa — mientras
-// el borrador de términos que la propia app genera prometía "hasta la fecha que aparece en la
-// tarjeta", una fecha que no aparecía en ninguna parte del pase.
-describe('generarPassApple — identidad y vigencia del pase', () => {
-  it('membresía vigente: el primaryField dice hasta cuándo está activa', async () => {
-    // MUTACIÓN: quitar `vigenciaHasta` de la llamada a frentePase (o volver a devolver null para
-    // membresía) deja `primaryFields` vacío y reproduce exactamente el pase casi en blanco.
-    const buffer = await generarPassApple({
-      ...datosBase(),
-      serialNumber: 'test-serial-membresia',
-      qrToken: 'mem001',
-      puntos: 0,
-      tipoTarjeta: 'membresia',
-      selloMeta: null,
-      stripUrl: null,
-      vigenciaHasta: '2026-10-12',
-      hoyIso: '2026-09-09',
-    });
-
+// El FRENTE del pase como los diseños (spec 2026-09-17, "El frente, lugar por lugar"): arriba a la
+// derecha el ESTADO, sobre la franja el nombre del pase SOLO si es la banda lisa, debajo NOMBRE y
+// APELLIDO con su rótulo, y "Powered by Cardly" bajo el QR.
+//
+// Hasta esta entrega el nombre del pase iba arriba a la derecha, el estado SOBRE la franja —tapando
+// el texto que la imagen del comercio ya trae dibujado— y el nombre completo del cliente sin rótulo.
+//
+// Se asierta con `toEqual` sobre el arreglo ENTERO de cada lugar, no con un `find` por clave: un
+// campo de más (el nombre del pase sobre una franja propia, un numberStyle sobre "$50.00") es
+// justamente el defecto, y un `find` lo dejaría pasar.
+//
+// MUTACIONES (corridas el 2026-09-17 contra generatePass.ts; cada una tumba UNA prueba de este grupo):
+//   (a) `if (d.stripUrl) return 'propia'` en franjaDelPase, sin `hayStrips` → falla "franja propia
+//       que NO bajó": `expected [] to deeply equal [ { key: 'nombre_pase', …(1) } ]`.
+//   (b) quitar `altText: PIE_CODIGO` de setBarcodes → falla "exactamente UN código":
+//       `expected [ { …(3) } ] to deeply equal [ { …(4) } ]`.
+//   (c) `PKTextAlignmentLeft` en el apellido → falla "membresía vigente con franja propia" con el
+//       diff `- "PKTextAlignmentRight"` / `+ "PKTextAlignmentLeft"`.
+describe('generarPassApple — el frente del pase', () => {
+  async function abrir(buffer: Buffer) {
     const zip = await JSZip.loadAsync(buffer);
-    const passJson = JSON.parse(await zip.file('pass.json')!.async('string'));
-    expect(passJson.storeCard.primaryFields[0]).toMatchObject({
-      label: 'MEMBRESÍA',
-      value: 'Activa hasta el 12 de octubre de 2026',
-    });
-    // Y SIN numberStyle: no es un número, y aplicárselo haría que iOS intente reformatear el texto.
-    expect(passJson.storeCard.primaryFields[0].numberStyle).toBeUndefined();
+    return { zip, passJson: JSON.parse(await zip.file('pass.json')!.async('string')) };
+  }
+
+  it('membresía vigente con franja propia: VÁLIDO HASTA arriba, NADA sobre la franja, NOMBRE y APELLIDO debajo', async () => {
+    const { zip, passJson } = await abrir(
+      await generarPassApple({
+        ...datosBase(),
+        serialNumber: 'test-frente-membresia-propia',
+        qrToken: 'mem001',
+        puntos: 0,
+        tipoTarjeta: 'membresia',
+        selloMeta: null,
+        stripUrl: `data:image/png;base64,${PNG_1PX_B64}`,
+        vigenciaHasta: '2026-10-16',
+        hoyIso: '2026-09-09',
+        nombrePase: 'Mensualidad VIP',
+      }),
+    );
+
+    expect(Object.keys(zip.files)).toContain('strip.png');
+    // Fecha CORTA y SIN numberStyle: no es un número, e iOS intentaría reformatear el texto.
+    expect(passJson.storeCard.headerFields).toEqual([
+      { key: 'estado', label: 'VÁLIDO HASTA', value: '16/10/2026' },
+    ]);
+    // La imagen del comercio ya trae "Mensualidad VIP" dibujado: escribirlo encima lo taparía.
+    expect(passJson.storeCard.primaryFields ?? []).toEqual([]);
+    expect(passJson.storeCard.secondaryFields).toEqual([
+      { key: 'nombre', label: 'NOMBRE', value: 'María' },
+      { key: 'apellido', label: 'APELLIDO', value: 'Rivera', textAlignment: 'PKTextAlignmentRight' },
+    ]);
   });
 
-  it('membresía vencida: lo dice el texto — Apple no la marca vencida sola (asimetría con Google)', async () => {
+  it('membresía vencida: VENCIÓ EL con la fecha corta — Apple no la marca vencida sola (asimetría con Google)', async () => {
     // Está escrito acá porque es lo que un iPhone real muestra: sin `expirationDate` (fuera de
     // alcance), iOS no mueve el pase a "caducados"; el texto se refresca con el push, que llega al
     // OPERAR la tarjeta. Google, en cambio, sí lo marca con validTimeInterval.
-    const buffer = await generarPassApple({
-      ...datosBase(),
-      serialNumber: 'test-serial-membresia-vencida',
-      qrToken: 'mem002',
-      puntos: 0,
-      tipoTarjeta: 'membresia',
-      selloMeta: null,
-      stripUrl: null,
-      vigenciaHasta: '2026-08-03',
-      hoyIso: '2026-09-09',
-    });
+    const { passJson } = await abrir(
+      await generarPassApple({
+        ...datosBase(),
+        serialNumber: 'test-frente-membresia-vencida',
+        qrToken: 'mem002',
+        puntos: 0,
+        tipoTarjeta: 'membresia',
+        selloMeta: null,
+        stripUrl: null,
+        vigenciaHasta: '2026-08-03',
+        hoyIso: '2026-09-09',
+      }),
+    );
 
-    const zip = await JSZip.loadAsync(buffer);
-    const passJson = JSON.parse(await zip.file('pass.json')!.async('string'));
-    expect(passJson.storeCard.primaryFields[0].value).toBe('Vencida el 3 de agosto de 2026');
+    expect(passJson.storeCard.headerFields).toEqual([
+      { key: 'estado', label: 'VENCIÓ EL', value: '03/08/2026' },
+    ]);
     expect(passJson.expirationDate).toBeUndefined();
   });
 
-  it('el nombre del pase va a headerFields; sin nombre, el pase sale sin ese campo', async () => {
-    const conNombre = await generarPassApple({
-      ...datosBase(),
-      serialNumber: 'test-serial-nombre-pase',
-      qrToken: 'nom001',
-      puntos: 0,
-      tipoTarjeta: 'membresia',
-      selloMeta: null,
-      stripUrl: null,
-      nombrePase: 'Socio Oro',
-    });
-    const passConNombre = JSON.parse(
-      await (await JSZip.loadAsync(conNombre)).file('pass.json')!.async('string'),
+  it('gift card sobre la banda lisa: SALDO arriba y el nombre del pase SOBRE la franja', async () => {
+    const { zip, passJson } = await abrir(
+      await generarPassApple({
+        ...datosBase(),
+        serialNumber: 'test-frente-gift-card',
+        qrToken: 'gif001',
+        puntos: 5000,
+        tipoTarjeta: 'gift_card',
+        selloMeta: null,
+        stripUrl: null,
+        nombrePase: 'Gift Card',
+      }),
     );
-    expect(passConNombre.storeCard.headerFields).toEqual([
-      { key: 'nombre_pase', value: 'Socio Oro' },
-    ]);
 
-    const sinNombre = await generarPassApple({
-      ...datosBase(),
-      serialNumber: 'test-serial-sin-nombre-pase',
-      qrToken: 'nom002',
-      puntos: 0,
-      tipoTarjeta: 'membresia',
-      selloMeta: null,
-      stripUrl: null,
-    });
-    const passSinNombre = JSON.parse(
-      await (await JSZip.loadAsync(sinNombre)).file('pass.json')!.async('string'),
+    // La banda de marca se compone igual: es sobre ELLA que va el nombre.
+    expect(Object.keys(zip.files)).toContain('strip.png');
+    // Valor ya formateado → string y sin numberStyle.
+    expect(passJson.storeCard.headerFields).toEqual([
+      { key: 'estado', label: 'SALDO', value: '$50.00' },
+    ]);
+    // Sin rótulo: es un nombre propio, no un dato con unidad.
+    expect(passJson.storeCard.primaryFields).toEqual([{ key: 'nombre_pase', value: 'Gift Card' }]);
+  });
+
+  it('puntos: el estado va como NÚMERO con numberStyle, para que iOS le ponga los separadores', async () => {
+    const { passJson } = await abrir(
+      await generarPassApple({
+        ...datosBase(),
+        serialNumber: 'test-frente-puntos',
+        qrToken: 'pun001',
+        puntos: 1250,
+        tipoTarjeta: 'puntos',
+        selloMeta: null,
+        stripUrl: null,
+      }),
     );
-    expect(passSinNombre.storeCard.headerFields ?? []).toEqual([]);
+
+    expect(passJson.storeCard.headerFields).toEqual([
+      { key: 'estado', label: 'PUNTOS', value: 1250, numberStyle: 'PKNumberStyleDecimal' },
+    ]);
+  });
+
+  it('sellos con grilla: NADA sobre la franja aunque el programa tenga nombre de pase', async () => {
+    // El nombre encima de la grilla taparía los círculos (decisión 3 del spec).
+    const { zip, passJson } = await abrir(
+      await generarPassApple({
+        ...datosBase(),
+        serialNumber: 'test-frente-sellos-grilla',
+        qrToken: 'sel001',
+        puntos: 7,
+        tipoTarjeta: 'sellos',
+        selloMeta: 10,
+        stripUrl: null,
+        nombrePase: 'Club del Café',
+      }),
+    );
+
+    expect(Object.keys(zip.files)).toContain('strip.png');
+    expect(passJson.storeCard.headerFields).toEqual([
+      { key: 'estado', label: 'SELLOS', value: '7 de 10' },
+    ]);
+    expect(passJson.storeCard.primaryFields ?? []).toEqual([]);
+  });
+
+  it('descuento: sin estado arriba (no tiene contador ni fecha), el nombre del pase sobre la banda', async () => {
+    const { passJson } = await abrir(
+      await generarPassApple({
+        ...datosBase(),
+        serialNumber: 'test-frente-descuento',
+        qrToken: 'des001',
+        puntos: 0,
+        tipoTarjeta: 'descuento',
+        selloMeta: null,
+        stripUrl: null,
+        nombrePase: 'Descuento Casa',
+      }),
+    );
+
+    expect(passJson.storeCard.headerFields ?? []).toEqual([]);
+    expect(passJson.storeCard.primaryFields).toEqual([{ key: 'nombre_pase', value: 'Descuento Casa' }]);
+  });
+
+  it('titular sin apellido (cliente anterior a la 0036): solo NOMBRE; un apellido en blanco vale lo mismo', async () => {
+    for (const apellidoCliente of [null, '   ']) {
+      const { passJson } = await abrir(
+        await generarPassApple({
+          ...datosBase(),
+          nombreCliente: 'María José López',
+          apellidoCliente,
+          serialNumber: `test-frente-sin-apellido-${apellidoCliente === null ? 'null' : 'blanco'}`,
+          qrToken: 'tit001',
+          puntos: 1,
+          tipoTarjeta: 'puntos',
+          selloMeta: null,
+          stripUrl: null,
+        }),
+      );
+
+      expect(passJson.storeCard.secondaryFields, `apellidoCliente = ${JSON.stringify(apellidoCliente)}`).toEqual([
+        { key: 'nombre', label: 'NOMBRE', value: 'María José López' },
+      ]);
+    }
+  });
+
+  it('exactamente UN código: QR, con el token y "Powered by Cardly" debajo', async () => {
+    // Antes `setBarcodes(token)` generaba CUATRO formatos (QR, PDF417, Aztec, Code128) sin altText.
+    // Wallet usa el primero que soporta, así que quedarse con el QR no cambia lo que escanea el
+    // cajero. Y `filterValid` DESCARTA en silencio un objeto mal formado: sin esta prueba, un código
+    // inválido dejaría el pase sin QR y sin ningún error.
+    const { passJson } = await abrir(
+      await generarPassApple({
+        ...datosBase(),
+        serialNumber: 'test-frente-codigo',
+        qrToken: 'qr-unico-777',
+        puntos: 2,
+        tipoTarjeta: 'puntos',
+        selloMeta: null,
+        stripUrl: null,
+      }),
+    );
+
+    expect(passJson.barcodes).toEqual([
+      {
+        format: 'PKBarcodeFormatQR',
+        message: 'qr-unico-777',
+        messageEncoding: 'iso-8859-1',
+        altText: PIE_CODIGO,
+      },
+    ]);
+  });
+
+  it('franja propia que NO bajó: el pase sale sin franja y el nombre del pase vuelve sobre la banda', async () => {
+    // "Llegó al pase", no "el comercio subió una" (spec, "La franja, en tres estados"): si la
+    // descarga falla, componerStrips devuelve null y el pase sale SIN franja. Tratarlo como 'propia'
+    // dejaría una tarjeta sin franja Y sin nombre hasta la próxima operación del cliente.
+    //
+    // Se simula la descarga fallida con un 404 (el archivo borrado del storage) espiando `fetch`:
+    // es la ÚNICA descarga de este pase (sin logo, sin foto, sin ícono), y así corre el camino real
+    // de componerStrips en vez de un mock del módulo.
+    const urlFranja = 'https://storage.example.com/franja-borrada.png';
+    const espia = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('no existe', { status: 404 }));
+    let buffer: Buffer;
+    try {
+      buffer = await generarPassApple({
+        ...datosBase(),
+        serialNumber: 'test-frente-franja-no-bajo',
+        qrToken: 'fra001',
+        puntos: 0,
+        tipoTarjeta: 'membresia',
+        selloMeta: null,
+        stripUrl: urlFranja,
+        vigenciaHasta: '2026-10-16',
+        hoyIso: '2026-09-09',
+        nombrePase: 'Mensualidad VIP',
+      });
+      expect(espia).toHaveBeenCalledWith(urlFranja);
+    } finally {
+      espia.mockRestore();
+    }
+
+    const { zip, passJson } = await abrir(buffer);
+    expect(Object.keys(zip.files)).not.toContain('strip.png');
+    expect(passJson.storeCard.primaryFields).toEqual([{ key: 'nombre_pase', value: 'Mensualidad VIP' }]);
   });
 });

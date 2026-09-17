@@ -191,6 +191,34 @@ describe('datosPassDeTarjeta — reverso', () => {
     expect(resultado!.datos.selloMeta).toBeNull();
   }, 30_000);
 
+  // El titular del frente (spec 2026-09-17): NOMBRE y APELLIDO son dos campos del pase, y el
+  // apellido vive en su propia columna desde la 0036. Sin `apellido` en el join, generatePass
+  // recibiría siempre null y el pase de TODOS los clientes saldría solo con NOMBRE, sin error.
+  // MUTACIÓN: `clientes(nombre)` en el select (o `apellidoCliente: null` fijo) → falla esta prueba.
+  it('el pase lleva el nombre y el APELLIDO del cliente, cada uno por separado', async () => {
+    const serial = await crearEscenario([]);
+    const { error } = await supabase
+      .from('clientes')
+      .update({ apellido: 'Rivera' })
+      .eq('id', creados!.clienteId);
+    if (error) throw new Error(`no se pudo guardar el apellido de prueba: ${error.message}`);
+
+    const resultado = await datosPassDeTarjeta(supabase, serial);
+
+    expect(resultado!.datos.nombreCliente).toBe('Cliente Reverso');
+    expect(resultado!.datos.apellidoCliente).toBe('Rivera');
+  }, 30_000);
+
+  it('un cliente sin apellido (anterior a la 0036) llega con apellidoCliente null, nunca undefined', async () => {
+    // null y no undefined: frentePase exige el campo, y DatosPass lo declara `string | null`.
+    const serial = await crearEscenario([]);
+
+    const resultado = await datosPassDeTarjeta(supabase, serial);
+
+    expect(resultado!.datos.nombreCliente).toBe('Cliente Reverso');
+    expect(resultado!.datos.apellidoCliente).toBeNull();
+  }, 30_000);
+
   // Branding por programa (migración 0027). La herencia es CAMPO POR CAMPO: lo que el programa
   // define pisa, lo que deja en null viene del comercio. Las dos mitades se asertan en la misma
   // prueba a propósito — una que solo mirara el color propio pasaría igual si el código ignorara

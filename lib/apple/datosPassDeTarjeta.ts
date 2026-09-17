@@ -18,8 +18,9 @@ export async function datosPassDeTarjeta(
     throw new Error('NEXT_PUBLIC_BASE_URL no está configurada — requerida para el webServiceURL del pass');
   }
 
-  // clientes(nombre) para el campo de la tarjeta: el pass muestra a QUIÉN pertenece, igual que una
-  // tarjeta de socio física. Sin join no habría forma de saberlo desde acá.
+  // clientes(nombre, apellido) para NOMBRE y APELLIDO del frente: el pass muestra a QUIÉN pertenece,
+  // igual que una tarjeta de socio física. Sin join no habría forma de saberlo desde acá. El apellido
+  // vive en su propia columna desde la 0036: sin pedirlo acá, todos los pases saldrían solo con NOMBRE.
   // programas_tarjeta NO es opcional: desde la 0024 el tipo y su configuración viven en el PROGRAMA
   // y comercios.tipo_tarjeta/sello_meta quedaron LEGADAS. Sin este join, la tarjeta de un programa
   // secundario se dibujaba con el tipo del comercio — un cupón se le instalaba al cliente como
@@ -27,7 +28,7 @@ export async function datosPassDeTarjeta(
   const { data: tarjeta } = await supabase
     .from('tarjetas')
     .select(
-      '*, comercios(*), clientes(nombre), programas_tarjeta(tipo_tarjeta, sello_meta, nombre_pase, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, reverso_propio, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona)',
+      '*, comercios(*), clientes(nombre, apellido), programas_tarjeta(tipo_tarjeta, sello_meta, nombre_pase, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, reverso_propio, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona)',
     )
     .eq('apple_serial_number', serialNumber)
     .maybeSingle();
@@ -49,7 +50,7 @@ export async function datosPassDeTarjeta(
   const selloMeta = programa ? programa.sello_meta : tarjeta.comercios.sello_meta;
   // `nombre_pase` vive SOLO en programas_tarjeta: `comercios` no tiene columna equivalente ni la va
   // a tener (es identidad del PROGRAMA, no del negocio, que ya está en el logo). Sin programa el
-  // pase sale sin encabezado, igual que antes de la 0033.
+  // pase sale sin nombre sobre la franja, igual que antes de la 0033.
   const nombrePase = programa ? programa.nombre_pase : null;
 
   // Branding por programa (0027). A DIFERENCIA de tipo/meta, acá la herencia SÍ es campo por campo:
@@ -171,9 +172,11 @@ export async function datosPassDeTarjeta(
       qrToken: tarjeta.qr_token,
       puntos: tarjeta.puntos_actuales,
       nombreComercio: tarjeta.comercios.nombre,
-      // Puede faltar si el join falla o la fila del cliente se borró: el pass se genera igual, solo
-      // sin el campo del titular (generatePass lo omite si viene null).
+      // Pueden faltar si el join falla o la fila del cliente se borró: el pass se genera igual, solo
+      // sin NOMBRE ni APELLIDO (frentePase no arma titular sin nombre). El apellido además es null
+      // en todo cliente anterior a la 0036: ese pase sale solo con NOMBRE.
       nombreCliente: tarjeta.clientes?.nombre ?? null,
+      apellidoCliente: tarjeta.clientes?.apellido ?? null,
       colorFondo: marca.colorFondo ?? 'rgb(35, 24, 18)',
       colorTexto: marca.colorTexto ?? 'rgb(255, 255, 255)',
       colorLabel: marca.colorLabel ?? 'rgb(255, 255, 255)',
@@ -181,7 +184,7 @@ export async function datosPassDeTarjeta(
       selloMeta,
       // Identidad y vigencia del frente (0033). `vigencia_hasta` y `usado_en` ya venían en el `*`
       // de tarjetas: lo que faltaba era LLEVARLOS, y por eso el frente de una membresía salía con
-      // el logo, la franja y nada más.
+      // el logo, la franja y nada más. Hoy deciden el ESTADO de arriba a la derecha ("VÁLIDO HASTA").
       vigenciaHasta: tarjeta.vigencia_hasta,
       usadoEn: tarjeta.usado_en,
       nombrePase,
