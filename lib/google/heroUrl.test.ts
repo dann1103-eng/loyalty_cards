@@ -12,7 +12,7 @@ function datos(sobre: Partial<DatosVersionHero> = {}): DatosVersionHero {
   return {
     puntos: 3, selloMeta: 8, colorFondo: 'rgb(36, 24, 18)', colorLabel: 'rgb(214, 146, 74)',
     selloIconoUrl: 'https://ejemplo.com/icono.png', heroUrl: 'https://ejemplo.com/hero.jpg',
-    stripUrl: null, difuminadoFranja: 'medio',
+    stripUrl: null, difuminadoFranja: 'medio', hayTextoEncima: false,
     encuadreFranja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
     ...sobre,
   };
@@ -95,32 +95,35 @@ describe('versionHeroTarjeta', () => {
   const marcaConFranja = { ...marca, stripUrl: 'https://ejemplo.com/franja.png' };
 
   it('grilla (sellos con meta, sin franja propia): dos puntajes dan versiones DISTINTAS', () => {
-    expect(versionHeroTarjeta(marca, 'sellos', 3, 8)).not.toBe(versionHeroTarjeta(marca, 'sellos', 4, 8));
+    expect(versionHeroTarjeta(marca, 'sellos', 3, 8, null)).not.toBe(versionHeroTarjeta(marca, 'sellos', 4, 8, null));
     // Y es EXACTAMENTE versionHero con los puntos y la meta reales: la misma URL que antes de esta
     // entrega, para que las tarjetas de sellos no re-descarguen su grilla por el cambio de código.
-    expect(versionHeroTarjeta(marca, 'sellos', 3, 8)).toBe(versionHero({ ...marca, puntos: 3, selloMeta: 8 }));
+    expect(versionHeroTarjeta(marca, 'sellos', 3, 8, null)).toBe(versionHero({ ...marca, puntos: 3, selloMeta: 8, hayTextoEncima: false }));
   });
 
   it('franja propia (aunque sea de sellos con meta): dos puntajes dan la MISMA versión', () => {
-    expect(versionHeroTarjeta(marcaConFranja, 'sellos', 3, 8)).toBe(versionHeroTarjeta(marcaConFranja, 'sellos', 4, 8));
-    expect(versionHeroTarjeta(marcaConFranja, 'gift_card', 2500, null)).toBe(
-      versionHeroTarjeta(marcaConFranja, 'gift_card', 5000, null),
+    expect(versionHeroTarjeta(marcaConFranja, 'sellos', 3, 8, null)).toBe(versionHeroTarjeta(marcaConFranja, 'sellos', 4, 8, null));
+    expect(versionHeroTarjeta(marcaConFranja, 'gift_card', 2500, null, null)).toBe(
+      versionHeroTarjeta(marcaConFranja, 'gift_card', 5000, null, null),
     );
   });
 
   it('gift card sin franja (banda de marca): dos saldos dan la MISMA versión, la de progreso cero', () => {
-    expect(versionHeroTarjeta(marca, 'gift_card', 2500, null)).toBe(versionHeroTarjeta(marca, 'gift_card', 5000, null));
-    expect(versionHeroTarjeta(marca, 'gift_card', 2500, null)).toBe(versionHero({ ...marca, puntos: 0, selloMeta: null }));
+    expect(versionHeroTarjeta(marca, 'gift_card', 2500, null, null)).toBe(versionHeroTarjeta(marca, 'gift_card', 5000, null, null));
+    expect(versionHeroTarjeta(marca, 'gift_card', 2500, null, null)).toBe(versionHero({ ...marca, puntos: 0, selloMeta: null, hayTextoEncima: false }));
   });
 
   it('sellos SIN meta (banda, no grilla): los sellos acreditados no cambian la versión', () => {
-    expect(versionHeroTarjeta(marca, 'sellos', 3, null)).toBe(versionHeroTarjeta(marca, 'sellos', 4, null));
+    expect(versionHeroTarjeta(marca, 'sellos', 3, null, null)).toBe(versionHeroTarjeta(marca, 'sellos', 4, null, null));
   });
 
   it('lo que SÍ altera la imagen fuera de la grilla sigue cambiando la versión (la franja, los colores)', () => {
-    const base = versionHeroTarjeta(marca, 'membresia', 0, null);
-    expect(versionHeroTarjeta(marcaConFranja, 'membresia', 0, null)).not.toBe(base);
-    expect(versionHeroTarjeta({ ...marca, colorFondo: 'rgb(1,2,3)' }, 'membresia', 0, null)).not.toBe(base);
+    const base = versionHeroTarjeta(marca, 'membresia', 0, null, null);
+    expect(versionHeroTarjeta(marcaConFranja, 'membresia', 0, null, null)).not.toBe(base);
+    expect(versionHeroTarjeta({ ...marca, colorFondo: 'rgb(1,2,3)' }, 'membresia', 0, null, null)).not.toBe(base);
+    // Y el nombre del pase también: prende el velo sobre la foto (stripPass.capasDeFondo). Antes no
+    // entraba al hash porque solo viajaba en textModulesData, que no dibuja nada.
+    expect(versionHeroTarjeta(marca, 'membresia', 0, null, 'Mensualidad VIP')).not.toBe(base);
   });
 });
 
@@ -147,7 +150,7 @@ describe('versionFranjaClase', () => {
     // Es EXACTAMENTE versionHero con progreso cero, sin meta, sin ícono y sin franja propia: lo que
     // dibuja la ruta franja.png. Si un sync hasheara otra cosa, la URL de la clase no coincidiría.
     expect(versionFranjaClase(marca)).toBe(
-      versionHero({ ...marca, puntos: 0, selloMeta: null, selloIconoUrl: null, stripUrl: null }),
+      versionHero({ ...marca, puntos: 0, selloMeta: null, selloIconoUrl: null, stripUrl: null, hayTextoEncima: false }),
     );
   });
 });

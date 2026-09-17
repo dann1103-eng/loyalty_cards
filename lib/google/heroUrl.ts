@@ -38,6 +38,10 @@ export interface DatosVersionHero {
   stripUrl: string | null;
   difuminadoFranja: string;
   encuadreFranja: Encuadre;
+  // Si la app escribe algo sobre la franja: decide el VELO sobre la foto (stripPass.capasDeFondo),
+  // así que cambia los píxeles y tiene que entrar al hash. Antes el nombre del pase no entraba
+  // porque solo viajaba en textModulesData, que no dibuja nada.
+  hayTextoEncima: boolean;
 }
 
 // Hash corto de todo lo que la composición dibuja. Determinístico a propósito: la misma tarjeta con
@@ -48,11 +52,13 @@ export interface DatosVersionHero {
 // sirviendo para siempre la imagen que ya tenía cacheada. Historia:
 //   2 — 2026-09-17: la franja propia pasó a encajarse COMPLETA en el marco (antes se mandaban sus
 //       bytes crudos y Wallet la recortaba). Ver lib/apple/stripPass.tsx, franjaPropia.
-const VERSION_COMPOSICION = 2;
+//   3 — 2026-09-17: el velo oscuro sobre la foto pasó a pintarse solo cuando hay texto encima.
+const VERSION_COMPOSICION = 3;
 
 export function versionHero(d: DatosVersionHero): string {
   const clave = JSON.stringify([
     VERSION_COMPOSICION,
+    d.hayTextoEncima,
     d.puntos, d.selloMeta, d.colorFondo, d.colorLabel,
     d.selloIconoUrl, d.heroUrl, d.stripUrl, d.difuminadoFranja,
     d.encuadreFranja.modo, d.encuadreFranja.focoX, d.encuadreFranja.focoY, d.encuadreFranja.zoom,
@@ -72,15 +78,18 @@ export function versionHero(d: DatosVersionHero): string {
 // compra (hasta 2 MB con una franja propia). Fuera de la grilla se hashea con progreso cero, sin
 // meta — y todo lo demás de la marca, que sí altera la imagen, sigue entrando.
 export function versionHeroTarjeta(
-  marca: Omit<DatosVersionHero, 'puntos' | 'selloMeta'>,
+  marca: Omit<DatosVersionHero, 'puntos' | 'selloMeta' | 'hayTextoEncima'>,
   tipoTarjeta: string,
   puntos: number,
   selloMeta: number | null,
+  nombrePase: string | null,
 ): string {
+  // Lo mismo que le pasa generatePass a componerStrips: el velo depende del nombre del pase.
+  const hayTextoEncima = Boolean((nombrePase ?? '').trim());
   const esGrilla = tipoTarjeta === 'sellos' && selloMeta != null && selloMeta > 0 && !marca.stripUrl;
   return esGrilla
-    ? versionHero({ ...marca, puntos, selloMeta })
-    : versionHero({ ...marca, puntos: 0, selloMeta: null });
+    ? versionHero({ ...marca, puntos, selloMeta, hayTextoEncima })
+    : versionHero({ ...marca, puntos: 0, selloMeta: null, hayTextoEncima });
 }
 
 // La versión de la portada de CLASE: la misma banda que dibuja la ruta franja.png, o sea sin
@@ -96,6 +105,8 @@ export function versionFranjaClase(marca: {
   return versionHero({
     puntos: 0,
     selloMeta: null,
+    // La portada de la clase no lleva texto encima (ver la ruta franja.png).
+    hayTextoEncima: false,
     colorFondo: marca.colorFondo,
     colorLabel: marca.colorLabel,
     selloIconoUrl: null,

@@ -168,7 +168,7 @@ export async function generarLinkGuardar(
       // error. Es el riesgo que el spec de branding por programa marca como el peor del sistema.
       // versionHeroTarjeta, la MISMA de syncObjetoTarjeta: si los dos caminos armaran distinto el
       // `?v=`, Google re-descargaría la imagen en cada JWT.
-      versionHeroTarjeta(marca, tipoTarjeta, tarjeta.puntos_actuales, selloMeta),
+      versionHeroTarjeta(marca, tipoTarjeta, tarjeta.puntos_actuales, selloMeta, nombrePase),
     ),
   });
 

@@ -123,7 +123,7 @@ export async function syncObjetoTarjeta(
       // deja los puntos fuera del hash (la banda y la franja propia no cambian al operar).
       heroImageUrl: urlHeroTarjeta(
         tarjetaId,
-        versionHeroTarjeta(marca, tipoTarjeta, tarjeta.puntos_actuales, selloMeta),
+        versionHeroTarjeta(marca, tipoTarjeta, tarjeta.puntos_actuales, selloMeta, nombrePase),
       ),
     });
     const client = walletClient();
