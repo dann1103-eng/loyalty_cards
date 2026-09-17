@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { formatearFecha } from './vigencia';
+import { formatearFecha, formatearFechaCorta } from './vigencia';
 
 // Prueba PURA, en archivo aparte de vigencia.test.ts a propósito: aquel tiene un afterEach que limpia
 // la base, y esto no toca Supabase.
@@ -59,5 +59,39 @@ describe('formatearFecha', () => {
     expect(formatearFecha('2026-10-12')).toBe('12 de octubre de 2026');
     // Fin de año: si se corriera, cambiaría también el AÑO.
     expect(formatearFecha('2027-01-01')).toBe('1 de enero de 2027');
+  });
+});
+
+// La fecha CORTA de la esquina del pase ("VÁLIDO HASTA 16/10/2026"): la larga de formatearFecha no
+// entra al lado del logo. Se arma recortando el texto, sin `Date`, así que no hay zona que la corra;
+// las pruebas de zona igual se quedan, porque "sin Date" es un detalle de implementación que alguien
+// puede cambiar por un `toLocaleDateString` que se ve igual en UTC.
+describe('formatearFechaCorta', () => {
+  it('AAAA-MM-DD → dd/mm/aaaa, con los ceros a la izquierda', () => {
+    expect(formatearFechaCorta('2026-10-16')).toBe('16/10/2026');
+    expect(formatearFechaCorta('2026-08-03')).toBe('03/08/2026');
+  });
+
+  it('con un timestamp completo toma solo los primeros 10 caracteres', () => {
+    expect(formatearFechaCorta('2026-10-16T23:59:59.000Z')).toBe('16/10/2026');
+    expect(formatearFechaCorta('2026-10-16T00:00:00+00:00')).toBe('16/10/2026');
+  });
+
+  // MUTACIÓN (vigencia.ts, formatearFechaCorta): armarla con
+  // `new Date(iso.slice(0, 10)).toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })`.
+  // `new Date('2026-10-16')` es medianoche UTC, que en América todavía es el 15: la esquina del pase
+  // diría "VÁLIDO HASTA 15/10/2026" y el socio perdería un día. Cae en las cinco zonas americanas con
+  // `expected '15/10/2026' to be '16/10/2026'`; en UTC sigue verde.
+  it.each([
+    'America/El_Salvador',
+    'America/Mexico_City',
+    'America/New_York',
+    'America/Los_Angeles',
+    'America/Adak',
+    'UTC',
+  ])('no corre el día en %s', (zona) => {
+    enZona(zona);
+    expect(formatearFechaCorta('2026-10-16')).toBe('16/10/2026');
+    expect(formatearFechaCorta('2027-01-01')).toBe('01/01/2027');
   });
 });

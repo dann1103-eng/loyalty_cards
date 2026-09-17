@@ -76,6 +76,16 @@ export function formatearFecha(iso: string | null): string {
   );
 }
 
+// AAAA-MM-DD (o un timestamp que empiece así) → "16/10/2026". La fecha CORTA de la esquina del pase
+// ("VÁLIDO HASTA 16/10/2026", ver frentePase): la larga de formatearFecha no entra al lado del logo.
+//
+// Por RECORTE de texto y no con `Date`: sin instante no hay zona que corra el día, ni la del proceso
+// ni la del teléfono. Probado en formatearFecha.test.ts con las mismas zonas americanas.
+export function formatearFechaCorta(iso: string): string {
+  const [anio, mes, dia] = iso.slice(0, 10).split('-');
+  return `${dia}/${mes}/${anio}`;
+}
+
 export type ResultadoVigencia =
   | { ok: true; fecha: string | null; mensaje: string }
   | { ok: false; error: string };
