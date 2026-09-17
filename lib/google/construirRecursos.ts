@@ -114,8 +114,17 @@ function loyaltyPointsDe(listado: CampoFrente | null): walletobjects_v1.Schema$L
   // `int` cuando el contador es un número pelado, para que Google le ponga los separadores de miles
   // del teléfono; `string` cuando el valor ya viene formateado ("$25.00", "3 de 8 sellos", "Activa
   // hasta el 12 de octubre de 2026"), donde un int sería imposible o perdería la unidad.
-  if (listado.numero !== null) return { label: etiqueta, balance: { int: listado.numero } };
-  return { label: etiqueta, balance: { string: listado.valor } };
+  //
+  // ══ EL OTRO TIPO VIAJA EN null, Y NO SE PUEDE OMITIR ══
+  // El sync hace `patch`, que MEZCLA: si el objeto tenía `balance.int` y ahora mandamos
+  // `balance.string`, quedan los dos puestos y Google rechaza el patch ENTERO con
+  // `400 More than one type of loyalty point balances cannot be set`. Desde ahí esa tarjeta deja de
+  // actualizar su saldo en Android, en silencio. Pasa cada vez que el contador cambia de forma: el
+  // caso real (2026-09-17, tarjeta 0fdae83d de Barbiere Di Paolo) fue un programa de sellos que
+  // nació sin meta —entero pelado— y al que después le configuraron la meta, que lo pasa a texto.
+  // Mandar el otro en `null` lo BORRA: verificado contra la API con esa misma tarjeta.
+  if (listado.numero !== null) return { label: etiqueta, balance: { int: listado.numero, string: null } };
+  return { label: etiqueta, balance: { string: listado.valor, int: null } };
 }
 
 // Hasta cuándo vale el pase. Google mueve solo el objeto a "Pases caducados" cuando el intervalo

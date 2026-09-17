@@ -131,7 +131,7 @@ describe('syncObjetoTarjeta', () => {
     expect(patchMock).toHaveBeenCalledOnce();
     const llamada = patchMock.mock.calls[0][0];
     expect(llamada.resourceId).toBe(idExistente);
-    expect(llamada.requestBody.loyaltyPoints).toEqual({ label: 'Puntos', balance: { int: 7 } });
+    expect(llamada.requestBody.loyaltyPoints).toEqual({ label: 'Puntos', balance: { int: 7, string: null } });
     expect(insertMock).not.toHaveBeenCalled();
   });
 
@@ -139,7 +139,7 @@ describe('syncObjetoTarjeta', () => {
     const t = await crearTarjeta({ googleClassId: 'issuer-test.comercio_x', tipoTarjeta: 'sellos', selloMeta: 8, puntos: 3 });
     await syncObjetoTarjeta(supabase, t.tarjetaId);
     const llamada = insertMock.mock.calls[0][0];
-    expect(llamada.requestBody.loyaltyPoints).toEqual({ label: 'Sellos', balance: { string: '3 de 8 sellos' } });
+    expect(llamada.requestBody.loyaltyPoints).toEqual({ label: 'Sellos', balance: { string: '3 de 8 sellos', int: null } });
   });
 
   it('tarjeta de sellos: incluye heroImage apuntando a /api/tarjetas/<id>/hero.png (grilla por cliente)', async () => {
@@ -177,7 +177,7 @@ describe('syncObjetoTarjeta', () => {
     const antes = insertMock.mock.calls[0][0].requestBody.heroImage.sourceUri.uri;
     // La segunda vuelta ya tiene google_object_id: es un patch, con el saldo nuevo.
     const despues = patchMock.mock.calls[0][0].requestBody;
-    expect(despues.loyaltyPoints).toEqual({ label: 'Puntos', balance: { int: 55 } });
+    expect(despues.loyaltyPoints).toEqual({ label: 'Puntos', balance: { int: 55, string: null } });
     expect(despues.heroImage.sourceUri.uri).toBe(antes);
   });
 

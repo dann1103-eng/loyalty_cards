@@ -65,14 +65,31 @@ describe('construirObjeto', () => {
     // "Powered by Cardly" debajo del QR (decisión 4 del spec), literal: en TODOS los pases de todos
     // los comercios. Antes esta prueba afirmaba el código SIN `alternateText`; se invirtió a propósito.
     expect(obj.barcode).toEqual({ type: 'QR_CODE', value: 'tok-1', alternateText: 'Powered by Cardly' });
-    expect(obj.loyaltyPoints).toEqual({ label: 'Puntos', balance: { int: 42 } });
+    expect(obj.loyaltyPoints).toEqual({ label: 'Puntos', balance: { int: 42, string: null } });
+  });
+
+  // El sync hace `patch`, que MEZCLA. Un objeto que nació con `balance.int` (sellos sin meta, o
+  // puntos) y que ahora manda `balance.string` quedaría con los dos puestos, y Google rechaza el
+  // patch ENTERO: `400 More than one type of loyalty point balances cannot be set`. Esa tarjeta deja
+  // de actualizar su saldo en Android sin un solo error a la vista — pasó de verdad el 2026-09-17.
+  // MUTACIÓN: omitir el `int: null` / `string: null` hace fallar esta prueba.
+  it('el balance manda SIEMPRE el otro tipo en null, para borrar el que tenía el objeto', () => {
+    const conNumero = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      ...frenteBase, qrToken: 'tok-b1', puntosActuales: 7, tipoTarjeta: 'puntos', selloMeta: null, ubicaciones: [],
+    });
+    expect(conNumero.loyaltyPoints?.balance).toEqual({ int: 7, string: null });
+
+    const conTexto = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      ...frenteBase, qrToken: 'tok-b2', puntosActuales: 2, tipoTarjeta: 'sellos', selloMeta: 5, ubicaciones: [],
+    });
+    expect(conTexto.loyaltyPoints?.balance).toEqual({ string: '2 de 5 sellos', int: null });
   });
 
   it('tarjeta de sellos: loyaltyPoints usa balance.string con "N de M sellos"', () => {
     const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
       ...frenteBase, qrToken: 'tok-2', puntosActuales: 3, tipoTarjeta: 'sellos', selloMeta: 8, ubicaciones: [],
     });
-    expect(obj.loyaltyPoints).toEqual({ label: 'Sellos', balance: { string: '3 de 8 sellos' } });
+    expect(obj.loyaltyPoints).toEqual({ label: 'Sellos', balance: { string: '3 de 8 sellos', int: null } });
   });
 
   it('sellos sin meta configurada (selloMeta null) cae al entero pelado, no revienta', () => {
@@ -81,7 +98,7 @@ describe('construirObjeto', () => {
     });
     // La etiqueta sigue siendo "Sellos" —es lo que la tarjeta ES— aunque no haya meta contra la
     // cual compararse. Antes decía "Puntos", que le mentía al cliente sobre su propia tarjeta.
-    expect(obj.loyaltyPoints).toEqual({ label: 'Sellos', balance: { int: 5 } });
+    expect(obj.loyaltyPoints).toEqual({ label: 'Sellos', balance: { int: 5, string: null } });
   });
 
   // El bug que motivó contadorPase: gift card y cashback guardan CENTAVOS en puntos_actuales, y
@@ -91,7 +108,7 @@ describe('construirObjeto', () => {
     const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
       ...frenteBase, qrToken: 'tok-7', puntosActuales: 2500, tipoTarjeta: 'gift_card', selloMeta: null, ubicaciones: [],
     });
-    expect(obj.loyaltyPoints).toEqual({ label: 'Saldo', balance: { string: '$25.00' } });
+    expect(obj.loyaltyPoints).toEqual({ label: 'Saldo', balance: { string: '$25.00', int: null } });
   });
 
   it('descuento: NO lleva loyaltyPoints (Google rechaza null y "Puntos 0" no dice nada)', () => {
@@ -144,7 +161,7 @@ describe('construirObjeto', () => {
     expect(obj.heroImage).toBeDefined();
     // Y con la palabra UNA sola vez: el listado ya la trae, así que Google no la agrega encima
     // ("3 de 8 sellos sellos" era el otro extremo del mismo error).
-    expect(obj.loyaltyPoints).toEqual({ label: 'Sellos', balance: { string: '3 de 8 sellos' } });
+    expect(obj.loyaltyPoints).toEqual({ label: 'Sellos', balance: { string: '3 de 8 sellos', int: null } });
   });
 
   // INVERTIDA a propósito (spec 2026-09-17, decisión 8). Hasta acá afirmaba que puntos NUNCA llevaba
@@ -205,7 +222,7 @@ describe('construirObjeto — el frente de los diseños', () => {
       classId: '123.comercio_abc',
       state: 'ACTIVE',
       barcode: { type: 'QR_CODE', value: 'tok-memb', alternateText: 'Powered by Cardly' },
-      loyaltyPoints: { label: 'Membresía', balance: { string: 'Activa hasta el 16 de octubre de 2026' } },
+      loyaltyPoints: { label: 'Membresía', balance: { string: 'Activa hasta el 16 de octubre de 2026', int: null } },
       textModulesData: [
         { id: 'nombre_pase', header: 'Tarjeta', body: 'Mensualidad VIP' },
         { id: 'estado', header: 'VÁLIDO HASTA', body: '16/10/2026' },
@@ -236,7 +253,7 @@ describe('construirObjeto — el frente de los diseños', () => {
       classId: '123.comercio_abc',
       state: 'ACTIVE',
       barcode: { type: 'QR_CODE', value: 'tok-gift', alternateText: 'Powered by Cardly' },
-      loyaltyPoints: { label: 'Saldo', balance: { string: '$50.00' } },
+      loyaltyPoints: { label: 'Saldo', balance: { string: '$50.00', int: null } },
       textModulesData: [
         { id: 'estado', header: 'SALDO', body: '$50.00' },
         { id: 'nombre', header: 'NOMBRE', body: 'Ana' },
@@ -345,7 +362,7 @@ describe('construirObjeto — el frente de los diseños', () => {
       { id: 'estado', header: 'PUNTOS', body: '1250' },
       { id: 'nombre', header: 'NOMBRE', body: 'José' },
     ]);
-    expect(obj.loyaltyPoints).toEqual({ label: 'Puntos', balance: { int: 1250 } });
+    expect(obj.loyaltyPoints).toEqual({ label: 'Puntos', balance: { int: 1250, string: null } });
   });
 
   it('apellido sin nombre: ni NOMBRE ni APELLIDO (un apellido solo no nombra a nadie)', () => {
@@ -503,7 +520,7 @@ describe('construirObjeto — identidad y vigencia del pase', () => {
     });
     expect(obj.loyaltyPoints).toEqual({
       label: 'Membresía',
-      balance: { string: 'Activa hasta el 12 de octubre de 2026' },
+      balance: { string: 'Activa hasta el 12 de octubre de 2026', int: null },
     });
     // `validTimeInterval` es lo que hace que un pase VENCIDO se vea vencido en Android: Google mueve
     // el objeto a "Pases caducados" solo. Sin offset a propósito: la propia API documenta que un
@@ -516,7 +533,7 @@ describe('construirObjeto — identidad y vigencia del pase', () => {
     const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
       ...frenteBase, ...base, tipoTarjeta: 'membresia', vigenciaHasta: '2026-08-03',
     });
-    expect(obj.loyaltyPoints!.balance).toEqual({ string: 'Vencida el 3 de agosto de 2026' });
+    expect(obj.loyaltyPoints!.balance).toEqual({ string: 'Vencida el 3 de agosto de 2026', int: null });
     expect(obj.validTimeInterval).toEqual({ end: { date: '2026-08-03T23:59:59' } });
   });
 
@@ -525,7 +542,7 @@ describe('construirObjeto — identidad y vigencia del pase', () => {
       ...frenteBase, ...base, tipoTarjeta: 'membresia',
     });
     expect(obj.validTimeInterval).toBeUndefined();
-    expect(obj.loyaltyPoints!.balance).toEqual({ string: 'Sin activar' });
+    expect(obj.loyaltyPoints!.balance).toEqual({ string: 'Sin activar', int: null });
   });
 
   it('los tipos SIN vigencia nunca mandan validTimeInterval, aunque la fila traiga una fecha', () => {
@@ -562,6 +579,6 @@ describe('construirObjeto — identidad y vigencia del pase', () => {
       ...frenteBase, ...base, tipoTarjeta: 'cupon',
       vigenciaHasta: '2026-09-30', usadoEn: '2026-09-05T15:00:00Z',
     });
-    expect(obj.loyaltyPoints).toEqual({ label: 'Cupón', balance: { string: 'Ya usado' } });
+    expect(obj.loyaltyPoints).toEqual({ label: 'Cupón', balance: { string: 'Ya usado', int: null } });
   });
 });
