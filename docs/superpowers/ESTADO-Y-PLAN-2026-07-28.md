@@ -1047,8 +1047,13 @@ verificada** (`scripts/verificar-0036.ts`).
 
 ### Pendiente, anotado para no perderlo
 
-- **Fase `objetos`** del script (`scripts/actualizar-frente-google.ts`) y, con 0 fallos, **Task 9 +
-  deploy B + fase `clases`** — la plantilla espera la QA de Daniel en Android.
+- **Fase `objetos`** del script (`scripts/actualizar-frente-google.ts`): se corrió el 2026-09-17 tras
+  el deploy A (309434b) y fallaron las 28 con `invalid_grant`, sin tocar nada en Google: el reloj de
+  la PC estaba ~4 h atrasado y el JWT de la cuenta de servicio salía vencido. Reintentar con el reloj
+  sincronizado. (Mientras tanto cada objeto toma el frente nuevo en su próxima operación.)
+- **Task 9 (la plantilla de filas) ya está hecha y probada en la rama `claude/plantilla-filas-google`**,
+  SIN publicar. Orden: fase `objetos` con 0 fallos → QA de Daniel en Android → merge + push (deploy
+  B) → fase `clases` desde ese commit.
 - **QA en teléfono**: iPhone y Android, membresía con franja propia, gift card, descuento, un cliente
   sin apellido; en Android, que un ítem vacío de la plantilla no deje hueco.
 - **Objeto creado solo por el JWT** (cuando `syncObjetoTarjeta` falló en `linkGuardar`): queda en
