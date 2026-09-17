@@ -998,3 +998,59 @@ Meta nada del panel del negocio ni de los clientes de los comercios.
   campos de los formularios de las páginas con píxel.
 - `marcarCobroPagado` no la llama nadie; si se conecta, tiene que avisar a Meta solo en la transición a
   pagado.
+
+## 2026-09-17 — El frente del pase como los diseños, el apellido del cliente, y tres modelos en la portada
+
+Spec: `specs/2026-09-17-frente-del-pase-como-los-disenos-design.md`. Plan:
+`plans/2026-09-17-frente-del-pase-y-apellido.md`. **Migración 0036 (`clientes.apellido`) APLICADA y
+verificada** (`scripts/verificar-0036.ts`).
+
+### Lo que entró (deploy A)
+
+- **El frente del pase sigue el orden de los diseños de Daniel**, en Apple, en Google y en la vista
+  previa del editor: el ESTADO arriba a la derecha (`VÁLIDO HASTA 16/10/2026`, `SALDO $50.00`,
+  `SELLOS 7 de 10`; nada en descuento), la franja limpia, NOMBRE y APELLIDO debajo, y
+  "Powered by Cardly" bajo el QR. El nombre del pase se escribe sobre la franja SOLO si es la banda
+  de marca: con franja propia (que ya trae su texto) o con la grilla de sellos, no.
+- **`frentePase`** cambió de contrato: `estado`, `sobreFranja`, `titular`, `listado` (se fueron
+  `primario`, `secundario`, `encabezado` e `hayGrilla`), y recibe `franja: 'propia' | 'grilla' |
+  'banda'` calculada por cada consumidor con lo que DE VERDAD llegó al pase.
+- **El apellido se pide al registrarse** (obligatorio en el QR; opcional en el alta por teléfono del
+  panel) y se ve en el escáner, Clientes (con buscador por apellido), el admin y el CSV.
+- **En Google todos los tipos llevan el hero de su tarjeta** (no solo sellos), y los objetos llevan
+  los módulos `nombre_pase`, `estado`, `nombre`, `apellido` y el `alternateText` del QR.
+- **Portada**: membresía, gift card y descuento en la tira; el cartel quedó en "+3".
+
+### Lo que NO es obvio y hay que recordar
+
+1. **Google va en DOS deploys.** La plantilla de filas de la clase (Task 9) NO está publicada. La clase
+   se re-sincroniza sola en cada registro, cada "Agregar a Google Wallet", cada guardado de marca,
+   `admin/comercios/actions.ts`, `sucursales/actions.ts` y `campanasVencidas.ts`: publicar la
+   plantilla junto con los objetos nuevos dejaría tarjetas con filas vacías. Orden: deploy A → fase
+   `objetos` del script con 0 fallos de Google → deploy B (la plantilla) → fase `clases`.
+2. **En un `patch` de Google, un campo omitido deja el valor VIEJO.** Por eso `textModulesData` viaja
+   siempre (aunque sea `[]`) y el hero viaja en todos los tipos: si no, un nombre de pase borrado o una
+   franja propia quitada se seguirían viendo en Android para siempre.
+3. **Google rechaza el patch ENTERO si el `heroImage` no carga.** `hero.png` ya no responde 404 cuando
+   la franja propia no baja: sirve la banda de marca. Con un 404, esa tarjeta dejaba de actualizar el
+   saldo en Android.
+4. **La versión del hero (`versionHeroTarjeta`) solo incluye los puntos cuando la imagen es la
+   grilla.** Con franja propia o banda la imagen no cambia al operar; con los puntos en el `?v=`,
+   Google volvía a bajarla en cada compra. `syncObjeto` y `linkGuardar` usan el MISMO ayudante.
+5. **Un cliente existente NO recibe apellido** al registrarse en otro programa (gana el primer
+   registro, como el nombre): completarlo "si está vacío" dejaría que cualquiera que conozca un
+   teléfono le escriba un apellido a otra persona, visible en su tarjeta de todos los comercios.
+6. **El código de barras de Apple pasó de string a objeto**, con `format`, `message`,
+   `messageEncoding` y `altText` explícitos: `filterValid` descarta en silencio un código mal formado
+   y el pase saldría sin QR.
+7. **Los pases de Apple ya instalados cambian en su próxima operación**, sin push masivo.
+
+### Pendiente, anotado para no perderlo
+
+- **Fase `objetos`** del script (`scripts/actualizar-frente-google.ts`) y, con 0 fallos, **Task 9 +
+  deploy B + fase `clases`** — la plantilla espera la QA de Daniel en Android.
+- **QA en teléfono**: iPhone y Android, membresía con franja propia, gift card, descuento, un cliente
+  sin apellido; en Android, que un ítem vacío de la plantilla no deje hueco.
+- **Objeto creado solo por el JWT** (cuando `syncObjetoTarjeta` falló en `linkGuardar`): queda en
+  Google con `google_object_id` null en la base, el script no lo ve y no se repara solo.
+- **Google no pone separador de miles** en el estado de puntos (viaja como texto).
