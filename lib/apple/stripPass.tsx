@@ -3,10 +3,12 @@ import sharp from 'sharp';
 import { stopsDifuminado } from './difuminadoFranja';
 import { comprimirPng } from './imagenesPass';
 import { colocarFoto, MARCO_FRANJA, type Encuadre, type Medidas } from '@/lib/comercio/encuadreFranja';
+import type { Franja } from '@/lib/tarjetas/frentePase';
 
 // Composición de la FRANJA (strip) del pass con next/og — el "pipeline de composición de
 // imágenes" que la Fase 3 no tenía: llegó gratis con los íconos del portal (PWA). Tres casos:
-//   1. El comercio subió su franja (strip_url) → se usa esa imagen tal cual.
+//   1. El comercio subió su franja (strip_url) → esa imagen, ENCAJADA COMPLETA en el marco, con el
+//      color de la tarjeta rellenando lo que sobre (ver franjaPropia).
 //   2. Tarjeta de sellos con meta → grilla de círculos llenos/vacíos en los colores del comercio.
 //   3. Cualquier otro caso → banda de marca sutil (color de fondo + resplandor del color label).
 // SIEMPRE best-effort: cualquier fallo devuelve null y el pass sale sin franja (nunca se rompe
@@ -45,6 +47,10 @@ export interface StripsPass {
   s1: Buffer; // 375×123 (@1x)
   s2: Buffer; // 750×246 (@2x)
   s3: Buffer; // 1125×369 (@3x)
+  // QUÉ se dibujó, decidido donde se decide de verdad. El llamador no puede deducirlo de `stripUrl`:
+  // si la franja del comercio no baja, acá sale la grilla o la banda, y `frentePase` tiene que
+  // saberlo para volver a escribir el nombre del pase encima (ver generatePass).
+  franja: Franja;
 }
 
 // Capa de fondo compartida: foto (si hay) + velo oscuro para contraste + DIFUMINADO en los
@@ -240,6 +246,57 @@ function grillaSellos(datos: DatosStrip, escala: number, iconoDataUrl: string | 
   };
 }
 
+// La franja que subió el comercio, ENCAJADA COMPLETA dentro del espacio de Wallet (375×123), con
+// el color de la tarjeta rellenando lo que sobre.
+//
+// Hasta el 2026-09-17 esos bytes se mandaban tal cual y Wallet los recortaba para llenar su marco:
+// una franja más alta que 375×123 perdía los costados, y el dueño de M&M Inversiones vio su propio
+// nombre cortado a la mitad ("M&M INVERSIONE") en su iPhone. Se encaja con `colocarFoto` en modo
+// 'completa' —la MISMA función del encuadre de la foto y de la vista previa del editor— así que lo
+// que se ve acá es lo que el dueño ve al diseñar.
+//
+// Sin velo, sin difuminado y sin resplandores: la imagen del comercio ES el diseño (los tres
+// modelos de la portada traen su texto dibujado adentro), y oscurecerla sería pisarla.
+function franjaPropia(datos: DatosStrip, escala: number, franja: FotoFondo) {
+  const marco = { ancho: MARCO_FRANJA.ancho * escala, alto: MARCO_FRANJA.alto * escala };
+  const colocacion = franja.medidas
+    ? colocarFoto(franja.medidas, marco, { modo: 'completa', focoX: 50, focoY: 50, zoom: 100 })
+    : null;
+  return {
+    type: 'div',
+    props: {
+      style: {
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        position: 'relative',
+        background: datos.colorFondo,
+      },
+      children: [
+        {
+          type: 'img',
+          // satori no entiende objectFit: 'contain', así que la caja va calculada en números. Sin
+          // medidas (sharp no pudo leer la imagen) se cae al comportamiento de antes: llenar y que
+          // Wallet recorte, que es peor que esto pero mejor que una franja vacía.
+          props: colocacion
+            ? {
+                src: franja.dataUrl,
+                width: Math.round(colocacion.ancho),
+                height: Math.round(colocacion.alto),
+                style: { position: 'absolute', top: Math.round(colocacion.top), left: Math.round(colocacion.left) },
+              }
+            : {
+                src: franja.dataUrl,
+                width: marco.ancho,
+                height: marco.alto,
+                style: { position: 'absolute', top: 0, left: 0, objectFit: 'cover' },
+              },
+        },
+      ],
+    },
+  };
+}
+
 function bandaMarca(datos: DatosStrip, escala: number, foto: FotoFondo | null) {
   return {
     type: 'div',
@@ -290,16 +347,28 @@ function bandaMarca(datos: DatosStrip, escala: number, foto: FotoFondo | null) {
   };
 }
 
+// QUÉ se dibuja, en un solo lugar: la franja propia MANDA sobre todo lo demás, incluida la grilla
+// de sellos (es lo que espera el dueño que se tomó el trabajo de diseñarla), pero solo si de verdad
+// bajó. Con `franja` en null el pase vuelve a su diseño de siempre.
+function queFranja(datos: DatosStrip, franja: FotoFondo | null): Franja {
+  if (franja) return 'propia';
+  const esSellos = datos.tipoTarjeta === 'sellos' && datos.selloMeta != null && datos.selloMeta > 0;
+  return esSellos ? 'grilla' : 'banda';
+}
+
 async function renderizar(
   datos: DatosStrip,
   escala: number,
   iconoDataUrl: string | null,
   foto: FotoFondo | null,
+  franja: FotoFondo | null,
 ): Promise<Buffer> {
-  const esSellos = datos.tipoTarjeta === 'sellos' && datos.selloMeta != null && datos.selloMeta > 0;
-  const jsx = esSellos
-    ? grillaSellos(datos, escala, iconoDataUrl, foto)
-    : bandaMarca(datos, escala, foto);
+  const jsx =
+    queFranja(datos, franja) === 'propia'
+      ? franjaPropia(datos, escala, franja!)
+      : queFranja(datos, franja) === 'grilla'
+        ? grillaSellos(datos, escala, iconoDataUrl, foto)
+        : bandaMarca(datos, escala, foto);
   const img = new ImageResponse(jsx as React.ReactElement, { width: 375 * escala, height: 123 * escala });
   // next/og escupe PNG de 24 bits sin cuantizar: con una foto de fondo, las tres franjas sumaban
   // 661 KB medidos (49 + 176 + 435). Cuantizar a paleta las deja en 145 KB sin que se note — se
@@ -343,13 +412,19 @@ async function medir(buf: Buffer): Promise<Medidas | null> {
 
 // Baja el ícono y la foto UNA vez y mide la foto UNA vez: componerStrips renderiza tres escalas con
 // lo mismo, y la ruta de portada de clase una sola.
-async function bajarInsumos(datos: DatosStrip): Promise<{ iconoUrl: string | null; foto: FotoFondo | null }> {
-  const [icono, hero] = await Promise.all([
+async function bajarInsumos(
+  datos: DatosStrip,
+): Promise<{ iconoUrl: string | null; foto: FotoFondo | null; franja: FotoFondo | null }> {
+  const [icono, hero, propia] = await Promise.all([
     descargarImagen(datos.selloIconoUrl, 'el ícono del sello'),
     descargarImagen(datos.heroUrl, 'la foto de fondo de la franja'),
+    descargarImagen(datos.stripUrl, 'la franja del comercio'),
   ]);
   const foto = hero ? { dataUrl: comoDataUrl(hero)!, medidas: await medir(hero.buf) } : null;
-  return { iconoUrl: comoDataUrl(icono), foto };
+  // Si la franja propia no bajó, `franja` queda null y se compone la grilla o la banda: el comercio
+  // ve su diseño de siempre en vez de un pase sin franja.
+  const franja = propia ? { dataUrl: comoDataUrl(propia)!, medidas: await medir(propia.buf) } : null;
+  return { iconoUrl: comoDataUrl(icono), foto, franja };
 }
 
 // UNA escala. Para la portada de la clase de Google (app/api/comercios/[comercioId]/franja.png), que
@@ -357,13 +432,8 @@ async function bajarInsumos(datos: DatosStrip): Promise<{ iconoUrl: string | nul
 // para servir uno. Respeta stripUrl igual que componerStrips (la ruta lo manda en null a propósito).
 export async function componerFranja(datos: DatosStrip, escala: 1 | 2 | 3): Promise<Buffer | null> {
   try {
-    if (datos.stripUrl) {
-      const res = await fetch(datos.stripUrl);
-      if (!res.ok) throw new Error(`strip del comercio respondió ${res.status}`);
-      return Buffer.from(await res.arrayBuffer());
-    }
-    const { iconoUrl, foto } = await bajarInsumos(datos);
-    return await renderizar(datos, escala, iconoUrl, foto);
+    const { iconoUrl, foto, franja } = await bajarInsumos(datos);
+    return await renderizar(datos, escala, iconoUrl, foto, franja);
   } catch (error) {
     console.warn('[apple] no se pudo componer la franja de una escala:', error);
     return null;
@@ -372,18 +442,11 @@ export async function componerFranja(datos: DatosStrip, escala: 1 | 2 | 3): Prom
 
 export async function componerStrips(datos: DatosStrip): Promise<StripsPass | null> {
   try {
-    if (datos.stripUrl) {
-      // La franja del comercio se usa tal cual en los tres tamaños (Wallet la escala/recorta).
-      const res = await fetch(datos.stripUrl);
-      if (!res.ok) throw new Error(`strip del comercio respondió ${res.status}`);
-      const buf = Buffer.from(await res.arrayBuffer());
-      return { s1: buf, s2: buf, s3: buf };
-    }
     // Los insumos se bajan y se miden UNA vez para las tres escalas (no tres llamadas a
     // componerFranja: eso bajaría y mediría la foto tres veces).
-    const { iconoUrl, foto } = await bajarInsumos(datos);
-    const [s1, s2, s3] = await Promise.all([1, 2, 3].map((e) => renderizar(datos, e, iconoUrl, foto)));
-    return { s1, s2, s3 };
+    const { iconoUrl, foto, franja } = await bajarInsumos(datos);
+    const [s1, s2, s3] = await Promise.all([1, 2, 3].map((e) => renderizar(datos, e, iconoUrl, foto, franja)));
+    return { s1, s2, s3, franja: queFranja(datos, franja) };
   } catch (error) {
     console.warn('[apple] no se pudo componer la franja; el pass sale sin strip:', error);
     return null;

@@ -399,14 +399,17 @@ export default function FormularioBranding({
             aria-label={puedeArrastrar ? 'Arrastrá la foto para encuadrarla' : undefined}
           >
             {urls.strip ? (
-              // La franja personalizada reemplaza TODO lo que va en esta zona: el pass la usa tal cual,
-              // sin velo, sin difuminado, sin encuadre y sin grilla de sellos.
+              // La franja personalizada reemplaza TODO lo que va en esta zona: el pass la muestra sin
+              // velo, sin difuminado y sin grilla de sellos. `contain` y no `cover` porque el pass la
+              // ENCAJA COMPLETA y rellena lo que sobra con el color de la tarjeta (stripPass.tsx,
+              // franjaPropia): con `cover` acá, el dueño veía entero un diseño que en su iPhone salía
+              // cortado por los costados.
               // eslint-disable-next-line @next/next/no-img-element -- vista previa simple
               <img
                 src={urls.strip}
                 alt=""
                 aria-hidden="true"
-                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }}
               />
             ) : (
               <>

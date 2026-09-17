@@ -85,16 +85,12 @@ export async function GET(
     difuminadoFranja: marca.difuminadoFranja,
     encuadreFranja: marca.encuadreFranja,
   };
-  let strips = await componerStrips(insumos);
-
-  // Si la franja PROPIA no se pudo bajar (el archivo se borró del storage, el storage no responde),
-  // se sirve la banda de marca en vez de un 404. Un 404 acá no deja "sin franja": Google valida el
-  // heroImage de cada patch y rechaza el patch ENTERO si la imagen no carga, así que la tarjeta
-  // dejaría de actualizar el saldo en Android. Desde que todos los tipos llevan hero (spec
-  // 2026-09-17, decisión 8), eso le pasaría a cualquier tarjeta con franja propia, no solo a sellos.
-  if (!strips && insumos.stripUrl) {
-    strips = await componerStrips({ ...insumos, stripUrl: null });
-  }
+  // Si la franja PROPIA no se pudo bajar, componerStrips ya cae sola a la grilla o a la banda de
+  // marca (ver stripPass.queFranja): esta ruta nunca responde 404 por eso. Importa porque Google
+  // valida el heroImage de cada patch y rechaza el patch ENTERO si la imagen no carga — la tarjeta
+  // dejaría de actualizar su saldo en Android, y desde que todos los tipos llevan hero (spec
+  // 2026-09-17, decisión 8) eso le pasaría a cualquiera, no solo a sellos.
+  const strips = await componerStrips(insumos);
 
   if (!strips) {
     return NextResponse.json({ error: 'No se pudo componer la imagen' }, { status: 404 });

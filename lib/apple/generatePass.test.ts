@@ -165,8 +165,12 @@ describe('generarPassApple', () => {
     expect(passJson.storeCard.headerFields[0].value).toBe(7);
   });
 
-  it('usa la franja subida por el comercio cuando existe (bytes exactos)', async () => {
-    const esperado = Buffer.from(PNG_1PX_B64, 'base64');
+  // La franja del comercio ya NO viaja tal cual: se ENCAJA COMPLETA en el marco de Wallet (375×123
+  // y sus escalas) con el color de la tarjeta rellenando lo que sobra. Antes esta prueba exigía los
+  // bytes exactos; se invirtió a propósito el 2026-09-17, cuando el dueño de M&M Inversiones vio su
+  // nombre cortado en el iPhone porque Wallet recortaba la imagen para llenar el marco.
+  // MUTACIÓN: devolver los bytes crudos deja un strip.png de 1×1 y esta prueba falla.
+  it('encaja la franja subida por el comercio en el marco del pase, sin recortarla', async () => {
     const buffer = await generarPassApple({
       ...datosBase(),
       serialNumber: 'test-serial-strip-propia',
@@ -179,7 +183,11 @@ describe('generarPassApple', () => {
 
     const zip = await JSZip.loadAsync(buffer);
     const guardado = Buffer.from(await zip.file('strip.png')!.async('nodebuffer'));
-    expect(guardado.equals(esperado)).toBe(true);
+    const medidas = await sharp(guardado).metadata();
+    expect([medidas.width, medidas.height], 'la franja @1x tiene el tamaño del marco de Wallet').toEqual([375, 123]);
+    // Y las tres escalas están, como en cualquier otra franja compuesta.
+    const dos = await sharp(Buffer.from(await zip.file('strip@2x.png')!.async('nodebuffer'))).metadata();
+    expect([dos.width, dos.height]).toEqual([750, 246]);
   });
 
   it('los campos del reverso llegan al pass.json en el mismo orden, con su attributedValue', async () => {
@@ -623,8 +631,9 @@ describe('generarPassApple — el frente del pase', () => {
 
   it('franja propia que NO bajó: el pase sale sin franja y el nombre del pase vuelve sobre la banda', async () => {
     // "Llegó al pase", no "el comercio subió una" (spec, "La franja, en tres estados"): si la
-    // descarga falla, componerStrips devuelve null y el pase sale SIN franja. Tratarlo como 'propia'
-    // dejaría una tarjeta sin franja Y sin nombre hasta la próxima operación del cliente.
+    // descarga falla, el pase NO es 'propia'. Desde el 2026-09-17 la franja se compone, así que en
+    // ese caso sale la banda de marca —el diseño de siempre— y el nombre del pase vuelve sobre ella.
+    // Tratarlo como 'propia' dejaría la tarjeta sin nombre hasta la próxima operación del cliente.
     //
     // Se simula la descarga fallida con un 404 (el archivo borrado del storage) espiando `fetch`:
     // es la ÚNICA descarga de este pase (sin logo, sin foto, sin ícono), y así corre el camino real
@@ -653,7 +662,7 @@ describe('generarPassApple — el frente del pase', () => {
     }
 
     const { zip, passJson } = await abrir(buffer);
-    expect(Object.keys(zip.files)).not.toContain('strip.png');
+    expect(Object.keys(zip.files), 'sale con la banda de marca, no sin franja').toContain('strip.png');
     expect(passJson.storeCard.primaryFields).toEqual([{ key: 'nombre_pase', value: 'Mensualidad VIP' }]);
   });
 });

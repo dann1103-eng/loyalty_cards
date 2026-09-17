@@ -90,26 +90,4 @@ describe('GET /api/tarjetas/[tarjetaId]/hero.png', () => {
     expect(args.heroUrl).toBe('https://ejemplo.com/hero-PROGRAMA.jpg');
     expect(args.encuadreFranja).toEqual({ modo: 'completa', focoX: 0, focoY: 100, zoom: 200 });
   }, 30_000);
-
-  // Google rechaza el patch ENTERO si el heroImage no carga: un 404 acá dejaría la tarjeta sin
-  // actualizar el saldo en Android. MUTACIÓN (2026-09-17): sin el reintento con stripUrl null, la
-  // ruta responde 404 y esta prueba falla con "expected 404 to be 200".
-  it('si la franja propia no se puede bajar, sirve la banda de marca y no un 404', async () => {
-    const comercioId = await entorno.crearComercio({
-      tipo_tarjeta: 'gift_card',
-      strip_url: 'https://ejemplo.com/franja-BORRADA.png',
-    });
-    const { id: tarjetaId } = await entorno.crearTarjeta(comercioId, 5000);
-    componerStripsMock
-      .mockReset()
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ s1: Buffer.from('a'), s2: Buffer.from('b'), s3: Buffer.from('c') });
-
-    const respuesta = await pedirImagen(tarjetaId);
-
-    expect(respuesta.status).toBe(200);
-    expect(componerStripsMock).toHaveBeenCalledTimes(2);
-    expect(componerStripsMock.mock.calls[0][0].stripUrl).toBe('https://ejemplo.com/franja-BORRADA.png');
-    expect(componerStripsMock.mock.calls[1][0].stripUrl, 'el reintento es la banda, sin la franja').toBeNull();
-  }, 30_000);
 });

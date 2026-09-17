@@ -4,7 +4,7 @@ import { requireEnv } from '@/lib/env';
 import { componerStrips, descargarImagen } from './stripPass';
 import { redimensionarLogo } from './imagenesPass';
 import type { CampoReverso } from './construirReverso';
-import { frentePase, PIE_CODIGO, type Franja } from '@/lib/tarjetas/frentePase';
+import { frentePase, PIE_CODIGO } from '@/lib/tarjetas/frentePase';
 import type { Encuadre } from '@/lib/comercio/encuadreFranja';
 import {
   MAXIMO_UBICACIONES_APPLE,
@@ -24,21 +24,6 @@ function cargarCertificados() {
     signerCert: Buffer.from(requireEnv('APPLE_SIGNER_CERT_B64'), 'base64').toString('utf-8'),
     signerKey: Buffer.from(requireEnv('APPLE_SIGNER_KEY_B64'), 'base64').toString('utf-8'),
   };
-}
-
-// Qué hay DE VERDAD en la franja de ESTE pase (spec 2026-09-17, "La franja, en tres estados"). Se
-// decide con `hayStrips` —si componerStrips devolvió algo— y no solo con lo que subió el comercio:
-// si la franja propia no se pudo bajar, el pase sale SIN franja, y tratarlo como 'propia' lo dejaría
-// también sin el nombre del pase hasta la próxima operación del cliente.
-function franjaDelPase(
-  d: { tipoTarjeta: string; selloMeta: number | null; stripUrl: string | null },
-  hayStrips: boolean,
-): Franja {
-  if (d.stripUrl && hayStrips) return 'propia';
-  // Misma condición de grilla que usa stripPass para componerla.
-  const sellosConMeta = d.tipoTarjeta === 'sellos' && d.selloMeta != null && d.selloMeta > 0;
-  if (sellosConMeta && !d.stripUrl && hayStrips) return 'grilla';
-  return 'banda';
 }
 
 export interface DatosPass {
@@ -73,7 +58,7 @@ export interface DatosPass {
   vigenciaHasta: string | null;
   usadoEn: string | null;
   // `programas_tarjeta.nombre_pase`: cómo se llama la tarjeta para el cliente. Se escribe SOBRE la
-  // franja, y solo cuando la franja es la banda lisa (ver `franjaDelPase`). null = nada encima.
+  // franja, y solo cuando la franja es la banda lisa (lo decide stripPass). null = nada encima.
   nombrePase: string | null;
   // El "hoy" del COMERCIO (hoyEnZona(comercio.zona_horaria)), no el del servidor: decide si la
   // membresía dice "VÁLIDO HASTA" o "VENCIÓ EL", y con UTC el borde se corre un día entero.
@@ -200,12 +185,15 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
 
   // Qué va en el frente del pass lo decide frentePase, compartido con Google y con la vista previa
   // del editor de marca: así ninguno puede decir algo distinto del pass ni en una palabra. La franja
-  // se le pasa YA RESUELTA contra lo que de verdad llegó al pase (ver `franjaDelPase`).
+  // se le pasa YA RESUELTA contra lo que de verdad se dibujó (`strips.franja`).
   const frente = frentePase({
     tipoTarjeta: datos.tipoTarjeta,
     puntos: datos.puntos,
     selloMeta: datos.selloMeta,
-    franja: franjaDelPase(datos, strips !== null),
+    // Lo que se DIBUJÓ, no lo que el comercio configuró: lo decide componerStrips, que es quien
+    // sabe si la franja propia bajó. Sin franja compuesta, es la banda (y el nombre del pase va
+    // encima) — ver stripPass.queFranja.
+    franja: strips?.franja ?? 'banda',
     vigenciaHasta: datos.vigenciaHasta,
     usadoEn: datos.usadoEn,
     nombrePase: datos.nombrePase,
