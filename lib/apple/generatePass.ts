@@ -164,6 +164,10 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
     heroUrl: datos.heroUrl,
     difuminadoFranja: datos.difuminadoFranja,
     encuadreFranja: datos.encuadreFranja,
+    // El velo sobre la foto solo si vamos a escribir encima. Es el MISMO recorte que hace frentePase
+    // con el nombre del pase; acá no se puede consultar `frente` porque `frente` depende de lo que
+    // esta composición dibuje (`strips.franja`).
+    hayTextoEncima: Boolean((datos.nombrePase ?? '').trim()),
   });
   if (strips) {
     pass.addBuffer('strip.png', strips.s1);

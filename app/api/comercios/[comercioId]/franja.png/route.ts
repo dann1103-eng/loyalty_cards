@@ -87,6 +87,8 @@ export async function GET(
       heroUrl: marca.heroUrl,
       difuminadoFranja: marca.difuminadoFranja,
       encuadreFranja: marca.encuadreFranja,
+      // La portada de la CLASE no lleva nada escrito encima: sin velo sobre la foto.
+      hayTextoEncima: false,
     },
     3,
   );

@@ -29,7 +29,7 @@ export async function GET(
     // cacheaba esa imagen equivocada. Peor: el cache-busting de heroUrl.ts hashea el branding, así
     // que la URL cambiaba y Google re-descargaba… la misma imagen mal dibujada.
     .select(
-      'puntos_actuales, programas_tarjeta(tipo_tarjeta, sello_meta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(tipo_tarjeta, sello_meta, color_fondo, color_texto, color_label, logo_url, strip_url, sello_icono_url, hero_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja)',
+      'puntos_actuales, programas_tarjeta(tipo_tarjeta, sello_meta, nombre_pase, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(tipo_tarjeta, sello_meta, color_fondo, color_texto, color_label, logo_url, strip_url, sello_icono_url, hero_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja)',
     )
     .eq('id', tarjetaId)
     .maybeSingle();
@@ -84,6 +84,8 @@ export async function GET(
     heroUrl: marca.heroUrl,
     difuminadoFranja: marca.difuminadoFranja,
     encuadreFranja: marca.encuadreFranja,
+    // Igual que en el pass de Apple: el velo sobre la foto solo si se escribe algo encima.
+    hayTextoEncima: Boolean((programa?.nombre_pase ?? '').trim()),
   };
   // Si la franja PROPIA no se pudo bajar, componerStrips ya cae sola a la grilla o a la banda de
   // marca (ver stripPass.queFranja): esta ruta nunca responde 404 por eso. Importa porque Google

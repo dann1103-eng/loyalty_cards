@@ -34,6 +34,11 @@ export interface DatosStrip {
   // Qué parte de la foto se ve dentro del marco (migración 0032, lib/comercio/encuadreFranja.ts).
   // Con el default es el cover centrado de siempre.
   encuadreFranja: Encuadre;
+  // Si la app va a ESCRIBIR algo sobre la franja (el nombre del pase). Decide el velo oscuro sobre la
+  // foto: existe para que ese texto se lea, y sin texto solo apaga la foto del comercio (lo reportó
+  // Daniel el 2026-09-17 con su membresía, que no lleva nada encima). La grilla de sellos lleva velo
+  // SIEMPRE, sin mirar esto: los círculos son lo que tiene que resaltar.
+  hayTextoEncima: boolean;
 }
 
 // La foto ya bajada, con sus medidas. Sin medidas (sharp no pudo leerla) la capa cae al cover
@@ -53,10 +58,14 @@ export interface StripsPass {
   franja: Franja;
 }
 
+// Un nodo del árbol que satori dibuja (next/og acepta este objeto plano en vez de JSX). El tipo es
+// laxo a propósito: acá se arman estilos que TypeScript no puede tipar contra CSSProperties.
+type Nodo = { type: string; key?: string; props: Record<string, unknown> };
+
 // Capa de fondo compartida: foto (si hay) + velo oscuro para contraste + DIFUMINADO en los
 // bordes hacia el color del pass — la foto se funde con la tarjeta en vez de cortarse seca
 // (referencia del usuario: así lo hace la competencia). Sin foto no hace falta nada.
-function capasDeFondo(datos: DatosStrip, escala: number, foto: FotoFondo | null) {
+function capasDeFondo(datos: DatosStrip, escala: number, foto: FotoFondo | null, conVelo: boolean) {
   if (!foto) return [];
   const marco = { ancho: MARCO_FRANJA.ancho * escala, alto: MARCO_FRANJA.alto * escala };
   // Con medidas, la foto va posicionada en absoluto por colocarFoto (la MISMA función que usa la
@@ -64,7 +73,7 @@ function capasDeFondo(datos: DatosStrip, escala: number, foto: FotoFondo | null)
   // es el fondo del contenedor, y el difuminado lo funde. Sin medidas, el cover de siempre.
   const colocacion = foto.medidas ? colocarFoto(foto.medidas, marco, datos.encuadreFranja) : null;
   const capaLlena = { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' };
-  const capas = [
+  const capas: Nodo[] = [
     {
       type: 'img',
       // satori no entiende objectPosition ni transform: la única forma de encuadrar es dar la caja
@@ -83,11 +92,15 @@ function capasDeFondo(datos: DatosStrip, escala: number, foto: FotoFondo | null)
             style: { position: 'absolute', top: 0, left: 0, objectFit: 'cover' },
           },
     },
-    {
+  ];
+
+  // El velo, solo cuando hay algo escrito encima que tiene que leerse.
+  if (conVelo) {
+    capas.push({
       type: 'div',
       props: { style: { ...capaLlena, background: 'rgba(0, 0, 0, 0.45)' } },
-    },
-  ];
+    });
+  }
 
   // Difuminado configurable por el dueño (nivel elegido en /comercio/branding). 'ninguno' →
   // stopsDifuminado devuelve null → la foto queda con corte seco (sin las dos capas de abajo).
@@ -241,7 +254,7 @@ function grillaSellos(datos: DatosStrip, escala: number, iconoDataUrl: string | 
         position: 'relative',
         background: datos.colorFondo,
       },
-      children: [...capasDeFondo(datos, escala, foto), filasDeSellos],
+      children: [...capasDeFondo(datos, escala, foto, true), filasDeSellos],
     },
   };
 }
@@ -309,7 +322,7 @@ function bandaMarca(datos: DatosStrip, escala: number, foto: FotoFondo | null) {
         position: 'relative',
       },
       children: [
-        ...capasDeFondo(datos, escala, foto),
+        ...capasDeFondo(datos, escala, foto, datos.hayTextoEncima),
         // Resplandor suave del color de etiqueta hacia la derecha: da textura sin pelear con el
         // número de puntos que Wallet superpone en esta zona.
         {

@@ -22,6 +22,7 @@ const datosBase = {
   heroUrl: null,
   difuminadoFranja: 'ninguno',
   encuadreFranja: { modo: 'llenar' as const, focoX: 50, focoY: 50, zoom: 100 },
+  hayTextoEncima: false,
 };
 
 // Una franja CUADRADA (el peor caso: el marco es casi tres veces más ancho que alto).
@@ -78,6 +79,24 @@ describe('componerStrips con franja propia', () => {
     const derecha = await pixel(strips!.s1, 372, 61);
     expect(izquierda, 'el costado izquierdo es el color de la tarjeta').toEqual([0, 0, 0]);
     expect(derecha, 'el costado derecho es el color de la tarjeta').toEqual([0, 0, 0]);
+  }, 30_000);
+
+  it('la foto de fondo NO se oscurece cuando no se escribe nada encima, y sí cuando se escribe', async () => {
+    // El velo existe para que el texto sobre la franja se lea. En una membresía sin nombre de pase
+    // no va nada encima, así que solo apagaba la foto del comercio (reportado con una tarjeta real
+    // el 2026-09-17). MUTACIÓN: pintar el velo siempre hace fallar la primera mitad de esta prueba.
+    const foto = await franjaCuadrada();
+    const datosConFoto = { ...datosBase, stripUrl: null, heroUrl: 'https://ejemplo.com/foto.jpg' };
+
+    vi.stubGlobal('fetch', responderCon(foto));
+    const limpia = await componerStrips(datosConFoto);
+    const [r] = await pixel(limpia!.s1, 187, 61);
+    expect(r, 'sin texto encima, el rojo de la foto queda intacto').toBe(255);
+
+    vi.stubGlobal('fetch', responderCon(foto));
+    const conVelo = await componerStrips({ ...datosConFoto, hayTextoEncima: true });
+    const [rVelo] = await pixel(conVelo!.s1, 187, 61);
+    expect(rVelo, 'con texto encima, la foto se oscurece para que se lea').toBeLessThan(200);
   }, 30_000);
 
   it('si la franja propia no baja, compone la banda de marca en vez de quedarse sin franja', async () => {
