@@ -29,7 +29,9 @@ interface Demo {
   emoji: string; // código twemoji del ícono de sello
   regla: { tipo: 'por_visita' | 'por_monto'; valor: number };
   recompensas: { nombre: string; descripcion: string; costo: number; tipo: string }[];
-  clientes: { nombre: string; telefono: string; progreso: number }[];
+  // Nombre y apellido por separado, como los pide el registro desde la 0036: un demo es para
+  // mostrarlo, y su pase tiene que llevar NOMBRE y APELLIDO como el de un cliente real.
+  clientes: { nombre: string; apellido: string; telefono: string; progreso: number }[];
 }
 
 const DEMOS: Demo[] = [
@@ -43,8 +45,8 @@ const DEMOS: Demo[] = [
       { nombre: 'Postre del día', descripcion: 'Con la compra de cualquier bebida', costo: 5, tipo: 'articulo_gratis' },
     ],
     clientes: [
-      { nombre: 'María Rivera', telefono: '+50370000111', progreso: 5 },
-      { nombre: 'Carlos Menjívar', telefono: '+50370000112', progreso: 8 },
+      { nombre: 'María', apellido: 'Rivera', telefono: '+50370000111', progreso: 5 },
+      { nombre: 'Carlos', apellido: 'Menjívar', telefono: '+50370000112', progreso: 8 },
     ],
   },
   {
@@ -57,8 +59,8 @@ const DEMOS: Demo[] = [
       { nombre: '2x1 en bowls', descripcion: 'Válido de lunes a jueves', costo: 6, tipo: 'otro' },
     ],
     clientes: [
-      { nombre: 'Ana Portillo', telefono: '+50370000221', progreso: 7 },
-      { nombre: 'José Aguilar', telefono: '+50370000222', progreso: 10 },
+      { nombre: 'Ana', apellido: 'Portillo', telefono: '+50370000221', progreso: 7 },
+      { nombre: 'José', apellido: 'Aguilar', telefono: '+50370000222', progreso: 10 },
     ],
   },
   {
@@ -71,8 +73,8 @@ const DEMOS: Demo[] = [
       { nombre: 'Papas grandes gratis', descripcion: 'Con cualquier compra', costo: 50, tipo: 'articulo_gratis' },
     ],
     clientes: [
-      { nombre: 'Lucía Campos', telefono: '+50370000331', progreso: 35 },
-      { nombre: 'Diego Flores', telefono: '+50370000332', progreso: 80 },
+      { nombre: 'Lucía', apellido: 'Campos', telefono: '+50370000331', progreso: 35 },
+      { nombre: 'Diego', apellido: 'Flores', telefono: '+50370000332', progreso: 80 },
     ],
   },
   {
@@ -84,8 +86,8 @@ const DEMOS: Demo[] = [
       { nombre: 'Dona rellena gratis', descripcion: 'De la vitrina del día', costo: 6, tipo: 'articulo_gratis' },
     ],
     clientes: [
-      { nombre: 'Sofía Ramos', telefono: '+50370000441', progreso: 4 },
-      { nombre: 'Andrés Molina', telefono: '+50370000442', progreso: 6 },
+      { nombre: 'Sofía', apellido: 'Ramos', telefono: '+50370000441', progreso: 4 },
+      { nombre: 'Andrés', apellido: 'Molina', telefono: '+50370000442', progreso: 6 },
     ],
   },
   {
@@ -98,8 +100,8 @@ const DEMOS: Demo[] = [
       { nombre: 'Arreglo de barba', descripcion: 'Con cualquier corte', costo: 3, tipo: 'articulo_gratis' },
     ],
     clientes: [
-      { nombre: 'Valeria Cruz', telefono: '+50370000551', progreso: 3 },
-      { nombre: 'Mario Chávez', telefono: '+50370000552', progreso: 5 },
+      { nombre: 'Valeria', apellido: 'Cruz', telefono: '+50370000551', progreso: 3 },
+      { nombre: 'Mario', apellido: 'Chávez', telefono: '+50370000552', progreso: 5 },
     ],
   },
 ];
@@ -245,7 +247,7 @@ async function main() {
     // 4. Clientes demo por el flujo REAL (registrarCliente + init de Apple como /api/registro +
     //    acreditaciones que dejan ledger — los demos se comportan igual que datos reales).
     for (const c of d.clientes) {
-      const registro = await registrarCliente(supabase, comercioId, programaId, c.nombre, c.telefono);
+      const registro = await registrarCliente(supabase, comercioId, programaId, c.nombre, c.apellido, c.telefono);
       const authToken = crypto.randomBytes(16).toString('hex');
       await supabase
         .from('tarjetas')

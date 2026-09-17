@@ -32,6 +32,8 @@ export async function accionAgregarClientePorTelefono(
     {
       telefono: String(formData.get('telefono') ?? ''),
       nombre: String(formData.get('nombre') ?? ''),
+      // Opcional: un campo vacío llega como '' y altaYAcreditacionPorTelefono lo guarda null.
+      apellido: String(formData.get('apellido') ?? ''),
       programaId: String(formData.get('programa_id') ?? ''),
       cantidad: Number.isFinite(cantidad) ? cantidad : Number.NaN,
     },

@@ -84,6 +84,16 @@ async function inicializarApple(
 // actualiza — gana el primer registro (el spec define la búsqueda por teléfono; no define
 // semántica de actualización).
 //
+// `apellido` (0036) sigue la MISMA regla: se escribe solo al CREAR el cliente. Un cliente que ya
+// existe no lo recibe ni siquiera si lo tiene vacío (decisión 6 del spec del 2026-09-17):
+// completarlo dejaría que cualquiera que conozca un teléfono le escriba un apellido a otra persona,
+// y ese apellido se vería en su tarjeta de TODOS los comercios.
+//
+// Es obligatorio en la firma (y no opcional) para que cada llamador decida: el registro público lo
+// exige, el alta por teléfono del panel no. Llega YA LIMPIO —recortado, y null si quedó vacío—
+// porque la columna tiene un CHECK (`btrim(apellido) <> ''`): un '' que llegara acá tumbaría el
+// alta entera con 23514.
+//
 // `comercioId` y `programaId` viajan los DOS (migración 0024): el segundo identifica el programa
 // concreto (para el nuevo unique y para qué motor le corresponde a la tarjeta), pero
 // `tarjetas.comercio_id` sigue siendo una columna propia — el caller ya resolvió el programa
@@ -93,6 +103,7 @@ export async function registrarCliente(
   comercioId: string,
   programaId: string,
   nombre: string,
+  apellido: string | null,
   telefono: string,
 ): Promise<RegistrarClienteResult> {
   const { data: clienteExistente, error: buscarClienteError } = await supabase
@@ -110,7 +121,7 @@ export async function registrarCliente(
   } else {
     const { data: nuevoCliente, error: crearClienteError } = await supabase
       .from('clientes')
-      .insert({ nombre, telefono })
+      .insert({ nombre, apellido, telefono })
       .select('id')
       .single();
     if (crearClienteError) {

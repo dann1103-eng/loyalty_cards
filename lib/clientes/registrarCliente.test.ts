@@ -58,7 +58,7 @@ describe('registrarCliente', () => {
     const telefono = `+503-test-${Date.now()}`;
     telefonosDePrueba.push(telefono);
 
-    const resultado = await registrarCliente(supabase, comercioId, programaId, 'Cliente Prueba', telefono);
+    const resultado = await registrarCliente(supabase, comercioId, programaId, 'Cliente Prueba', null, telefono);
 
     expect(resultado.esNuevoCliente).toBe(true);
     expect(resultado.esNuevaTarjeta).toBe(true);
@@ -73,8 +73,8 @@ describe('registrarCliente', () => {
     const telefono = `+503-test-${Date.now()}`;
     telefonosDePrueba.push(telefono);
 
-    const primero = await registrarCliente(supabase, comercioA.comercioId, comercioA.programaId, 'Cliente Prueba', telefono);
-    const segundo = await registrarCliente(supabase, comercioB.comercioId, comercioB.programaId, 'Cliente Prueba', telefono);
+    const primero = await registrarCliente(supabase, comercioA.comercioId, comercioA.programaId, 'Cliente Prueba', null, telefono);
+    const segundo = await registrarCliente(supabase, comercioB.comercioId, comercioB.programaId, 'Cliente Prueba', null, telefono);
 
     expect(segundo.clienteId).toBe(primero.clienteId);
     expect(segundo.tarjetaId).not.toBe(primero.tarjetaId);
@@ -88,8 +88,8 @@ describe('registrarCliente', () => {
     const telefono = `+503-test-${Date.now()}`;
     telefonosDePrueba.push(telefono);
 
-    const primero = await registrarCliente(supabase, comercioId, programaId, 'Cliente Prueba', telefono);
-    const segundo = await registrarCliente(supabase, comercioId, programaId, 'Cliente Prueba', telefono);
+    const primero = await registrarCliente(supabase, comercioId, programaId, 'Cliente Prueba', null, telefono);
+    const segundo = await registrarCliente(supabase, comercioId, programaId, 'Cliente Prueba', null, telefono);
 
     expect(segundo.tarjetaId).toBe(primero.tarjetaId);
     // El qr_token no debe cambiar entre registros: los passes ya emitidos siguen siendo escaneables.
@@ -106,8 +106,8 @@ describe('registrarCliente', () => {
     // Sin importar quién gane la carrera del insert (vía unique + reintento con relectura),
     // ambas llamadas deben terminar apuntando al mismo cliente y la misma tarjeta.
     const [a, b] = await Promise.all([
-      registrarCliente(supabase, comercioId, programaId, 'Cliente Prueba', telefono),
-      registrarCliente(supabase, comercioId, programaId, 'Cliente Prueba', telefono),
+      registrarCliente(supabase, comercioId, programaId, 'Cliente Prueba', null, telefono),
+      registrarCliente(supabase, comercioId, programaId, 'Cliente Prueba', null, telefono),
     ]);
 
     expect(a.clienteId).toBe(b.clienteId);
@@ -131,8 +131,8 @@ describe('registrarCliente', () => {
     const telefono = `+503-test-${Date.now()}`;
     telefonosDePrueba.push(telefono);
 
-    const enPrincipal = await registrarCliente(supabase, comercioId, principalId, 'Cliente Prueba', telefono);
-    const enSegundo = await registrarCliente(supabase, comercioId, segundoPrograma.id, 'Cliente Prueba', telefono);
+    const enPrincipal = await registrarCliente(supabase, comercioId, principalId, 'Cliente Prueba', null, telefono);
+    const enSegundo = await registrarCliente(supabase, comercioId, segundoPrograma.id, 'Cliente Prueba', null, telefono);
 
     expect(enSegundo.clienteId).toBe(enPrincipal.clienteId);
     expect(enSegundo.tarjetaId).not.toBe(enPrincipal.tarjetaId);
@@ -140,7 +140,7 @@ describe('registrarCliente', () => {
     expect(enSegundo.esNuevaTarjeta).toBe(true);
 
     // Repetir el registro en el mismo programa recupera la MISMA tarjeta, no una tercera.
-    const otraVezPrincipal = await registrarCliente(supabase, comercioId, principalId, 'Cliente Prueba', telefono);
+    const otraVezPrincipal = await registrarCliente(supabase, comercioId, principalId, 'Cliente Prueba', null, telefono);
     expect(otraVezPrincipal.tarjetaId).toBe(enPrincipal.tarjetaId);
     expect(otraVezPrincipal.esNuevaTarjeta).toBe(false);
   });
@@ -158,7 +158,7 @@ describe('registrarCliente', () => {
     const telefono = `+503-test-inst-${Date.now()}`;
     telefonosDePrueba.push(telefono);
 
-    const res = await registrarCliente(supabase, comercioId, programaId, 'Cliente Prueba', telefono);
+    const res = await registrarCliente(supabase, comercioId, programaId, 'Cliente Prueba', null, telefono);
 
     const { data } = await supabase
       .from('tarjetas')
@@ -168,5 +168,75 @@ describe('registrarCliente', () => {
 
     expect(data!.apple_serial_number, 'sin serial, el pase no se puede emitir').toBe(res.tarjetaId);
     expect(data!.apple_auth_token, 'sin token, el pase no se puede autenticar').toBeTruthy();
+  });
+});
+
+// El apellido (0036) se escribe SOLO al crear el cliente, igual que el nombre desde siempre: gana el
+// primer registro (decisión 6 del spec del 2026-09-17).
+//
+// Mutación verificada (2026-09-17): completar el apellido de un cliente existente cuando lo tiene
+// vacío — en la rama `if (clienteExistente)`, un
+// `update({ apellido }).eq('id', clienteExistente.id).is('apellido', null)` cuando `apellido` no es
+// null — hace fallar "un cliente que ya existe NO recibe apellido…" con
+// `el apellido de un cliente existente se completó desde otro registro: expected 'Rivera' to be null`.
+describe('registrarCliente: el apellido', () => {
+  async function clienteGuardado(clienteId: string) {
+    const { data, error } = await supabase
+      .from('clientes')
+      .select('nombre, apellido')
+      .eq('id', clienteId)
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  it('un cliente nuevo guarda el apellido junto al nombre', async () => {
+    const { comercioId, programaId } = await crearComercioDePrueba(`test-apellido-a-${Date.now()}`);
+    ids = { comercioId };
+    const telefono = `+503-test-ap-${Date.now()}`;
+    telefonosDePrueba.push(telefono);
+
+    const res = await registrarCliente(supabase, comercioId, programaId, 'María', 'Rivera', telefono);
+
+    expect(res.esNuevoCliente).toBe(true);
+    expect(await clienteGuardado(res.clienteId)).toEqual({ nombre: 'María', apellido: 'Rivera' });
+  });
+
+  it('un cliente nuevo con apellido null lo guarda null', async () => {
+    const { comercioId, programaId } = await crearComercioDePrueba(`test-apellido-b-${Date.now()}`);
+    ids = { comercioId };
+    const telefono = `+503-test-ap-${Date.now()}`;
+    telefonosDePrueba.push(telefono);
+
+    const res = await registrarCliente(supabase, comercioId, programaId, 'María', null, telefono);
+
+    expect(await clienteGuardado(res.clienteId)).toEqual({ nombre: 'María', apellido: null });
+  });
+
+  it('un cliente que ya existe NO recibe apellido al registrarse en otro programa, aunque no tenga', async () => {
+    // Completarlo "si está vacío" dejaría que cualquiera que conozca un teléfono le escriba un
+    // apellido a otra persona, y ese apellido se vería en su tarjeta de TODOS los comercios.
+    const comercioA = await crearComercioDePrueba(`test-apellido-c1-${Date.now()}`);
+    const comercioB = await crearComercioDePrueba(`test-apellido-c2-${Date.now()}`);
+    ids = { comercioId: comercioA.comercioId };
+    idsB = { comercioId: comercioB.comercioId };
+    const telefono = `+503-test-ap-${Date.now()}`;
+    telefonosDePrueba.push(telefono);
+
+    const primero = await registrarCliente(
+      supabase, comercioA.comercioId, comercioA.programaId, 'María', null, telefono,
+    );
+    const segundo = await registrarCliente(
+      supabase, comercioB.comercioId, comercioB.programaId, 'Otra Persona', 'Rivera', telefono,
+    );
+
+    expect(segundo.clienteId).toBe(primero.clienteId);
+    expect(segundo.esNuevaTarjeta, 'el segundo registro tenía que emitir su tarjeta').toBe(true);
+    const guardado = await clienteGuardado(primero.clienteId);
+    expect(
+      guardado.apellido,
+      'el apellido de un cliente existente se completó desde otro registro',
+    ).toBeNull();
+    expect(guardado.nombre, 'el nombre de un cliente existente se pisó').toBe('María');
   });
 });

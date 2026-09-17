@@ -178,6 +178,97 @@ describe('altaYAcreditacionPorTelefono', () => {
     if (primera.ok) expect((await estadoDe(primera.tarjetaId)).puntos_actuales).toBe(1);
   });
 
+  describe('el apellido, opcional desde el panel', () => {
+    // En el registro público el apellido es obligatorio; acá no: quien atiende un pedido por
+    // teléfono muchas veces solo sabe el nombre, y exigirlo sería inventarlo.
+    //
+    // Mutaciones verificadas (2026-09-17):
+    //   - sin el `|| null` (el apellido recortado viaja como '') → fallan 5: "en blanco…" y las
+    //     CUATRO altas de arriba que no mandan apellido, todas con `new row for relation "clientes"
+    //     violates check constraint "clientes_apellido_check"` (23514: el alta ENTERA se cae, no
+    //     solo el apellido).
+    //   - sin el tope de 120 (`if (false)`) → falla "de 121 caracteres…" con el mismo CHECK lanzado
+    //     en vez del mensaje: `new row for relation "clientes" violates check constraint
+    //     "clientes_apellido_check"`.
+    //   - pasarle siempre null a registrarCliente → falla "con apellido lo guarda recortado":
+    //     `expected null to be 'Rivera'`.
+    async function clienteDeTarjeta(tarjetaId: string) {
+      const { data, error } = await supabase
+        .from('tarjetas')
+        .select('clientes(nombre, apellido)')
+        .eq('id', tarjetaId)
+        .single();
+      if (error) throw error;
+      return data.clientes;
+    }
+
+    it('con apellido lo guarda recortado', async () => {
+      const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+      const programaId = entorno.obtenerProgramaPrincipal(comercioId);
+
+      const res = await altaYAcreditacionPorTelefono(supabase, comercioId, {
+        telefono: telefonoUnico(),
+        nombre: 'María',
+        apellido: '  Rivera ',
+        programaId,
+        cantidad: 1,
+      });
+
+      expect(res.ok, res.ok ? '' : res.error).toBe(true);
+      if (!res.ok) return;
+      expect((await clienteDeTarjeta(res.tarjetaId))?.apellido).toBe('Rivera');
+    });
+
+    it('en blanco o ausente, el cliente queda con apellido null (no con "")', async () => {
+      // `clientes.apellido` tiene un CHECK de `btrim(apellido) <> ''` (0036): un '' que llegara a
+      // la base tumbaría el alta ENTERA con 23514, no solo el apellido.
+      const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+      const programaId = entorno.obtenerProgramaPrincipal(comercioId);
+
+      const enBlanco = await altaYAcreditacionPorTelefono(supabase, comercioId, {
+        telefono: telefonoUnico(),
+        nombre: 'María',
+        apellido: '   ',
+        programaId,
+        cantidad: 1,
+      });
+      const ausente = await altaYAcreditacionPorTelefono(supabase, comercioId, {
+        telefono: telefonoUnico(),
+        nombre: 'José',
+        programaId,
+        cantidad: 1,
+      });
+
+      expect(enBlanco.ok, enBlanco.ok ? '' : enBlanco.error).toBe(true);
+      expect(ausente.ok, ausente.ok ? '' : ausente.error).toBe(true);
+      if (!enBlanco.ok || !ausente.ok) return;
+      expect((await clienteDeTarjeta(enBlanco.tarjetaId))?.apellido).toBeNull();
+      expect((await clienteDeTarjeta(ausente.tarjetaId))?.apellido).toBeNull();
+    });
+
+    it('de 121 caracteres se rechaza con el motivo y SIN crear el cliente', async () => {
+      const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+      const programaId = entorno.obtenerProgramaPrincipal(comercioId);
+      const telefono = telefonoUnico();
+
+      const res = await altaYAcreditacionPorTelefono(supabase, comercioId, {
+        telefono,
+        nombre: 'María',
+        apellido: 'a'.repeat(121),
+        programaId,
+        cantidad: 1,
+      });
+
+      expect(res).toEqual({ ok: false, error: 'El apellido puede tener hasta 120 caracteres.' });
+      const { data: cliente } = await supabase
+        .from('clientes')
+        .select('id')
+        .eq('telefono', telefono)
+        .maybeSingle();
+      expect(cliente, 'se creó el cliente aunque el apellido no entraba').toBeNull();
+    });
+  });
+
   it('NO acredita en un programa de otro comercio', async () => {
     const mio = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
     const ajeno = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });

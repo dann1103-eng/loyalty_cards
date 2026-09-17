@@ -31,6 +31,9 @@ export interface DatosAltaPorTelefono {
   // normalizarTelefono, que es el mismo comportamiento del registro público.
   clavePais?: string;
   nombre: string;
+  // OPCIONAL, a diferencia del registro público: quien toma un pedido por teléfono muchas veces solo
+  // sabe el nombre, y exigirlo sería obligarlo a inventar uno. Ausente o en blanco ⇒ null.
+  apellido?: string;
   programaId: string;
   // En la unidad del programa. OJO: en gift card y cashback son CENTAVOS, como en todo el resto del
   // sistema (ver el encabezado de lib/tarjetas/tipos.ts).
@@ -49,6 +52,15 @@ export async function altaYAcreditacionPorTelefono(
 ): Promise<ResultadoAltaPorTelefono> {
   const nombre = datos.nombre.trim();
   if (!nombre) return { ok: false, error: 'Escribí el nombre del cliente.' };
+
+  // Se limpia ACÁ y no en registrarCliente, que lo recibe ya limpio: `clientes.apellido` tiene un
+  // CHECK (0036) de `btrim(apellido) <> ''` y hasta 120, y lo que no entre tumbaría el alta entera
+  // con 23514 en vez de devolverle un mensaje al dueño. Por eso un blanco viaja como null, y el tope
+  // se revisa antes de crear nada.
+  const apellido = (datos.apellido ?? '').trim() || null;
+  if (apellido !== null && apellido.length > 120) {
+    return { ok: false, error: 'El apellido puede tener hasta 120 caracteres.' };
+  }
 
   if (!Number.isInteger(datos.cantidad) || datos.cantidad <= 0) {
     return { ok: false, error: 'La cantidad tiene que ser un número entero mayor que cero.' };
@@ -88,7 +100,7 @@ export async function altaYAcreditacionPorTelefono(
   // registrarCliente es idempotente por (cliente, programa): si ese teléfono ya tiene su tarjeta,
   // devuelve la que existe en vez de crear una segunda. Y desde el 2026-08-07 deja la tarjeta
   // instalable (serial + token de Apple), así que la que nace por acá sirve igual que la del QR.
-  const alta = await registrarCliente(supabase, comercioId, programa.id, nombre, telefonoCanonico);
+  const alta = await registrarCliente(supabase, comercioId, programa.id, nombre, apellido, telefonoCanonico);
 
   const res = await acreditarPuntos(supabase, comercioId, alta.tarjetaId, datos.cantidad, opciones);
   if (!res.ok) {

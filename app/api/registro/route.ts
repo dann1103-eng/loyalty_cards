@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { registrarCliente } from '@/lib/clientes/registrarCliente';
+import { validarNombreRegistro } from '@/lib/clientes/validarNombreRegistro';
 import { normalizarTelefono } from '@/lib/clientes/normalizarTelefono';
 import { resolverProgramaPorSlug } from '@/lib/comercio/programas';
 import { syncClaseComercio } from '@/lib/google/syncClase';
@@ -16,22 +17,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Cuerpo inválido' }, { status: 400 });
   }
 
-  const { comercioSlug, programaSlug, nombre, telefono, clavePais } = (body ?? {}) as Record<string, unknown>;
+  const campos = (body ?? {}) as Record<string, unknown>;
+  const { comercioSlug, programaSlug, nombre, apellido, telefono, clavePais } = campos;
 
-  if (
-    typeof comercioSlug !== 'string' ||
-    typeof nombre !== 'string' ||
-    typeof telefono !== 'string' ||
-    !comercioSlug ||
-    !nombre ||
-    !telefono
-  ) {
+  if (typeof comercioSlug !== 'string' || typeof telefono !== 'string' || !comercioSlug || !telefono) {
     return NextResponse.json({ error: 'Faltan datos' }, { status: 400 });
   }
 
-  const nombreLimpio = nombre.trim();
-  if (nombreLimpio.length === 0 || nombreLimpio.length > 120) {
-    return NextResponse.json({ error: 'Nombre inválido' }, { status: 400 });
+  // Nombre y apellido con el mismo criterio ('Faltan datos', 'Nombre inválido', 'Apellido
+  // inválido'), en una función pura con prueba. Vuelven recortados, que es como los espera
+  // registrarCliente.
+  const nombres = validarNombreRegistro({ nombre, apellido });
+  if (!nombres.ok) {
+    return NextResponse.json({ error: nombres.error }, { status: 400 });
   }
 
   let telefonoCanonico: string;
@@ -69,7 +67,14 @@ export async function POST(request: NextRequest) {
   // en esta ruta, que era su único llamador, y por eso cualquier camino de alta nuevo habría
   // emitido tarjetas imposibles de instalar — /api/tarjetas/<id>/pass.pkpass responde 404 sin el
   // serial. Ver el comentario de `inicializarApple` en lib/clientes/registrarCliente.ts.
-  const resultado = await registrarCliente(supabase, comercio.id, programa.id, nombreLimpio, telefonoCanonico);
+  const resultado = await registrarCliente(
+    supabase,
+    comercio.id,
+    programa.id,
+    nombres.nombre,
+    nombres.apellido,
+    telefonoCanonico,
+  );
 
   // Google Wallet, best-effort (nunca bloquea el registro): la clase del comercio se crea la
   // primera vez que hace falta (aquí, en su primer cliente) o ya existe de un guardado de

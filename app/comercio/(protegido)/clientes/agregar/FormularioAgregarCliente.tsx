@@ -14,8 +14,11 @@ export interface ProgramaElegible {
 // escanearle nada.
 //
 // Decisiones con la vara de "alguien de 50 años, solo":
-// - Tres campos y nada más. El teléfono es la identidad (así lo guarda todo el sistema), el nombre
+// - Cuatro campos y nada más. El teléfono es la identidad (así lo guarda todo el sistema), el nombre
 //   es lo que el cliente va a ver en su tarjeta, y la cantidad se dice en la unidad de SU programa.
+// - El apellido es el ÚNICO opcional: quien toma un pedido por teléfono muchas veces solo sabe el
+//   nombre, y exigirlo sería obligarlo a inventar uno. Sin apellido, la tarjeta muestra NOMBRE solo.
+//   (En el registro que llena el propio cliente sí es obligatorio.)
 // - No hay selector de sucursal: la atribución la pone el servidor desde el contexto activo. Un
 //   campo más acá es un campo más que puede quedar mal.
 // - El selector de tarjeta aparece SOLO si el comercio tiene más de una. Con una sola, elegir entre
@@ -59,6 +62,11 @@ export default function FormularioAgregarCliente({ programas }: { programas: Pro
         <p className="nota" style={{ marginTop: 6 }}>
           Es el nombre que va a ver en su tarjeta.
         </p>
+      </div>
+
+      <div className="field">
+        <label htmlFor="apellido">Apellido (opcional)</label>
+        <input id="apellido" name="apellido" type="text" maxLength={120} placeholder="Rivera" />
       </div>
 
       {programas.length > 1 && (

@@ -123,6 +123,7 @@ describe('la configuración que carga el dueño en Programas llega a los motores
       comercioId,
       res.id,
       'Cliente Cupón',
+      null,
       `+503${String(Date.now()).slice(-8)}`,
     );
 
@@ -250,7 +251,7 @@ describe('el portal del cliente no le muestra plata como si fueran puntos', () =
     const telefono = `+503${String(Date.now()).slice(-8)}${Math.floor(Math.random() * 10000)
       .toString()
       .padStart(4, '0')}`;
-    const alta = await registrarCliente(supabase, comercioId, programa.id, 'Cliente Gift', telefono);
+    const alta = await registrarCliente(supabase, comercioId, programa.id, 'Cliente Gift', null, telefono);
     await supabase.from('tarjetas').update({ puntos_actuales: 2500 }).eq('id', alta.tarjetaId);
 
     const res = await buscarTarjetasPorTelefono(supabase, telefono);
@@ -276,7 +277,7 @@ describe('el portal del cliente no le muestra plata como si fueran puntos', () =
     const telefono = `+503${String(Date.now()).slice(-8)}${Math.floor(Math.random() * 10000)
       .toString()
       .padStart(4, '0')}`;
-    const alta = await registrarCliente(supabase, comercioId, programa.id, 'Cliente Cupón', telefono);
+    const alta = await registrarCliente(supabase, comercioId, programa.id, 'Cliente Cupón', null, telefono);
     await supabase.from('tarjetas').update({ vigencia_hasta: '2020-01-01' }).eq('id', alta.tarjetaId);
 
     const res = await buscarTarjetasPorTelefono(supabase, telefono);

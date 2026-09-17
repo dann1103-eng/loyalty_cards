@@ -38,6 +38,9 @@ test('registro público entrega un pass descargable', async ({ page, request }) 
   // encuentra y borra el cliente si el registro alcanzó a crearlo.
   telefonoDePrueba = telefono;
   await page.getByLabel('Nombre').fill('Cliente E2E');
+  // Obligatorio desde la 0036: sin él, el navegador no deja enviar el formulario (`required`) y la
+  // ruta respondería 400 'Faltan datos'.
+  await page.getByLabel('Apellido').fill('Prueba');
   await page.getByLabel('Teléfono').fill(telefono);
   await page.getByRole('button', { name: /crear mi tarjeta/i }).click();
 

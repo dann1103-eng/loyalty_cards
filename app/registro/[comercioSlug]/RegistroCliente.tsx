@@ -32,7 +32,7 @@ function IconoGoogle() {
 // y "0 PUNTOS" para los ocho tipos, así que el dueño de una membresía azul con logo veía —al
 // escanear su propio QR— una tarjeta café que le prometía a su cliente una mecánica inexistente.
 //
-// El contador sale de `frentePase`, la MISMA función que arma el frente del pase real y la vista
+// El estado sale de `frentePase`, la MISMA función que arma el frente del pase real y la vista
 // previa del editor de marca. Es a propósito y es un guardarraíl: si esta pantalla volviera a
 // tener su propio if, el dueño diseñaría una cosa y su cliente vería otra.
 function VistaTarjeta({
@@ -48,21 +48,26 @@ function VistaTarjeta({
   marca: MarcaRegistro;
   hoyIso: string;
 }) {
-  // `hayGrilla: false` es literal, no una simplificación: esta tarjeta de muestra no dibuja la
-  // grilla de sellos. Con la grilla ausente, `frentePase` baja la palabra al valor ("0 de 10
-  // sellos") porque el número solo no dice qué se está contando —— exactamente lo que hace el pase
-  // real cuando la franja no pudo componerse. `puntos: 0` porque la tarjeta acaba de nacer.
-  // `vigenciaHasta`/`usadoEn` en null: acá NO hay ninguna tarjeta emitida todavía, y ahí
-  // describirSaldo dice "Sin activar" (membresía) o "Disponible" (cupón) sin mirar el reloj — que
-  // es exactamente el estado que va a tener la tarjeta el primer día. `nombrePase` tampoco viaja:
-  // esta pantalla ya rotula la tarjeta con `rotuloTarjeta` arriba.
+  // De `frentePase` esta réplica usa SOLO `estado` (lo que el pase lleva arriba a la derecha): el
+  // contador del tipo ("SELLOS 0 de 10", "SALDO $0.00") o, en membresía y cupón, su estado sin fecha.
+  //
+  // - `franja: 'banda'` es literal, no una simplificación: esta tarjeta de muestra no dibuja franja
+  //   ni grilla. Solo decide `sobreFranja`, que acá no se muestra — y el estado no depende de ella.
+  // - `puntos: 0` porque la tarjeta acaba de nacer.
+  // - `vigenciaHasta`/`usadoEn` en null: acá NO hay ninguna tarjeta emitida todavía, y ahí el estado
+  //   dice "MEMBRESÍA · Sin activar" o "CUPÓN · Disponible" sin mirar el reloj — que es exactamente
+  //   el estado que va a tener la tarjeta el primer día.
+  // - `nombrePase` no viaja: esta pantalla ya rotula la tarjeta con `rotuloTarjeta` arriba.
+  // - `nombreCliente`/`apellidoCliente` en null: esta réplica no dibuja el titular, así que no se le
+  //   pasa lo que el cliente acaba de escribir.
   //
   // `hoyIso` igual llega desde el SERVIDOR y no de un new Date() acá: este componente es
   // 'use client' montado desde una página de servidor, y un reloj propio daría mismatch de
   // hidratación. La regla vale aunque hoy el valor no se llegue a leer.
   const frente = frentePase({
-    tipoTarjeta, puntos: 0, selloMeta, hayGrilla: false,
-    vigenciaHasta: null, usadoEn: null, nombrePase: null, hoyIso,
+    tipoTarjeta, puntos: 0, selloMeta, franja: 'banda',
+    vigenciaHasta: null, usadoEn: null, nombrePase: null,
+    nombreCliente: null, apellidoCliente: null, hoyIso,
   });
 
   // Mismos respaldos que la cara de la tarjeta del portal (mi-tarjeta/PortalCliente.tsx): un
@@ -89,16 +94,16 @@ function VistaTarjeta({
         </div>
       )}
       <div className="cardface-name">{nombreComercio}</div>
-      {/* SIN CONTADOR NO SE DIBUJA EL BLOQUE. Cupón, membresía y descuento no tienen número —su
-          estado es una fecha o un nivel— y su pase real tampoco lo lleva. */}
-      {frente.primario && (
+      {/* SIN ESTADO NO SE DIBUJA EL BLOQUE. El descuento no lleva estado —su porcentaje sale de
+          los niveles, un dato que el pase no recibe— y su pase real tampoco lo lleva. */}
+      {frente.estado && (
         // Etiqueta arriba y valor abajo, como los dibuja Apple y como los replica el editor de
-        // marca. El valor compuesto ("0 de 10 sellos", "$0.00") no entra a 2.2rem en un teléfono
-        // angosto, así que el número pelado se queda grande y el texto baja de tamaño.
+        // marca. El valor compuesto ("0 de 10", "$0.00", "Sin activar") no entra a 2.2rem en un
+        // teléfono angosto, así que el número pelado se queda grande y el texto baja de tamaño.
         <div className="cardface-points" style={{ flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-          <span style={estiloLabel}>{frente.primario.etiqueta}</span>
-          <b style={frente.primario.numero === null ? { fontSize: '1.5rem' } : undefined}>
-            {frente.primario.valor}
+          <span style={estiloLabel}>{frente.estado.etiqueta}</span>
+          <b style={frente.estado.numero === null ? { fontSize: '1.5rem' } : undefined}>
+            {frente.estado.valor}
           </b>
         </div>
       )}
@@ -129,6 +134,7 @@ export default function RegistroCliente({
   hoyIso: string;
 }) {
   const [nombre, setNombre] = useState('');
+  const [apellido, setApellido] = useState('');
   const [telefono, setTelefono] = useState('');
   // País del teléfono. El Salvador por defecto: es el mercado actual y el país de todos los
   // clientes ya registrados.
@@ -146,7 +152,7 @@ export default function RegistroCliente({
       const res = await fetch('/api/registro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comercioSlug, programaSlug, nombre, telefono, clavePais }),
+        body: JSON.stringify({ comercioSlug, programaSlug, nombre, apellido, telefono, clavePais }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error al registrar');
@@ -215,6 +221,9 @@ export default function RegistroCliente({
         </p>
 
         <form className="panel reveal d3" onSubmit={handleSubmit}>
+          {/* Nombre y apellido por separado (0036): el pase los muestra en dos campos, NOMBRE y
+              APELLIDO. El autocompletado es `given-name` / `family-name` y no `name`, que metía el
+              nombre completo en "Nombre". El tope de 120 es el mismo que valida la ruta. */}
           <div className="field">
             <label htmlFor="nombre">Nombre</label>
             <input
@@ -222,7 +231,20 @@ export default function RegistroCliente({
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               placeholder="Tu nombre"
-              autoComplete="name"
+              autoComplete="given-name"
+              maxLength={120}
+              required
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="apellido">Apellido</label>
+            <input
+              id="apellido"
+              value={apellido}
+              onChange={(e) => setApellido(e.target.value)}
+              placeholder="Tu apellido"
+              autoComplete="family-name"
+              maxLength={120}
               required
             />
           </div>
@@ -260,7 +282,7 @@ export default function RegistroCliente({
             </p>
           )}
           <p className="nota">
-            Solo usamos tu nombre y teléfono para identificar tu tarjeta.
+            Solo usamos tu nombre, apellido y teléfono para identificar tu tarjeta.
           </p>
         </form>
       </div>
