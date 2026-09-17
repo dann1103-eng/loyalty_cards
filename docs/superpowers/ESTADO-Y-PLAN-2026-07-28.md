@@ -1031,6 +1031,11 @@ verificada** (`scripts/verificar-0036.ts`).
 2. **En un `patch` de Google, un campo omitido deja el valor VIEJO.** Por eso `textModulesData` viaja
    siempre (aunque sea `[]`) y el hero viaja en todos los tipos: si no, un nombre de pase borrado o una
    franja propia quitada se seguirían viendo en Android para siempre.
+   **Y por eso `loyaltyPoints.balance` manda el otro tipo en `null`**: un objeto que nació con
+   `balance.int` y al que ahora se le manda `balance.string` queda con los dos puestos, y Google
+   rechaza el patch ENTERO con `400 More than one type of loyalty point balances cannot be set` —
+   esa tarjeta deja de actualizar su saldo en Android, en silencio. Apareció en producción el
+   2026-09-17 en un programa de sellos que nació sin meta (entero) y después la configuró (texto).
 3. **Google rechaza el patch ENTERO si el `heroImage` no carga.** `hero.png` ya no responde 404 cuando
    la franja propia no baja: sirve la banda de marca. Con un 404, esa tarjeta dejaba de actualizar el
    saldo en Android.
@@ -1047,10 +1052,9 @@ verificada** (`scripts/verificar-0036.ts`).
 
 ### Pendiente, anotado para no perderlo
 
-- **Fase `objetos`** del script (`scripts/actualizar-frente-google.ts`): se corrió el 2026-09-17 tras
-  el deploy A (309434b) y fallaron las 28 con `invalid_grant`, sin tocar nada en Google: el reloj de
-  la PC estaba ~4 h atrasado y el JWT de la cuenta de servicio salía vencido. Reintentar con el reloj
-  sincronizado. (Mientras tanto cada objeto toma el frente nuevo en su próxima operación.)
+- ~~Fase `objetos`~~ **HECHA el 2026-09-17: 28 de 28, 0 fallos**, desde el commit `5d43bc4`. En el
+  camino hizo falta arreglar dos cosas: el reloj de la PC estaba ~4 h atrasado (todas las llamadas
+  daban `invalid_grant`, sin tocar nada en Google) y el balance del patch (nota 2).
 - **Task 9 (la plantilla de filas) ya está hecha y probada en la rama `claude/plantilla-filas-google`**,
   SIN publicar. Orden: fase `objetos` con 0 fallos → QA de Daniel en Android → merge + push (deploy
   B) → fase `clases` desde ese commit.
