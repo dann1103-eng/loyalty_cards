@@ -43,8 +43,16 @@ export interface DatosVersionHero {
 // Hash corto de todo lo que la composición dibuja. Determinístico a propósito: la misma tarjeta con
 // los mismos datos da la misma URL (Google no re-descarga de gusto), y cualquier cambio —un sello
 // más, otro ícono, otro color, otro encuadre de la foto— la cambia.
+// Sube de a UNO cuando cambia CÓMO se dibuja la franja, no qué datos se dibujan: el hash de abajo
+// solo mira los datos, así que sin esto una composición nueva conserva la URL vieja y Google sigue
+// sirviendo para siempre la imagen que ya tenía cacheada. Historia:
+//   2 — 2026-09-17: la franja propia pasó a encajarse COMPLETA en el marco (antes se mandaban sus
+//       bytes crudos y Wallet la recortaba). Ver lib/apple/stripPass.tsx, franjaPropia.
+const VERSION_COMPOSICION = 2;
+
 export function versionHero(d: DatosVersionHero): string {
   const clave = JSON.stringify([
+    VERSION_COMPOSICION,
     d.puntos, d.selloMeta, d.colorFondo, d.colorLabel,
     d.selloIconoUrl, d.heroUrl, d.stripUrl, d.difuminadoFranja,
     d.encuadreFranja.modo, d.encuadreFranja.focoX, d.encuadreFranja.focoY, d.encuadreFranja.zoom,
