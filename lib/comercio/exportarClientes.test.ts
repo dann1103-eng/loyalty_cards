@@ -60,17 +60,28 @@ describe('generarCsv', () => {
   it('arma encabezado y filas separados por CRLF', () => {
     // CRLF y no LF: es lo que dice RFC 4180 y lo que Excel en Windows espera.
     const csv = generarCsv([
-      { nombre: 'Ana', telefono: '+50377771234', tarjeta: 'Principal', saldo: '3 sellos', visitas: 5, alta: '2026-07-01' },
+      { nombre: 'Ana', apellido: 'Rivera', telefono: '+50377771234', tarjeta: 'Principal', saldo: '3 sellos', visitas: 5, alta: '2026-07-01' },
     ]);
     const lineas = csv.split('\r\n');
     expect(lineas).toHaveLength(2);
-    expect(lineas[0]).toBe('"Nombre","Teléfono","Tarjeta","Saldo","Visitas","Cliente desde"');
+    // "Apellido" en su propia columna, justo después de "Nombre" (0036). Aparte y no unido al nombre:
+    // el dueño que ordena o filtra la hoja por apellido necesita la columna sola.
+    expect(lineas[0]).toBe('"Nombre","Apellido","Teléfono","Tarjeta","Saldo","Visitas","Cliente desde"');
     // El teléfono sale con apóstrofo, y eso es CORRECTO, no un efecto colateral: todo teléfono
     // canónico empieza con '+' y cae en el escape. En Excel y Google Sheets el apóstrofo inicial es
     // un marcador de "esto es texto" que NO se muestra — y es justamente lo que evita que Excel
     // convierta +50377771234 en el número 50377771234 y se coma el signo. Sin él, la columna más
     // importante del export llegaría mutilada.
-    expect(lineas[1]).toBe(`"Ana","'+50377771234","Principal","3 sellos","5","2026-07-01"`);
+    expect(lineas[1]).toBe(`"Ana","Rivera","'+50377771234","Principal","3 sellos","5","2026-07-01"`);
+  });
+
+  it('un cliente sin apellido deja la celda vacía, sin correr las columnas', () => {
+    // Todo cliente registrado antes de la 0036 tiene el apellido en null. La celda vacía mantiene
+    // el teléfono bajo "Teléfono".
+    const csv = generarCsv([
+      { nombre: 'Ana López', apellido: '', telefono: '+50377771234', tarjeta: 'Principal', saldo: '3 sellos', visitas: 5, alta: '2026-07-01' },
+    ]);
+    expect(csv.split('\r\n')[1]).toBe(`"Ana López","","'+50377771234","Principal","3 sellos","5","2026-07-01"`);
   });
 
   it('con cero clientes deja solo el encabezado', () => {
@@ -80,10 +91,11 @@ describe('generarCsv', () => {
 
   it('una fila con una coma en el nombre no corre las columnas', () => {
     const csv = generarCsv([
-      { nombre: 'Pérez, Ana', telefono: '+50370000000', tarjeta: 'Principal', saldo: '1 sello', visitas: 1, alta: '2026-07-01' },
+      { nombre: 'Pérez, Ana', apellido: 'Gómez, hija', telefono: '+50370000000', tarjeta: 'Principal', saldo: '1 sello', visitas: 1, alta: '2026-07-01' },
     ]);
-    // Seis campos entrecomillados: si el escape fallara, el nombre partiría la fila en siete.
-    expect(csv.split('\r\n')[1].match(/","/g)).toHaveLength(5);
+    // Siete campos entrecomillados: si el escape fallara, el nombre y el apellido partirían la fila
+    // en nueve.
+    expect(csv.split('\r\n')[1].match(/","/g)).toHaveLength(6);
   });
 });
 
@@ -98,7 +110,7 @@ describe('el CSV dice en qué moneda está cada saldo', () => {
     // 1250 en la columna son $12.50. Exportar "1250" bajo el título "Saldo" no es ambiguo: es
     // falso, y por un factor de cien.
     const csv = generarCsv([
-      { nombre: 'Ana', telefono: '+50377771234', tarjeta: 'Gift card', saldo: '$12.50', visitas: 2, alta: '2026-07-01' },
+      { nombre: 'Ana', apellido: 'Rivera', telefono: '+50377771234', tarjeta: 'Gift card', saldo: '$12.50', visitas: 2, alta: '2026-07-01' },
     ]);
     expect(csv.split('\r\n')[1]).toContain('$12.50');
   });
@@ -107,7 +119,7 @@ describe('el CSV dice en qué moneda está cada saldo', () => {
     // Un comercio puede tener dos programas activos a la vez. Sin esta columna, la fila de alguien
     // con 8 sellos y la de alguien con $8.00 de saldo se ven idénticas en la hoja de cálculo.
     const csv = generarCsv([
-      { nombre: 'Ana', telefono: '+50377771234', tarjeta: 'Sellos del café', saldo: '8 sellos', visitas: 8, alta: '2026-07-01' },
+      { nombre: 'Ana', apellido: 'Rivera', telefono: '+50377771234', tarjeta: 'Sellos del café', saldo: '8 sellos', visitas: 8, alta: '2026-07-01' },
     ]);
     const lineas = csv.split('\r\n');
     expect(lineas[0]).toContain('Tarjeta');
@@ -153,6 +165,33 @@ describe('filasParaExportar (contra la base)', () => {
     const filas = await filasParaExportar(supabase, comercioId);
 
     expect(filas![0].saldo).toBe('8 sellos');
+  });
+
+  it('el apellido sale en su columna, y vacío en un cliente que no lo tiene', async () => {
+    // Por el recorrido y no por `generarCsv`: la prueba del encabezado pasa aunque la CONSULTA no
+    // traiga el apellido, porque se la alimenta con la fila ya armada.
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    const { id: conApellido } = await entorno.crearTarjeta(comercioId, 1);
+    await entorno.crearTarjeta(comercioId, 2);
+    // El fixture crea clientes sin apellido (como los anteriores a la 0036); a uno se le pone acá.
+    // El registro que lo guarda al crear el cliente es de otra tarea y tiene sus propias pruebas.
+    const { data: tarjeta, error: eT } = await supabase
+      .from('tarjetas')
+      .select('cliente_id')
+      .eq('id', conApellido)
+      .single();
+    if (eT) throw eT;
+    const { error: eU } = await supabase.from('clientes').update({ apellido: 'Rivera' }).eq('id', tarjeta.cliente_id);
+    if (eU) throw eU;
+
+    const filas = await filasParaExportar(supabase, comercioId);
+
+    // MUTACIÓN (2026-09-17): sacar `apellido` del select de `filasParaExportar` (dejándolo en
+    // `clientes(nombre, telefono)`) hace fallar esta prueba con
+    // "expected [ '', '' ] to deeply equal [ '', 'Rivera' ]": la columna sale vacía para todos
+    // aunque el cliente tenga apellido.
+    // Ordenado y no por posición: las dos tarjetas nacen en el mismo milisegundo a veces.
+    expect((filas ?? []).map((f) => f.apellido).sort()).toEqual(['', 'Rivera']);
   });
 
   // ───────────────────────────────────────────────────────────────────────────

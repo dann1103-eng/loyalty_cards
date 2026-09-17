@@ -95,11 +95,16 @@ async function crearComercio(): Promise<string> {
   return data.id;
 }
 
-async function crearTarjeta(comercioId: string, puntos = 0): Promise<{ id: string; qrToken: string }> {
+// `apellido` null por default: es lo que tienen todos los clientes registrados antes de la 0036.
+async function crearTarjeta(
+  comercioId: string,
+  puntos = 0,
+  apellido: string | null = null,
+): Promise<{ id: string; qrToken: string }> {
   const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const { data: cliente, error: eC } = await supabase
     .from('clientes')
-    .insert({ nombre: 'Cliente Escáner', telefono: `+503${String(Date.now()).slice(-8)}${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}` })
+    .insert({ nombre: 'Cliente Escáner', apellido, telefono: `+503${String(Date.now()).slice(-8)}${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}` })
     .select('id')
     .single();
   if (eC) throw eC;
@@ -155,7 +160,23 @@ describe('buscarTarjetaPorToken', () => {
     expect(res).not.toBeNull();
     expect(res!.tarjetaId).toBe(id);
     expect(res!.puntosActuales).toBe(4);
+    // Cliente sin apellido (anterior a la 0036): el nombre solo, sin espacio colgando.
     expect(res!.nombreCliente).toBe('Cliente Escáner');
+  });
+
+  it('nombra al cliente con nombre y apellido', async () => {
+    // El cajero confirma a quién le acredita leyendo este nombre. Con el apellido (0036) distingue
+    // a dos "María" del mismo local.
+    const comercioId = await crearComercio();
+    const { qrToken } = await crearTarjeta(comercioId, 0, 'Rivera');
+
+    const res = await buscarTarjetaPorToken(supabase, comercioId, qrToken);
+
+    // MUTACIÓN (2026-09-17): sacar `apellido` del select de `buscarTarjetaPorToken` (dejándolo en
+    // `clientes(nombre, telefono)`) hace fallar esta prueba con
+    // "expected 'Cliente Escáner' to be 'Cliente Escáner Rivera'": la consulta no trae el apellido
+    // y `nombreCompleto` recibe undefined. El defecto vive en la CONSULTA, no en el formateador.
+    expect(res!.nombreCliente).toBe('Cliente Escáner Rivera');
   });
 
   it('devuelve null para el token de una tarjeta de OTRO comercio', async () => {

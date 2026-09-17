@@ -14,6 +14,10 @@ import { listarNiveles } from '../tarjetas/descuento';
 
 export interface FilaExportacion {
   nombre: string;
+  // Columna PROPIA (0036), no unida al nombre con `nombreCompleto`: el dueño que ordena o filtra la
+  // hoja por apellido necesita el dato solo. Cadena vacía en los clientes registrados antes del
+  // apellido, que lo tienen en null.
+  apellido: string;
   telefono: string;
   // A cuál de las tarjetas del comercio pertenece la fila. Sin esta columna, en un comercio con dos
   // programas activos la fila de alguien con 8 sellos y la de alguien con $8.00 se ven identicas.
@@ -59,11 +63,11 @@ export function escaparCelda(valor: string | number | null | undefined): string 
 }
 
 export function generarCsv(filas: FilaExportacion[]): string {
-  const encabezado = ['Nombre', 'Teléfono', 'Tarjeta', 'Saldo', 'Visitas', 'Cliente desde'];
+  const encabezado = ['Nombre', 'Apellido', 'Teléfono', 'Tarjeta', 'Saldo', 'Visitas', 'Cliente desde'];
   const lineas = [
     encabezado.map(escaparCelda).join(','),
     ...filas.map((f) =>
-      [f.nombre, f.telefono, f.tarjeta, f.saldo, f.visitas, f.alta].map(escaparCelda).join(','),
+      [f.nombre, f.apellido, f.telefono, f.tarjeta, f.saldo, f.visitas, f.alta].map(escaparCelda).join(','),
     ),
   ];
   // CRLF, no LF: es lo que dice RFC 4180 y lo que Excel en Windows espera.
@@ -84,7 +88,7 @@ export async function filasParaExportar(
   // los tres tipos cuyo estado es una fecha o un nivel, no un número.
   const { data: tarjetas, error } = await supabase
     .from('tarjetas')
-    .select(`${COLUMNAS_ESTADO}, created_at, cliente_id, programa_id, clientes(nombre, telefono)`)
+    .select(`${COLUMNAS_ESTADO}, created_at, cliente_id, programa_id, clientes(nombre, apellido, telefono)`)
     .eq('comercio_id', comercioId)
     .order('created_at');
 
@@ -131,6 +135,7 @@ export async function filasParaExportar(
       const programa = programaPorId.get(t.programa_id);
       return {
       nombre: t.clientes!.nombre,
+      apellido: t.clientes!.apellido ?? '',
       telefono: t.clientes!.telefono,
       tarjeta: programa?.nombre ?? '',
       saldo: describirFila(t, programa?.tipoTarjeta ?? 'puntos', programa?.selloMeta ?? null, niveles, hoyIso),

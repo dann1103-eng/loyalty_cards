@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { validarMotivo } from './motivo';
+import { nombreCompleto } from '../clientes/nombreCompleto';
 
 // Capa de datos del escáner del cajero (Fase 4). TODO scopeado por comercio_id (del gate de
 // sesión, nunca del cliente): un dueño no puede leer ni acreditar tarjetas de otro comercio
@@ -9,6 +10,8 @@ import { validarMotivo } from './motivo';
 export interface TarjetaEscaneada {
   tarjetaId: string;
   puntosActuales: number;
+  // Nombre y apellido (0036) ya unidos por `nombreCompleto`: es lo que el cajero lee para confirmar
+  // a quién le acredita. Un cliente anterior al apellido se ve con su nombre solo.
   nombreCliente: string;
   telefono: string | null;
 }
@@ -26,7 +29,7 @@ export async function buscarTarjetaPorToken(
 
   const { data, error } = await supabase
     .from('tarjetas')
-    .select('id, puntos_actuales, clientes(nombre, telefono)')
+    .select('id, puntos_actuales, clientes(nombre, apellido, telefono)')
     .eq('qr_token', token)
     .eq('comercio_id', comercioId)
     .maybeSingle();
@@ -41,7 +44,7 @@ export async function buscarTarjetaPorToken(
   return {
     tarjetaId: data.id,
     puntosActuales: data.puntos_actuales,
-    nombreCliente: data.clientes?.nombre ?? 'Cliente',
+    nombreCliente: data.clientes ? nombreCompleto(data.clientes.nombre, data.clientes.apellido) : 'Cliente',
     telefono: data.clientes?.telefono ?? null,
   };
 }

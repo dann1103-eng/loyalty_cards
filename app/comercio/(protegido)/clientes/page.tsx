@@ -7,6 +7,8 @@ import { describirFila, type NivelDeDescuento } from '@/lib/tarjetas/estadoTarje
 import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import { listarNiveles } from '@/lib/tarjetas/descuento';
 import { etiquetaAtajoEscaner } from '@/lib/tarjetas/etiquetaEscaner';
+import { nombreCompleto } from '@/lib/clientes/nombreCompleto';
+import { coincideBusqueda } from '@/lib/clientes/coincideBusqueda';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,7 +48,7 @@ export default async function PaginaClientes({
       // número. Ver lib/tarjetas/estadoTarjeta.ts.
       .from('tarjetas')
       .select(
-        'id, qr_token, puntos_actuales, vigencia_hasta, usado_en, acumulado_centavos, created_at, programa_id, clientes(nombre, telefono)',
+        'id, qr_token, puntos_actuales, vigencia_hasta, usado_en, acumulado_centavos, created_at, programa_id, clientes(nombre, apellido, telefono)',
       )
       .eq('comercio_id', comercioId)
       .order('created_at', { ascending: false }),
@@ -63,15 +65,17 @@ export default async function PaginaClientes({
   if (error) console.error('[comercio] falló la consulta de clientes:', error);
 
   // Filtro en servidor sobre el resultado (la lista del piloto es corta; paginar llegará después).
-  const filtradas = (tarjetas ?? []).filter((t) => {
-    if (!busqueda) return true;
-    const cliente = t.clientes;
-    const texto = `${cliente?.nombre ?? ''} ${cliente?.telefono ?? ''}`.toLowerCase();
-    return texto.includes(busqueda.toLowerCase());
-  });
+  // Por nombre, apellido o teléfono: la regla vive en lib/clientes/coincideBusqueda.ts, con pruebas.
+  const filtradas = (tarjetas ?? []).filter((t) => coincideBusqueda(t.clientes, busqueda));
 
+  // `nombreCliente` una sola vez por fila: lo usan el título, el alt del QR y el nombre del archivo
+  // descargado. null cuando el join a clientes vino vacío, y cada uso pone su propio respaldo.
   const conQr = await Promise.all(
-    filtradas.map(async (t) => ({ ...t, qrDataUrl: await qrDeTarjeta(t.qr_token) })),
+    filtradas.map(async (t) => ({
+      ...t,
+      nombreCliente: t.clientes ? nombreCompleto(t.clientes.nombre, t.clientes.apellido) : null,
+      qrDataUrl: await qrDeTarjeta(t.qr_token),
+    })),
   );
 
   const saldoTexto = (t: Parameters<typeof describirFila>[0] & { programa_id: string }) => {
@@ -130,7 +134,7 @@ export default async function PaginaClientes({
             name="q"
             type="search"
             defaultValue={busqueda}
-            placeholder="Nombre o teléfono…"
+            placeholder="Nombre, apellido o teléfono…"
           />
         </div>
       </form>
@@ -162,7 +166,7 @@ export default async function PaginaClientes({
                     <span className="icono">person</span>
                   </span>
                   <div>
-                    <div className="admin-fila-nombre">{t.clientes?.nombre ?? 'Cliente'}</div>
+                    <div className="admin-fila-nombre">{t.nombreCliente ?? 'Cliente'}</div>
                     <div className="admin-fila-slug dato-mono">{t.clientes?.telefono}</div>
                   </div>
                 </div>
@@ -176,7 +180,7 @@ export default async function PaginaClientes({
               <div style={{ paddingTop: 16, textAlign: 'center' }}>
                 <div className="qr-tile" style={{ maxWidth: 200, margin: '0 auto' }}>
                   {/* eslint-disable-next-line @next/next/no-img-element -- data URL del servidor */}
-                  <img src={t.qrDataUrl} alt={`QR de la tarjeta de ${t.clientes?.nombre ?? 'cliente'}`} />
+                  <img src={t.qrDataUrl} alt={`QR de la tarjeta de ${t.nombreCliente ?? 'cliente'}`} />
                 </div>
                 <p className="qr-codigo">{t.qr_token}</p>
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 10, flexWrap: 'wrap' }}>
@@ -195,7 +199,7 @@ export default async function PaginaClientes({
                   <a
                     className="btn-borde"
                     href={t.qrDataUrl}
-                    download={`qr-${(t.clientes?.nombre ?? 'cliente').toLowerCase().replace(/\s+/g, '-')}.png`}
+                    download={`qr-${(t.nombreCliente ?? 'cliente').toLowerCase().replace(/\s+/g, '-')}.png`}
                   >
                     <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">download</span>
                     Descargar

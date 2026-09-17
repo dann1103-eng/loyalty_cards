@@ -14,6 +14,7 @@ import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import { listarNiveles } from '@/lib/tarjetas/descuento';
 import { etiquetaAtajoEscaner } from '@/lib/tarjetas/etiquetaEscaner';
 import { ZONA_HORARIA_DEFAULT } from '@/lib/comercio/zonasHorarias';
+import { nombreCompleto } from '@/lib/clientes/nombreCompleto';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,7 +60,7 @@ export default async function PaginaFichaCliente({
     .from('tarjetas')
     // Las tres columnas de estado van SIEMPRE: sin ellas esta ficha decía "0 puntos" en cupón,
     // membresía y descuento. Ver lib/tarjetas/estadoTarjeta.ts.
-    .select('id, puntos_actuales, vigencia_hasta, usado_en, acumulado_centavos, qr_token, clientes(nombre, telefono)')
+    .select('id, puntos_actuales, vigencia_hasta, usado_en, acumulado_centavos, qr_token, clientes(nombre, apellido, telefono)')
     .eq('id', tarjetaId)
     .eq('comercio_id', comercioId)
     .maybeSingle();
@@ -112,7 +113,9 @@ export default async function PaginaFichaCliente({
   return (
     <main className="admin-main" style={{ maxWidth: 720 }}>
       <div className="admin-encabezado reveal d1">
-        <h1 className="title" style={{ margin: 0 }}>{tarjeta.clientes?.nombre ?? 'Cliente'}</h1>
+        <h1 className="title" style={{ margin: 0 }}>
+          {tarjeta.clientes ? nombreCompleto(tarjeta.clientes.nombre, tarjeta.clientes.apellido) : 'Cliente'}
+        </h1>
         <Link className="admin-fila-slug" href="/comercio/clientes">← Volver</Link>
       </div>
 

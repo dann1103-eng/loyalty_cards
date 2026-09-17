@@ -6,6 +6,7 @@ import { listarProgramas } from '@/lib/comercio/programas';
 import { describirFila } from '@/lib/tarjetas/estadoTarjeta';
 import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import { listarNiveles } from '@/lib/tarjetas/descuento';
+import { nombreCompleto } from '@/lib/clientes/nombreCompleto';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +43,7 @@ export default async function PaginaClientesComercio({
     supabase
       .from('tarjetas')
       .select(
-        'id, qr_token, puntos_actuales, vigencia_hasta, usado_en, acumulado_centavos, created_at, programa_id, clientes(nombre, telefono)',
+        'id, qr_token, puntos_actuales, vigencia_hasta, usado_en, acumulado_centavos, created_at, programa_id, clientes(nombre, apellido, telefono)',
       )
       .eq('comercio_id', id)
       .order('created_at', { ascending: false }),
@@ -64,6 +65,8 @@ export default async function PaginaClientesComercio({
   const conQr = await Promise.all(
     (tarjetas ?? []).map(async (t) => ({
       ...t,
+      // Nombre y apellido (0036), el mismo que ve el dueño en su lista. null si el join vino vacío.
+      nombreCliente: t.clientes ? nombreCompleto(t.clientes.nombre, t.clientes.apellido) : null,
       qrDataUrl: await QRCode.toDataURL(t.qr_token, {
         width: 320,
         margin: 1,
@@ -107,7 +110,7 @@ export default async function PaginaClientesComercio({
                     <span className="icono">person</span>
                   </span>
                   <div>
-                    <div className="admin-fila-nombre">{t.clientes?.nombre ?? 'Cliente'}</div>
+                    <div className="admin-fila-nombre">{t.nombreCliente ?? 'Cliente'}</div>
                     <div className="admin-fila-slug dato-mono">{t.clientes?.telefono}</div>
                   </div>
                 </div>
@@ -121,7 +124,7 @@ export default async function PaginaClientesComercio({
               <div style={{ paddingTop: 16, textAlign: 'center' }}>
                 <div className="qr-tile" style={{ maxWidth: 200, margin: '0 auto' }}>
                   {/* eslint-disable-next-line @next/next/no-img-element -- data URL del servidor */}
-                  <img src={t.qrDataUrl} alt={`QR de la tarjeta de ${t.clientes?.nombre ?? 'cliente'}`} />
+                  <img src={t.qrDataUrl} alt={`QR de la tarjeta de ${t.nombreCliente ?? 'cliente'}`} />
                 </div>
                 <p className="qr-codigo">{t.qr_token}</p>
               </div>
