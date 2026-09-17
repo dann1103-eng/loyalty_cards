@@ -90,7 +90,7 @@ Las marcadas (U) las tomó el usuario; el resto se presentó y se aprobó.
 | Cupón sin vencimiento | CUPÓN · Disponible | ″ |
 | Cupón usado (con o sin fecha: USADO GANA, como en `describirSaldo`) | CUPÓN · Usado | ″ |
 | Gift card, cashback | SALDO · $50.00 | ″ |
-| Puntos | PUNTOS · 1250 (número, con separador del teléfono) | ″ |
+| Puntos | PUNTOS · 1250 (en Apple con el separador del teléfono; en Google sin separador) | ″ |
 | Prepago | VISITAS · 4 (número) | ″ |
 | Sellos con meta | SELLOS · 7 de 10 | ″ (con grilla, nada) |
 | Sellos sin meta | SELLOS · 7 (número) | ″ |
@@ -143,7 +143,8 @@ Entradas: las de hoy menos `hayGrilla`, más `franja: Franja`, `nombreCliente: s
 `apellidoCliente: string | null`, todas OBLIGATORIAS (un consumidor nuevo tiene que decidir cada
 una). Nombre y apellido se recortan; vacío vale null; apellido sin nombre no produce titular. Las
 réplicas chicas del registro y del admin pasan `null` en los dos: solo muestran `estado`.
-`CampoFrente` conserva `numero` (Apple `numberStyle`).
+`CampoFrente` conserva `numero` (Apple `numberStyle` y el `balance.int` de `loyaltyPoints` en Google,
+que sale de `listado`).
 
 `primario`, `secundario` y `encabezado` **desaparecen**: dejarlos convive con la trampa de que un
 consumidor siga leyendo el lugar viejo. El compilador marca a cada uno.
@@ -193,8 +194,10 @@ previa.
 - `heroImage` cuando la franja es `'grilla'` **o `'propia'`** (decisión 8), con la URL versionada.
   **Con franja propia, la versión NO incluye puntos ni meta**: la imagen son los bytes de la franja
   y no cambia al operar, y con los puntos en el hash Google volvería a bajar hasta 2 MB en cada
-  compra de una gift card. `versionHero` recibe `puntos: 0, selloMeta: null` en ese caso (una
-  prueba lo fija).
+  compra de una gift card. La versión la calcula UN ayudante compartido,
+  `versionHeroTarjeta(marca, puntos, selloMeta)` en `heroUrl.ts` (con `stripUrl` ignora puntos y
+  meta), que usan `syncObjeto` y `linkGuardar`: si los dos caminos armaran distinto el `?v=`, Google
+  volvería a bajar la imagen en cada JWT. Una prueba lo fija.
 - `loyaltyPoints` desde `listado` y `validTimeInterval`, sin cambios.
 
 **Clase** (`construirClase`, compartida por `syncClaseComercio`, `syncClasePrograma` y
@@ -215,9 +218,12 @@ cada guardado de marca (decisión 9):
 
 1. **Deploy A**: todo menos la plantilla. Los objetos que se toquen desde ahí salen con los módulos
    nuevos; con la plantilla por defecto, esos módulos aparecen abajo en los detalles (inocuo).
-2. **Script, fase objetos** (ver abajo).
-3. **Deploy B**: solo la plantilla en `construirClase`.
-4. **Script, fase clases.**
+2. **Script, fase objetos** (ver abajo), repetida hasta terminar con **0 fallos**.
+3. **Deploy B**: solo la plantilla en `construirClase`. **No se hace mientras la fase objetos tenga
+   fallos**: apenas sale, cada registro, guardado de marca y "Agregar a Google Wallet" le pone la
+   plantilla a la clase, corra o no el script, así que el control tiene que estar ANTES del deploy.
+4. **Script, fase clases**, corrida desde el commit del deploy B (el script usa el `construirClase`
+   de la copia local, no el desplegado).
 
 ### Script `scripts/actualizar-frente-google.ts`
 
@@ -229,11 +235,11 @@ Ejecución: `npx tsx --conditions=react-server scripts/actualizar-frente-google.
 - **Fase `objetos`**: solo tarjetas con `google_object_id is not null` (la consulta de
   `scripts/resincronizar-objetos-google.ts`). Nunca `syncObjetosComercio`, que no filtra y
   CREARÍA objetos. En secuencia, con `syncObjetoTarjeta`. Resume éxitos y fallos por comercio.
-- **Fase `clases`**: `syncClaseComercio` solo para comercios con `google_class_id`, y
-  `syncClasesDeProgramasConClase` para las de programa (solo programas que YA tienen clase: llamar a
-  `syncClasePrograma` sobre todos crearía clases permanentes). Como el script no guarda estado entre
-  fases, la fase `clases` **re-sincroniza primero los objetos de cada comercio** (mismo filtro) y
-  solo aplica sus clases si todos salieron bien; si alguno falla, saltea ese comercio y lo lista.
+- **Fase `clases`**: `syncClaseComercio` solo para comercios con `google_class_id`, y para las de
+  programa, `syncClasePrograma` SOLO sobre programas con `google_class_id` (sobre todos crearía
+  clases permanentes), leyendo su resultado para contar éxitos y fallos.
+  `syncClasesDeProgramasConClase` no sirve acá: devuelve `void` y solo loguea. La protección de las
+  tarjetas no está en esta fase sino en la condición del deploy B.
 - Lo corre el usuario (o el asistente con su autorización explícita en el chat): toca los pases
   reales de todos los clientes.
 
@@ -305,7 +311,8 @@ una prueba fija que un apellido en blanco llega como null.
   `message`; la franja `'banda'` cuando la franja propia no bajó. **Mutación**: `'propia'` solo por
   `stripUrl`.
 - Google: módulos por caso, `alternateText`, hero con franja propia en un tipo que no es sellos, y su
-  versión sin puntos; plantilla de dos filas en la clase (deploy B). **Mutación**: invertir filas.
+  versión sin puntos (`versionHeroTarjeta`); plantilla de dos filas en la clase (deploy B).
+  **Mutación**: invertir filas.
 - Script: el guardián de `NEXT_PUBLIC_BASE_URL` en una función pura probada.
 - Registro: apellido guardado al crear; NO se escribe sobre un cliente existente (**mutación**:
   completarlo si está vacío); `'Faltan datos'` y `'Apellido inválido'` en la ruta; alta por teléfono
@@ -322,7 +329,13 @@ una prueba fija que un apellido en blanco llega como null.
 - **Los módulos referenciados en filas pueden repetirse en los detalles** de Google. Aceptable; si
   molesta, se agrega un `detailsTemplateOverride` en otra entrega.
 - **`hero.png` sirve los bytes crudos de la franja propia con `Content-Type: image/png`** aunque el
-  archivo sea JPG o WebP. En sellos ya pasaba; en los demás tipos es nuevo. Se verifica en Android.
+  archivo sea JPG o WebP. En sellos ya pasaba; en los demás tipos es nuevo. Y Google rechaza el
+  patch ENTERO si no puede cargar la imagen: una franja que no acepte no deja "sin franja", deja el
+  objeto sin crear o sin actualizar el saldo. La fase `objetos` del script lo delata (fallos por
+  comercio) antes del deploy B; además se verifica en Android con un tipo que no sea sellos.
+- **Objeto creado solo por el JWT** (cuando `syncObjetoTarjeta` falló en `linkGuardar`): existe en
+  Google con `google_object_id` null en la base, el script no lo ve y queda con filas vacías tras el
+  deploy B hasta su próxima operación. Hueco conocido, fuera de esta entrega.
 - **Esquina del logo en Apple**: un logo muy ancho recorta el estado. La fecha corta existe para eso.
 
 ## Fuera de alcance
