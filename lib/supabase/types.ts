@@ -21,6 +21,7 @@
 //   - supabase/migrations/0033_operaciones_y_nombre_pase.sql (nombre_pase en programas_tarjeta; las funciones de reporte renombran acreditaciones -> operaciones y cuentan tambien uso y renovacion)
 //   - supabase/migrations/0034_aviso_vencimiento.sql (aviso_vencimiento_activo/dias/mensaje en programas_tarjeta; tarjetas.aviso_vencimiento_para; notificaciones_enviadas.origen admite 'vencimiento')
 //   - supabase/migrations/0035_sin_saldo_circulante.sql (reporte_fm_comercios() deja de devolver saldo_circulante)
+//   - supabase/migrations/0036_apellido_cliente.sql (clientes.apellido, nullable)
 //   - supabase/migrations/0029_reverso_por_programa.sql (reverso por programa en programas_tarjeta)
 //   - supabase/migrations/0027_branding_por_programa.sql (branding por programa en programas_tarjeta)
 //   - supabase/migrations/0026_notificaciones_push.sql (tablas difusiones y notificaciones_enviadas; tarjetas.aviso_texto/aviso_hasta/aviso_inactividad_enviado_en; comercios.aviso_inactividad_activo/dias/mensaje)
@@ -259,18 +260,23 @@ export type Database = {
         Row: {
           id: string;
           nombre: string;
+          // 0036. null en los clientes anteriores al registro con apellido: esos pases
+          // muestran solo NOMBRE.
+          apellido: string | null;
           telefono: string;
           created_at: string;
         };
         Insert: {
           id?: string;
           nombre: string;
+          apellido?: string | null;
           telefono: string;
           created_at?: string;
         };
         Update: {
           id?: string;
           nombre?: string;
+          apellido?: string | null;
           telefono?: string;
           created_at?: string;
         };
