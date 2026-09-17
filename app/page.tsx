@@ -25,7 +25,7 @@ import {
 } from './_inicio/iconos';
 import { MARCA } from '@/lib/marca';
 import { openGraphDe, twitterDe } from '@/lib/metadatosOg';
-import { TIPOS } from '@/lib/tarjetas/tipos';
+import { TIPOS, buscarTipo } from '@/lib/tarjetas/tipos';
 
 // Página de entrada de cardly-sv.site. Le habla a DUEÑOS DE COMERCIO que todavía no son clientes:
 // el cliente final nunca llega acá, llega por el código de su propio comercio.
@@ -132,30 +132,57 @@ const PASOS = [
   },
 ];
 
-// Los modelos REALES del kit que se muestran. Eran tres: se retiró la de "Puntos" (la violeta con
-// el QR gigante y el logo de Cardly) por pedido del dueño — es la tarjeta de MUESTRA de Cardly, no
-// la de un comercio, así que en una sección que promete "la marca de cada negocio" contaba la
-// historia equivocada. Quedan las dos que sí son de un comercio.
+// Los modelos REALES que se muestran, uno por tipo de tarjeta. Del kit original quedan dos (sellos
+// y puntos): se retiró la de "Puntos" violeta con el QR gigante y el logo de Cardly por pedido del
+// dueño — es la tarjeta de MUESTRA de Cardly, no la de un comercio, así que en una sección que
+// promete "la marca de cada negocio" contaba la historia equivocada. El 2026-09-17 se sumaron
+// membresía, gift card y descuento, que ya traen el frente nuevo del pase (nombre y apellido,
+// "Powered by Cardly" bajo el QR).
 //
-// El catálogo tiene ocho tipos y el kit trae estos dos modelos, así que la tira cierra con un
-// cartel (no una maqueta) que nombra los que faltan. Ver MAS_TIPOS abajo.
-const MODELOS_REALES = [
+// Cada modelo declara su `tipo` y de ahí sale lo demás: el rótulo es la `etiqueta` del catálogo
+// (así "Gift card" se escribe igual en la tira, en los chips del cartel y en el panel del dueño), y
+// el cartel del final nombra los tipos que NO están en esta lista. Ver TIPOS_SIN_MODELO abajo.
+const MODELOS = [
   {
+    tipo: 'sellos',
     imagen: '/_inicio/tarjeta-sellos.webp',
-    nombre: 'Sellos',
     alt: 'Tarjeta de sellos de un gimnasio: fondo negro, promoción de temporada y dos de ocho sellos.',
   },
   {
+    tipo: 'puntos',
     imagen: '/_inicio/tarjeta-puntos-bu.webp',
-    nombre: 'Puntos',
     alt: 'Tarjeta de puntos azul marino con una franja celeste que muestra 50 puntos.',
   },
-];
+  {
+    tipo: 'membresia',
+    imagen: '/_inicio/tarjeta-membresia.webp',
+    alt: 'Pase de membresía de un gimnasio: fondo negro, franja de la mensualidad VIP, válido hasta el 16 de octubre de 2026, con el nombre y el apellido del socio.',
+  },
+  {
+    tipo: 'gift_card',
+    imagen: '/_inicio/tarjeta-gift-card.webp',
+    alt: 'Gift card de un estudio de arte: fondo oscuro, franja con un moño plateado y un saldo de $50.',
+  },
+  {
+    tipo: 'descuento',
+    imagen: '/_inicio/tarjeta-descuento.webp',
+    alt: 'Tarjeta de descuento de una joyería: fondo café, franja con unos aretes dorados y 40% de descuento.',
+  },
+].map((modelo) => {
+  // Un `tipo` mal escrito REVIENTA al armar la página (se prerenderiza en el build) en vez de
+  // publicar una tarjeta sin rótulo — que además seguiría apareciendo en el cartel de los que
+  // faltan, porque TIPOS_SIN_MODELO no la reconocería como suya.
+  const tipo = buscarTipo(modelo.tipo);
+  if (!tipo) throw new Error(`La portada muestra un modelo de un tipo que no existe: ${modelo.tipo}`);
+  return { ...modelo, nombre: tipo.etiqueta };
+});
 
 // Los tipos que no tienen modelo todavía, para el cartel del final de la tira. Se derivan del
-// catálogo real en vez de escribirse a mano: si mañana se agrega un tipo a lib/tarjetas/tipos.ts,
-// aparece acá solo. `sellos` y `puntos` se excluyen porque ya se muestran con su modelo.
-const TIPOS_SIN_MODELO = TIPOS.filter((t) => t.valor !== 'sellos' && t.valor !== 'puntos');
+// catálogo y de MODELOS en vez de escribirse a mano: un tipo nuevo en lib/tarjetas/tipos.ts
+// aparece acá solo, y un modelo nuevo arriba sale de acá solo. Antes esto excluía `sellos` y
+// `puntos` a mano, así que sumar un modelo obligaba a acordarse de tocar también esta línea — y
+// si no, ese tipo salía dos veces: con su tarjeta y en el cartel.
+const TIPOS_SIN_MODELO = TIPOS.filter((t) => !MODELOS.some((m) => m.tipo === t.valor));
 
 const DOLORES = [
   {
@@ -458,8 +485,8 @@ export default function Inicio() {
               aria-label="Modelos de tarjeta"
             >
               <div className={estilos.modelosFila}>
-                {MODELOS_REALES.map((modelo) => (
-                  <div key={modelo.nombre} className={estilos.modelo}>
+                {MODELOS.map((modelo) => (
+                  <div key={modelo.tipo} className={estilos.modelo}>
                     <Image
                       className={estilos.modeloImagen}
                       src={modelo.imagen}

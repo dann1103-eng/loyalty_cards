@@ -803,14 +803,15 @@
 }
 
 /* ---------- tarjetas para cada negocio ----------
-   Los TRES modelos reales de tarjeta del kit (CARDLY-Imagen1/2/3), no ocho mini-tarjetas dibujadas
-   en CSS. Antes acá había una grilla 4×2 con una ficha inventada por cada tipo del catálogo: un
-   rectángulo de color con el valor de ejemplo y un QR de patrón falso. Se retira por dos razones:
-   los modelos reales se ven muchísimo mejor, y una ficha dibujada por nosotros para "Cupón" o
-   "Membresía" es una promesa visual de un diseño que todavía no existe.
-   ══ HUECO CONOCIDO ══ El kit trae 3 modelos y el catálogo tiene 8 tipos. Se muestran los 3 reales
-   y los 8 tipos se nombran abajo en texto, sin maqueta. Cuando existan los otros 5 modelos, entran
-   en este mismo grid sin tocar el CSS. */
+   Los modelos REALES de tarjeta, no ocho mini-tarjetas dibujadas en CSS. Antes acá había una
+   grilla 4×2 con una ficha inventada por cada tipo del catálogo: un rectángulo de color con el
+   valor de ejemplo y un QR de patrón falso. Se retiró por dos razones: los modelos reales se ven
+   muchísimo mejor, y una ficha dibujada por nosotros para "Cupón" o "Prepago" es una promesa
+   visual de un diseño que todavía no existe.
+   ══ HUECO CONOCIDO ══ No todos los tipos del catálogo tienen modelo. Los que tienen se muestran
+   con su tarjeta y los demás se nombran en el cartel del final, sin maqueta (la lista se deriva en
+   app/page.tsx, TIPOS_SIN_MODELO). Cuando llegue otro modelo, entra en esta misma tira sin tocar
+   el CSS. */
 /* Tira horizontal deslizable, no una grilla: es lo que hace que "hay más tipos" se ENTIENDA sin
    escribirlo. Los modelos reales van primero y al final va una tarjeta-cartel con los tipos que
    faltan, así el gesto de deslizar descubre que la lista sigue.
@@ -887,7 +888,7 @@
 
 /* La última pieza de la tira: NO es una tarjeta de mentira, es un cartel con la misma silueta que
    las tarjetas reales que dice cuántos tipos más hay y los nombra. Así el que desliza hasta el
-   final entiende que la lista sigue, sin que nosotros maquetemos seis diseños que no existen. */
+   final entiende que la lista sigue, sin que nosotros maquetemos diseños que no existen. */
 .modeloMas {
   display: flex;
   flex-direction: column;
