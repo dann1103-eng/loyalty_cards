@@ -41,7 +41,7 @@ export interface DatosBrandingPrograma {
   // interruptor. Y su `null` es un VALOR legítimo (un cupón no tiene meta), no una ausencia: nunca
   // se resuelve con `??` contra el comercio. Ese `??` fue un bug real el 2026-07-30.
   selloMeta: number | null;
-  // El nombre que el cliente ve arriba en su tarjeta (0033). MISMO estatuto que selloMeta: no es
+  // El nombre que el cliente ve sobre la franja de su tarjeta (0033). MISMO estatuto que selloMeta: no es
   // branding, es identidad del programa, y por eso NO se rige por `brandingPropio` ni entra en
   // hayMarcaPropia — ponerle nombre a una tarjeta no puede sacarla del diseño del negocio. Acá
   // `null` no significa "heredá" (el nombre no se hereda de nadie): significa "sin nombre".
@@ -127,7 +127,7 @@ export async function guardarBrandingPrograma(
       foco_franja_y: datos.encuadreFranja?.focoY ?? null,
       zoom_franja: datos.encuadreFranja?.zoom ?? null,
       sello_meta: datos.selloMeta,
-      // Recortado: es el texto que va al headerField de Apple y al textModulesData de Google.
+      // Recortado: es el texto que va al primaryField de Apple y al textModulesData de Google.
       nombre_pase: datos.nombrePase?.trim() ?? null,
     })
     .eq('id', programaId)

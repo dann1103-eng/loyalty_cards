@@ -15,7 +15,7 @@ export interface DatosBranding {
   // NIVELES_DIFUMINADO (migración 0007) — misma constante que valida el pass real, así el
   // <select> del formulario y este check nunca pueden divergir.
   difuminado_franja: string;
-  // El nombre que el cliente ve arriba en su tarjeta (0033). null = sin nombre, que es como nace
+  // El nombre que el cliente ve sobre la franja de su tarjeta (0033). null = sin nombre, que es como nace
   // todo programa: el pase sale como hasta ahora. NO es branding heredable — es identidad del
   // PROGRAMA, igual que sello_meta, y por eso se escribe en programas_tarjeta y no en comercios
   // (que ni siquiera tiene la columna).
@@ -110,7 +110,7 @@ export async function guardarBranding(
   // `nombre_pase` (0033) viaja en la MISMA sentencia y por el mismo motivo, con una diferencia que
   // lo hace todavía más claro: `comercios` no tiene columna equivalente, así que este UPDATE es el
   // ÚNICO lugar donde el nombre se escribe desde el modo negocio. Se guarda RECORTADO — es el texto
-  // que va al headerField de Apple y al textModulesData de Google.
+  // que va al primaryField de Apple y al textModulesData de Google (ver frentePase).
   const { error: errorPrograma } = await supabase
     .from('programas_tarjeta')
     .update({ sello_meta: datos.sello_meta, nombre_pase: datos.nombre_pase?.trim() ?? null })

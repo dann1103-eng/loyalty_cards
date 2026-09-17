@@ -1,5 +1,6 @@
-// El NOMBRE DEL PASE (`programas_tarjeta.nombre_pase`, migración 0033): lo que el cliente lee arriba
-// en su tarjeta para saber cuál de todas es. Opcional — vacío = el pase sale como hasta ahora.
+// El NOMBRE DEL PASE (`programas_tarjeta.nombre_pase`, migración 0033): lo que el cliente lee sobre
+// la franja de su tarjeta para saber cuál de todas es — solo cuando la franja es la banda de marca
+// (con franja propia o grilla de sellos no se escribe; ver frentePase). Opcional: vacío = sin nombre.
 //
 // NO se reusa `programas_tarjeta.nombre`: el programa principal nace llamándose como el comercio
 // (0024, `c.nombre`), así que mostrarlo sería repetir el nombre del negocio que ya está en el logo.
