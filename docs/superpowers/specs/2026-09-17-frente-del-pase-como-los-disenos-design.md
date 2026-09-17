@@ -66,10 +66,14 @@ Las marcadas (U) las tomó el usuario; el resto se presentó y se aprobó.
    `/api/tarjetas/<id>/hero.png` ya devuelve los bytes de la franja propia para cualquier tipo, y
    `versionHero` ya incluye `stripUrl`.
 
-9. **Orden de entrega (aprobado):** migración 0036 → registro → `frentePase` → Apple → Google (objetos
-   antes que plantilla) → vista previa → escáner/Clientes/CSV → portada → suite, navegador, deploy, y
-   por último la actualización de Google para todos los comercios con un script que primero muestra
-   cuántos toca.
+9. **Orden de entrega (aprobado), con Google partido en DOS deploys:** migración 0036 → registro →
+   `frentePase` → Apple → objetos de Google → vista previa → escáner/Clientes/CSV → portada → suite,
+   navegador, **deploy A** → script de OBJETOS → **deploy B** (la plantilla de filas en
+   `construirClase`) → script de CLASES. La plantilla no puede salir en el deploy A: la clase se
+   actualiza sola en cada registro (`app/api/registro/route.ts`, `syncClaseComercio`), en cada
+   "Agregar a Google Wallet" (`linkGuardar`) y en cada guardado de marca, mientras que un objeto solo
+   cambia cuando se opera su tarjeta. Con la plantilla ya puesta y objetos viejos, esas tarjetas se
+   verían con filas vacías y sin contador. (Ver "Orden de despliegue" en la sección de Google.)
 
 10. **Los pases de Apple ya instalados se actualizan solos en la próxima operación de cada cliente.**
     Sin push masivo: avisarle a todos los iPhone para cambiar un diseño es desproporcionado.
@@ -84,7 +88,7 @@ Las marcadas (U) las tomó el usuario; el resto se presentó y se aprobó.
 | Cupón con fecha, vigente | VÁLIDO HASTA · fecha | ″ |
 | Cupón con fecha, vencido | VENCIÓ EL · fecha | ″ |
 | Cupón sin vencimiento | CUPÓN · Disponible | ″ |
-| Cupón usado | CUPÓN · Usado | ″ |
+| Cupón usado (con o sin fecha: USADO GANA, como en `describirSaldo`) | CUPÓN · Usado | ″ |
 | Gift card, cashback | SALDO · $50.00 | ″ |
 | Puntos | PUNTOS · 1250 (número, con separador del teléfono) | ″ |
 | Prepago | VISITAS · 4 (número) | ″ |
@@ -101,15 +105,26 @@ Las marcadas (U) las tomó el usuario; el resto se presentó y se aprobó.
 
 ### La franja, en tres estados
 
-`frentePase` recibe **qué hay en la franja** en vez de `hayGrilla`:
+`frentePase` recibe **qué hay DE VERDAD en la franja** en vez de `hayGrilla`:
 
-- `'propia'`: el comercio subió una imagen de franja (`stripUrl`).
-- `'grilla'`: sellos con meta y la grilla compuesta existe, sin franja propia.
-- `'banda'`: cualquier otro caso (la banda de marca, con o sin foto; o la composición falló).
+- `'propia'`: la imagen de franja del comercio **llegó al pase**.
+- `'grilla'`: sellos con meta, sin franja propia, y la grilla compuesta existe.
+- `'banda'`: cualquier otro caso — la banda de marca (con o sin foto), o no hay franja porque la
+  composición o la descarga fallaron.
 
-Cada consumidor lo calcula de SUS datos: Apple de `stripUrl` y de que `componerStrips` haya devuelto
-algo; Google de `stripUrl` y de que el objeto lleve hero; la vista previa de `urls.strip` y la meta.
-Esto corrige de paso una asimetría: hoy Google calcula `hayGrilla` sin mirar la franja propia.
+"Llegó al pase" y no "el comercio subió una": si la descarga de la franja propia falla,
+`componerStrips` devuelve null y el pase sale SIN franja. Tratarlo como `'propia'` dejaría una
+tarjeta sin franja y sin nombre del pase hasta la próxima operación del cliente.
+
+| Consumidor | `'propia'` | `'grilla'` | `'banda'` |
+|---|---|---|---|
+| Apple | `stripUrl && strips !== null` | sellos con meta `&& !stripUrl && strips !== null` | el resto |
+| Google | `stripUrl && heroImageUrl` | sellos con meta `&& !stripUrl && heroImageUrl` | el resto |
+| Vista previa del editor | `urls.strip` | sellos con meta configurada `&& !urls.strip` | el resto |
+| Réplica del registro (`RegistroCliente`) | — | — | siempre `'banda'` (hoy `hayGrilla: false`) |
+| Réplica del admin (`FormularioComercio`) | — | sellos con meta de demo (hoy `hayGrilla: true`) | el resto |
+
+La fila de Google corrige de paso una asimetría: hoy calcula `hayGrilla` sin mirar la franja propia.
 
 ## El contrato de `frentePase`
 
@@ -125,72 +140,109 @@ export interface FrentePase {
 ```
 
 Entradas: las de hoy menos `hayGrilla`, más `franja: Franja`, `nombreCliente: string | null` y
-`apellidoCliente: string | null`. Nombre y apellido se recortan; vacío vale null. `CampoFrente`
-conserva `numero` (Apple `numberStyle`, Google `balance.int`).
+`apellidoCliente: string | null`, todas OBLIGATORIAS (un consumidor nuevo tiene que decidir cada
+una). Nombre y apellido se recortan; vacío vale null; apellido sin nombre no produce titular. Las
+réplicas chicas del registro y del admin pasan `null` en los dos: solo muestran `estado`.
+`CampoFrente` conserva `numero` (Apple `numberStyle`).
 
 `primario`, `secundario` y `encabezado` **desaparecen**: dejarlos convive con la trampa de que un
 consumidor siga leyendo el lugar viejo. El compilador marca a cada uno.
 
+**La etiqueta del estado depende del tipo Y del estado**, así que hay una rama por estado de la
+fecha (vigente / vencida / sin fecha / usado) y dentro de cada rama la etiqueta sale de una tabla
+por tipo: `VÁLIDO HASTA` y `VENCIÓ EL` son comunes a membresía y cupón; sin fecha y usado usan el
+nombre del tipo (`MEMBRESÍA`, `CUPÓN`). Un tipo con vigencia nuevo tiene que agregarse a la tabla o
+no lleva estado — nunca hereda "MEMBRESÍA". Los tipos con contador siguen saliendo de `contadorPase`.
+
 La fecha corta sale de una función nueva `formatearFechaCorta('2026-10-16') → '16/10/2026'`, por
-recorte de texto (sin `Date`: no hay zona horaria que la corra un día). Las etiquetas del estado por
-tipo van en tabla, no en `if`.
+recorte de texto (sin `Date`: no hay zona horaria que la corra un día).
 
 "Powered by Cardly" es una constante exportada (`PIE_CODIGO`) que usan Apple, Google y la vista
 previa.
 
 ## Apple (`lib/apple/generatePass.ts`)
 
-- `estado` → `headerFields` (`key: 'estado'`), con `numberStyle` cuando `numero !== null`.
+- `estado` → `headerFields` (`key: 'estado'`), con `numberStyle: 'PKNumberStyleDecimal'` cuando
+  `numero !== null` (el esquema de passkit-generator lo admite en cualquier campo).
 - `sobreFranja` → `primaryFields` (`key: 'nombre_pase'`, sin rótulo).
 - `titular` → `secondaryFields`: `{ key: 'nombre', label: 'NOMBRE' }` y, si hay apellido,
   `{ key: 'apellido', label: 'APELLIDO', textAlignment: 'PKTextAlignmentRight' }`.
-- `setBarcodes` pasa de string a objeto: QR con `message`, `messageEncoding: 'iso-8859-1'` y
-  `altText: PIE_CODIGO`. Hoy el string genera cuatro formatos sin `altText`; Wallet usa el primero
-  que soporta (QR), así que quedarse solo con QR no cambia lo que escanea el cajero.
-- `DatosPass` suma `apellidoCliente`; `datosPassDeTarjeta` lee `clientes(nombre, apellido)`.
-- La franja: `'propia'` si hay `stripUrl`; `'grilla'` si es sellos con meta y `strips !== null`;
-  `'banda'` si no.
+- `setBarcodes` pasa de string a objeto, con TODOS los campos explícitos:
+  `{ format: 'PKBarcodeFormatQR', message: qrToken, messageEncoding: 'iso-8859-1', altText: PIE_CODIGO }`.
+  `format` y `message` son obligatorios en el esquema, y `filterValid` DESCARTA en silencio un
+  código mal formado: el pase saldría sin QR y sin error. La prueba afirma exactamente UN código.
+  Hoy el string genera cuatro formatos sin `altText`; Wallet usa el primero que soporta (QR), así que
+  quedarse solo con QR no cambia lo que escanea el cajero.
+- `DatosPass` suma `apellidoCliente: string | null`; `datosPassDeTarjeta` lee
+  `clientes(nombre, apellido)`. Las pruebas que arman `DatosPass` a mano (`generatePass.test.ts`,
+  `pesoPass.test.ts`) lo agregan.
 
 ## Google (`lib/google/**`)
 
 **Objeto** (`construirObjeto`, compartido por `syncObjetoTarjeta` y `generarLinkGuardar`):
 
-- `textModulesData` con ids fijos: `nombre_pase` (solo si `sobreFranja`), `estado` (header = rótulo,
-  body = valor), `nombre` (header "NOMBRE") y `apellido` (header "APELLIDO"), cada uno solo si existe.
+- `TarjetaParaObjeto` suma `nombreCliente`, `apellidoCliente` y `stripUrl: string | null` (el dato
+  crudo); la franja se resuelve ADENTRO de `construirObjeto` con la tabla de arriba. `syncObjeto` y
+  `linkGuardar` leen `clientes(nombre, apellido)` y ya tienen `marca.stripUrl`.
+- `textModulesData` con ids fijos, cada uno solo si su dato existe:
+  - `nombre_pase`: header `'Tarjeta'` (el de hoy), body = `sobreFranja`;
+  - `estado`: header = etiqueta, body = valor (texto; Google no le pone separador de miles a un
+    texto, así que 1250 puntos se leen "1250" en Android y con separador en iPhone — aceptado);
+  - `nombre`: header `'NOMBRE'`; `apellido`: header `'APELLIDO'`.
 - `barcode.alternateText = PIE_CODIGO`.
-- `heroImage` cuando hay grilla **o franja propia** (decisión 8), con la misma URL versionada de hoy.
-- `loyaltyPoints` desde `listado`, sin cambios. `validTimeInterval` sin cambios.
-- `TarjetaParaObjeto` suma `nombreCliente`, `apellidoCliente` y `stripUrl` (o la franja ya
-  resuelta); `syncObjeto` y `linkGuardar` los leen.
+- `heroImage` cuando la franja es `'grilla'` **o `'propia'`** (decisión 8), con la URL versionada.
+  **Con franja propia, la versión NO incluye puntos ni meta**: la imagen son los bytes de la franja
+  y no cambia al operar, y con los puntos en el hash Google volvería a bajar hasta 2 MB en cada
+  compra de una gift card. `versionHero` recibe `puntos: 0, selloMeta: null` en ese caso (una
+  prueba lo fija).
+- `loyaltyPoints` desde `listado` y `validTimeInterval`, sin cambios.
 
 **Clase** (`construirClase`, compartida por `syncClaseComercio`, `syncClasePrograma` y
 `generarLinkGuardar`): `classTemplateInfo.cardTemplateOverride.cardRowTemplateInfos` con DOS filas
-`twoItems`:
+`twoItems`, cada ítem con `firstValue.fields: [{ fieldPath }]`:
 
 1. `object.textModulesData['nombre_pase']` | `object.textModulesData['estado']`
 2. `object.textModulesData['nombre']` | `object.textModulesData['apellido']`
 
-Google dibuja el hero DESPUÉS de la primera fila cuando hay más de una, así que el orden queda
-estado → franja → nombres → QR, como en los diseños. La plantilla REEMPLAZA las filas por defecto
-(puntos, nombre de socio).
+Según la documentación de plantillas de tarjetas de lealtad de Google, el hero se dibuja después de
+la primera fila cuando hay más de una: el orden queda estado → franja → nombres → QR, como en los
+diseños. La plantilla REEMPLAZA las filas por defecto (puntos, nombre de socio).
 
-**Orden de despliegue, obligatorio:** primero se sincronizan los OBJETOS (con la plantilla por
-defecto, los módulos nuevos aparecen abajo en los detalles: inocuo), y recién después las CLASES.
-Al revés, entre los dos pasos cada tarjeta mostraría filas que apuntan a módulos que todavía no
-tiene.
+### Orden de despliegue (obligatorio)
 
-**Script** `scripts/actualizar-frente-google.ts`: recorre todos los comercios con clase; primero
-imprime cuántos comercios, clases de programa y objetos va a tocar y termina (modo ensayo); con
-`--aplicar` sincroniza objetos de todos y después clases de todos, en secuencia, y resume
-éxitos y fallos. Lo corre el usuario en SU terminal (usa credenciales de producción).
+Dos deploys, porque la clase se actualiza sola en cada registro, cada "Agregar a Google Wallet" y
+cada guardado de marca (decisión 9):
+
+1. **Deploy A**: todo menos la plantilla. Los objetos que se toquen desde ahí salen con los módulos
+   nuevos; con la plantilla por defecto, esos módulos aparecen abajo en los detalles (inocuo).
+2. **Script, fase objetos** (ver abajo).
+3. **Deploy B**: solo la plantilla en `construirClase`.
+4. **Script, fase clases.**
+
+### Script `scripts/actualizar-frente-google.ts`
+
+Ejecución: `npx tsx --conditions=react-server scripts/actualizar-frente-google.ts <objetos|clases> [--aplicar]`.
+
+- **Aborta** si `NEXT_PUBLIC_BASE_URL` no es `https://` o apunta a `localhost`: Google rechaza el
+  patch ENTERO con `400 Image cannot be loaded` si las URLs de imagen no son públicas.
+- Sin `--aplicar` es un **ensayo**: imprime cuántos comercios, clases y objetos tocaría, y termina.
+- **Fase `objetos`**: solo tarjetas con `google_object_id is not null` (la consulta de
+  `scripts/resincronizar-objetos-google.ts`). Nunca `syncObjetosComercio`, que no filtra y
+  CREARÍA objetos. En secuencia, con `syncObjetoTarjeta`. Resume éxitos y fallos por comercio.
+- **Fase `clases`**: `syncClaseComercio` solo para comercios con `google_class_id`, y
+  `syncClasesDeProgramasConClase` para las de programa (solo programas que YA tienen clase: llamar a
+  `syncClasePrograma` sobre todos crearía clases permanentes). Como el script no guarda estado entre
+  fases, la fase `clases` **re-sincroniza primero los objetos de cada comercio** (mismo filtro) y
+  solo aplica sus clases si todos salieron bien; si alguno falla, saltea ese comercio y lo lista.
+- Lo corre el usuario (o el asistente con su autorización explícita en el chat): toca los pases
+  reales de todos los clientes.
 
 ## Vista previa del editor de marca (`FormularioBranding.tsx`)
 
 Réplica del mismo orden: logo | estado arriba; franja con `sobreFranja` encima solo en `'banda'`;
 fila NOMBRE / APELLIDO con los rótulos y un ejemplo ("María" / "Rivera"); QR con "Powered by
-Cardly" debajo. Las otras dos réplicas chicas que usan `frentePase` —la del registro del cliente
-(`RegistroCliente.tsx`) y la del formulario de comercio del admin (`FormularioComercio.tsx`)—
-pasan a mostrar `estado`.
+Cardly" debajo. Las réplicas chicas del registro (`RegistroCliente.tsx`) y del admin
+(`FormularioComercio.tsx`) pasan a mostrar `estado` (ver la tabla de franjas para su `franja`).
 
 ## El apellido
 
@@ -202,44 +254,63 @@ alter table clientes
     check (apellido is null or (btrim(apellido) <> '' and char_length(apellido) <= 120));
 ```
 
-**Registro** (`/api/registro`, `RegistroCliente.tsx`, `registrarCliente`):
+**`registrarCliente(supabase, comercioId, programaId, nombre, apellido, telefono)`**: `apellido:
+string | null`, OBLIGATORIO en la firma y ya limpio (recortado, vacío → null); cada llamador (ruta,
+alta por teléfono, seed, pruebas) decide. Se inserta solo al CREAR el cliente (decisión 6). Un `''`
+que llegara igual rompería el alta entera con 23514, así que la limpieza vive en los llamadores y
+una prueba fija que un apellido en blanco llega como null.
 
-- Campo **Apellido** obligatorio, validado igual que el nombre (recortado, 1 a 120). Mensaje
-  "Apellido inválido".
-- Autocompletado `given-name` / `family-name` (hoy `name`, que mete el nombre completo en "Nombre").
-- `registrarCliente` recibe el apellido y lo inserta solo al CREAR el cliente (decisión 6).
+**Ruta `/api/registro`**, espejo exacto del nombre:
 
-**Alta por teléfono desde el panel** (`altaPorTelefono`, "Agregar cliente"): Apellido **opcional**.
-El dueño que carga a un cliente de delivery puede no saberlo; ahí vale más el cliente cargado que el
-campo completo.
+- `typeof apellido !== 'string'` o `!apellido` → 400 `'Faltan datos'` (como el nombre);
+- recortado vacío o más de 120 → 400 `'Apellido inválido'`.
 
-**Donde se muestra** (decisión 7): un ayudante `nombreCompleto(nombre, apellido)` para escáner,
-Clientes (lista, detalle, buscador — que pasa a buscar también por apellido), admin y CSV (columna
-"Apellido" después de "Nombre").
+**Formulario del registro** (`RegistroCliente.tsx`): campo "Apellido" obligatorio (`required`,
+`maxLength={120}`, placeholder "Tu apellido") debajo de "Nombre"; autocompletado `given-name` /
+`family-name` (hoy `name`, que mete el nombre completo en "Nombre"); el body del fetch suma
+`apellido`.
 
-## La portada (`app/page.tsx`)
+**Alta por teléfono desde el panel** (`lib/comercio/altaPorTelefono.ts`,
+`clientes/agregar/actions.ts`, `FormularioAgregarCliente.tsx`): Apellido **opcional**
+(`maxLength={120}`, sin `required`). `altaPorTelefono` lo recorta; vacío → null; más de 120 →
+`'El apellido puede tener hasta 120 caracteres.'` sin llamar a `registrarCliente`.
+
+**Donde se muestra** (decisión 7):
+
+- Ayudante puro `nombreCompleto(nombre, apellido)` (con apellido null devuelve el nombre) para el
+  escáner (`buscarTarjetaPorToken`), la lista y el detalle de Clientes, y la lista de clientes del
+  admin.
+- El buscador de Clientes sale de `clientes/page.tsx` a una función pura
+  `coincideBusqueda(cliente, q)` que mira nombre, apellido y teléfono, para poder probarla.
+- CSV: columna **"Apellido" aparte**, después de "Nombre" (NO pasa por `nombreCompleto`; vacía si
+  no hay).
+
+## La portada (`app/page.tsx`) — commit propio
 
 - Tres modelos nuevos en la tira "Tarjetas para cada negocio": `tarjeta-membresia.webp`,
   `tarjeta-gift-card.webp`, `tarjeta-descuento.webp` (ya convertidos al lienzo 695×1090 de los
   existentes, tarjeta a 661 px de ancho en la misma posición).
 - Cada modelo declara su `tipo`, y `TIPOS_SIN_MODELO` se deriva de esos tipos en vez de excluir
   `'sellos'` y `'puntos'` a mano. El cartel pasa a "+3" (cashback, prepago, cupón) solo.
-- La nota debajo de la tira se mantiene: con el pase nuevo, el logo, el estado, los nombres y el
-  código se ven como en las ilustraciones; el fondo sigue siendo un color sólido.
+- La nota debajo de la tira **no cambia de texto**.
 
 ## Pruebas
 
-- `frentePase`: la tabla completa de arriba, fila por fila (incluidos el último día y el día
-  siguiente); `sobreFranja` en los tres estados de franja; titular con y sin apellido, y con blancos.
-  **Mutaciones**: escribir el nombre del pase también en `'propia'`; usar la fecha larga; tomar
-  "VÁLIDO HASTA" con `>` en vez del `sigueVigente`.
-- `formatearFechaCorta`: formato y ausencia de corrimiento de día.
-- Apple: header/primary/secondary por caso, `altText`, un solo formato QR con el mismo `message`.
-- Google: módulos por caso, `alternateText`, hero con franja propia en un tipo que no es sellos,
-  plantilla de dos filas en la clase. **Mutación**: invertir filas.
+- `frentePase`: la tabla completa, fila por fila (incluidos el último día y el día siguiente, y el
+  cupón usado con fecha); `sobreFranja` en los tres estados de franja; titular con y sin apellido,
+  con blancos y con apellido sin nombre. **Mutaciones**: escribir el nombre del pase también en
+  `'propia'`; usar la fecha larga; poner la fecha antes que "usado" en el cupón.
+- `formatearFechaCorta`: formato, y sin corrimiento de día con `TZ` de América.
+- Apple: header/primary/secondary por caso, `altText`, exactamente un código QR con el mismo
+  `message`; la franja `'banda'` cuando la franja propia no bajó. **Mutación**: `'propia'` solo por
+  `stripUrl`.
+- Google: módulos por caso, `alternateText`, hero con franja propia en un tipo que no es sellos, y su
+  versión sin puntos; plantilla de dos filas en la clase (deploy B). **Mutación**: invertir filas.
+- Script: el guardián de `NEXT_PUBLIC_BASE_URL` en una función pura probada.
 - Registro: apellido guardado al crear; NO se escribe sobre un cliente existente (**mutación**:
-  completarlo si está vacío); rechazo de apellido vacío o de 121 caracteres en la ruta.
-- CSV: encabezado exacto con la columna nueva. Buscador de Clientes por apellido.
+  completarlo si está vacío); `'Faltan datos'` y `'Apellido inválido'` en la ruta; alta por teléfono
+  con apellido vacío (null) y con 121 caracteres.
+- `nombreCompleto`, `coincideBusqueda` (por apellido) y el encabezado exacto del CSV.
 - `e2e/registro.spec.ts` completa el apellido.
 - Portada y vistas previas: medición en el navegador (sin pruebas de componente en el repo).
 
@@ -250,6 +321,8 @@ Clientes (lista, detalle, buscador — que pasa a buscar también por apellido),
   Daniel en un Android — no se crean clases de QA contra el emisor real.
 - **Los módulos referenciados en filas pueden repetirse en los detalles** de Google. Aceptable; si
   molesta, se agrega un `detailsTemplateOverride` en otra entrega.
+- **`hero.png` sirve los bytes crudos de la franja propia con `Content-Type: image/png`** aunque el
+  archivo sea JPG o WebP. En sellos ya pasaba; en los demás tipos es nuevo. Se verifica en Android.
 - **Esquina del logo en Apple**: un logo muy ancho recorta el estado. La fecha corta existe para eso.
 
 ## Fuera de alcance
