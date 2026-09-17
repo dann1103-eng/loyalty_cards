@@ -81,31 +81,34 @@ export default function FormularioComercio({
   // dos réplicas (el editor de marca del dueño y la pantalla de registro del cliente). Antes acá
   // vivía un `esSellos ? '0 de 10' : '0'` propio, y por eso dar de alta una MEMBRESÍA —— o un cupón,
   // o un descuento —— dibujaba "0 Puntos": una unidad que esa tarjeta no tiene y un número que su
-  // pase nunca va a mostrar. Con esos tipos frentePase devuelve los dos campos en null y el bloque
-  // del contador no se dibuja, igual que en la billetera.
+  // pase nunca va a mostrar. En el descuento frentePase devuelve el estado en null y el bloque del
+  // contador no se dibuja, igual que en la billetera.
   const frente = frentePase({
     tipoTarjeta: valores.tipo_tarjeta,
     // Tarjeta recién emitida: el preview muestra lo que va a ver el primer cliente del comercio.
     puntos: 0,
     selloMeta: valores.tipo_tarjeta === 'sellos' ? META_SELLOS_DEMO : null,
-    // `hayGrilla` le pregunta a frentePase si la palabra "sellos" YA se ve en otra parte del frente
-    // (en el pase, la grilla de círculos de la franja). Acá se ve: esta tarjeta imprime la etiqueta
-    // en su propio renglón, el <span> de abajo. Con `false`, frentePase la metería ADEMÁS dentro del
-    // valor ("0 de 10 sellos") y quedaría repetida y, a los 2.2rem de mono de .cardface-points b,
-    // más ancha que la tarjeta —— que recorta con overflow:hidden.
-    hayGrilla: true,
+    // Tabla de franjas del spec 2026-09-17, fila de esta réplica: 'grilla' en sellos (la meta de
+    // demo siempre está), 'banda' en el resto. Solo decide `sobreFranja`, que esta tarjeta no dibuja
+    // (el alta no pregunta el nombre del pase), pero la entrada es obligatoria a propósito.
+    franja: valores.tipo_tarjeta === 'sellos' ? 'grilla' : 'banda',
     // Un comercio que se está dando de alta todavía no tiene ninguna tarjeta emitida: sin fecha de
-    // vigencia, describirSaldo dice "Sin activar" (membresía) o "Disponible" (cupón) —— el estado
-    // real del primer cliente. Y `nombrePase` no se pregunta en el alta: lo elige el dueño en Marca.
+    // vigencia, el estado dice "Sin activar" (membresía) o "Disponible" (cupón) —— el estado real
+    // del primer cliente. Y `nombrePase` no se pregunta en el alta: lo elige el dueño en Marca.
     vigenciaHasta: null,
     usadoEn: null,
     nombrePase: null,
+    // Sin cliente: esta réplica solo muestra el estado, no el titular.
+    nombreCliente: null,
+    apellidoCliente: null,
     hoyIso,
   });
 
-  // La tarjeta de FM tiene UN solo renglón de contador, así que da lo mismo en qué campo lo haya
-  // puesto frentePase; en los tipos sin contador los dos son null y no se dibuja nada.
-  const contador = frente.primario ?? frente.secundario;
+  // La tarjeta de FM tiene UN solo renglón de contador y dibuja el ESTADO, el mismo campo que el
+  // pase lleva arriba a la derecha. Nunca trae la palabra dentro del valor ("0 de 10", no "0 de 10
+  // sellos"): la etiqueta va en su propio <span> y, repetida, a los 2.2rem de mono de
+  // .cardface-points b el valor quedaría más ancho que la tarjeta, que recorta con overflow:hidden.
+  const contador = frente.estado;
 
   return (
     <>

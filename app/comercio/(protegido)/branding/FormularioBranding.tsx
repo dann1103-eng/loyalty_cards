@@ -23,7 +23,8 @@ import { NIVELES_DIFUMINADO, stopsDifuminado, type NivelDifuminado } from '@/lib
 import { hexDesdeRgb, rgbDesdeTexto } from '@/lib/comercio/colorHex';
 // La MISMA función que arma el frente del pass real (lib/apple/generatePass.ts). Antes esta vista
 // previa tenía su propio if/else y una membresía veía "PUNTOS 0", que en el pass no existe.
-import { frentePase } from '@/lib/tarjetas/frentePase';
+// PIE_CODIGO es el mismo literal que las dos billeteras escriben debajo del QR.
+import { frentePase, PIE_CODIGO, type Franja } from '@/lib/tarjetas/frentePase';
 import { tipoOPuntos } from '@/lib/tarjetas/tipos';
 import { LARGO_MAXIMO_NOMBRE_PASE } from '@/lib/comercio/nombrePase';
 import {
@@ -58,7 +59,14 @@ type Colores = {
   difuminado_franja: string;
 };
 
-const NOMBRE_DE_EJEMPLO = 'Nombre del cliente';
+// El rótulo chico de cada campo del frente (estado, NOMBRE, APELLIDO): el `label` que Apple dibuja
+// arriba del valor con el color de etiqueta del pase.
+const ESTILO_ROTULO = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: '0.62rem',
+  letterSpacing: '0.14em',
+  textTransform: 'uppercase',
+} as const;
 
 type Props = {
   nombreComercio: string;
@@ -279,31 +287,50 @@ export default function FormularioBranding({
   }
 
   // ---- frente del pass --------------------------------------------------------------------------
+  // Qué hay en la franja (spec 2026-09-17, tabla de franjas, fila "Vista previa del editor"): la
+  // franja personalizada manda; si no, la grilla cuando es sellos con meta; si no, la banda de marca.
+  // Asume que la imagen llega al pase: el navegador no puede saber si la descarga o next/og fallaron
+  // en el servidor, y nadie intenta replicar acá ese caso. Es el MISMO orden de ramas con el que se
+  // dibuja la franja más abajo.
+  const franja: Franja = hayStrip
+    ? 'propia'
+    : esSellos && metaConfigurada !== null
+      ? 'grilla'
+      : 'banda';
+
   // La misma función que arma el pass real. Contador 0 (tarjeta recién emitida) salvo en sellos, que
-  // conserva la demostración de 7 llenos. `hayGrilla` asume composición exitosa: el navegador no
-  // puede saber si next/og falló, y nadie intenta replicar acá ese fallback.
+  // conserva la demostración de 7 llenos.
   const frente = frentePase({
     tipoTarjeta,
     puntos: esSellos ? llenos : 0,
     selloMeta: esSellos ? metaConfigurada : null,
-    hayGrilla: esSellos && metaConfigurada !== null && !hayStrip,
+    franja,
     // Acá NO hay ninguna tarjeta emitida, así que la vista previa no inventa una fecha: con
-    // `vigenciaHasta: null` describirSaldo dice "Sin activar" (membresía) o "Disponible" (cupón)
-    // sin mirar el reloj — que es EXACTAMENTE el estado de una tarjeta recién registrada. El dueño
-    // ve lo que su cliente va a ver el primer día, no un caso inventado.
+    // `vigenciaHasta: null` el estado dice "MEMBRESÍA · Sin activar" o "CUPÓN · Disponible" sin
+    // mirar el reloj — que es EXACTAMENTE el estado de una tarjeta recién registrada. El dueño ve lo
+    // que su cliente va a ver el primer día, no un caso inventado.
     vigenciaHasta: null,
     usadoEn: null,
     // Este sí es en vivo: es el campo que el dueño está escribiendo abajo.
     nombrePase: valores.nombre_pase,
+    // Un titular de EJEMPLO con apellido, para que el dueño vea las dos columnas (NOMBRE a la
+    // izquierda, APELLIDO a la derecha) como en los diseños. Pasa por frentePase y no se dibuja a
+    // pelo: así se recorta y se omite con la misma regla que el pase.
+    nombreCliente: 'María',
+    apellidoCliente: 'Rivera',
     hoyIso,
   });
 
   return (
     <div className="branding-grid">
       {/* -------- VISTA PREVIA EN VIVO (sticky en desktop) --------
-          Réplica de la ANATOMÍA REAL del pass de Apple (que es fija: logo arriba a la izquierda,
-          franja, campos debajo, QR al pie) — antes el preview inventaba un layout propio y no se
-          parecía a lo que llegaba al Wallet (observación del usuario). */}
+          Réplica de la ANATOMÍA REAL del pass de Apple (que es fija), en el orden de los diseños
+          (spec 2026-09-17): logo arriba a la izquierda y el ESTADO a la derecha; la franja, con el
+          nombre del pase encima solo sobre la banda lisa; NOMBRE y APELLIDO debajo; el QR con
+          "Powered by Cardly" al pie. Antes el preview inventaba un layout propio y no se parecía a
+          lo que llegaba al Wallet (observación del usuario).
+          Los `data-frente` y `data-franja` no los lee ningún estilo: son los puntos de medición en
+          el navegador, porque este repo no tiene pruebas de componentes. */}
       <div className="branding-preview reveal d1">
         <p className="titulo-seccion" style={{ marginBottom: 12 }}>
           {programaId ? `Vista previa: ${nombreTarjeta}` : 'Vista previa en vivo'}
@@ -333,8 +360,9 @@ export default function FormularioBranding({
           }}
         >
           {/* Cabecera: logo a la izquierda (o el nombre como logoText, igual que el pass real sin
-              logo) y, a la derecha, el NOMBRE DEL PASE — que es donde Apple dibuja los headerFields
-              y donde el cliente lee cuál de sus tarjetas es esta. */}
+              logo) y, a la derecha, el ESTADO — donde Apple dibuja los headerFields: el rótulo
+              chico arriba y el valor abajo ("VÁLIDO HASTA" / "16/10/2026" en el diseño; acá, sin
+              tarjeta emitida, "MEMBRESÍA" / "Sin activar"). El descuento no lleva estado. */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', minHeight: 52 }}>
             {urls.logo ? (
               // eslint-disable-next-line @next/next/no-img-element -- vista previa simple
@@ -342,19 +370,18 @@ export default function FormularioBranding({
             ) : (
               <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '1.05rem' }}>{nombreComercio}</span>
             )}
-            {/* Sale de `frente.encabezado` y no de `valores.nombre_pase` a pelo: así lo que se ve
-                acá pasa por la MISMA normalización que el pase (un nombre en blanco no dibuja un
-                campo vacío). */}
-            {frente.encabezado && (
-              <span style={{ fontSize: '0.85rem', textAlign: 'right', opacity: 0.92, overflowWrap: 'anywhere' }}>
-                {frente.encabezado}
-              </span>
+            {frente.estado && (
+              <div data-frente="estado" style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ ...ESTILO_ROTULO, color: label }}>{frente.estado.etiqueta}</div>
+                <div style={{ fontSize: '1.05rem', lineHeight: 1.2, color: texto }}>{frente.estado.valor}</div>
+              </div>
             )}
           </div>
 
           {/* Franja (aspecto real 375:123): foto encuadrada + velo + difuminado a los bordes + grilla.
               Es también la superficie de arrastre del encuadre cuando hay foto propia. */}
           <div
+            data-franja={franja}
             style={{
               position: 'relative',
               width: '100%',
@@ -421,9 +448,11 @@ export default function FormularioBranding({
                   // Sin meta configurada NO hay grilla, ni acá ni en el pase real: generatePass exige
                   // `selloMeta > 0` para dibujarla. Antes esta rama no existía y se dibujaba una grilla
                   // inventada de 10; ahora se muestra lo mismo que verá el cliente, y se dice por qué.
-                  // El paddingBottom deja libre la esquina donde ahora se dibuja el campo primario
-                  // ("SELLOS 0"): sin él, este aviso centrado y el contador se pisan.
-                  <div style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px 34px' }}>
+                  // Sin grilla la franja es 'banda', así que el nombre del pase se escribe encima,
+                  // abajo a la izquierda: el paddingBottom le deja libre esa esquina SOLO cuando hay
+                  // nombre (sin él, este aviso centrado y el nombre se pisan; con él siempre, el aviso
+                  // quedaría subido sin motivo).
+                  <div style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: frente.sobreFranja ? '0 24px 34px' : '0 24px' }}>
                     <p style={{ fontSize: '0.78rem', textAlign: 'center', opacity: 0.75, margin: 0 }}>
                       Poné la meta de sellos abajo para que aparezca la grilla. Sin ella, tus clientes
                       ven solo un contador.
@@ -486,47 +515,64 @@ export default function FormularioBranding({
               </>
             )}
 
-            {/* El campo primario va SOBRE la franja, abajo a la izquierda: ahí dibuja Apple los
-                primaryFields de un storeCard. Con grilla de sellos NO lo hay —el texto taparía los
-                círculos— y tampoco en descuento, cuyo estado es un porcentaje que esta pantalla no
-                conoce. Cupón y membresía SÍ lo tienen desde la 0033: su estado es la vigencia. */}
-            {frente.primario && (
-              <div style={{ position: 'absolute', left: 16, right: 16, bottom: 10, pointerEvents: 'none' }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: label }}>
-                  {frente.primario.etiqueta}
-                </div>
-                {/* Desde que cupón y membresía dicen su vigencia acá, este campo puede ser una FRASE
-                    ("Activa hasta el 12 de octubre de 2026") y no solo "$25.00". A los 1.7rem se
-                    saldría de la franja; iOS también achica el primaryField para que entre, así que
-                    bajar el cuerpo es lo que hace la réplica más fiel, no menos. */}
-                <div style={{ fontSize: frente.primario.valor.length > 14 ? '1.05rem' : '1.7rem', lineHeight: 1.2, color: texto }}>
-                  {frente.primario.valor}
+            {/* SOBRE la franja, abajo a la izquierda (donde Apple dibuja los primaryFields de un
+                storeCard), va SOLO el nombre del pase, sin rótulo, y solo sobre la banda lisa:
+                frentePase lo devuelve null con franja personalizada (la imagen ya trae su texto) y
+                con grilla (taparía los círculos). Sale de `frente.sobreFranja` y no de
+                `valores.nombre_pase` a pelo: así pasa por la MISMA regla y el mismo recorte que el
+                pase (un nombre en blanco no dibuja nada). */}
+            {frente.sobreFranja && (
+              <div
+                data-frente="sobre-franja"
+                style={{ position: 'absolute', left: 16, right: 16, bottom: 10, pointerEvents: 'none' }}
+              >
+                {/* El nombre del pase llega a 40 caracteres (LARGO_MAXIMO_NOMBRE_PASE): a los 1.7rem
+                    un nombre largo se saldría de la franja, e iOS también achica el primaryField
+                    para que entre, así que bajar el cuerpo hace la réplica más fiel, no menos. */}
+                <div style={{ fontSize: frente.sobreFranja.length > 14 ? '1.05rem' : '1.7rem', lineHeight: 1.2, color: texto, overflowWrap: 'anywhere' }}>
+                  {frente.sobreFranja}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Fila secundaria, debajo de la franja: el contador de sellos con grilla a la izquierda (si
-              lo hay) y el titular a la derecha, como el pass real. El minHeight la reserva aunque no
-              haya secundario, para que la tarjeta no cambie de alto al elegir otro tipo. */}
+          {/* Debajo de la franja, el titular: NOMBRE a la izquierda y APELLIDO a la derecha (alineado
+              a la derecha), cada uno con su rótulo chico arriba — los secondaryFields del pase. Sin
+              apellido, solo NOMBRE. El minHeight reserva la fila para que la tarjeta no cambie de
+              alto si algún día no hay titular. */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, padding: '12px 16px 4px', minHeight: 44 }}>
-            {frente.secundario ? (
-              <div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: label }}>
-                  {frente.secundario.etiqueta}
+            {frente.titular && (
+              <>
+                <div data-frente="nombre" style={{ minWidth: 0 }}>
+                  <div style={{ ...ESTILO_ROTULO, color: label }}>NOMBRE</div>
+                  <div style={{ fontSize: '1.1rem', lineHeight: 1.2, color: texto, overflowWrap: 'anywhere' }}>
+                    {frente.titular.nombre}
+                  </div>
                 </div>
-                <div style={{ fontSize: '1.1rem', lineHeight: 1.2 }}>{frente.secundario.valor}</div>
-              </div>
-            ) : (
-              <span />
+                {frente.titular.apellido && (
+                  <div data-frente="apellido" style={{ minWidth: 0, textAlign: 'right' }}>
+                    <div style={{ ...ESTILO_ROTULO, color: label }}>APELLIDO</div>
+                    <div style={{ fontSize: '1.1rem', lineHeight: 1.2, color: texto, overflowWrap: 'anywhere' }}>
+                      {frente.titular.apellido}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
-            <div style={{ textAlign: 'right', fontSize: '0.95rem', opacity: 0.9 }}>{NOMBRE_DE_EJEMPLO}</div>
           </div>
 
-          {/* Zona del QR (siempre presente en el pass real). */}
+          {/* Zona del QR (siempre presente en el pass real), con PIE_CODIGO DENTRO de la caja blanca,
+              debajo del código, en letra chica y oscura: ahí dibujan Apple el `altText` y Google el
+              `alternateText`. */}
           <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 0 20px' }}>
-            <div style={{ background: '#fff', borderRadius: 10, padding: 10, display: 'grid', placeItems: 'center' }}>
+            <div
+              data-frente="qr"
+              style={{ background: '#fff', borderRadius: 10, padding: '10px 12px 8px', display: 'grid', placeItems: 'center', gap: 2 }}
+            >
               <span className="icono icono-lleno" style={{ fontSize: 64, color: '#111' }} aria-hidden="true">qr_code_2</span>
+              <span data-frente="pie-codigo" style={{ fontSize: '0.68rem', lineHeight: 1.2, color: '#111', whiteSpace: 'nowrap' }}>
+                {PIE_CODIGO}
+              </span>
             </div>
           </div>
         </div>
@@ -639,8 +685,15 @@ export default function FormularioBranding({
               placeholder="Socio Oro"
               style={{ width: '100%' }}
             />
+            {/* Desde el 2026-09-17 el nombre ya no va arriba: se escribe SOBRE la franja, y solo
+                sobre la banda lisa (decisión 3 del spec 2026-09-17). Decir "arriba" le prometía al
+                dueño un lugar donde no va a aparecer, y callar la excepción le haría creer que se
+                rompió al subir una franja personalizada. La grilla solo se nombra en sellos. */}
             <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>
-              Lo que tu cliente ve arriba en su tarjeta. Dejalo vacío y solo se ve tu logo.
+              Se escribe sobre la franja de tu tarjeta.{' '}
+              {esSellos
+                ? 'No aparece con una franja personalizada ni sobre la grilla de sellos.'
+                : 'No aparece si subís una franja personalizada: la imagen ya lleva su texto.'}
             </p>
           </div>
 
