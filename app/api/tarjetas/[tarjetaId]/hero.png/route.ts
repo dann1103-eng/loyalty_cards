@@ -73,7 +73,7 @@ export async function GET(
       : null,
   );
 
-  const strips = await componerStrips({
+  const insumos = {
     tipoTarjeta: programa ? programa.tipo_tarjeta : c.tipo_tarjeta,
     puntos: tarjeta.puntos_actuales,
     selloMeta: programa ? programa.sello_meta : c.sello_meta,
@@ -84,7 +84,17 @@ export async function GET(
     heroUrl: marca.heroUrl,
     difuminadoFranja: marca.difuminadoFranja,
     encuadreFranja: marca.encuadreFranja,
-  });
+  };
+  let strips = await componerStrips(insumos);
+
+  // Si la franja PROPIA no se pudo bajar (el archivo se borró del storage, el storage no responde),
+  // se sirve la banda de marca en vez de un 404. Un 404 acá no deja "sin franja": Google valida el
+  // heroImage de cada patch y rechaza el patch ENTERO si la imagen no carga, así que la tarjeta
+  // dejaría de actualizar el saldo en Android. Desde que todos los tipos llevan hero (spec
+  // 2026-09-17, decisión 8), eso le pasaría a cualquier tarjeta con franja propia, no solo a sellos.
+  if (!strips && insumos.stripUrl) {
+    strips = await componerStrips({ ...insumos, stripUrl: null });
+  }
 
   if (!strips) {
     return NextResponse.json({ error: 'No se pudo componer la imagen' }, { status: 404 });
