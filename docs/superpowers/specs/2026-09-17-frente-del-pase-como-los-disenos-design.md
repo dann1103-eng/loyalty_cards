@@ -59,12 +59,17 @@ Las marcadas (U) las tomó el usuario; el resto se presentó y se aprobó.
    el saludo del portal ("Hola, María") ni el reporte de mejores clientes (tocar una función SQL que
    nadie necesita tocar).
 
-8. **Google muestra la franja propia del comercio en TODOS los tipos**, no solo en sellos. Hoy la
-   franja propia solo llega a Google dentro del hero de sellos; una membresía o una gift card con
-   franja propia se ven en Android con la foto compuesta de la clase, o sin franja. Sin esto, los
-   tres diseños —que son sobre todo su franja— no existirían en Android. La ruta
-   `/api/tarjetas/<id>/hero.png` ya devuelve los bytes de la franja propia para cualquier tipo, y
-   `versionHero` ya incluye `stripUrl`.
+8. **En Google, TODOS los tipos llevan el hero de SU tarjeta** (`/api/tarjetas/<id>/hero.png`), igual
+   que Apple siempre lleva su franja: la franja propia, la grilla o la banda de marca. Hoy solo
+   sellos lo lleva; una membresía o una gift card se ven en Android con la foto compuesta de la
+   clase, o sin franja, así que los tres diseños —que son sobre todo su franja— no existirían en
+   Android. La ruta ya compone los tres casos para cualquier tipo, y `versionHero` ya incluye
+   `stripUrl`.
+   **Por qué siempre y no "solo con franja propia":** el sync hace `patch`, y un campo omitido en un
+   patch deja el valor viejo en Google. Si el hero se mandara solo con franja propia, el dueño que
+   la quita seguiría viendo la franja borrada en Android para siempre. Mandándolo siempre, quitarla
+   cambia la URL a la banda de marca. Consecuencia visible, aceptada: un comercio sin foto ni franja
+   pasa a ver en Android la banda de colores que ya ve en iPhone.
 
 9. **Orden de entrega (aprobado), con Google partido en DOS deploys:** migración 0036 → registro →
    `frentePase` → Apple → objetos de Google → vista previa → escáner/Clientes/CSV → portada → suite,
@@ -191,13 +196,13 @@ previa.
     texto, así que 1250 puntos se leen "1250" en Android y con separador en iPhone — aceptado);
   - `nombre`: header `'NOMBRE'`; `apellido`: header `'APELLIDO'`.
 - `barcode.alternateText = PIE_CODIGO`.
-- `heroImage` cuando la franja es `'grilla'` **o `'propia'`** (decisión 8), con la URL versionada.
-  **Con franja propia, la versión NO incluye puntos ni meta**: la imagen son los bytes de la franja
-  y no cambia al operar, y con los puntos en el hash Google volvería a bajar hasta 2 MB en cada
-  compra de una gift card. La versión la calcula UN ayudante compartido,
-  `versionHeroTarjeta(marca, puntos, selloMeta)` en `heroUrl.ts` (con `stripUrl` ignora puntos y
-  meta), que usan `syncObjeto` y `linkGuardar`: si los dos caminos armaran distinto el `?v=`, Google
-  volvería a bajar la imagen en cada JWT. Una prueba lo fija.
+- `heroImage` **siempre que haya `heroImageUrl`**, en todos los tipos (decisión 8).
+- **La versión del hero incluye puntos y meta SOLO cuando la imagen depende de ellos**: sellos con
+  meta y sin franja propia (la grilla). En la franja propia y en la banda de marca la imagen no
+  cambia al operar, y con los puntos en el hash Google volvería a bajarla en cada compra (hasta 2 MB
+  con una franja propia). La calcula UN ayudante compartido, `versionHeroTarjeta(marca, tipoTarjeta,
+  puntos, selloMeta)` en `heroUrl.ts`, que usan `syncObjeto` y `linkGuardar`: si los dos caminos
+  armaran distinto el `?v=`, Google volvería a bajar la imagen en cada JWT. Una prueba lo fija.
 - `loyaltyPoints` desde `listado` y `validTimeInterval`, sin cambios.
 
 **Clase** (`construirClase`, compartida por `syncClaseComercio`, `syncClasePrograma` y
@@ -310,8 +315,8 @@ una prueba fija que un apellido en blanco llega como null.
 - Apple: header/primary/secondary por caso, `altText`, exactamente un código QR con el mismo
   `message`; la franja `'banda'` cuando la franja propia no bajó. **Mutación**: `'propia'` solo por
   `stripUrl`.
-- Google: módulos por caso, `alternateText`, hero con franja propia en un tipo que no es sellos, y su
-  versión sin puntos (`versionHeroTarjeta`); plantilla de dos filas en la clase (deploy B).
+- Google: módulos por caso, `alternateText`, hero en un tipo que no es sellos (con y sin franja propia), y su
+  versión sin puntos fuera de la grilla (`versionHeroTarjeta`); plantilla de dos filas en la clase (deploy B).
   **Mutación**: invertir filas.
 - Script: el guardián de `NEXT_PUBLIC_BASE_URL` en una función pura probada.
 - Registro: apellido guardado al crear; NO se escribe sobre un cliente existente (**mutación**:
@@ -332,7 +337,8 @@ una prueba fija que un apellido en blanco llega como null.
   archivo sea JPG o WebP. En sellos ya pasaba; en los demás tipos es nuevo. Y Google rechaza el
   patch ENTERO si no puede cargar la imagen: una franja que no acepte no deja "sin franja", deja el
   objeto sin crear o sin actualizar el saldo. **El riesgo arranca con el deploy A** (que es el que
-  activa el hero con franja propia en todos los tipos), no con el B. Antes del deploy A, el
+  activa el hero en todos los tipos), no con el B. La banda y la grilla las compone nuestra propia
+  ruta y ya funcionan hoy en sellos; el riesgo real es la franja propia. Antes del deploy A, el
   controlador lista en producción (solo lectura) los programas que NO son de sellos y tienen franja
   propia efectiva y tarjetas con objeto en Google, y el tipo de archivo de esas franjas: si hay
   alguno, se prueba esa URL de `hero.png` contra Google con su tarjeta antes de publicar.
