@@ -1036,23 +1036,33 @@ verificada** (`scripts/verificar-0036.ts`).
    rechaza el patch ENTERO con `400 More than one type of loyalty point balances cannot be set` —
    esa tarjeta deja de actualizar su saldo en Android, en silencio. Apareció en producción el
    2026-09-17 en un programa de sellos que nació sin meta (entero) y después la configuró (texto).
-3. **Google rechaza el patch ENTERO si el `heroImage` no carga.** `hero.png` ya no responde 404 cuando
-   la franja propia no baja: sirve la banda de marca. Con un 404, esa tarjeta dejaba de actualizar el
-   saldo en Android.
-4. **La versión del hero (`versionHeroTarjeta`) solo incluye los puntos cuando la imagen es la
+3. **Google rechaza el patch ENTERO si el `heroImage` no carga.** `componerStrips` ya no devuelve null
+   cuando la franja propia no baja: cae a la grilla o a la banda, y además informa QUÉ dibujó
+   (`strips.franja`), que es lo que `frentePase` necesita para volver a escribir el nombre del pase
+   encima. Con un 404, esa tarjeta dejaba de actualizar el saldo en Android.
+4. **La franja que sube el comercio se ENCAJA COMPLETA** en el marco (375×123) con el color de la
+   tarjeta rellenando los lados: antes iban sus bytes crudos y Wallet la recortaba (M&M Inversiones
+   vio su nombre partido en el iPhone). **Y el velo oscuro sobre la FOTO solo se pinta cuando la app
+   escribe algo encima** (el nombre del pase, o la grilla de sellos): sin texto solo apagaba la foto.
+   Ojo: la foto en modo "Llenar" la sigue recortando Wallet en el teléfono — eso se resuelve con el
+   encuadre "Completa" del editor, no con código.
+5. **`VERSION_COMPOSICION` en `heroUrl.ts` sube cuando cambia CÓMO se dibuja la franja.** El hash del
+   `?v=` solo mira los datos, así que sin ese número Google seguiría sirviendo para siempre la imagen
+   vieja que tiene cacheada. Y el nombre del pase ya entra al hash, porque ahora decide el velo.
+6. **La versión del hero (`versionHeroTarjeta`) solo incluye los puntos cuando la imagen es la
    grilla.** Con franja propia o banda la imagen no cambia al operar; con los puntos en el `?v=`,
    Google volvía a bajarla en cada compra. `syncObjeto` y `linkGuardar` usan el MISMO ayudante.
-5. **Un cliente existente NO recibe apellido** al registrarse en otro programa (gana el primer
+7. **Un cliente existente NO recibe apellido** al registrarse en otro programa (gana el primer
    registro, como el nombre): completarlo "si está vacío" dejaría que cualquiera que conozca un
    teléfono le escriba un apellido a otra persona, visible en su tarjeta de todos los comercios.
-6. **El código de barras de Apple pasó de string a objeto**, con `format`, `message`,
+8. **El código de barras de Apple pasó de string a objeto**, con `format`, `message`,
    `messageEncoding` y `altText` explícitos: `filterValid` descarta en silencio un código mal formado
    y el pase saldría sin QR.
-7. **Los pases de Apple ya instalados cambian en su próxima operación**, sin push masivo.
+9. **Los pases de Apple ya instalados cambian en su próxima operación**, sin push masivo.
 
 ### Pendiente, anotado para no perderlo
 
-- ~~Fase `objetos`~~ **HECHA el 2026-09-17: 28 de 28, 0 fallos**, desde el commit `5d43bc4`. En el
+- ~~Fase `objetos`~~ **HECHA el 2026-09-17: 28 de 28, 0 fallos**, corrida tres veces (la última desde `1ced6a5`, con la franja encajada y sin velo). En el
   camino hizo falta arreglar dos cosas: el reloj de la PC estaba ~4 h atrasado (todas las llamadas
   daban `invalid_grant`, sin tocar nada en Google) y el balance del patch (nota 2).
 - **Task 9 (la plantilla de filas) ya está hecha y probada en la rama `claude/plantilla-filas-google`**,
