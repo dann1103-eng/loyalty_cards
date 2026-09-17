@@ -7,7 +7,7 @@ import { construirClase, construirObjeto } from './construirRecursos';
 import { syncClaseComercio } from './syncClase';
 import { syncClasePrograma } from './syncClasePrograma';
 import { syncObjetoTarjeta } from './syncObjeto';
-import { urlHeroTarjeta, versionHero, heroUrlDeClase } from './heroUrl';
+import { urlHeroTarjeta, versionHeroTarjeta, heroUrlDeClase } from './heroUrl';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
 import { hoyEnZona } from '../tarjetas/vigencia';
 import { brandingEfectivo } from '../comercio/brandingEfectivo';
@@ -29,7 +29,9 @@ export async function generarLinkGuardar(
     // procesar el JWT, ese cuerpo PISABA al que syncObjetoTarjeta acababa de escribir bien unas
     // líneas más abajo. O sea que el camino "Agregar a Google Wallet" reintroducía en silencio el
     // bug que el resto del sistema ya tenía arreglado.
-    .select('comercio_id, qr_token, puntos_actuales, vigencia_hasta, usado_en, programas_tarjeta(id, tipo_tarjeta, sello_meta, nombre_pase, google_class_id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(nombre, zona_horaria, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, google_class_id, tipo_tarjeta, sello_meta)')
+    // clientes(nombre, apellido): por el mismo upsert, el objeto embebido tiene que llevar NOMBRE y
+    // APELLIDO igual que el de syncObjetoTarjeta, o los borraría (0036, spec 2026-09-17).
+    .select('comercio_id, qr_token, puntos_actuales, vigencia_hasta, usado_en, clientes(nombre, apellido), programas_tarjeta(id, tipo_tarjeta, sello_meta, nombre_pase, google_class_id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(nombre, zona_horaria, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, google_class_id, tipo_tarjeta, sello_meta)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
@@ -151,6 +153,11 @@ export async function generarLinkGuardar(
     usadoEn: tarjeta.usado_en,
     nombrePase,
     hoyIso: hoyEnZona(tarjeta.comercios.zona_horaria),
+    // Lo mismo que manda syncObjetoTarjeta, por el mismo upsert: sin esto el JWT borraría NOMBRE y
+    // APELLIDO, y con otra franja escribiría el nombre del pase encima de una franja propia.
+    nombreCliente: tarjeta.clientes?.nombre ?? null,
+    apellidoCliente: tarjeta.clientes?.apellido ?? null,
+    stripUrl: marca.stripUrl,
     // Las mismas del bloque de arriba: Google pide las ubicaciones en la clase Y en el objeto.
     ubicaciones,
     heroImageUrl: urlHeroTarjeta(
@@ -159,17 +166,9 @@ export async function generarLinkGuardar(
       // /api/tarjetas/<id>/hero.png para DIBUJAR. Si divergen, la URL cambia, Google re-descarga y
       // recibe la imagen de siempre: cache-busting perfecto entregando lo incorrecto, sin un solo
       // error. Es el riesgo que el spec de branding por programa marca como el peor del sistema.
-      versionHero({
-        puntos: tarjeta.puntos_actuales,
-        selloMeta,
-        colorFondo: marca.colorFondo,
-        colorLabel: marca.colorLabel,
-        selloIconoUrl: marca.selloIconoUrl,
-        heroUrl: marca.heroUrl,
-        stripUrl: marca.stripUrl,
-        difuminadoFranja: marca.difuminadoFranja,
-        encuadreFranja: marca.encuadreFranja,
-      }),
+      // versionHeroTarjeta, la MISMA de syncObjetoTarjeta: si los dos caminos armaran distinto el
+      // `?v=`, Google re-descargaría la imagen en cada JWT.
+      versionHeroTarjeta(marca, tipoTarjeta, tarjeta.puntos_actuales, selloMeta),
     ),
   });
 

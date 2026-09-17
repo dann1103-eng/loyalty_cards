@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { urlHeroTarjeta, urlFranjaClase, versionHero, versionFranjaClase, heroUrlDeClase, type DatosVersionHero } from './heroUrl';
+import { urlHeroTarjeta, urlFranjaClase, versionHero, versionHeroTarjeta, versionFranjaClase, heroUrlDeClase, type DatosVersionHero } from './heroUrl';
 
 const ORIGINAL = process.env.NEXT_PUBLIC_BASE_URL;
 
@@ -72,6 +72,55 @@ describe('versionHero', () => {
 
   it('es corta y apta para una URL (12 hex)', () => {
     expect(versionHero(datos())).toMatch(/^[0-9a-f]{12}$/);
+  });
+});
+
+// Desde el 2026-09-17 TODOS los tipos llevan el hero de su tarjeta en Google (decisión 8 del spec),
+// no solo los sellos. Pero solo la GRILLA cambia al operar: la franja propia y la banda de marca son
+// la misma imagen con 3 puntos que con 4. Con los puntos en el hash, Google volvería a bajar la
+// imagen en cada compra — hasta 2 MB con una franja propia.
+//
+// MUTACIÓN corrida (restaurada y comparada byte a byte): pasar SIEMPRE los puntos y la meta reales,
+//   `return versionHero({ ...marca, puntos, selloMeta });`
+// → FALLAN "franja propia…", "gift card sin franja…" y "sellos SIN meta…" con
+//   `expected '<hash>' to be '<otro hash>' // Object.is equality`.
+describe('versionHeroTarjeta', () => {
+  // La marca EFECTIVA, sin progreso: lo que syncObjeto y linkGuardar le pasan (brandingEfectivo).
+  const marca = {
+    colorFondo: 'rgb(36, 24, 18)', colorLabel: 'rgb(214, 146, 74)',
+    selloIconoUrl: 'https://ejemplo.com/icono.png', heroUrl: 'https://ejemplo.com/hero.jpg',
+    stripUrl: null, difuminadoFranja: 'medio',
+    encuadreFranja: { modo: 'llenar' as const, focoX: 50, focoY: 50, zoom: 100 },
+  };
+  const marcaConFranja = { ...marca, stripUrl: 'https://ejemplo.com/franja.png' };
+
+  it('grilla (sellos con meta, sin franja propia): dos puntajes dan versiones DISTINTAS', () => {
+    expect(versionHeroTarjeta(marca, 'sellos', 3, 8)).not.toBe(versionHeroTarjeta(marca, 'sellos', 4, 8));
+    // Y es EXACTAMENTE versionHero con los puntos y la meta reales: la misma URL que antes de esta
+    // entrega, para que las tarjetas de sellos no re-descarguen su grilla por el cambio de código.
+    expect(versionHeroTarjeta(marca, 'sellos', 3, 8)).toBe(versionHero({ ...marca, puntos: 3, selloMeta: 8 }));
+  });
+
+  it('franja propia (aunque sea de sellos con meta): dos puntajes dan la MISMA versión', () => {
+    expect(versionHeroTarjeta(marcaConFranja, 'sellos', 3, 8)).toBe(versionHeroTarjeta(marcaConFranja, 'sellos', 4, 8));
+    expect(versionHeroTarjeta(marcaConFranja, 'gift_card', 2500, null)).toBe(
+      versionHeroTarjeta(marcaConFranja, 'gift_card', 5000, null),
+    );
+  });
+
+  it('gift card sin franja (banda de marca): dos saldos dan la MISMA versión, la de progreso cero', () => {
+    expect(versionHeroTarjeta(marca, 'gift_card', 2500, null)).toBe(versionHeroTarjeta(marca, 'gift_card', 5000, null));
+    expect(versionHeroTarjeta(marca, 'gift_card', 2500, null)).toBe(versionHero({ ...marca, puntos: 0, selloMeta: null }));
+  });
+
+  it('sellos SIN meta (banda, no grilla): los sellos acreditados no cambian la versión', () => {
+    expect(versionHeroTarjeta(marca, 'sellos', 3, null)).toBe(versionHeroTarjeta(marca, 'sellos', 4, null));
+  });
+
+  it('lo que SÍ altera la imagen fuera de la grilla sigue cambiando la versión (la franja, los colores)', () => {
+    const base = versionHeroTarjeta(marca, 'membresia', 0, null);
+    expect(versionHeroTarjeta(marcaConFranja, 'membresia', 0, null)).not.toBe(base);
+    expect(versionHeroTarjeta({ ...marca, colorFondo: 'rgb(1,2,3)' }, 'membresia', 0, null)).not.toBe(base);
   });
 });
 

@@ -40,7 +40,14 @@ beforeEach(() => {
 // restaura para no filtrarlo al resto de la suite.
 const BASE_ORIGINAL = process.env.NEXT_PUBLIC_BASE_URL;
 
-async function crearTarjeta(opts: { googleClassId?: string | null; logoUrl?: string | null; puntos?: number; heroUrl?: string | null }) {
+async function crearTarjeta(opts: {
+  googleClassId?: string | null;
+  logoUrl?: string | null;
+  puntos?: number;
+  heroUrl?: string | null;
+  nombreCliente?: string;
+  apellidoCliente?: string | null;
+}) {
   const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const { data: comercio, error: eC } = await supabase
     .from('comercios')
@@ -72,7 +79,14 @@ async function crearTarjeta(opts: { googleClassId?: string | null; logoUrl?: str
     .single();
   if (eP) throw eP;
   const { data: cliente, error: eCl } = await supabase
-    .from('clientes').insert({ nombre: 'Cliente Test', telefono: `+503-link-${sufijo}` }).select('id').single();
+    .from('clientes')
+    .insert({
+      nombre: opts.nombreCliente ?? 'Cliente Test',
+      apellido: opts.apellidoCliente ?? null,
+      telefono: `+503-link-${sufijo}`,
+    })
+    .select('id')
+    .single();
   if (eCl) throw eCl;
   const { data: tarjeta, error: eT } = await supabase
     .from('tarjetas')
@@ -146,6 +160,57 @@ describe('generarLinkGuardar', () => {
       const delSync = patchClaseMock.mock.calls.at(-1)![0].requestBody.heroImage.sourceUri.uri;
 
       expect(clase.heroImage!.sourceUri.uri).toBe(delSync);
+    });
+  });
+
+  // El objeto viaja EMBEBIDO en el JWT y Google lo upsertea por id: un cuerpo sin los módulos del
+  // frente PISARÍA al que syncObjetoTarjeta acaba de escribir bien (la falla del 2026-07-30 con el
+  // tipo de tarjeta). Por eso este camino también lee clientes(nombre, apellido).
+  describe('el objeto embebido (frente de los diseños, spec 2026-09-17)', () => {
+    type ObjetoJwt = {
+      textModulesData?: Array<{ id: string; header: string; body: string }>;
+      barcode?: { type: string; value: string; alternateText?: string };
+      heroImage?: { sourceUri: { uri: string } };
+    };
+    async function objetoDelJwt(tarjetaId: string): Promise<ObjetoJwt> {
+      const url = await generarLinkGuardar(supabase, tarjetaId);
+      const claims = jwt.verify(url!.replace('https://pay.google.com/gp/v/save/', ''), publicKey, {
+        algorithms: ['RS256'],
+      }) as Record<string, unknown>;
+      return (claims.payload as { loyaltyObjects: ObjetoJwt[] }).loyaltyObjects[0];
+    }
+
+    // MUTACIÓN corrida: `apellidoCliente: null` en linkGuardar.ts → FALLA con `expected [ { id:
+    // 'estado', …(2) }, …(1) ] to deeply equal [ { id: 'estado', …(2) }, …(2) ]` (falta APELLIDO).
+    it('lleva NOMBRE y APELLIDO del cliente y el pie del QR', async () => {
+      const t = await crearTarjeta({ puntos: 5, nombreCliente: 'María', apellidoCliente: 'Rivera' });
+      const objeto = await objetoDelJwt(t.tarjetaId);
+      expect(objeto.textModulesData).toEqual([
+        { id: 'estado', header: 'PUNTOS', body: '5' },
+        { id: 'nombre', header: 'NOMBRE', body: 'María' },
+        { id: 'apellido', header: 'APELLIDO', body: 'Rivera' },
+      ]);
+      expect(objeto.barcode!.alternateText).toBe('Powered by Cardly');
+    });
+
+    // Los dos caminos que arman el objeto tienen que dar la MISMA URL de hero: si difirieran, cada
+    // "Agregar a Google Wallet" haría que Google volviera a bajar la imagen. Con puntos (fuera de la
+    // grilla) es donde más fácil divergen: un camino con los puntos en el hash y el otro sin ellos.
+    // MUTACIÓN corrida: en linkGuardar.ts, `versionHero({ ...marca, puntos: tarjeta.puntos_actuales,
+    // selloMeta })` en vez de versionHeroTarjeta → FALLA con `expected 'https://www.cardly-sv.site/
+    // api/tarjet…' to be 'https://www.cardly-sv.site/api/tarjet…'`.
+    it('el ?v= del hero es el MISMO que escribe syncObjetoTarjeta para la misma tarjeta', async () => {
+      process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+      const t = await crearTarjeta({ puntos: 5 });
+      const objeto = await objetoDelJwt(t.tarjetaId);
+
+      // generarLinkGuardar llama a syncObjetoTarjeta antes de armar el JWT: la tarjeta todavía no
+      // tenía google_object_id, así que ese sync fue un insert.
+      const delSync = insertObjetoMock.mock.calls.at(-1)![0].requestBody.heroImage.sourceUri.uri;
+      expect(objeto.heroImage!.sourceUri.uri).toMatch(
+        new RegExp(`^https://www\\.cardly-sv\\.site/api/tarjetas/${t.tarjetaId}/hero\\.png\\?v=[0-9a-f]{12}$`),
+      );
+      expect(objeto.heroImage!.sourceUri.uri).toBe(delSync);
     });
   });
 

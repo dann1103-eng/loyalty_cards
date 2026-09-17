@@ -3,7 +3,7 @@ import type { Database } from '../supabase/types';
 import { walletClient, issuerId } from './walletClient';
 import { idObjetoGoogle } from './ids';
 import { construirObjeto } from './construirRecursos';
-import { urlHeroTarjeta, versionHero } from './heroUrl';
+import { urlHeroTarjeta, versionHeroTarjeta } from './heroUrl';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
 import { hoyEnZona } from '../tarjetas/vigencia';
 import { brandingEfectivo } from '../comercio/brandingEfectivo';
@@ -24,7 +24,8 @@ export async function syncObjetoTarjeta(
     // columnas homónimas de comercios quedaron legadas. Sin este join, la tarjeta de un programa
     // secundario se sincronizaba a Google con el tipo del COMERCIO — la misma falla que tenía el
     // lado de Apple (ver datosPassDeTarjeta.ts).
-    .select('qr_token, puntos_actuales, vigencia_hasta, usado_en, google_object_id, comercio_id, programas_tarjeta(tipo_tarjeta, sello_meta, nombre_pase, google_class_id, branding_propio, color_fondo, color_label, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(google_class_id, zona_horaria, tipo_tarjeta, sello_meta, color_fondo, color_label, sello_icono_url, hero_url, strip_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja)')
+    // clientes(nombre, apellido): NOMBRE y APELLIDO debajo de la franja (0036, spec 2026-09-17).
+    .select('qr_token, puntos_actuales, vigencia_hasta, usado_en, google_object_id, comercio_id, clientes(nombre, apellido), programas_tarjeta(tipo_tarjeta, sello_meta, nombre_pase, google_class_id, branding_propio, color_fondo, color_label, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(google_class_id, zona_horaria, tipo_tarjeta, sello_meta, color_fondo, color_label, sello_icono_url, hero_url, strip_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
@@ -104,24 +105,25 @@ export async function syncObjetoTarjeta(
       usadoEn: tarjeta.usado_en,
       nombrePase,
       hoyIso: hoyEnZona(tarjeta.comercios.zona_horaria),
+      // `clientes` es FK obligatoria de tarjetas, pero el tipo del join admite null: sin cliente, el
+      // pase sale sin NOMBRE ni APELLIDO en vez de reventar el sync.
+      nombreCliente: tarjeta.clientes?.nombre ?? null,
+      apellidoCliente: tarjeta.clientes?.apellido ?? null,
+      // La franja propia CRUDA de la marca efectiva: con ella construirObjeto decide si la franja es
+      // 'propia' (no se escribe el nombre del pase encima) o la banda.
+      stripUrl: marca.stripUrl,
       ubicaciones,
-      // OJO: ni `nombre_pase` ni la vigencia entran en versionHero, y no es un olvido. Ese hash
-      // versiona la URL de una IMAGEN y resume todo lo que ALTERA esa imagen; estos dos viajan en
-      // textModulesData y validTimeInterval, campos JSON del patch que no cambian un solo píxel.
-      // Meterlos ahí haría rotar la URL del hero de cada tarjeta al cambiar el día.
+      // OJO: ni `nombre_pase`, ni la vigencia, ni el nombre del cliente entran en la versión, y no es
+      // un olvido. Ese hash versiona la URL de una IMAGEN y resume todo lo que ALTERA esa imagen;
+      // estos viajan en textModulesData y validTimeInterval, campos JSON del patch que no cambian un
+      // solo píxel. Meterlos ahí haría rotar la URL del hero de cada tarjeta al cambiar el día.
+      //
+      // versionHeroTarjeta y no versionHero a mano: es la MISMA que usa generarLinkGuardar (si los dos
+      // caminos armaran distinto el `?v=`, Google re-descargaría en cada JWT), y fuera de la grilla
+      // deja los puntos fuera del hash (la banda y la franja propia no cambian al operar).
       heroImageUrl: urlHeroTarjeta(
         tarjetaId,
-        versionHero({
-          puntos: tarjeta.puntos_actuales,
-          selloMeta,
-          colorFondo: marca.colorFondo,
-          colorLabel: marca.colorLabel,
-          selloIconoUrl: marca.selloIconoUrl,
-          heroUrl: marca.heroUrl,
-          stripUrl: marca.stripUrl,
-          difuminadoFranja: marca.difuminadoFranja,
-          encuadreFranja: marca.encuadreFranja,
-        }),
+        versionHeroTarjeta(marca, tipoTarjeta, tarjeta.puntos_actuales, selloMeta),
       ),
     });
     const client = walletClient();

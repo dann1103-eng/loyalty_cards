@@ -6,11 +6,14 @@ import { encuadreDelComercio, encuadreDelPrograma } from '@/lib/comercio/encuadr
 
 export const runtime = 'nodejs';
 
-// Sirve la MISMA grilla de sellos que ya se compone para la franja del pass de Apple
-// (lib/apple/stripPass.tsx), pero como una imagen pública independiente — es lo que permite
-// usarla como heroImage de un LoyaltyObject de Google (que exige una URL, no bytes incrustados
-// como hace passkit-generator). Pensada para reflejar el progreso de ESTA tarjeta puntual: el
-// llamador (construirObjeto) decide si corresponde usarla (solo sellos con meta).
+// Sirve la MISMA franja que ya se compone para el pass de Apple (lib/apple/stripPass.tsx), pero
+// como una imagen pública independiente — es lo que permite usarla como heroImage de un
+// LoyaltyObject de Google (que exige una URL, no bytes incrustados como hace passkit-generator).
+// Compone los tres casos para CUALQUIER tipo de tarjeta: la franja propia del comercio, la grilla
+// de sellos con el progreso de ESTA tarjeta, o la banda de marca. Desde el 2026-09-17 todos los
+// tipos la llevan en Google (spec, decisión 8), no solo los sellos con meta: construirObjeto la
+// manda siempre que haya URL pública. El `?v=` lo arma versionHeroTarjeta (lib/google/heroUrl.ts),
+// que solo mete los puntos cuando lo que se dibuja es la grilla.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ tarjetaId: string }> },

@@ -1,6 +1,6 @@
 import type { walletobjects_v1 } from 'googleapis/build/src/apis/walletobjects/v1';
 import { rgbAHex } from './colorHex';
-import { frentePase, type CampoFrente } from '../tarjetas/frentePase';
+import { frentePase, PIE_CODIGO, type CampoFrente, type Franja, type FrentePase } from '../tarjetas/frentePase';
 import { tipoOPuntos } from '../tarjetas/tipos';
 
 // Insumos mínimos para armar una LoyaltyClass: solo lo que la clase realmente usa (no el row
@@ -59,12 +59,20 @@ export interface TarjetaParaObjeto {
   puntosActuales: number;
   tipoTarjeta: string;
   selloMeta: number | null;
-  // URL pública de la grilla de sellos COMPUESTA PARA ESTA TARJETA (ver lib/google/heroUrl.ts).
-  // Ya no es solo texto: heroImage existe también a nivel de LoyaltyObject (no solo de clase,
-  // corrección al diseño original — ver memoria del proyecto), así que cada cliente puede ver su
-  // propio progreso visual, igual que en Apple. Solo se usa para sellos (ver construirObjeto);
-  // en puntos queda sin heroImage propio y se ve el de la clase (foto de fondo del comercio).
+  // URL pública de la franja COMPUESTA PARA ESTA TARJETA (/api/tarjetas/<id>/hero.png, ver
+  // lib/google/heroUrl.ts): la franja propia del comercio, la grilla de sellos o la banda de marca,
+  // la misma que Apple pone en su strip. heroImage existe también a nivel de LoyaltyObject (no solo
+  // de clase), así que cada cliente ve SU franja. Va en TODOS los tipos (spec 2026-09-17,
+  // decisión 8); null cuando no hay URL pública (falta NEXT_PUBLIC_BASE_URL).
   heroImageUrl?: string | null;
+  // La franja PROPIA de la marca efectiva (`strip_url` del programa o del comercio), CRUDA: no es la
+  // URL que se manda, es el dato con el que construirObjeto decide qué hay en la franja ('propia' /
+  // 'grilla' / 'banda', ver franjaDe). Obligatoria, como el resto del frente.
+  stripUrl: string | null;
+  // `clientes.nombre` y `clientes.apellido` (0036): NOMBRE y APELLIDO debajo de la franja. Un cliente
+  // anterior a la 0036 llega sin apellido y sale solo con NOMBRE.
+  nombreCliente: string | null;
+  apellidoCliente: string | null;
   // Las MISMAS ubicaciones que van en la clase. Google pide explícitamente ponerlas en los dos
   // lados ("add locations to your classes and objects"), y `LoyaltyObject.merchantLocations` está
   // documentado como disparador por su cuenta. Hasta el 2026-07-30 solo estaban en la clase y
@@ -78,7 +86,7 @@ export interface TarjetaParaObjeto {
   // silencio y le mande a Android una membresía sin fecha.
   vigenciaHasta: string | null;
   usadoEn: string | null;
-  // `programas_tarjeta.nombre_pase`. null = el pase sale sin textModulesData, como hasta ahora.
+  // `programas_tarjeta.nombre_pase`. Solo se escribe sobre la banda lisa (ver frentePase).
   nombrePase: string | null;
   // El "hoy" del COMERCIO (hoyEnZona(comercio.zona_horaria)): es lo que decide si la membresía dice
   // "Activa hasta" o "Vencida el". Nunca un new Date() adentro — ver frentePase.
@@ -89,11 +97,11 @@ export interface TarjetaParaObjeto {
 // que se lee en la vista de lista de Wallet (donde no cabe la imagen) y el respaldo si la
 // composición de la grilla falla.
 //
-// Por eso recibe `frentePase(...).listado` y NO `.primario`: con grilla, `primario` es null (en
-// Apple el texto taparía los círculos) y tomarlo acá dejaría a cada Android con una tarjeta de
-// sellos SIN contador, sin un solo error del lado de Google. `listado` es la línea única que
-// describe la tarjeta sin importar dónde se dibuje, y ya trae la palabra "sellos": agregarla acá
-// otra vez daría "3 de 8 sellos sellos".
+// Por eso recibe `frentePase(...).listado` y NO `.estado`: el estado va al lado del logo bajo su
+// rótulo ("SELLOS" / "7 de 10") y en cupón y membresía es la fecha CORTA; en la vista de lista no
+// hay rótulo ni grilla que diga qué se cuenta. `listado` es la línea única que describe la tarjeta
+// sin importar dónde se dibuje, y ya trae la palabra "sellos": agregarla acá otra vez daría
+// "3 de 8 sellos sellos".
 function loyaltyPointsDe(listado: CampoFrente | null): walletobjects_v1.Schema$LoyaltyPoints | null {
   // Misma fuente de verdad que el lado de Apple (lib/tarjetas/frentePase.ts), para que las dos
   // plataformas no puedan divergir en lo que el cliente lee de un vistazo. Antes esta función
@@ -129,22 +137,62 @@ function esSellosConMeta(t: TarjetaParaObjeto): boolean {
   return t.tipoTarjeta === 'sellos' && t.selloMeta != null && t.selloMeta > 0;
 }
 
+// Qué hay DE VERDAD en la franja de este objeto (spec 2026-09-17, "La franja, en tres estados", fila
+// de Google). En Google la franja ES el heroImage, así que "llegó al pase" quiere decir "hay URL de
+// hero": sin ella el objeto sale sin franja, aunque el comercio haya subido una, y tratarlo como
+// 'propia' lo dejaría también sin el nombre del pase. Mismo criterio que Apple con `strips !== null`.
+// La grilla mira además la franja propia (antes calculaba `hayGrilla` sin mirarla): con franja propia
+// la ruta hero.png dibuja esa imagen, no los círculos.
+function franjaDe(t: TarjetaParaObjeto): Franja {
+  if (!t.heroImageUrl) return 'banda';
+  if (t.stripUrl) return 'propia';
+  if (esSellosConMeta(t)) return 'grilla';
+  return 'banda';
+}
+
+// Los cuatro lugares del frente de los diseños, como módulos de texto con `id` FIJO: son las celdas
+// que la plantilla de la clase acomoda en dos filas (Task 9, deploy B):
+//   fila 1: nombre_pase | estado      fila 2: nombre | apellido
+// Cada módulo solo si su dato existe: nunca un módulo con body vacío. (Que la celda sin módulo no
+// deje hueco en Android es parte de la QA en teléfono del spec, no algo que esta función garantice.)
+//
+// `header` es el rótulo chico y `body` el valor. El del nombre del pase sigue siendo 'Tarjeta', el
+// de siempre. El estado va como TEXTO: Google no le pone separador de miles a un texto, así que 1250
+// puntos se leen "1250" en Android y con separador en iPhone (aceptado en el spec; el `int` con
+// separador sigue en loyaltyPoints).
+function modulosDelFrente(frente: FrentePase): walletobjects_v1.Schema$TextModuleData[] {
+  const modulos: walletobjects_v1.Schema$TextModuleData[] = [];
+  if (frente.sobreFranja) {
+    modulos.push({ id: 'nombre_pase', header: 'Tarjeta', body: frente.sobreFranja });
+  }
+  if (frente.estado) {
+    modulos.push({ id: 'estado', header: frente.estado.etiqueta, body: frente.estado.valor });
+  }
+  if (frente.titular) {
+    modulos.push({ id: 'nombre', header: 'NOMBRE', body: frente.titular.nombre });
+    if (frente.titular.apellido) {
+      modulos.push({ id: 'apellido', header: 'APELLIDO', body: frente.titular.apellido });
+    }
+  }
+  return modulos;
+}
+
 export function construirObjeto(
   objectId: string,
   classId: string,
   tarjeta: TarjetaParaObjeto,
 ): walletobjects_v1.Schema$LoyaltyObject {
   // El MISMO módulo que arma el frente del pass de Apple y la vista previa del editor de marca.
-  // `hayGrilla` acá es "el objeto lleva su grilla compuesta en heroImage" (la condición de abajo),
-  // que es el equivalente exacto de la franja compuesta de Apple.
   const frente = frentePase({
     tipoTarjeta: tarjeta.tipoTarjeta,
     puntos: tarjeta.puntosActuales,
     selloMeta: tarjeta.selloMeta,
-    hayGrilla: esSellosConMeta(tarjeta) && Boolean(tarjeta.heroImageUrl),
+    franja: franjaDe(tarjeta),
     vigenciaHasta: tarjeta.vigenciaHasta,
     usadoEn: tarjeta.usadoEn,
     nombrePase: tarjeta.nombrePase,
+    nombreCliente: tarjeta.nombreCliente,
+    apellidoCliente: tarjeta.apellidoCliente,
     hoyIso: tarjeta.hoyIso,
   });
   const puntos = loyaltyPointsDe(frente.listado);
@@ -153,22 +201,26 @@ export function construirObjeto(
     id: objectId,
     classId,
     state: 'ACTIVE',
-    barcode: { type: 'QR_CODE', value: tarjeta.qrToken },
+    // "Powered by Cardly" debajo del QR, en todos los pases (decisión 4 del spec). Es el
+    // `alternateText` del código: Google lo dibuja justo debajo, como el `altText` de Apple.
+    barcode: { type: 'QR_CODE', value: tarjeta.qrToken, alternateText: PIE_CODIGO },
     // Se OMITE la clave si el tipo no tiene nada que decir (descuento, cuyo estado es un porcentaje
     // que este objeto no recibe), en vez de mandar null: Google rechaza un loyaltyPoints nulo, y un
-    // "Puntos 0" no le diría nada al cliente. Mismo criterio que heroImage y merchantLocations.
+    // "Puntos 0" no le diría nada al cliente. Mismo criterio que merchantLocations.
     ...(puntos ? { loyaltyPoints: puntos } : {}),
-    // El NOMBRE del pase, lo que el cliente ve para saber cuál de sus tarjetas es esta. Va en
-    // textModulesData porque es el equivalente de Google al headerField de Apple; `header` es el
-    // rótulo del módulo y `body`, el nombre. El `id` permite referenciarlo desde un template
-    // override si algún día hace falta.
-    ...(frente.encabezado
-      ? { textModulesData: [{ id: 'nombre_pase', header: 'Tarjeta', body: frente.encabezado }] }
-      : {}),
+    // SIEMPRE, aunque quede `[]`, a diferencia de loyaltyPoints. syncObjetoTarjeta hace `patch`, y
+    // en un patch un campo omitido deja el valor VIEJO en Google: con la clave omitida cuando no hay
+    // módulos, el dueño que borra el nombre del pase lo seguiría viendo en cada Android.
+    textModulesData: modulosDelFrente(frente),
     ...(vigencia ? { validTimeInterval: vigencia } : {}),
-    ...(esSellosConMeta(tarjeta) && tarjeta.heroImageUrl
-      ? { heroImage: { sourceUri: { uri: tarjeta.heroImageUrl } } }
-      : {}),
+    // SIEMPRE que haya URL, en TODOS los tipos (spec 2026-09-17, decisión 8): la franja propia, la
+    // grilla o la banda de marca, igual que Apple siempre lleva su strip. Hasta esa fecha solo los
+    // sellos lo llevaban, y una membresía o una gift card —cuyos diseños son sobre todo su franja— se
+    // veían en Android con la foto de la clase o sin franja.
+    // "Siempre" y no "solo con franja propia" por el mismo `patch`: un hero mandado solo con franja
+    // propia dejaría en Android la franja BORRADA para siempre cuando el dueño la quita. Mandándolo
+    // siempre, quitarla cambia la URL a la de la banda de marca.
+    ...(tarjeta.heroImageUrl ? { heroImage: { sourceUri: { uri: tarjeta.heroImageUrl } } } : {}),
     // Mismo corte de 10 y mismo criterio que la clase: un arreglo vacío es ruido en el objeto de
     // cada cliente de todos los comercios sin geopush.
     ...(tarjeta.ubicaciones.length > 0

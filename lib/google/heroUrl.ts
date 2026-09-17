@@ -52,6 +52,29 @@ export function versionHero(d: DatosVersionHero): string {
   return crypto.createHash('sha1').update(clave).digest('hex').slice(0, 12);
 }
 
+// La versión del hero de UNA TARJETA (el `?v=` de urlHeroTarjeta), para los DOS caminos que arman su
+// objeto: syncObjetoTarjeta y el objeto embebido en el JWT de generarLinkGuardar. Si cada uno armara
+// su `?v=`, Google haría upsert del JWT con otra URL y volvería a bajar la imagen en cada "Agregar a
+// Google Wallet".
+//
+// Los puntos y la meta entran SOLO cuando la imagen depende de ellos: la GRILLA (sellos con meta y
+// sin franja propia, la misma condición con la que componerStrips la dibuja). Desde el 2026-09-17
+// todos los tipos llevan hero en Google (spec, decisión 8), y la franja propia y la banda de marca
+// no cambian al operar: con los puntos en el hash, Google re-descargaría la misma imagen en cada
+// compra (hasta 2 MB con una franja propia). Fuera de la grilla se hashea con progreso cero, sin
+// meta — y todo lo demás de la marca, que sí altera la imagen, sigue entrando.
+export function versionHeroTarjeta(
+  marca: Omit<DatosVersionHero, 'puntos' | 'selloMeta'>,
+  tipoTarjeta: string,
+  puntos: number,
+  selloMeta: number | null,
+): string {
+  const esGrilla = tipoTarjeta === 'sellos' && selloMeta != null && selloMeta > 0 && !marca.stripUrl;
+  return esGrilla
+    ? versionHero({ ...marca, puntos, selloMeta })
+    : versionHero({ ...marca, puntos: 0, selloMeta: null });
+}
+
 // La versión de la portada de CLASE: la misma banda que dibuja la ruta franja.png, o sea sin
 // progreso (puntos 0, sin meta), sin ícono de sello y sin franja propia. Vive acá y no en cada sync
 // para que la ruta y los dos syncs no puedan hashear cosas distintas.

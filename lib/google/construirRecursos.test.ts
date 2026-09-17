@@ -2,10 +2,22 @@ import { describe, it, expect } from 'vitest';
 import { construirClase, construirObjeto } from './construirRecursos';
 
 // Lo que el objeto sabe del frente del pase además del contador: la vigencia, si el cupón ya se
-// usó, el nombre del pase y el "hoy" del comercio. Los cuatro son OBLIGATORIOS en
-// TarjetaParaObjeto a propósito (mismo criterio que `ubicaciones`): que el compilador obligue a
-// cada llamador a decidir, en vez de que una ruta nueva se olvide en silencio.
-const frenteBase = { vigenciaHasta: null, usadoEn: null, nombrePase: null, hoyIso: '2026-09-09' };
+// usó, el nombre del pase, el "hoy" del comercio, el nombre y apellido del cliente y la franja
+// propia CRUDA de la marca. Todos OBLIGATORIOS en TarjetaParaObjeto a propósito (mismo criterio que
+// `ubicaciones`): que el compilador obligue a cada llamador a decidir, en vez de que una ruta nueva
+// se olvide en silencio.
+const frenteBase = {
+  vigenciaHasta: null,
+  usadoEn: null,
+  nombrePase: null,
+  hoyIso: '2026-09-09',
+  nombreCliente: null,
+  apellidoCliente: null,
+  stripUrl: null,
+};
+
+const HERO = 'https://ejemplo.com/api/tarjetas/xyz/hero.png?v=abc123def456';
+const FRANJA_PROPIA = 'https://ejemplo.com/storage/franja.png';
 
 describe('construirClase', () => {
   it('arma una LoyaltyClass con issuerName/programName = nombre del comercio y el logo requerido', () => {
@@ -50,7 +62,9 @@ describe('construirObjeto', () => {
     expect(obj.id).toBe('123.tarjeta_xyz');
     expect(obj.classId).toBe('123.comercio_abc');
     expect(obj.state).toBe('ACTIVE');
-    expect(obj.barcode).toEqual({ type: 'QR_CODE', value: 'tok-1' });
+    // "Powered by Cardly" debajo del QR (decisión 4 del spec), literal: en TODOS los pases de todos
+    // los comercios. Antes esta prueba afirmaba el código SIN `alternateText`; se invirtió a propósito.
+    expect(obj.barcode).toEqual({ type: 'QR_CODE', value: 'tok-1', alternateText: 'Powered by Cardly' });
     expect(obj.loyaltyPoints).toEqual({ label: 'Puntos', balance: { int: 42 } });
   });
 
@@ -92,31 +106,40 @@ describe('construirObjeto', () => {
   it('sellos con meta y con heroImageUrl: incluye heroImage a nivel de objeto (grilla por cliente)', () => {
     const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
       ...frenteBase, qrToken: 'tok-4', puntosActuales: 3, tipoTarjeta: 'sellos', selloMeta: 8, ubicaciones: [],
-      heroImageUrl: 'https://ejemplo.com/api/tarjetas/xyz/hero.png',
+      heroImageUrl: HERO,
     });
-    expect(obj.heroImage).toEqual({ sourceUri: { uri: 'https://ejemplo.com/api/tarjetas/xyz/hero.png' } });
+    expect(obj.heroImage).toEqual({ sourceUri: { uri: HERO } });
   });
 
-  it('sellos sin heroImageUrl (ej. NEXT_PUBLIC_BASE_URL ausente): omite heroImage, no manda uri vacía', () => {
-    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+  // Vale para CUALQUIER tipo, no solo sellos: sin URL pública no hay hero que mandar.
+  it('sin heroImageUrl (ej. NEXT_PUBLIC_BASE_URL ausente): omite heroImage en sellos y en gift card, no manda uri vacía', () => {
+    const sellos = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
       ...frenteBase, qrToken: 'tok-5', puntosActuales: 3, tipoTarjeta: 'sellos', selloMeta: 8, heroImageUrl: null,
       ubicaciones: [],
     });
-    expect(obj.heroImage).toBeUndefined();
+    expect(sellos.heroImage).toBeUndefined();
+    expect('heroImage' in sellos).toBe(false);
+
+    const giftCard = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      ...frenteBase, qrToken: 'tok-5b', puntosActuales: 2500, tipoTarjeta: 'gift_card', selloMeta: null,
+      heroImageUrl: null, stripUrl: FRANJA_PROPIA, ubicaciones: [],
+    });
+    expect('heroImage' in giftCard).toBe(false);
   });
 
   // LA prueba de `listado`. En Google el contador va SIEMPRE en loyaltyPoints, también cuando el
   // objeto lleva su grilla compuesta en heroImage: es lo que se lee en la vista de LISTA de Wallet,
   // donde la imagen no cabe.
   //
-  // MUTACIÓN: cambiar `frente.listado` por `frente.primario` en loyaltyPointsDe. Con grilla,
-  // frentePase devuelve `primario: null` (el texto taparía los círculos en Apple) y esta tarjeta
-  // saldría SIN loyaltyPoints: cada Android con una tarjeta de sellos perdería su contador, sin un
-  // solo error del lado de Google.
+  // MUTACIÓN: cambiar `frente.listado` por `frente.estado` en la llamada a loyaltyPointsDe. El
+  // estado de los sellos es "3 de 8" SIN la palabra (va al lado del logo, bajo el rótulo SELLOS), y
+  // esta prueba falla: en la vista de lista de Wallet no hay rótulo ni grilla que diga qué se cuenta.
+  // (Antes del 2026-09-17 la mutación era `frente.primario`, que con grilla valía null y dejaba cada
+  // Android sin contador; ese lugar ya no existe.)
   it('sellos CON grilla en el heroImage: el contador SIGUE yendo en loyaltyPoints (vista de lista)', () => {
     const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
       ...frenteBase, qrToken: 'tok-9', puntosActuales: 3, tipoTarjeta: 'sellos', selloMeta: 8,
-      ubicaciones: [], heroImageUrl: 'https://ejemplo.com/api/tarjetas/xyz/hero.png',
+      ubicaciones: [], heroImageUrl: HERO,
     });
     expect(obj.heroImage).toBeDefined();
     // Y con la palabra UNA sola vez: el listado ya la trae, así que Google no la agrega encima
@@ -124,12 +147,272 @@ describe('construirObjeto', () => {
     expect(obj.loyaltyPoints).toEqual({ label: 'Sellos', balance: { string: '3 de 8 sellos' } });
   });
 
-  it('puntos (no sellos): NUNCA incluye heroImage propio aunque venga heroImageUrl — se ve el de la clase', () => {
+  // INVERTIDA a propósito (spec 2026-09-17, decisión 8). Hasta acá afirmaba que puntos NUNCA llevaba
+  // hero propio y se veía el de la clase: así los diseños de membresía, gift card y descuento —que
+  // son sobre todo su franja— no existían en Android.
+  it('puntos (no sellos): TAMBIÉN lleva el heroImage de SU tarjeta (la banda de marca o su franja propia)', () => {
     const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
       ...frenteBase, qrToken: 'tok-6', puntosActuales: 40, tipoTarjeta: 'puntos', selloMeta: null, ubicaciones: [],
-      heroImageUrl: 'https://ejemplo.com/api/tarjetas/xyz/hero.png',
+      heroImageUrl: HERO,
     });
-    expect(obj.heroImage).toBeUndefined();
+    expect(obj.heroImage).toEqual({ sourceUri: { uri: HERO } });
+  });
+});
+
+// El frente nuevo en Google (spec 2026-09-17, sección "Google" → Objeto). Los cuatro módulos de texto
+// son las celdas que la plantilla de la clase (Task 9, deploy B) va a acomodar en dos filas:
+//   fila 1: nombre_pase | estado      fila 2: nombre | apellido
+// Hasta el deploy B se ven abajo, en los detalles (inocuo). Por eso ESTA tarea va primero: con la
+// plantilla puesta y objetos sin módulos, las tarjetas quedarían con filas vacías.
+describe('construirObjeto — el frente de los diseños', () => {
+  // MUTACIONES corridas el 2026-09-17 (cada una restaurada y el archivo comparado byte a byte):
+  //
+  // (a) hero solo en 'grilla'/'propia', en construirObjeto:
+  //   `...(franjaDe(tarjeta) !== 'banda' && tarjeta.heroImageUrl ? { heroImage: … } : {})`
+  //   → FALLAN "gift card SIN franja propia (banda)", "membresía vigente sobre la banda…" y "puntos
+  //   (no sellos): TAMBIÉN lleva el heroImage…" con `expected undefined to deeply equal { Object
+  //   (sourceUri) }`. Es la regresión que dejaría en Android la franja BORRADA para siempre: el sync
+  //   hace `patch`, y un hero omitido deja el viejo.
+  //
+  // (b) omitir textModulesData cuando queda vacío:
+  //   `...(modulosDelFrente(frente).length > 0 ? { textModulesData: modulosDelFrente(frente) } : {})`
+  //   → FALLAN "descuento sin datos" (`- "textModulesData": []`) y "apellido sin nombre" (`expected
+  //   undefined to deeply equal []`). Mismo motivo del patch: un nombre de pase borrado seguiría
+  //   viéndose.
+  //
+  // (c) 'propia' sin mirar heroImageUrl, en franjaDe: subir `if (t.stripUrl) return 'propia';` por
+  //   encima de `if (!t.heroImageUrl) return 'banda';`
+  //   → FALLA "franja propia que NO llegó" con `expected [ { id: 'estado', …(2) } ] to deeply equal
+  //   [ { id: 'nombre_pase', …(2) }, …(1) ]`: sin hero no hay franja, y tratarla como propia deja la
+  //   tarjeta también sin el nombre del pase.
+
+  it('membresía vigente sobre la banda, con nombre del pase y apellido: el cuerpo COMPLETO', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      ...frenteBase,
+      qrToken: 'tok-memb',
+      puntosActuales: 0,
+      tipoTarjeta: 'membresia',
+      selloMeta: null,
+      vigenciaHasta: '2026-10-16',
+      nombrePase: 'Mensualidad VIP',
+      nombreCliente: 'María',
+      apellidoCliente: 'Rivera',
+      heroImageUrl: HERO,
+      ubicaciones: [],
+    });
+    expect(obj).toEqual({
+      id: '123.tarjeta_xyz',
+      classId: '123.comercio_abc',
+      state: 'ACTIVE',
+      barcode: { type: 'QR_CODE', value: 'tok-memb', alternateText: 'Powered by Cardly' },
+      loyaltyPoints: { label: 'Membresía', balance: { string: 'Activa hasta el 16 de octubre de 2026' } },
+      textModulesData: [
+        { id: 'nombre_pase', header: 'Tarjeta', body: 'Mensualidad VIP' },
+        { id: 'estado', header: 'VÁLIDO HASTA', body: '16/10/2026' },
+        { id: 'nombre', header: 'NOMBRE', body: 'María' },
+        { id: 'apellido', header: 'APELLIDO', body: 'Rivera' },
+      ],
+      validTimeInterval: { end: { date: '2026-10-16T23:59:59' } },
+      heroImage: { sourceUri: { uri: HERO } },
+    });
+  });
+
+  it('gift card con franja PROPIA que llegó: sin nombre_pase (la imagen ya trae su texto), con heroImage', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      ...frenteBase,
+      qrToken: 'tok-gift',
+      puntosActuales: 5000,
+      tipoTarjeta: 'gift_card',
+      selloMeta: null,
+      nombrePase: 'Gift Card Estudio',
+      nombreCliente: 'Ana',
+      apellidoCliente: null,
+      stripUrl: FRANJA_PROPIA,
+      heroImageUrl: HERO,
+      ubicaciones: [],
+    });
+    expect(obj).toEqual({
+      id: '123.tarjeta_xyz',
+      classId: '123.comercio_abc',
+      state: 'ACTIVE',
+      barcode: { type: 'QR_CODE', value: 'tok-gift', alternateText: 'Powered by Cardly' },
+      loyaltyPoints: { label: 'Saldo', balance: { string: '$50.00' } },
+      textModulesData: [
+        { id: 'estado', header: 'SALDO', body: '$50.00' },
+        { id: 'nombre', header: 'NOMBRE', body: 'Ana' },
+      ],
+      heroImage: { sourceUri: { uri: HERO } },
+    });
+  });
+
+  // El caso de la MUTACIÓN (a): una gift card sin franja propia ni grilla se ve en Android con la
+  // banda de marca que ya ve en iPhone.
+  it('gift card SIN franja propia (banda): con heroImage y con nombre_pase', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      ...frenteBase,
+      qrToken: 'tok-gift-banda',
+      puntosActuales: 2500,
+      tipoTarjeta: 'gift_card',
+      selloMeta: null,
+      nombrePase: 'Gift Card Estudio',
+      heroImageUrl: HERO,
+      ubicaciones: [],
+    });
+    expect(obj.heroImage).toEqual({ sourceUri: { uri: HERO } });
+    expect(obj.textModulesData).toEqual([
+      { id: 'nombre_pase', header: 'Tarjeta', body: 'Gift Card Estudio' },
+      { id: 'estado', header: 'SALDO', body: '$25.00' },
+    ]);
+  });
+
+  // El caso de la MUTACIÓN (c). Mismo criterio que Apple con `strips !== null`: lo que cuenta es qué
+  // hay DE VERDAD en la franja, no qué subió el comercio.
+  it('franja propia que NO llegó (sin heroImageUrl): es banda, y el nombre del pase SÍ se manda', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      ...frenteBase,
+      qrToken: 'tok-sin-hero',
+      puntosActuales: 2500,
+      tipoTarjeta: 'gift_card',
+      selloMeta: null,
+      nombrePase: 'Gift Card Estudio',
+      stripUrl: FRANJA_PROPIA,
+      heroImageUrl: null,
+      ubicaciones: [],
+    });
+    expect(obj.textModulesData).toEqual([
+      { id: 'nombre_pase', header: 'Tarjeta', body: 'Gift Card Estudio' },
+      { id: 'estado', header: 'SALDO', body: '$25.00' },
+    ]);
+  });
+
+  // El caso de la MUTACIÓN (b): nada que decir, y aun así la clave viaja, vacía.
+  it('descuento sin datos: textModulesData SIEMPRE, aunque quede [] (el patch no borra lo que se omite)', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      ...frenteBase,
+      qrToken: 'tok-desc',
+      puntosActuales: 0,
+      tipoTarjeta: 'descuento',
+      selloMeta: null,
+      ubicaciones: [],
+    });
+    expect(obj).toEqual({
+      id: '123.tarjeta_xyz',
+      classId: '123.comercio_abc',
+      state: 'ACTIVE',
+      barcode: { type: 'QR_CODE', value: 'tok-desc', alternateText: 'Powered by Cardly' },
+      textModulesData: [],
+    });
+    // Explícito además del toEqual: esta es la clave que un patch necesita ver para borrar un nombre
+    // de pase viejo, y es la que la mutación (b) saca.
+    expect('textModulesData' in obj).toBe(true);
+    expect(obj.textModulesData).toEqual([]);
+  });
+
+  it('descuento con nombre del pase y cliente: sin módulo de estado (su porcentaje no llega al objeto)', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      ...frenteBase,
+      qrToken: 'tok-desc-2',
+      puntosActuales: 0,
+      tipoTarjeta: 'descuento',
+      selloMeta: null,
+      nombrePase: 'Club Joyería',
+      nombreCliente: 'Lucía',
+      apellidoCliente: 'Pérez',
+      heroImageUrl: HERO,
+      ubicaciones: [],
+    });
+    expect(obj.textModulesData).toEqual([
+      { id: 'nombre_pase', header: 'Tarjeta', body: 'Club Joyería' },
+      { id: 'nombre', header: 'NOMBRE', body: 'Lucía' },
+      { id: 'apellido', header: 'APELLIDO', body: 'Pérez' },
+    ]);
+  });
+
+  it('cliente sin apellido: solo el módulo NOMBRE, sin un APELLIDO vacío', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      ...frenteBase,
+      qrToken: 'tok-sin-apellido',
+      puntosActuales: 1250,
+      tipoTarjeta: 'puntos',
+      selloMeta: null,
+      nombreCliente: 'José',
+      apellidoCliente: '   ',
+      ubicaciones: [],
+    });
+    // Puntos: el estado va como TEXTO, sin separador de miles en Android (aceptado en el spec); el
+    // `int` con separador sigue en loyaltyPoints.
+    expect(obj.textModulesData).toEqual([
+      { id: 'estado', header: 'PUNTOS', body: '1250' },
+      { id: 'nombre', header: 'NOMBRE', body: 'José' },
+    ]);
+    expect(obj.loyaltyPoints).toEqual({ label: 'Puntos', balance: { int: 1250 } });
+  });
+
+  it('apellido sin nombre: ni NOMBRE ni APELLIDO (un apellido solo no nombra a nadie)', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      ...frenteBase,
+      qrToken: 'tok-sin-nombre',
+      puntosActuales: 0,
+      tipoTarjeta: 'descuento',
+      selloMeta: null,
+      nombreCliente: null,
+      apellidoCliente: 'Rivera',
+      ubicaciones: [],
+    });
+    expect(obj.textModulesData).toEqual([]);
+  });
+
+  it('sellos con la grilla en el hero: sin nombre_pase (taparía los círculos), con el estado "7 de 10"', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      ...frenteBase,
+      qrToken: 'tok-grilla',
+      puntosActuales: 7,
+      tipoTarjeta: 'sellos',
+      selloMeta: 10,
+      nombrePase: 'Café Gratis',
+      nombreCliente: 'María',
+      heroImageUrl: HERO,
+      ubicaciones: [],
+    });
+    expect(obj.textModulesData).toEqual([
+      { id: 'estado', header: 'SELLOS', body: '7 de 10' },
+      { id: 'nombre', header: 'NOMBRE', body: 'María' },
+    ]);
+    expect(obj.heroImage).toEqual({ sourceUri: { uri: HERO } });
+  });
+
+  // 'grilla' exige que el hero exista: sin él no hay círculos que tapar y la banda queda sin nombre.
+  it('sellos con meta pero SIN heroImageUrl: es banda, y el nombre del pase SÍ se manda', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      ...frenteBase,
+      qrToken: 'tok-sellos-sin-hero',
+      puntosActuales: 7,
+      tipoTarjeta: 'sellos',
+      selloMeta: 10,
+      nombrePase: 'Café Gratis',
+      heroImageUrl: null,
+      ubicaciones: [],
+    });
+    expect(obj.textModulesData).toEqual([
+      { id: 'nombre_pase', header: 'Tarjeta', body: 'Café Gratis' },
+      { id: 'estado', header: 'SELLOS', body: '7 de 10' },
+    ]);
+  });
+
+  it('sellos con franja PROPIA (no grilla): sin nombre_pase, con heroImage', () => {
+    const obj = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
+      ...frenteBase,
+      qrToken: 'tok-sellos-propia',
+      puntosActuales: 7,
+      tipoTarjeta: 'sellos',
+      selloMeta: 10,
+      nombrePase: 'Café Gratis',
+      stripUrl: FRANJA_PROPIA,
+      heroImageUrl: HERO,
+      ubicaciones: [],
+    });
+    expect(obj.textModulesData).toEqual([{ id: 'estado', header: 'SELLOS', body: '7 de 10' }]);
+    expect(obj.heroImage).toEqual({ sourceUri: { uri: HERO } });
   });
 });
 
@@ -254,19 +537,24 @@ describe('construirObjeto — identidad y vigencia del pase', () => {
     expect(obj.validTimeInterval).toBeUndefined();
   });
 
-  it('el nombre del pase viaja en textModulesData; sin nombre, la clave ni aparece', () => {
+  // INVERTIDA a propósito (spec 2026-09-17). Antes afirmaba que sin nombre del pase la clave
+  // `textModulesData` ni aparecía. Pero el sync hace `patch`, y un campo omitido deja el valor viejo
+  // en Google: el dueño que borraba el nombre del pase lo seguía viendo en Android. Ahora la lista
+  // viaja SIEMPRE, y sin nombre del pase lleva igual el estado.
+  it('el nombre del pase viaja en textModulesData; sin nombre, la lista viaja igual SIN ese módulo', () => {
     const conNombre = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
       ...frenteBase, ...base, tipoTarjeta: 'membresia', nombrePase: 'Socio Oro',
     });
     expect(conNombre.textModulesData).toEqual([
       { id: 'nombre_pase', header: 'Tarjeta', body: 'Socio Oro' },
+      { id: 'estado', header: 'MEMBRESÍA', body: 'Sin activar' },
     ]);
 
     const sinNombre = construirObjeto('123.tarjeta_xyz', '123.comercio_abc', {
       ...frenteBase, ...base, tipoTarjeta: 'membresia',
     });
-    expect(sinNombre.textModulesData).toBeUndefined();
-    expect('textModulesData' in sinNombre).toBe(false);
+    expect(sinNombre.textModulesData).toEqual([{ id: 'estado', header: 'MEMBRESÍA', body: 'Sin activar' }]);
+    expect('textModulesData' in sinNombre).toBe(true);
   });
 
   it('cupón ya usado: lo dice el texto (usadoEn gana sobre la fecha)', () => {

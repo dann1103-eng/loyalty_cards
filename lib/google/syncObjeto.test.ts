@@ -15,7 +15,17 @@ vi.mock('./walletClient', () => ({
 const supabase = createServiceClient();
 let ids: { comercioId: string; programaId: string; clienteId: string; tarjetaId: string } | null = null;
 
-async function crearTarjeta(opts: { googleClassId: string | null; googleObjectId?: string | null; tipoTarjeta?: string; selloMeta?: number | null; puntos?: number }) {
+async function crearTarjeta(opts: {
+  googleClassId: string | null;
+  googleObjectId?: string | null;
+  tipoTarjeta?: string;
+  selloMeta?: number | null;
+  puntos?: number;
+  nombreCliente?: string;
+  apellidoCliente?: string | null;
+  nombrePase?: string | null;
+  stripUrl?: string | null;
+}) {
   const sufijo = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const { data: comercio, error: eC } = await supabase
     .from('comercios')
@@ -25,6 +35,7 @@ async function crearTarjeta(opts: { googleClassId: string | null; googleObjectId
       google_class_id: opts.googleClassId,
       tipo_tarjeta: opts.tipoTarjeta ?? 'puntos',
       sello_meta: opts.selloMeta ?? null,
+      strip_url: opts.stripUrl ?? null,
     })
     .select('id, nombre, tipo_tarjeta, sello_meta, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias')
     .single();
@@ -42,12 +53,20 @@ async function crearTarjeta(opts: { googleClassId: string | null; googleObjectId
       multipass_visitas: comercio.multipass_visitas,
       membresia_dias: comercio.membresia_dias,
       cupon_vigencia_dias: comercio.cupon_vigencia_dias,
+      nombre_pase: opts.nombrePase ?? null,
     })
     .select('id')
     .single();
   if (eP) throw eP;
   const { data: cliente, error: eCl } = await supabase
-    .from('clientes').insert({ nombre: 'Cliente Test', telefono: `+503-gobj-${sufijo}` }).select('id').single();
+    .from('clientes')
+    .insert({
+      nombre: opts.nombreCliente ?? 'Cliente Test',
+      apellido: opts.apellidoCliente ?? null,
+      telefono: `+503-gobj-${sufijo}`,
+    })
+    .select('id')
+    .single();
   if (eCl) throw eCl;
   const { data: tarjeta, error: eT } = await supabase
     .from('tarjetas')
@@ -70,7 +89,13 @@ beforeEach(() => {
   patchMock.mockReset().mockResolvedValue({});
 });
 
+// NEXT_PUBLIC_BASE_URL lo fijan las pruebas del hero (viaja dentro de la URL): se restaura para no
+// filtrarlo al resto de la suite.
+const BASE_ORIGINAL = process.env.NEXT_PUBLIC_BASE_URL;
+
 afterEach(async () => {
+  if (BASE_ORIGINAL === undefined) delete process.env.NEXT_PUBLIC_BASE_URL;
+  else process.env.NEXT_PUBLIC_BASE_URL = BASE_ORIGINAL;
   if (!ids) return;
   await supabase.from('tarjetas').delete().eq('id', ids.tarjetaId);
   await supabase.from('clientes').delete().eq('id', ids.clienteId);
@@ -118,17 +143,90 @@ describe('syncObjetoTarjeta', () => {
   });
 
   it('tarjeta de sellos: incluye heroImage apuntando a /api/tarjetas/<id>/hero.png (grilla por cliente)', async () => {
+    process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
     const t = await crearTarjeta({ googleClassId: 'issuer-test.comercio_x', tipoTarjeta: 'sellos', selloMeta: 8, puntos: 3 });
     await syncObjetoTarjeta(supabase, t.tarjetaId);
     const llamada = insertMock.mock.calls[0][0];
     expect(llamada.requestBody.heroImage.sourceUri.uri).toContain(`/api/tarjetas/${t.tarjetaId}/hero.png`);
   });
 
-  it('tarjeta de puntos: NUNCA incluye heroImage propio (se ve el de la clase)', async () => {
+  // INVERTIDA a propósito (spec 2026-09-17, decisión 8). Antes afirmaba que puntos NUNCA llevaba hero
+  // propio: los diseños de los tipos que no son sellos no existían en Android.
+  it('tarjeta de puntos: TAMBIÉN incluye heroImage apuntando a /api/tarjetas/<id>/hero.png (su banda o su franja)', async () => {
+    process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
     const t = await crearTarjeta({ googleClassId: 'issuer-test.comercio_x', tipoTarjeta: 'puntos', puntos: 40 });
     await syncObjetoTarjeta(supabase, t.tarjetaId);
     const llamada = insertMock.mock.calls[0][0];
-    expect(llamada.requestBody.heroImage).toBeUndefined();
+    expect(llamada.requestBody.heroImage.sourceUri.uri).toMatch(
+      new RegExp(`^https://www\\.cardly-sv\\.site/api/tarjetas/${t.tarjetaId}/hero\\.png\\?v=[0-9a-f]{12}$`),
+    );
+  });
+
+  // Fuera de la grilla la imagen no cambia al operar: con los puntos en el `?v=`, Google volvería a
+  // bajar la misma banda (o una franja propia de hasta 2 MB) en cada compra.
+  // MUTACIÓN corrida: en syncObjeto.ts, `versionHero({ ...marca, puntos: tarjeta.puntos_actuales,
+  // selloMeta })` en vez de versionHeroTarjeta → FALLA con `expected 'https://www.cardly-sv.site/
+  // api/tarjet…' to be 'https://www.cardly-sv.site/api/tarjet…'` (el `?v=` rotó con el saldo).
+  it('tarjeta de puntos: acreditar NO cambia el ?v= del hero (versionHeroTarjeta)', async () => {
+    process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+    const t = await crearTarjeta({ googleClassId: 'issuer-test.comercio_x', tipoTarjeta: 'puntos', puntos: 40 });
+    await syncObjetoTarjeta(supabase, t.tarjetaId);
+    await supabase.from('tarjetas').update({ puntos_actuales: 55 }).eq('id', t.tarjetaId);
+    await syncObjetoTarjeta(supabase, t.tarjetaId);
+
+    const antes = insertMock.mock.calls[0][0].requestBody.heroImage.sourceUri.uri;
+    // La segunda vuelta ya tiene google_object_id: es un patch, con el saldo nuevo.
+    const despues = patchMock.mock.calls[0][0].requestBody;
+    expect(despues.loyaltyPoints).toEqual({ label: 'Puntos', balance: { int: 55 } });
+    expect(despues.heroImage.sourceUri.uri).toBe(antes);
+  });
+
+  // El frente de los diseños (spec 2026-09-17): NOMBRE y APELLIDO salen de `clientes`, que este
+  // select no traía. MUTACIÓN corrida: `apellidoCliente: null` en syncObjeto.ts → FALLA con
+  // `expected [ { id: 'nombre_pase', …(2) }, …(2) ] to deeply equal [ { id: 'nombre_pase', …(2) },
+  // …(3) ]` (falta el módulo APELLIDO).
+  it('el cuerpo mandado lleva los módulos del frente (nombre del pase, estado, NOMBRE, APELLIDO) y el pie del QR', async () => {
+    const t = await crearTarjeta({
+      googleClassId: 'issuer-test.comercio_x',
+      googleObjectId: `issuer-test.tarjeta_con-frente-${Date.now()}`,
+      tipoTarjeta: 'puntos',
+      puntos: 7,
+      nombreCliente: 'María',
+      apellidoCliente: 'Rivera',
+      nombrePase: 'Club Puntos',
+    });
+    await syncObjetoTarjeta(supabase, t.tarjetaId);
+    const cuerpo = patchMock.mock.calls[0][0].requestBody;
+    expect(cuerpo.textModulesData).toEqual([
+      { id: 'nombre_pase', header: 'Tarjeta', body: 'Club Puntos' },
+      { id: 'estado', header: 'PUNTOS', body: '7' },
+      { id: 'nombre', header: 'NOMBRE', body: 'María' },
+      { id: 'apellido', header: 'APELLIDO', body: 'Rivera' },
+    ]);
+    expect(cuerpo.barcode).toEqual({ type: 'QR_CODE', value: expect.any(String), alternateText: 'Powered by Cardly' });
+  });
+
+  // `stripUrl: marca.stripUrl` es lo que le dice a construirObjeto que la franja es PROPIA (la imagen
+  // trae su texto). MUTACIÓN corrida: `stripUrl: null` en syncObjeto.ts → el objeto se cree banda y
+  // FALLA con `expected [ { id: 'nombre_pase', …(2) }, …(2) ] to deeply equal [ { id: 'estado',
+  // …(2) }, …(1) ]` (nombre del pase escrito encima de la franja del comercio).
+  it('con franja propia del comercio y hero: NO manda el nombre del pase (la imagen ya trae su texto)', async () => {
+    process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+    const t = await crearTarjeta({
+      googleClassId: 'issuer-test.comercio_x',
+      tipoTarjeta: 'gift_card',
+      puntos: 5000,
+      nombreCliente: 'Ana',
+      nombrePase: 'Gift Card Estudio',
+      stripUrl: 'https://ejemplo.com/storage/franja.png',
+    });
+    await syncObjetoTarjeta(supabase, t.tarjetaId);
+    const cuerpo = insertMock.mock.calls[0][0].requestBody;
+    expect(cuerpo.textModulesData).toEqual([
+      { id: 'estado', header: 'SALDO', body: '$50.00' },
+      { id: 'nombre', header: 'NOMBRE', body: 'Ana' },
+    ]);
+    expect(cuerpo.heroImage.sourceUri.uri).toContain(`/api/tarjetas/${t.tarjetaId}/hero.png`);
   });
 
   it('una tarjeta de OTRO comercio no puede colar su google_class_id (scoping via el join real)', async () => {
