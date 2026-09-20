@@ -117,12 +117,19 @@ import { componer, luminancia, parsearColor, razon } from './contraste';
 // (3) sacar el +0.05 → negro contra blanco deja de dar 21;
 // (4) componer de arriba hacia abajo en vez de abajo hacia arriba → la pila de tres capas;
 // (5) redondear a 8 bits dentro de componer → 127.5 pasa a 128 y el gris da 3.95, no 3.98;
-// (6) que parsearColor devuelva algo para un formato que no conoce → oklch, hsl, nombres.
-// Mutante equivalente, no vale la pena: 0.04045 → 0.03928 no altera ningún valor de 8 bits.
+// (6) que parsearColor devuelva algo para un formato que no conoce → oklch, hsl, nombres;
+// (7) permutar los canales del hex CORTO → lo atrapa `#f0a`, que no es gris (los grises `#fff`,
+//     `#000` y `#777` no notan ninguna permutación, por eso hace falta uno de color);
+// (8) sacar la guarda de alpha fuera de rango, o la de canal fuera de rango de luminancia → las
+//     atrapan `rgba(0, 0, 0, 5)` y el color armado a mano.
+// Mutante equivalente, no vale la pena: 0.04045 → 0.03928. No altera ningún valor de 8 bits, y con
+// un canal compuesto entre los dos umbrales mueve la razón en la sexta cifra decimal.
 
 describe('parsearColor', () => {
   it('lee hex corto, hex largo, rgb, rgba y transparent', () => {
     expect(parsearColor('#fff')).toEqual({ r: 255, g: 255, b: 255, a: 1 });
+    // De color a propósito: un hex corto gris no delata una permutación de canales.
+    expect(parsearColor('#f0a')).toEqual({ r: 255, g: 0, b: 170, a: 1 });
     expect(parsearColor('#181849')).toEqual({ r: 24, g: 24, b: 73, a: 1 });
     expect(parsearColor('  #E7E6F0 ')).toEqual({ r: 231, g: 230, b: 240, a: 1 });
     expect(parsearColor('rgb(1, 2, 3)')).toEqual({ r: 1, g: 2, b: 3, a: 1 });
@@ -144,6 +151,7 @@ describe('parsearColor', () => {
       expect(() => parsearColor(valor)).toThrow(`formato de color no soportado: ${valor}`);
     }
     expect(() => parsearColor('rgba(300, 0, 0, 1)')).toThrow('color fuera de rango: rgba(300, 0, 0, 1)');
+    expect(() => parsearColor('rgba(0, 0, 0, 5)')).toThrow('color fuera de rango: rgba(0, 0, 0, 5)');
   });
 });
 
@@ -202,6 +210,12 @@ describe('razon (WCAG 2.x)', () => {
       'la luminancia solo existe para un color opaco',
     );
   });
+
+  it('la luminancia rechaza un canal fuera de rango, aunque el color no venga de parsearColor', () => {
+    // Rgba es un tipo exportado: un color armado a mano se saltea toda la validación del parseo.
+    expect(() => luminancia({ r: 999, g: 0, b: 0, a: 1 })).toThrow('canal fuera de rango: 999');
+    expect(() => luminancia({ r: 0, g: -50, b: 0, a: 1 })).toThrow('canal fuera de rango: -50');
+  });
 });
 ```
 
@@ -221,6 +235,12 @@ Corré las pruebas de diseño (ver "Cómo correr las pruebas"). Esperado: FALLA 
 // Solo entiende los formatos que usan los tokens de tema: hex y rgb()/rgba() con comas. Cualquier
 // otra cosa LANZA en vez de devolver un valor aproximado — una prueba de contraste que se saltea en
 // silencio el color que no sabe leer certifica justo lo que no midió.
+//
+// Mide el color SIN cuantizar a 8 bits, y el navegador sí cuantiza el color que compone. Se comparó
+// par por par contra una versión que redondea cada paso, sobre el CSS de hoy y el del rediseño: la
+// diferencia llega a 0.05 en la razón, va para los DOS lados (no es un sesgo optimista) y no cambia
+// el veredicto de ningún par en los tres temas. Con los márgenes actuales — el más ajustado es
+// 4.76 contra 4.5 — no compensa imitar el redondeo del compositor.
 
 export type Rgba = { r: number; g: number; b: number; a: number };
 
@@ -288,6 +308,12 @@ function lineal(canal: number): number {
 
 export function luminancia(color: Rgba): number {
   if (color.a !== 1) throw new Error('la luminancia solo existe para un color opaco: componelo primero');
+  // Rgba es un tipo exportado, así que un color armado a mano no pasó por parsearColor y puede traer
+  // cualquier cosa. Sin esta guarda, un canal fuera de rango devuelve un número igual y se certifica
+  // un contraste inventado, que es exactamente lo que este módulo existe para evitar.
+  for (const canal of [color.r, color.g, color.b]) {
+    if (canal < 0 || canal > 255) throw new Error(`canal fuera de rango: ${canal}`);
+  }
   return 0.2126 * lineal(color.r) + 0.7152 * lineal(color.g) + 0.0722 * lineal(color.b);
 }
 
@@ -1036,6 +1062,7 @@ en producción).
 - [ ] **Paso 1: las dos copias del CSS**
 
 ```bash
+mkdir -p public/tablero-neumorfico
 git show 3db8bf0:app/globals.css > public/tablero-neumorfico/antes.css
 cp app/globals.css public/tablero-neumorfico/propuesta.css
 ```
@@ -1356,9 +1383,10 @@ Y en `PARES_ALTO_CONTRASTE`, agregar:
   { frente: '--borde-relieve', fondo: ['--fondo'], minimo: 3, texto: false, uso: 'el borde de toda superficie con relieve' },
 ```
 
-Esperado al correr: rojo (el default todavía es oscuro y los tokens de relieve no existen: fallan
-`TEMA_POR_DEFECTO`, las pruebas de `relieve` y la de alto contraste con `el token --borde-relieve no
-está definido`).
+Esperado al correr: rojo. Ojo con la forma del rojo: la prueba de `TEMA_POR_DEFECTO` **falla** con
+una aserción, pero las de `relieve` y la de pares de alto contraste **lanzan**
+(`el token --relieve-1 no está definido`, `el token --borde-relieve no está definido`) porque esos
+tokens todavía no existen. Es rojo igual; no es un defecto.
 
 - [ ] **Paso 2: reescribir los bloques de tema**
 
@@ -1796,9 +1824,12 @@ Buscá TODAS las reglas que nombran `.field input` o `.field select`:
 }
 ```
 
-Las demás reglas que nombran `.field input[...]` (el reset de `type="file"`, etc.) se dejan: ya no
-compiten con la regla base, porque esta las excluye con los `:not()`. Revisá cada una igual y
-anotá en el reporte qué hiciste con cada una.
+Las demás reglas que nombran `.field input[...]` se dejan: ya no compiten con la regla base, porque
+esta las excluye con los `:not()`. Son estas cinco, y tenés que decir en el reporte qué hiciste con
+cada una: L1118 (`.subida-imagen .field input[type='file']`), L1142 y L1150 (los resets de
+`type="file"`), L1154 (`::file-selector-button`, que sí cambia — ver abajo) y L445
+(`.field select option`). **Y corregí el comentario de L1345-1346**, que dice que `.field input` le
+pone borde, fondo y 13px de padding a *todo* input: con los `:not()` deja de ser cierto.
 
 La única que sí cambia es `::file-selector-button` (L1154-1165): pasa a elevada, y como queda del
 color de la página lleva borde, con el padding compensado para que la caja no crezca.
@@ -1886,9 +1917,10 @@ L3, y `useState` si queda sin uso. Correr `npm run lint -- "app/comercio/(proteg
 Pruebas de diseño en verde. Mutaciones:
 - en `.field :is(…)::placeholder`, `color: var(--texto-3)` → `var(--linea-fuerte)` → debe fallar el
   par por regla del placeholder en los tres temas;
-- en `.btn-borde:active`, escribir `box-shadow: var(--hundido-2), 0 0 0 2px var(--acento)` → debe
-  fallar la prueba de composición con `.btn-borde:active compone var(--hundido-2), que vale none en
-  alto-contraste`.
+- en `.btn-borde:active:not(:disabled)` (ese es el selector real, L538), escribir
+  `box-shadow: var(--hundido-2), 0 0 0 2px var(--acento)` → debe fallar la prueba de composición con
+  `[composición] .btn-borde:active:not(:disabled) compone var(--hundido-2), que vale none en
+  alto-contraste` (el mensaje imprime el selector completo).
 
 ```bash
 cp app/globals.css public/tablero-neumorfico/propuesta.css
@@ -1914,8 +1946,9 @@ filas); recorrido con Tab; en la app, `/comercio/login`, `/registro-comercio` y 
 - [ ] **Paso 1: medir antes**
 
 Antes de tocar nada, el controlador mide en el tablero el ancho de `.contexto-etiqueta` a 360 y
-320px con `getBoundingClientRect` (lo pide en el reporte de la Tarea 7). Esos números tienen que
-quedar idénticos al final de esta tarea.
+320px con `getBoundingClientRect`. Se puede medir en cualquier momento de esta tarea con el
+interruptor **"Antes"** del tablero, porque ninguna tarea anterior toca `.contexto-pastilla`. Esos
+números tienen que quedar idénticos al final.
 
 - [ ] **Paso 2: CSS**
 
@@ -2080,16 +2113,19 @@ una opción pisa la siguiente), y cada `<label>` queda con
 `className={`opcion-plan${plan === p.valor ? ' opcion-plan-activa' : ''}`}` y
 `style={{ display: 'flex', alignItems: 'center', gap: 10 }}`.
 
-Después: `grep -rn "var(--superficie" app --include=*.tsx | grep -v _inicio` solo tiene que dejar
-lo que está en la lista de excepciones de la spec (pase y QR). Reportá la salida.
+Después: `grep -rn "var(--superficie" app --include=*.tsx | grep -v _inicio` tiene que quedar
+**vacío**. Hoy devuelve exactamente los 6 archivos que tocan esta tarea y la 7 (ningún TSX del pase
+ni del QR usa `var(--superficie`), así que al terminar no debe quedar ninguno. Reportá la salida.
 
 - [ ] **Paso 4: pruebas**
 
 En `PARES_REGLA`, reemplazar las dos entradas de `.metric-carta.naranja` / `.metric-carta.menta` por
 cuatro, **por variante y no por la regla base**: `.metric-carta.naranja .metric-valor` y
 `.metric-carta.menta .metric-valor` sobre `.metric-carta` (mínimo 3, texto grande), y lo mismo con
-`.metric-etiqueta` (4.5). Las cinco métricas de la app llevan `.naranja` o `.menta`, así que medir
-la regla base mediría un color que nunca se ve. Escribí los selectores exactos que dejaste en el CSS. Agregá los pares por regla de `.campo-suelto` (7) y `.campo-suelto::placeholder` (4.5).
+`.metric-etiqueta` (4.5). Las cuatro con `texto: true` (en alto contraste suben a 7:1, y pasan: el
+acento lima sobre negro da 15.64:1). Las cinco métricas de la app llevan `.naranja` o `.menta`, así
+que medir la regla base mediría un color que nunca se ve. Escribí los selectores exactos que dejaste
+en el CSS. Agregá los pares por regla de `.campo-suelto` (7) y `.campo-suelto::placeholder` (4.5).
 
 Mutaciones: `.metric-etiqueta` con `color: var(--linea-fuerte)` → falla su par; `.campo-suelto`
 con `background: #ffffff` → lanza `la regla .campo-suelto pinta background con #ffffff, no con un
