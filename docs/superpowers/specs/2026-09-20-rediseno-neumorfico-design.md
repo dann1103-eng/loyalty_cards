@@ -1,9 +1,10 @@
 # Rediseño neumórfico de la app
 
 Fecha: 2026-09-20
-Estado: decisiones tomadas por Daniel en conversación; aprobado para plan e implementación.
-Los valores de color son la propuesta inicial: **el tablero de componentes (Fase 1) los ajusta y lo
-que Daniel apruebe ahí es lo que se publica**, byte a byte.
+Estado: decisiones tomadas por Daniel en conversación; aprobado para plan e implementación. Daniel
+pidió terminar todo y revisarlo a la vuelta: los valores de color de esta spec se implementan como
+están, y **su revisión es sobre el tablero de componentes** (ver esa sección). Nada se publica sin
+su OK.
 
 ## Por qué
 
@@ -81,6 +82,12 @@ Verificado en el código (commit `3db8bf0`):
    ninguna prueba, ni siquiera las puras. Lo copia Daniel en su terminal; el asistente no lo lee ni
    lo copia.
 7. `DESIGN.md` y `PRODUCT.md` todavía describen el acento naranja y "oscuro por defecto".
+8. **Un segundo fallo, en alto contraste, que apareció al correr un prototipo de la prueba contra el
+   CSS de hoy.** La pastilla "inactivo" pinta `--error` (`#ff8a7a`) sobre `--error-suave`
+   (`rgba(255, 138, 122, 0.22)` sobre negro): **6.67:1**. Pasa el AA, pero no el 7:1 que esta spec
+   le exige al texto de ese tema, que existe para leer bajo el sol. `--error-suave` solo lo usa
+   `.pastilla-inactivo`, así que se arregla bajando su alpha en alto contraste a **0.16** (7.52:1),
+   sin tocar `--error`, que pinta todos los avisos de error. Va en la Fase 2 junto con el hallazgo 1.
 
 ## Reglas del sistema
 
@@ -98,9 +105,14 @@ algún tema, y no pueden ir en lista. Lo verifica una prueba.
 **3. El foco es `outline`, no `box-shadow`.** Así no pelea con el relieve ni con el hundido, no se
 compone con ningún token que valga `none`, y sobrevive a `forced-colors`.
 
-**4. Toda superficie con relieve tiene borde de 1px, aunque casi no se vea.** La caja mide igual en
-los tres temas (cambiar de tema no mueve nada: la cuenta de ancho de `.contexto-pastilla`, L1558-1590,
-sigue valiendo), y en `forced-colors` el borde es el único límite que queda.
+**4. Toda superficie con relieve DEL COLOR DE LA PÁGINA tiene borde de 1px, aunque casi no se vea.**
+La caja mide igual en los tres temas (cambiar de tema no mueve nada: la cuenta de ancho de
+`.contexto-pastilla`, L1558-1590, sigue valiendo), y en `forced-colors` el borde es el único límite
+que queda. Donde hoy no hay borde (`.menu-boton`, `.admin-salir`, `.metric-carta`), se agrega y se
+**descuenta 1px del padding** para que la caja no crezca (el `box-sizing: border-box` es global).
+**Exentos:** los botones rellenos (`.btn-primary`, `.btn-acento`) y los ítems activos de acento.
+Su relleno ya los separa de la página, y agregarles borde cambiaría 2px su alto: movería la fila del
+escáner, donde el campo y "Acreditar" se estiran a la misma altura.
 
 **5. `--shadow-1..3` son para lo que FLOTA; `--relieve-*` para lo que se levanta DE la página.**
 Flotan: `.cardface`, `.wallet-btn`, la vista previa del pase en `FormularioBranding.tsx`. Se
@@ -134,7 +146,7 @@ que es constante.
 
 | Token | Claro (`:root`) | Oscuro (`:root[data-tema="oscuro"]`, nuevo) | Alto contraste |
 |---|---|---|---|
-| `color-scheme` | `light` (en `html` y en el bloque) | `dark` | = |
+| `color-scheme` | `light`, solo en `html` (`:root` es el mismo elemento: declararlo en los dos deja uno muerto) | `dark` | = |
 | `--fondo` | `#e7e6f0` | `#1c1e3a` | = |
 | `--superficie-0` (el pozo) | `#dcdbe8` | `#15172e` | = |
 | `--superficie-1` / `-2` | `var(--fondo)` / `var(--fondo)` | `var(--fondo)` / `var(--fondo)` | = |
@@ -157,7 +169,7 @@ que es constante.
 | `--velo` | `rgba(24, 24, 73, 0.45)` | `rgba(6, 7, 20, 0.6)` | = |
 | `--hover-suave` / `--neutro-suave` | `rgba(24, 24, 73, 0.05)` / `rgba(24, 24, 73, 0.07)` | `rgba(245, 245, 240, 0.05)` / `rgba(245, 245, 240, 0.08)` | = |
 | `--acento-suave` / `--acento-borde` | `rgba(81, 75, 168, 0.12)` / `rgba(81, 75, 168, 0.4)` | `rgba(143, 134, 224, 0.12)` / `rgba(143, 134, 224, 0.4)` | = |
-| `--menta-suave` / `--error-suave` | `rgba(11, 102, 69, 0.12)` / `rgba(164, 35, 28, 0.1)` | `rgba(139, 214, 180, 0.13)` / `rgba(255, 180, 171, 0.12)` | = |
+| `--menta-suave` / `--error-suave` | `rgba(11, 102, 69, 0.12)` / `rgba(164, 35, 28, 0.1)` | `rgba(139, 214, 180, 0.13)` / `rgba(255, 180, 171, 0.12)` | = / **`rgba(255, 138, 122, 0.16)`** (hallazgo 8) |
 | `--btn-primario-fondo` / `-texto` | `#181849` / `#f5f4fc` | `var(--blanco)` / `var(--superficie-0)` | = |
 
 `--ring` se conserva (lo usan reglas que no son foco), pero el foco deja de usarlo.
@@ -246,25 +258,25 @@ corrige esa regla en `DESIGN.md`.
 | `.field` (410-454) | H | Ver el detalle abajo. |
 | `.btn-primary` (458-485) | E, relleno sólido | `box-shadow: var(--relieve-1)`. `:active` → `box-shadow: none` + `scale(.98)`. `:disabled` → `box-shadow: none` (deshabilitado no puede verse levantado). |
 | `.btn-acento` (488-515) | E, violeta | Radio `var(--radius-control)`; `box-shadow: var(--relieve-1)`; hover `box-shadow: var(--sombra-acento)` (solo); `:active` → `none`. |
-| `.btn-borde` (518-540) | E, neutro | `background: var(--superficie-1)`; `border-color: var(--borde-relieve)` (el nombre de la clase queda como herencia: las clases no se renombran, DESIGN.md:139); hover `var(--relieve-2)`; `:active` `var(--hundido-1)` + `scale(.97)`. |
-| `.admin-lista` (908-912) | — | `gap: 14px` (hoy 10). La extensión de `--relieve-1` es 4 + 10 = 14px: con 10px la sombra de una fila pisa el brillo de la siguiente. Igual: `.panel-atajos` → 14, `.portal-cuentas`/`.portal-recompensas` 8 → 12, `.metric-pila` 16 → 20. |
-| `.admin-fila` (913-928) | E | `border: 1px solid var(--borde-relieve)`; `box-shadow: var(--relieve-1)`. El hover aplica **solo a `:is(a, button).admin-fila`**: hay ~14 filas `<div>` estáticas que hoy "se levantan" sin ser tocables. Hover: `translateY(-2px)` + `var(--relieve-2)` con `cubic-bezier(0.22, 1, 0.36, 1)`; `:active` `var(--hundido-1)`. Se deja de cambiar el `background` en hover. |
+| `.btn-borde` (518-540) | E, neutro | `background: var(--superficie-1)`; `border-color: var(--borde-relieve)` (el nombre de la clase queda como herencia: las clases no se renombran, DESIGN.md:139); hover `var(--relieve-2)`; `:active` `var(--hundido-2)` + `scale(.97)`. |
+| `.admin-lista` (908-912) | — | `gap: 14px` (hoy 10). La extensión de `--relieve-1` es 4 + 10 = 14px: con 10px la sombra de una fila pisa el brillo de la siguiente. Igual: `.panel-atajos` → 14, `.portal-cuentas`/`.portal-recompensas` 8 → 12, `.metric-pila` 16 → 20 (en L1010 **y** en el `@media` de L1067), `.filtro-chips` 8 → 12. |
+| `.admin-fila` (913-928) | E | `border: 1px solid var(--borde-relieve)`; `box-shadow: var(--relieve-1)`. El hover aplica **solo a `:is(a, button).admin-fila`**: hay 14 filas `<div>` estáticas que hoy "se levantan" sin ser tocables. Hover: `translateY(-2px)` + `var(--relieve-2)` con `cubic-bezier(0.22, 1, 0.36, 1)`; `:active` `var(--hundido-2)`. Se deja de cambiar el `background` en hover. |
 | `.icono-circulo` (315-325) | P | Sin cambio: el tinte identifica, no es un control (`aria-hidden`). Levantarlo lo haría parecer tocable. |
 | `.pastilla` (943-959) | P | Solo hereda los valores nuevos. |
-| `.metric-carta` (1013-1071) | E, **neutra** | `background: var(--superficie-1)`; `color: var(--texto)`; `box-shadow: var(--relieve-2)`. `.naranja`/`.menta` solo colorean `.metric-valor` y `.metric-etiqueta` (`var(--acento)` / `var(--menta)`). Se quitan la rotación y el hover: no es interactiva. `.metric-etiqueta`/`.metric-sub` cambian `opacity` por `color: var(--texto-2)` / `var(--texto-3)`, así entran en la prueba. Hoy son bloques violeta saturados, lo que contradice "un acento, solo en lo interactivo activo". **Punto de aprobación del tablero.** |
+| `.metric-carta` (1013-1071) | E, **neutra** | `background: var(--superficie-1)`; `color: var(--texto)`; `border: 1px solid var(--borde-relieve)` con padding 22 → 21px; `box-shadow: var(--relieve-2)`. Se quitan también las rotaciones del `@media` de L1069-1070. `.naranja`/`.menta` solo colorean `.metric-valor` y `.metric-etiqueta` (`var(--acento)` / `var(--menta)`). Se quitan la rotación y el hover: no es interactiva. `.metric-etiqueta`/`.metric-sub` cambian `opacity` por `color: var(--texto-2)` / `var(--texto-3)`, así entran en la prueba. Hoy son bloques violeta saturados, lo que contradice "un acento, solo en lo interactivo activo". **Punto de aprobación del tablero.** |
 | `.nav-inferior` / `.nav-destacado` (1372-1456) | barra E hacia arriba, ítems P | Barra: `background: var(--fondo)`; borrar `backdrop-filter`; `border-top: 1px solid var(--borde-relieve)`; `box-shadow: var(--relieve-3)`. Ítem activo: píldora de acento sólido (como hoy). Destacado: como hoy. Barra a lo ancho, no isla flotante: no toca el `padding-bottom: 96px` de `.admin-shell`. |
 | `.filtro-chip` (1824-1838) | inactivo H, activo E acento | Inactivo: `background: var(--superficie-0)`, `box-shadow: var(--hundido-1)`, borde `--borde-relieve`. Activo: relleno de acento + `var(--relieve-1)`. El estado lo da el relleno, no el relieve. |
-| `.menu-boton` (1464-1484) | E | `background: var(--superficie-1)`; `var(--relieve-1)`; `:active` `var(--hundido-1)`; se mantiene 44×44. |
+| `.menu-boton` (1464-1484) | E | `background: var(--superficie-1)`; `border: 1px solid var(--borde-relieve)` con padding 10 → 9px (se mantiene 44×44); `var(--relieve-1)`; `:active` `var(--hundido-2)`. |
 | `.menu-destacado` (1488-1515) | E | `var(--relieve-1)`; `-activo` mantiene `border-color: var(--acento)`. |
 | `.sheet-panel` (1606-1623) | E hacia arriba | `border-top: 1px solid var(--borde-relieve)`; `box-shadow: var(--relieve-3)`. El padding de 18px aloja la sombra de las filas pese al `overflow-y: auto`. |
 | `.sheet-fila` (1624-1650) | P; la activa H | La activa: `background: var(--superficie-0)`, `box-shadow: var(--hundido-1)`, `outline: 2px solid var(--acento)`, `outline-offset: -2px`. Se agrega `.sheet-fila-activa:focus-visible { outline-width: 3px; outline-offset: 2px }`: la regla global de foco empata en especificidad y sin esto el foco sería indistinguible en la fila activa. |
 | `.contexto-pastilla` (1538-1596) | E | `background: var(--superficie-1)`; `border-color: var(--borde-relieve)`; `var(--relieve-1)`. Padding y borde intactos: la cuenta de L1558-1590 sigue valiendo. |
-| `.portal-cuenta` (1692-1713) | E; la activa H | `var(--relieve-1)`, `:active` `var(--hundido-1)`. Activa: `border-color: var(--acento)` + `outline: 1px solid var(--acento)` + `box-shadow: var(--hundido-1)`, en lugar de `var(--ring)`. |
+| `.portal-cuenta` (1692-1713) | E; la activa H | `var(--relieve-1)`, `:active` `var(--hundido-2)`. Activa: `border-color: var(--acento)` + `outline: 1px solid var(--acento)` + `box-shadow: var(--hundido-1)`, en lugar de `var(--ring)`. Se agrega `.portal-cuenta-activa:focus-visible { outline-width: 3px; outline-offset: 2px }`, por la misma razón que en `.sheet-fila-activa`. |
 | `.portal-recompensa` (1728-1737) | E | `var(--relieve-1)`, sin hover (es estática). Radio `--radius-control`. `.portal-instalar`/`.portal-link` quedan P. |
 | `.escaner-marco` (1787-1793) | E | `var(--relieve-2)`. **No puede ser H:** una sombra `inset` se pinta debajo del contenido y el `<video>` la taparía entera. Si se la quiere hundida, hace falta un `::after` superpuesto. `.escaner-video` como hoy. |
 | `.alerta` / `.nota` (542-568) | P | Solo radio `--radius-control`. Un mensaje no es una superficie. |
 | `.subida-imagen` (1090-1121) | H | `background: var(--superficie-0)`; `var(--hundido-1)`; radio `--radius-control`. **Se borra el literal naranja de L1111** y se reescribe su comentario (L1105-1110). El comentario dice que "se queda" porque no se veía y porque borrarlo era tocar el oscuro sin poder mirarlo; la razón nueva es otra: esa declaración de `box-shadow` en `:hover`/`:focus-within` **reemplaza** al hundido, y el pozo se aplanaría al pasar el mouse. En su lugar el hover conserva `box-shadow: var(--hundido-1)`. |
-| `.admin-top` / `.admin-salir` (839-891) | header P opaco; botón E | `background: var(--fondo)`; borrar `backdrop-filter` y reescribir el comentario de L849-851. `.admin-salir`: fondo `--superficie-1` + `var(--relieve-1)`. |
+| `.admin-top` / `.admin-salir` (839-891) | header P opaco; botón E | `background: var(--fondo)`; borrar `backdrop-filter` y reescribir el comentario de L849-851. `.admin-salir`: fondo `--superficie-1`, `border: 1px solid var(--borde-relieve)` con padding 8px 16px → 7px 15px, `var(--relieve-1)`, `:active` `var(--hundido-2)`. |
 | `body` (280-291) | — | Borrar `background-image` y `background-attachment`. |
 
 ### `.field` en detalle
@@ -278,9 +290,12 @@ corrige esa regla en `DESIGN.md`.
 - Foco: **se borra el `outline: none` de L440** (le ganaría en especificidad a la regla global).
   Queda `border-color: var(--acento)`, sin tocar `box-shadow` ni `background`: el pozo sigue
   hundido y el foco lo dibuja el `outline` global.
-- `resize: vertical` para el textarea.
-- `box-shadow: none` explícito en el reset de `.field input[type="file"]` (L1142) y de
-  `.encuadre-franja input[type='range']` (L1347).
+- Para el textarea: `.field textarea { resize: vertical; line-height: 1.55; }` (el `line-height`
+  viene del parche inline de `FormularioReverso`, que se borra).
+- Placeholder: `.field :is(input, textarea)::placeholder { color: var(--texto-3); }`.
+- Los resets de `.field input[type="file"]` (L1142) y `.encuadre-franja input[type='range']`
+  (L1347) **no** necesitan `box-shadow: none`: los `:not()` ya excluyen esos inputs de la regla del
+  hundido.
 - `::file-selector-button` pasa a E: fondo `--superficie-1` + `var(--relieve-1)`.
 
 ### Base nueva
@@ -317,9 +332,11 @@ tiene que mostrarlo** para confirmar que la maqueta del pase no queda mintiendo.
 Ninguna familia necesita envoltorios ni pseudo-elementos: el relieve es `box-shadow` sobre el mismo
 nodo. Lo que sí se toca:
 
-1. `app/comercio/(protegido)/branding/FormularioReverso.tsx:139-157, 272-275` — borrar
-   `estiloTextarea`, `textareaEnfocado` y los `onFocus`/`onBlur`. El textarea ya está dentro de
-   `.field`. Obligatorio: el estilo inline pisaría el hundido.
+1. `app/comercio/(protegido)/branding/FormularioReverso.tsx` — borrar `estiloTextarea` y
+   `textareaEnfocado` con su comentario (L139-157), los `onFocus`/`onBlur` (L265-266) y el
+   `style={estiloTextarea}` (L275); quitar `type CSSProperties` del import de L3 (queda sin uso y el
+   lint lo marca) y `useState` si también queda sin uso. El textarea ya está dentro de `.field`.
+   Obligatorio: el estilo inline pisaría el hundido.
 2. `app/comercio/(protegido)/reportes/page.tsx:320-321` — la barra del gráfico (hoy inline con
    `--superficie-3`/`--acento`) pasa a `.pista` / `.pista-relleno`.
 3. `app/comercio/(protegido)/escanear/Escaner.tsx:411-424` ("Puntos a sumar", el camino del cajero)
@@ -329,11 +346,15 @@ nodo. Lo que sí se toca:
    Hoy el plan elegido se marca con `--superficie-1` contra `transparent`; con
    `--superficie-1 == --fondo` esa diferencia desaparece.
 6. Solo comentarios que dejan de ser ciertos (hablan del `backdrop-filter` de `.admin-top`):
-   `app/_ui/SelectorTema.tsx:53-59`, `MenuOpciones.tsx:70-76`, `SelectorContexto.tsx:90-96`,
-   `sucursales/ModalAgregarLocal.tsx:129-135`. **El portal se mantiene**; el comentario pasa a "si
-   vuelve un `backdrop-filter`/`transform`/`filter` al header, el `position: fixed` de adentro
-   dejaría de ser relativo a la ventana".
-7. `lib/tema.ts` (default y etiquetas), `app/manifest.ts:10-11` → `#e7e6f0`,
+   `app/_ui/SelectorTema.tsx:53-59`, `MenuOpciones.tsx:70-76`, `SelectorContexto.tsx:90-96`.
+   **El portal se mantiene**; el comentario pasa a "si vuelve un `backdrop-filter`/`transform`/
+   `filter` al header, el `position: fixed` de adentro dejaría de ser relativo a la ventana".
+   En `sucursales/ModalAgregarLocal.tsx:129-135` la razón principal del portal (el `transform` de
+   `.reveal`) sigue siendo cierta: solo cambia la última cláusula (L135).
+7. `lib/tema.ts`: `TEMA_POR_DEFECTO = 'claro'` y `ETIQUETAS_TEMA` → claro `'El predeterminado'`,
+   oscuro `'Para usar de noche'` (hoy "Fondo blanco" y "El de siempre", que dejan de ser ciertas);
+   alto contraste sin cambio. El ORDEN de `TEMAS` no cambia: `lib/tema.test.ts` y el script del
+   `<head>` lo fijan como literal a propósito. `app/manifest.ts:10-11` → `#e7e6f0`;
    `app/mi-tarjeta/layout.tsx` → `statusBarStyle: 'default'`.
 
 ## Prueba de contraste
@@ -371,8 +392,11 @@ usarlo, **sin cambiar ninguna de sus aserciones**:
   ese selector.
 
 Pruebas unitarias de la matemática con valores de referencia: `#000`/`#fff` = 21; `#777`/`#fff` =
-4.48; `#767676`/`#fff` = 4.54; `rgba(0,0,0,.5)` sobre `#fff` = `#808080`, que contra blanco da
-3.95; `razon(a, b) === razon(b, a)`; lanza ante oklch y ante ciclos.
+4.48; `#767676`/`#fff` = 4.54; `rgba(0,0,0,.5)` sobre `#fff` = gris 127.5 (sin redondear: **no**
+`#808080`), que contra blanco da 3.98; `razon(a, b) === razon(b, a)`; lanza ante oklch y ante ciclos.
+Los grises solos no alcanzan: con r = g = b, permutar los coeficientes .2126/.7152/.0722 no cambia
+nada y la prueba seguiría verde. Por eso van también `#0000ff`/`#fff` = 8.59, `#ff0000`/`#fff` =
+4.00 y `#00ff00`/`#000` = 15.30.
 
 ### `lib/diseno/temas.test.ts` — pares de tokens
 
@@ -393,7 +417,11 @@ Lee `app/globals.css` y recorre los tres temas.
 | `--acento` | `--acento-suave` sobre `--fondo` | 3 | Glifo de ícono: no es texto (WCAG 1.4.11). |
 
 **Solo en alto contraste:** todo par de texto sube a `max(mínimo, 7)` — ese tema existe para el sol
-— y `--linea` y `--borde-relieve` contra `--fondo` ≥ 3, porque son la única separación que queda.
+— y `--linea` contra `--fondo` ≥ 3, porque es la única separación que queda. Desde la Fase 3 se
+suma `--borde-relieve` ≥ 3 (antes no existe, y `resolver` lanza ante un token que no existe).
+
+**Fondos translúcidos:** si la última capa de una pila no es opaca, se apoya sobre `--fondo` (lo que
+queda debajo de todo es la página), y la etiqueta lo dice: `--vidrio-nav∘--fondo`.
 
 ### Pares por regla
 
@@ -404,8 +432,8 @@ la página). Si no, lanza `la regla X pinta <prop> con <valor>, no con un token`
 
 | Regla | Mínimo |
 |---|---|
-| el selector nuevo de `.field`: texto sobre su fondo | 7 |
-| su `::placeholder` sobre el fondo del campo | 4.5 |
+| `.field input` (Fases 2-3) → el selector nuevo de `.field` (Fase 4+): texto sobre su fondo | 7 |
+| `.field input::placeholder` (Fases 2-3) → `.field :is(input, textarea)::placeholder` (Fase 4+), sobre el fondo del campo | 4.5 |
 | `.btn-primary` | 7 |
 | `.btn-acento` | 4.5 |
 | `.nav-inferior a` sobre `.nav-inferior` | 4.5 |
@@ -414,10 +442,12 @@ la página). Si no, lanza `la regla X pinta <prop> con <valor>, no con un token`
 | `.filtro-chip` y `.filtro-chip.activo` | 4.5 |
 | `.pastilla-activo`, `.pastilla-inactivo` | 4.5 |
 | `.alerta` | 7 |
-| `.metric-valor` dentro de `.metric-carta` | 3 (texto grande, 2.9rem) |
+| `.metric-carta.naranja` y `.metric-carta.menta` (Fases 2 a 5: hoy son bloques de color) | 4.5 |
+| desde la Fase 6: `.metric-valor` de cada variante sobre `.metric-carta` | 3 (texto grande, 2.9rem) |
+| desde la Fase 6: `.metric-etiqueta` sobre `.metric-carta` | 4.5 |
 
 El valor de medir por regla se ve con el placeholder: un par fijo `--texto-3`/`--superficie-0`
-fallaría hoy (4.48:1 en el claro actual) por una combinación que hoy no existe en pantalla, porque
+fallaría hoy (4.46:1 en el claro actual) por una combinación que hoy no existe en pantalla, porque
 el campo de hoy está sobre `--superficie-1`. El par por regla sigue a la migración solo.
 
 **Los selectores de los pares por regla se actualizan en el mismo commit que migra cada familia.**
@@ -437,7 +467,10 @@ Formato del mensaje, con el valor sin redondear comparado e impreso con dos deci
    `--sombra-relieve` valen `transparent`. En claro y oscuro, ninguno vale `none`.
 3. **Piso de relieve** en claro y oscuro: `--luz` y `--sombra-relieve`, compuestas sobre `--fondo`,
    dan ≥ 1.12:1 contra `--fondo`. Si no, el neumorfismo no se ve.
-4. **En `lib/tema.test.ts`:** el `color-scheme` de `html` coincide con el del tema por defecto.
+4. **En `lib/tema.test.ts`:** el `color-scheme` de `html` coincide con el del tema por defecto, y el
+   de cada bloque con el de su tema. La fuente de verdad es un mapa escrito en la prueba
+   (`claro → light`, `oscuro → dark`, `alto-contraste → dark`), no el CSS: comparar el CSS contra sí
+   mismo sería una tautología que sigue verde con `html` en `dark` y el default en claro.
 
 ### Mutation-testing
 
@@ -454,6 +487,7 @@ de la Fase 3 en adelante se identifican por bloque y token, porque los números 
 | `--acento` ≥ 4.5 | claro `--acento` (L153) `#514ba8` → `#8f86e0` | `[tema claro] --acento sobre --fondo: 2.80:1 < 4.5` |
 | `--sobre-acento`/`--acento` | alto contraste `--sobre-acento` (L224) `#000000` → `#ffffff` | `[tema alto-contraste] --sobre-acento sobre --acento: 1.34:1 < 7` |
 | `--sobre-acento`/`--acento-fuerte` | **Hoy ya falla.** Tras el arreglo (L48 → `#a49df0`), revertirlo | `[tema oscuro] --sobre-acento sobre --acento-fuerte: 2.31:1 < 4.5` |
+| pastilla inactiva en alto contraste | **Hoy ya falla.** Tras el arreglo (L253 → `0.16`), revertirlo a `0.22` | `[tema alto-contraste] --error sobre --error-suave∘--fondo: 6.67:1 < 7` |
 | `--sobre-menta` | claro `--sobre-menta` (L158) `#eefff7` → `#8bd6b4` | `[tema claro] --sobre-menta sobre --menta: 3.70:1 < 4.5` |
 | botón primario ≥ 7 | claro `--btn-primario-texto` (L184) `#faf8f5` → `#6b6b6b` | `[tema claro] --btn-primario-texto sobre --btn-primario-fondo: 3.28:1 < 7` |
 | `--menta` | claro `--menta` (L157) → `#8bd6b4` | `[tema claro] --menta sobre --fondo: 1.51:1 < 4.5` |
@@ -489,8 +523,17 @@ de 8 bits.
 
 ## Tablero de componentes
 
-La aprobación visual, antes de tocar `app/`. Vive en `public/tablero-neumorfico/` **del worktree**
-(`preview_start` sirve el worktree):
+**Cambio de papel (2026-09-20).** La idea original era aprobar el tablero antes de tocar `app/`.
+Daniel pidió terminar todo y revisarlo a la vuelta, así que el tablero pasa a ser **su herramienta
+de revisión**. Se construye primero, con el CSS de hoy (sirve de "antes"), y al cierre de cada fase
+`propuesta.css` se regenera **copiando** `app/globals.css`: son idénticos por construcción, y el diff
+de la Fase 7 queda como verificación formal. La lista de aprobación de abajo pasa a ser la lista de
+revisión de Daniel. Con los valores de esta spec como default: si algo no le gusta, se cambia el
+token y listo, porque todo está en una rama sin publicar.
+
+Vive en `public/tablero-neumorfico/` **del worktree** (`preview_start` sirve el worktree). Como está
+en `public/`, integrado a `master` se serviría en producción: **se borra en el commit previo a
+integrar**, después de la revisión de Daniel, y no en la Fase 7.
 
 - `index.html` — tres `<iframe>` con `componentes.html?tema=claro|oscuro|alto-contraste`: cada uno
   tiene su propio `:root`, aislamiento real.
@@ -519,13 +562,13 @@ inactivos hundidos · `--borde-relieve` tenue · `--acento-fuerte` oscuro lavand
 
 | Fase | Qué | Cómo se verifica |
 |---|---|---|
-| 1 · Tablero | `public/tablero-neumorfico/` | Ver "Tablero de componentes". Nada de `app/` antes de la aprobación. |
-| 2 · Contraste | `lib/diseno/{contraste,tokensCss}.ts` y sus pruebas, `lib/diseno/temas.test.ts`, `lib/tema.test.ts` sobre el parser nuevo. La primera corrida sale **roja** por el 2.31:1; se corrige `--acento-fuerte` oscuro. | `npx vitest run lib/diseno lib/tema.test.ts`, y cada fila de mutación de la Fase 2: romper, ver fallar con el mensaje, restaurar. |
+| 1 · Tablero | `public/tablero-neumorfico/`, con el CSS de hoy | Ver "Tablero de componentes". Capturas del "antes" en los tres temas. |
+| 2 · Contraste | `lib/diseno/{contraste,tokensCss}.ts` y sus pruebas, `lib/diseno/temas.test.ts`, `lib/tema.test.ts` sobre el parser nuevo. La primera corrida sale **roja con 5 fallas**: el 2.31:1 del oscuro (token, `.btn-acento`, `.nav-destacado .icono`) y el 6.67:1 de la pastilla inactiva en alto contraste (token y regla). Se corrigen `--acento-fuerte` del oscuro y `--error-suave` del alto contraste. | `npx vitest run lib/diseno lib/tema.test.ts`, y cada fila de mutación de la Fase 2: romper, ver fallar con el mensaje, restaurar. |
 | 3 · Tokens y default | Los tres bloques, `--radius-control` a `CONSTANTES`, `html { color-scheme: light }`, `lib/tema.ts`, `lib/tema.test.ts:29` y sus comentarios (L8-12, L24, L60), manifest, barra de estado. Durante esta fase `--vidrio-*` pasan a `var(--fondo)` y `--atmosfera` a `none`; se eliminan en la 4 y la 5. | Pruebas y mutaciones de la Fase 3. En el navegador, `getComputedStyle(document.documentElement)` de cada token contra la salida del parser. Recorrido de login, registro, mi-tarjeta, admin **y `/`** en los tres temas. |
 | 4 · Primitivas | `.panel`, `.field`, los tres botones, filas, pastilla, alerta, `body`, foco global, `FormularioReverso`. Se borran `--vidrio-panel`, `--atmosfera` y el `backdrop-filter` del panel. | Pares por regla actualizados en el mismo commit; prueba de composición; los 15 inputs en tres temas; branding, reglas, alta de comercio, registro-comercio. |
 | 5 · Header, barra y hojas | `.admin-top`, `.admin-salir`, `.nav-*`, `.menu-*`, `.sheet-*`, `.contexto-pastilla`, `.filtro-chip`, comentarios de portales. Se borran `--vidrio-top`/`--vidrio-nav`. | Ancho de `.contexto-etiqueta` con `getBoundingClientRect` a 360 y 320px idéntico antes y después; 5 columnas para el dueño y 3 para el cajero; las cuatro hojas abren y cierran con Escape; scroll por debajo del header y la barra. |
 | 6 · Pantallas y JSX inline | `.metric-*`, `.portal-*`, `.escaner-*`, `.subida-imagen`, gaps, y las clases nuevas en los 5 archivos TSX. | Panel, reportes, mi-tarjeta, branding. `grep -rn "var(--superficie" app --include=*.tsx \| grep -v _inicio` solo deja las excepciones del pase. El escáner con cámara lo prueba Daniel en un teléfono real. |
-| 7 · Cierre | `git diff --no-index --ignore-cr-at-eol public/tablero-neumorfico/propuesta.css app/globals.css` **vacío**, y recién entonces se borra el tablero. `DESIGN.md`, `PRODUCT.md`, `ESTADO-Y-PLAN`. | Suite completa, `npm run lint`, `npm run typecheck`, `npx next build` (`/` sigue `○ Static`). |
+| 7 · Cierre | `git diff --no-index --ignore-cr-at-eol public/tablero-neumorfico/propuesta.css app/globals.css` **vacío**. `DESIGN.md`, `PRODUCT.md`, `ESTADO-Y-PLAN`. El tablero queda para la revisión de Daniel (ver "Tablero de componentes"). | Suite completa, `npm run lint`, `npm run typecheck`, `npx next build` (`/` sigue `○ Static`). Lo que no se pueda correr sin `.env.local` queda anotado como pendiente de Daniel, con el comando. |
 
 **Integración.** Salvo la Fase 2, todo se integra junto al final: los estados intermedios de 3 a 6
 no deben llegar a los comercios piloto. La Fase 2 **puede** publicarse sola — arregla hoy el botón
@@ -569,8 +612,12 @@ tarea aparte por pantalla (toca JSX con comportamiento). Nunca se importa su HTM
    con `outline`; la prueba de composición; borrar L1111; los `:not()` más los resets; los 15 inputs
    en el tablero.
 3. **El default se filtra** a la portada, al PWA, a la barra de estado, y a los cajeros que pasan a
-   claro de golpe. → Recorrer `/` en cada fase sin editar `inicio.module.css` (si algo se filtra,
-   tarea aparte); manifest y barra de estado en la Fase 3; aviso a los pilotos.
+   claro de golpe. → Manifest y barra de estado en la Fase 3; aviso a los pilotos. La portada:
+   `FormularioDemo` consume `--superficie-1/2`, `--texto`, `--linea-fuerte` y `--ring`, así que
+   sigue al tema — **igual que hoy**, porque quien ya tenía el tema claro elegido ya lo veía así.
+   Lo único que cambia es que el visitante sin tema elegido lo ve en claro. Se recorre `/` en cada
+   fase: si queda **ilegible**, eso bloquea la integración y se arregla con el cambio mínimo en
+   `inicio.module.css`; si solo se ve distinto, se anota para Daniel y no se toca.
 4. **Costo de pintura** de las sombras dobles en listas largas en teléfonos baratos, y sombras que se
    pisan o se recortan (gaps de 8-10px, `overflow` de la hoja y del `body`). → Desenfoque ≤ 10px en
    `--relieve-1`; gaps de 12-20px; si el throttling ×4 de DevTools muestra repintados caros en
