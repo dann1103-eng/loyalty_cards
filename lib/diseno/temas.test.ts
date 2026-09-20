@@ -86,7 +86,17 @@ const PARES_ALTO_CONTRASTE: Par[] = [
 
 // Pares por regla: el color y el fondo se leen DE LA REGLA CSS, para medir lo que ve el usuario y no
 // un token intermediario. Al migrar una familia, su selector se actualiza en el mismo commit.
-type ParRegla = { color: string; fondo: string; minimo: number; texto: boolean; uso: string };
+// `contenedor` es la superficie sobre la que se apoya la regla cuando su propio fondo es
+// translúcido. Sin él, la pila cae en --fondo (la página) y mide algo que no está en pantalla: la
+// pastilla vive dentro de una fila y la alerta dentro de un panel.
+type ParRegla = {
+  color: string;
+  fondo: string;
+  minimo: number;
+  texto: boolean;
+  uso: string;
+  contenedor?: string;
+};
 
 const PARES_REGLA: ParRegla[] = [
   { color: '.field input', fondo: '.field input', minimo: 7, texto: true, uso: 'lo que se escribe en un campo' },
@@ -104,9 +114,23 @@ const PARES_REGLA: ParRegla[] = [
   { color: '.nav-destacado .icono', fondo: '.nav-destacado .icono', minimo: 3, texto: false, uso: 'círculo de Escanear' },
   { color: '.filtro-chip', fondo: '.filtro-chip', minimo: 4.5, texto: true, uso: 'filtro inactivo' },
   { color: '.filtro-chip.activo', fondo: '.filtro-chip.activo', minimo: 4.5, texto: true, uso: 'filtro activo' },
-  { color: '.pastilla-activo', fondo: '.pastilla-activo', minimo: 4.5, texto: true, uso: 'pastilla activa' },
-  { color: '.pastilla-inactivo', fondo: '.pastilla-inactivo', minimo: 4.5, texto: true, uso: 'pastilla inactiva' },
-  { color: '.alerta', fondo: '.alerta', minimo: 7, texto: true, uso: 'alerta' },
+  {
+    color: '.pastilla-activo',
+    fondo: '.pastilla-activo',
+    contenedor: '--superficie-2',
+    minimo: 4.5,
+    texto: true,
+    uso: 'pastilla activa, dentro de una fila',
+  },
+  {
+    color: '.pastilla-inactivo',
+    fondo: '.pastilla-inactivo',
+    contenedor: '--superficie-2',
+    minimo: 4.5,
+    texto: true,
+    uso: 'pastilla inactiva, dentro de una fila',
+  },
+  { color: '.alerta', fondo: '.alerta', contenedor: '--superficie-1', minimo: 7, texto: true, uso: 'alerta, dentro del panel' },
   { color: '.metric-carta.naranja', fondo: '.metric-carta.naranja', minimo: 4.5, texto: true, uso: 'métrica' },
   { color: '.metric-carta.menta', fondo: '.metric-carta.menta', minimo: 4.5, texto: true, uso: 'métrica' },
 ];
@@ -182,7 +206,9 @@ describe.each(TEMAS)('tema %s', (tema) => {
       try {
         const minimo = minimoDe(tema, par.minimo, par.texto);
         const frente = tokenDeRegla(par.color, ['color']);
-        const { razon: r, fondo } = medir(mapa, frente, [tokenDeRegla(par.fondo, ['background', 'background-color'])]);
+        const capas = [tokenDeRegla(par.fondo, ['background', 'background-color'])];
+        if (par.contenedor) capas.push(par.contenedor);
+        const { razon: r, fondo } = medir(mapa, frente, capas);
         if (r < minimo) {
           fallas.push(`[tema ${tema}] regla ${par.color}: ${frente} sobre ${fondo}: ${r.toFixed(2)}:1 < ${minimo} (${par.uso})`);
         }

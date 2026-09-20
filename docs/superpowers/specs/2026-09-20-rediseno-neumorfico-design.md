@@ -84,10 +84,14 @@ Verificado en el código (commit `3db8bf0`):
 7. `DESIGN.md` y `PRODUCT.md` todavía describen el acento naranja y "oscuro por defecto".
 8. **Un segundo fallo, en alto contraste, que apareció al correr un prototipo de la prueba contra el
    CSS de hoy.** La pastilla "inactivo" pinta `--error` (`#ff8a7a`) sobre `--error-suave`
-   (`rgba(255, 138, 122, 0.22)` sobre negro): **6.67:1**. Pasa el AA, pero no el 7:1 que esta spec
-   le exige al texto de ese tema, que existe para leer bajo el sol. `--error-suave` solo lo usa
-   `.pastilla-inactivo`, así que se arregla bajando su alpha en alto contraste a **0.16** (7.52:1),
-   sin tocar `--error`, que pinta todos los avisos de error. Va en la Fase 2 junto con el hallazgo 1.
+   (`rgba(255, 138, 122, 0.22)`). **Ninguna pastilla declara fondo propio**: su tinte es translúcido y
+   se compone sobre la fila que la contiene (`.admin-fila`, `--superficie-2`), no sobre la página.
+   Medida ahí da **5.97:1**, cuando este tema le exige 7:1 a todo texto porque existe para leer bajo
+   el sol. `--error-suave` solo lo usa `.pastilla-inactivo`, así que se arregla bajando su alpha en
+   alto contraste a **0.12** (7.31:1), sin tocar `--error`, que pinta todos los avisos de error. Va
+   en la Fase 2 junto con el hallazgo 1. **Corolario para la prueba:** todo par de un tinte
+   translúcido nombra la superficie que lo contiene; apoyarlo en `--fondo` mide una pila que en
+   pantalla no existe, y da más contraste del real.
 
 ## Reglas del sistema
 
@@ -169,7 +173,7 @@ que es constante.
 | `--velo` | `rgba(24, 24, 73, 0.45)` | `rgba(6, 7, 20, 0.6)` | = |
 | `--hover-suave` / `--neutro-suave` | `rgba(24, 24, 73, 0.05)` / `rgba(24, 24, 73, 0.07)` | `rgba(245, 245, 240, 0.05)` / `rgba(245, 245, 240, 0.08)` | = |
 | `--acento-suave` / `--acento-borde` | `rgba(81, 75, 168, 0.12)` / `rgba(81, 75, 168, 0.4)` | `rgba(143, 134, 224, 0.12)` / `rgba(143, 134, 224, 0.4)` | = |
-| `--menta-suave` / `--error-suave` | `rgba(11, 102, 69, 0.12)` / `rgba(164, 35, 28, 0.1)` | `rgba(139, 214, 180, 0.13)` / `rgba(255, 180, 171, 0.12)` | = / **`rgba(255, 138, 122, 0.16)`** (hallazgo 8) |
+| `--menta-suave` / `--error-suave` | `rgba(11, 102, 69, 0.12)` / `rgba(164, 35, 28, 0.1)` | `rgba(139, 214, 180, 0.13)` / `rgba(255, 180, 171, 0.12)` | = / **`rgba(255, 138, 122, 0.12)`** (hallazgo 8) |
 | `--btn-primario-fondo` / `-texto` | `#181849` / `#f5f4fc` | `var(--blanco)` / `var(--superficie-0)` | = |
 
 `--ring` se conserva (lo usan reglas que no son foco), pero el foco deja de usarlo.
@@ -414,16 +418,18 @@ Lee `app/globals.css` y recorre los tres temas.
 | `--sobre-menta` | `--menta` | 4.5 | `.check`. |
 | `--btn-primario-texto` | `--btn-primario-fondo` | 7 | El botón más tocado de la app. |
 | `--menta`, `--error` | `--fondo` | 4.5 | Mensajes de éxito, avisos de campo. |
-| `--menta` / `--error` | `--menta-suave` / `--error-suave` sobre `--fondo` | 4.5 | Pastillas. |
-| `--texto` | `--error-fondo` sobre `--fondo` | 7 | `.alerta`. |
-| `--acento` | `--acento-suave` sobre `--fondo` | 3 | Glifo de ícono: no es texto (WCAG 1.4.11). |
+| `--menta` / `--error` | `--menta-suave` / `--error-suave` sobre `--superficie-2` | 4.5 | Pastillas, sobre la fila que las contiene. |
+| `--texto` | `--error-fondo` sobre `--superficie-1` | 7 | `.alerta`, dentro del panel. |
+| `--acento` | `--acento-suave` sobre `--superficie-2` | 3 | Glifo de ícono, sobre la fila que lo contiene: no es texto (WCAG 1.4.11). |
 
 **Solo en alto contraste:** todo par de texto sube a `max(mínimo, 7)` — ese tema existe para el sol
 — y `--linea` contra `--fondo` ≥ 3, porque es la única separación que queda. Desde la Fase 3 se
 suma `--borde-relieve` ≥ 3 (antes no existe, y `resolver` lanza ante un token que no existe).
 
-**Fondos translúcidos:** si la última capa de una pila no es opaca, se apoya sobre `--fondo` (lo que
-queda debajo de todo es la página), y la etiqueta lo dice: `--vidrio-nav∘--fondo`.
+**Fondos translúcidos:** un par nombra la superficie que lo contiene (`--superficie-2` para lo que
+vive en una fila, `--superficie-1` para lo que vive en un panel). Recién si la última capa sigue sin
+ser opaca se apoya en `--fondo` — lo que queda debajo de todo es la página — y la etiqueta lo dice:
+`--vidrio-nav∘--fondo`. Un par por regla declara su contenedor con el campo `contenedor`.
 
 ### Pares por regla
 
@@ -502,7 +508,7 @@ de la Fase 3 en adelante se identifican por bloque y token, porque los números 
 | `--acento` ≥ 4.5 | claro `--acento` (L153) `#514ba8` → `#8f86e0` | `[tema claro] --acento sobre --fondo: 2.80:1 < 4.5` |
 | `--sobre-acento`/`--acento` | alto contraste `--sobre-acento` (L224) `#000000` → `#ffffff` | `[tema alto-contraste] --sobre-acento sobre --acento: 1.34:1 < 7` |
 | `--sobre-acento`/`--acento-fuerte` | **Hoy ya falla.** Tras el arreglo (L48 → `#a49df0`), revertirlo | `[tema oscuro] --sobre-acento sobre --acento-fuerte: 2.31:1 < 4.5` |
-| pastilla inactiva en alto contraste | **Hoy ya falla.** Tras el arreglo (L253 → `0.16`), revertirlo a `0.22` | `[tema alto-contraste] --error sobre --error-suave∘--fondo: 6.67:1 < 7` |
+| pastilla inactiva en alto contraste | **Hoy ya falla.** Tras el arreglo (L253 → `0.12`), revertirlo a `0.22` | `[tema alto-contraste] --error sobre --error-suave∘--superficie-2: 5.97:1 < 7`. Con `0.16` da 6.78: también falla, y es la prueba de que el umbral se mide sobre la fila |
 | `--sobre-menta` | claro `--sobre-menta` (L158) `#eefff7` → `#8bd6b4` | `[tema claro] --sobre-menta sobre --menta: 3.70:1 < 4.5` |
 | botón primario ≥ 7 | claro `--btn-primario-texto` (L184) `#faf8f5` → `#6b6b6b` | `[tema claro] --btn-primario-texto sobre --btn-primario-fondo: 3.28:1 < 7` |
 | `--menta` | claro `--menta` (L157) → `#8bd6b4` | `[tema claro] --menta sobre --fondo: 1.51:1 < 4.5` |
