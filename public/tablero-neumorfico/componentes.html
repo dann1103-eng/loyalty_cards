@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Componentes</title>
+<script>
+  // Igual que SCRIPT_TEMA (lib/tema.ts): el tema se fija ANTES del primer pintado. Y la hoja de
+  // estilos sale de ?css= (antes | propuesta), para comparar.
+  (function () {
+    var q = new URLSearchParams(location.search);
+    var t = q.get('tema');
+    if (['oscuro', 'claro', 'alto-contraste'].indexOf(t) > -1) document.documentElement.dataset.tema = t;
+    var hoja = q.get('css') === 'antes' ? 'antes.css' : 'propuesta.css';
+    document.write('<link rel="stylesheet" href="' + hoja + '">');
+  })();
+</script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Hanken+Grotesk:wght@400;600&family=Geist+Mono:wght@400;700&display=swap">
+<!-- Íconos Material Symbols, copiado tal cual de app/layout.tsx -->
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link
+  href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300..600,0..1,0&display=block"
+  rel="stylesheet"
+>
+<link rel="stylesheet" href="tablero.css">
+</head>
+<body>
+
+<!-- ═══ 1. Cabecera de la app ═══
+     Fuente: app/comercio/(protegido)/layout.tsx (.admin-top, .admin-marca),
+     app/comercio/(protegido)/SelectorContexto.tsx (.contexto-pastilla, .contexto-etiqueta),
+     app/comercio/(protegido)/MenuOpciones.tsx (.menu-boton),
+     app/admin/(protegido)/layout.tsx (.admin-salir) -->
+<section class="tablero-seccion">
+  <h2>1. Cabecera de la app</h2>
+  <header class="admin-top">
+    <a href="#" class="admin-marca">
+      <span class="icono-circulo" aria-hidden="true">
+        <span class="icono icono-lleno" style="font-size: 18px;">storefront</span>
+      </span>
+      <span style="display: flex; flex-direction: column; line-height: 1.2;">
+        Pupusería La Esquina
+      </span>
+    </a>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <button
+        type="button"
+        class="contexto-pastilla"
+        aria-label="Contexto activo: Pupusería La Esquina · Centro. Cambiar de comercio o sucursal."
+      >
+        <span class="icono" aria-hidden="true" style="font-size: 16px;">swap_horiz</span>
+        <span class="contexto-etiqueta">Centro</span>
+      </button>
+      <button type="button" class="menu-boton" aria-expanded="false" aria-label="Más opciones">
+        <span class="icono" aria-hidden="true">menu</span>
+      </button>
+    </div>
+  </header>
+  <div class="tablero-fila" style="margin-top: 14px;">
+    <!-- La variante admin (app/admin/(protegido)/layout.tsx): nav interna reusando .admin-salir. -->
+    <a href="#" class="admin-salir" style="text-decoration: none;">Comercios</a>
+    <a href="#" class="admin-salir" style="text-decoration: none;">Cuentas</a>
+    <button class="admin-salir" type="submit">Salir</button>
+  </div>
+</section>
+
+<!-- ═══ 2. Títulos ═══
+     Fuente: app/mi-tarjeta/PortalCliente.tsx (.kicker, .title, .lede),
+     app/comercio/(protegido)/panel/page.tsx (.title, .lede, .titulo-seccion) -->
+<section class="tablero-seccion">
+  <h2>2. Títulos</h2>
+  <p class="kicker">Cardly SV</p>
+  <h1 class="title" style="font-size: 1.7rem; margin: 0;">Resumen del local</h1>
+  <p class="lede" style="margin-top: 6px;">Así va tu programa de lealtad hoy.</p>
+  <p class="titulo-seccion" style="margin-top: 14px;">Gestión rápida</p>
+</section>
+
+<!-- ═══ 3. Panel con formulario ═══
+     Fuente: app/comercio/(protegido)/sucursales/ModalAgregarLocal.tsx (texto, radio),
+     app/mi-tarjeta/PortalCliente.tsx (select, tel),
+     app/admin/login/FormularioLogin.tsx (email, password),
+     app/comercio/(protegido)/escanear/Escaner.tsx (number),
+     app/admin/(protegido)/cuentas/[id]/FormularioCobro.tsx (date),
+     app/comercio/(protegido)/branding/FormularioBranding.tsx (.selector-color, .field-aviso),
+     app/comercio/(protegido)/branding/FormularioReverso.tsx (checkbox, textarea, url),
+     app/comercio/(protegido)/programas/[id]/cartel/EditorCartel.tsx (range),
+     app/comercio/(protegido)/clientes/page.tsx (search),
+     app/comercio/(protegido)/branding/SubidaImagen.tsx (file) -->
+<section class="tablero-seccion">
+  <h2>3. Panel con formulario — un .field por tipo de control</h2>
+  <form class="panel" style="margin-top: 0;">
+    <div class="field">
+      <label for="nombre-comercio">Nombre del comercio</label>
+      <input id="nombre-comercio" name="nombre" type="text" value="Pupusería La Esquina" data-par="campo">
+    </div>
+    <div class="field">
+      <label for="telefono">Teléfono</label>
+      <input id="telefono" type="tel" inputmode="tel" value="7123 4567" autocomplete="tel">
+    </div>
+    <div class="field">
+      <label for="email">Correo</label>
+      <input id="email" name="email" type="email" autocomplete="email" placeholder="dueno@negocio.com">
+    </div>
+    <div class="field">
+      <label for="password">Contraseña</label>
+      <input id="password" name="password" type="password" autocomplete="current-password">
+    </div>
+    <div class="field" style="max-width: 200px;">
+      <label for="monto-compra">Monto de la compra</label>
+      <input id="monto-compra" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+    </div>
+    <div class="field" style="max-width: 220px;">
+      <label for="periodo_desde">Período desde</label>
+      <input id="periodo_desde" name="periodo_desde" type="date" value="2026-09-01">
+    </div>
+    <div class="field">
+      <label for="color_fondo">Color de fondo</label>
+      <div class="selector-color">
+        <input type="color" aria-label="Color de fondo (selector)" value="#131315">
+        <div style="flex: 1;">
+          <input id="color_fondo" name="color_fondo" value="rgb(19, 19, 21)" style="width: 100%;">
+          <p class="hex" style="margin-top: 4px;">#131315</p>
+        </div>
+      </div>
+    </div>
+    <div class="field">
+      <label
+        for="mostrar_como_funciona"
+        style="display: flex; align-items: flex-start; gap: 10px; font-size: 0.95rem; line-height: 1.4; color: var(--texto); cursor: pointer;"
+      >
+        <input
+          id="mostrar_como_funciona"
+          name="mostrar_como_funciona"
+          type="checkbox"
+          checked
+          style="width: 20px; height: 20px; margin-top: 1px; flex-shrink: 0; accent-color: var(--acento-fuerte);"
+        >
+        <span>Mostrar la sección "Cómo funciona"</span>
+      </label>
+    </div>
+    <div class="field">
+      <label>Tipo de tarjeta</label>
+      <label style="display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; cursor: pointer;">
+        <input type="radio" name="tipoTarjeta" value="sellos" checked>
+        <span>
+          <span style="display: block; font-weight: 600;">Sellos</span>
+          <span class="admin-fila-slug">Una tarjeta se llena y canjea un premio</span>
+        </span>
+      </label>
+      <label style="display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; cursor: pointer;">
+        <input type="radio" name="tipoTarjeta" value="puntos">
+        <span>
+          <span style="display: block; font-weight: 600;">Puntos</span>
+          <span class="admin-fila-slug">Suma puntos y los canjea por premios</span>
+        </span>
+      </label>
+    </div>
+    <div class="field">
+      <label for="zoom">Zoom <span class="admin-fila-slug">(120%)</span></label>
+      <input id="zoom" type="range" min="100" max="200" step="1" value="120">
+    </div>
+    <div class="field" style="margin-bottom: 0;">
+      <label for="q">Buscar</label>
+      <input
+        id="q"
+        name="q"
+        type="search"
+        placeholder="Nombre, apellido o teléfono…"
+        data-par="campo-placeholder"
+        data-pseudo="::placeholder"
+      >
+    </div>
+    <div class="field">
+      <label for="instagram">Instagram</label>
+      <input
+        id="instagram"
+        name="instagram"
+        type="url"
+        inputmode="url"
+        autocapitalize="none"
+        autocorrect="off"
+        spellcheck="false"
+        placeholder="https://instagram.com/tu-negocio"
+      >
+    </div>
+    <div class="field">
+      <label for="pais">País</label>
+      <select id="pais">
+        <option value="sv">🇸🇻 El Salvador (+503)</option>
+        <option value="gt">🇬🇹 Guatemala (+502)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="terminos_uso">Términos de uso</label>
+      <textarea id="terminos_uso" name="terminos_uso" rows="4">Acumulás un sello por cada compra mayor a $3.00. Al completar la tarjeta canjeás tu premio en cualquiera de nuestras sucursales.</textarea>
+    </div>
+    <div class="field">
+      <label for="archivo-logo">Logo</label>
+      <input id="archivo-logo" name="archivo" type="file" accept="image/png,image/jpeg,image/webp">
+      <p class="field-aviso" style="color: var(--texto-2);">Esto crea la tarjeta de este programa en Google Wallet y no se puede deshacer.</p>
+    </div>
+    <div class="field">
+      <label for="slug">Nombre del negocio</label>
+      <input id="slug" name="slug" type="text" value="">
+      <p class="field-aviso">Este campo es obligatorio.</p>
+    </div>
+  </form>
+</section>
+
+<!-- ═══ 4. Botones ═══
+     Fuente: app/mi-tarjeta/PortalCliente.tsx (.btn-primary),
+     app/comercio/(protegido)/escanear/Escaner.tsx (.btn-acento),
+     app/comercio/(protegido)/panel/page.tsx (.btn-borde),
+     app/registro/[comercioSlug]/RegistroCliente.tsx (.wallet-btn) -->
+<section class="tablero-seccion">
+  <h2>4. Botones</h2>
+  <div class="tablero-fila">
+    <button class="btn-primary" type="submit" style="width: auto;" data-par="boton-primario">Ver mi tarjeta</button>
+    <button class="btn-primary" type="submit" style="width: auto;" disabled>Ver mi tarjeta</button>
+  </div>
+  <div class="tablero-fila" style="margin-top: 12px;">
+    <button class="btn-acento" style="width: auto;" data-par="boton-acento">
+      <span class="icono" aria-hidden="true">add_circle</span>
+      Acreditar
+    </button>
+    <button class="btn-acento" style="width: auto;" disabled>
+      <span class="icono" aria-hidden="true">add_circle</span>
+      Acreditar
+    </button>
+  </div>
+  <div class="tablero-fila" style="margin-top: 12px;">
+    <a href="#" class="btn-borde" data-par="boton-borde">
+      <span class="icono" style="font-size: 18px;" aria-hidden="true">download</span>
+      Descargar
+    </a>
+    <button class="btn-borde" disabled>
+      <span class="icono" style="font-size: 18px;" aria-hidden="true">download</span>
+      Descargar
+    </button>
+  </div>
+  <div class="tablero-fila" style="margin-top: 12px; max-width: 320px;">
+    <a class="wallet-btn" href="#" data-par="boton-wallet" style="width: 100%;">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width: 20px; height: 20px;">
+        <rect x="2.5" y="5.5" width="19" height="14" rx="3" stroke="currentColor" stroke-width="1.6" />
+        <path d="M2.5 9.5h19" stroke="currentColor" stroke-width="1.6" />
+        <path d="M16.5 14.5h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+      </svg>
+      Agregar a Apple Wallet
+    </a>
+  </div>
+</section>
+
+<!-- ═══ 5. Alerta y nota ═══
+     Fuente: app/mi-tarjeta/PortalCliente.tsx -->
+<section class="tablero-seccion">
+  <h2>5. Alerta y nota</h2>
+  <p class="alerta" role="alert" data-par="alerta">
+    No encontramos una tarjeta con ese número. Revisa que sea el mismo con el que te registraste.
+  </p>
+  <p class="nota">Solo usamos tu teléfono para encontrar tu tarjeta.</p>
+</section>
+
+<!-- ═══ 6. Lista ═══
+     Fuente: app/admin/(protegido)/comercios/page.tsx (.admin-fila como <a>, .pastilla-activo/inactivo),
+     app/comercio/(protegido)/cajeros/page.tsx (.admin-fila como <div>) -->
+<section class="tablero-seccion">
+  <h2>6. Lista</h2>
+  <div class="admin-lista">
+    <a href="#" class="admin-fila">
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <span class="icono-circulo acento" aria-hidden="true">
+          <span class="icono">storefront</span>
+        </span>
+        <div>
+          <div class="admin-fila-nombre">Pupusería La Esquina</div>
+          <div class="admin-fila-slug">/pupuseria-la-esquina · <span class="dato-mono">184</span> clientes</div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span class="pastilla pastilla-activo" data-par="pastilla-activo">Activo</span>
+      </div>
+    </a>
+    <div class="admin-fila">
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <span class="icono-circulo acento" aria-hidden="true">
+          <span class="icono">badge</span>
+        </span>
+        <div>
+          <div class="admin-fila-nombre">ana.martinez@pupuserialaesquina.com</div>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span class="admin-fila-slug">Santa Tecla</span>
+            <span class="pastilla pastilla-inactivo" data-par="pastilla-inactivo">Sucursal desactivada</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 7. Métricas ═══
+     Fuente: app/comercio/(protegido)/panel/page.tsx -->
+<section class="tablero-seccion">
+  <h2>7. Métricas</h2>
+  <section class="metric-pila">
+    <div class="metric-carta naranja">
+      <div class="metric-etiqueta">
+        <span>Clientes con tarjeta</span>
+        <span class="icono" aria-hidden="true">groups</span>
+      </div>
+      <div>
+        <div class="metric-valor" data-par="metrica-clientes" data-min="3">184</div>
+        <div class="metric-sub">registrados en tu comercio</div>
+      </div>
+    </div>
+    <div class="metric-carta menta">
+      <div class="metric-etiqueta">
+        <span>Sellos</span>
+        <span class="icono" aria-hidden="true">auto_awesome</span>
+      </div>
+      <div>
+        <div class="metric-sub" style="margin-bottom: 6px;">Tarjeta principal</div>
+        <div class="metric-valor" data-par="metrica-programa" data-min="3">
+          6
+          <span style="font-size: 0.95rem; letter-spacing: 0.06em; margin-left: 8px;">con 8 sellos</span>
+        </div>
+        <div class="metric-sub">promedio por cliente</div>
+      </div>
+    </div>
+  </section>
+</section>
+
+<!-- ═══ 8. Filtros ═══
+     Fuente: app/comercio/(protegido)/reportes/page.tsx -->
+<section class="tablero-seccion">
+  <h2>8. Filtros</h2>
+  <div class="filtro-chips">
+    <a href="#" class="filtro-chip" data-par="chip-inactivo-1">Todo</a>
+    <a href="#" class="filtro-chip activo" data-par="chip-activo">Pupusería La Esquina</a>
+    <a href="#" class="filtro-chip" data-par="chip-inactivo-2">Café Raíces</a>
+  </div>
+</section>
+
+<!-- ═══ 9. Subida de imagen ═══
+     Fuente: app/comercio/(protegido)/branding/SubidaImagen.tsx -->
+<section class="tablero-seccion">
+  <h2>9. Subida de imagen</h2>
+  <div class="subida-imagen">
+    <form class="field" style="flex: 1; min-width: 0; margin-bottom: 0;">
+      <label for="archivo-logo-2">Logo</label>
+      <input id="archivo-logo-2" name="archivo" type="file" accept="image/png,image/jpeg,image/webp">
+      <p class="admin-fila-slug">Subiendo…</p>
+    </form>
+    <button class="admin-eliminar" type="submit">Quitar</button>
+  </div>
+</section>
+
+<!-- ═══ 10. Portal del cliente ═══
+     Fuente: app/mi-tarjeta/PortalCliente.tsx -->
+<section class="tablero-seccion">
+  <h2>10. Portal del cliente</h2>
+  <div class="portal-cuentas">
+    <button type="button" class="portal-cuenta portal-cuenta-activa">
+      <span class="portal-cuenta-nombre">Pupusería La Esquina</span>
+      <span class="portal-cuenta-saldo">6 de 8 sellos</span>
+    </button>
+    <button type="button" class="portal-cuenta">
+      <span class="portal-cuenta-nombre">Café Raíces</span>
+      <span class="portal-cuenta-saldo">$12.50 de saldo</span>
+    </button>
+  </div>
+  <div class="portal-recompensas" style="margin-top: 16px;">
+    <p class="portal-subtitulo">Recompensas</p>
+    <div class="portal-recompensa">
+      <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+        <div style="min-width: 0;">
+          <div class="portal-recompensa-nombre">Pupusa gratis con queso</div>
+          <div class="portal-recompensa-desc">Válida en cualquier sucursal</div>
+        </div>
+      </div>
+      <div class="portal-recompensa-estado">
+        <span class="portal-canjeable">Ya puedes canjearla</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 11. Escáner ═══
+     Fuente: app/comercio/(protegido)/escanear/Escaner.tsx -->
+<section class="tablero-seccion">
+  <h2>11. Escáner</h2>
+  <div class="escaner-marco" style="max-width: 320px;">
+    <div class="escaner-video"></div>
+    <div class="escaner-guia" aria-hidden="true"></div>
+    <p class="nota" style="padding: 0 16px 16px;">Apuntá al QR del pass del cliente (o a su QR impreso).</p>
+  </div>
+  <div style="display: flex; gap: 10px; margin-top: 16px; align-items: stretch; max-width: 320px;">
+    <input
+      aria-label="Puntos a sumar"
+      type="number"
+      min="1"
+      step="1"
+      value="5"
+      class="dato-mono"
+      style="width: 90px; background: var(--superficie-1); border: 1px solid var(--linea); border-radius: 12px; color: var(--texto); padding: 0 12px; font-size: 1rem;"
+    >
+    <button class="btn-acento" style="flex: 1;">Acreditar</button>
+  </div>
+</section>
+
+<!-- ═══ 12. Pase ═══
+     Fuente: app/registro/[comercioSlug]/RegistroCliente.tsx (.cardface, .cardface-top,
+     .cardface-name, .cardface-points), app/globals.css (.sello-grid, .sello, .qr-tile —
+     no hay TSX que use la grilla de sellos "limpia": FormularioBranding.tsx la dibuja con estilos
+     en línea a medida; acá se arma con las clases tal como las declara el CSS) -->
+<section class="tablero-seccion">
+  <h2>12. Pase</h2>
+  <div class="tablero-fila" style="align-items: flex-start;">
+    <div class="cardface" style="max-width: 300px;">
+      <div class="cardface-top">
+        <span>Sellos</span>
+        <span>Cardly SV</span>
+      </div>
+      <div class="cardface-name">Pupusería La Esquina</div>
+      <div class="cardface-points">
+        <span>Progreso</span>
+        <b>6 de 8</b>
+      </div>
+      <div class="sello-grid">
+        <div class="sello lleno"></div>
+        <div class="sello lleno"></div>
+        <div class="sello lleno"></div>
+        <div class="sello lleno"></div>
+        <div class="sello lleno"></div>
+        <div class="sello lleno"></div>
+        <div class="sello"><span class="punto"></span></div>
+        <div class="sello"><span class="punto"></span></div>
+      </div>
+    </div>
+    <div class="qr-tile" style="max-width: 190px;">
+      <svg viewBox="0 0 29 29" aria-hidden="true">
+        <rect width="29" height="29" fill="#fff" />
+        <path fill="#000" d="M0 0h7v7H0zM9 0h1v1H9zM12 0h3v1h-3zM17 0h1v3h-1zM22 0h7v7h-7zM1 1h5v5H1zM10 1h1v2h-1zM13 1h1v1h-1zM15 1h1v1h-1zM23 1h5v5h-5zM24 2h3v3h-3zM9 3h1v1H9zM11 3h2v1h-2zM19 3h2v1h-2zM3 3h1v1H3zM9 5h1v1H9zM12 5h2v2h-2zM19 5h3v1h-3zM0 9h1v3H0zM3 9h4v1H3zM8 9h1v2H8zM10 9h3v1h-3zM15 9h2v1h-2zM19 9h1v3h-1zM21 9h2v1h-2zM25 9h1v2h-1zM27 9h2v1h-2zM2 10h1v3H2zM12 10h1v3h-1zM17 10h1v2h-1zM23 10h1v3h-1zM0 12h2v1H0zM6 12h2v1H6zM9 12h2v1H9zM14 12h1v1h-1zM20 12h1v2h-1zM25 12h2v1h-2zM4 13h2v2H4zM9 13h1v3H9zM15 13h2v1h-2zM19 13h1v3h-1zM27 13h1v3h-1zM0 15h1v2H0zM7 15h1v2H7zM12 15h1v2h-1zM16 15h1v3h-1zM21 15h3v1h-3zM25 15h1v3h-1zM2 16h3v1H2zM10 16h1v2h-1zM13 16h2v1h-2zM18 16h1v3h-1zM23 16h1v3h-1zM0 18h2v1H0zM5 18h1v3H5zM9 18h2v1H9zM14 18h1v3h-1zM20 18h3v1h-3zM27 18h1v3h-1zM22 19h1v3h-1zM0 20h4v1H0zM8 20h1v3H8zM11 20h3v1h-3zM17 20h1v3h-1zM25 20h2v1h-2zM0 22h7v7H0zM10 22h1v3h-1zM13 22h2v1h-2zM19 22h3v1h-3zM24 22h1v3h-1zM26 22h3v1h-3zM1 23h5v5H1zM9 23h1v3H9zM15 23h1v1h-1zM21 23h2v1h-2zM26 24h2v1h-2zM9 25h4v1H9zM14 25h2v1h-2zM19 25h1v3h-1zM21 25h1v1h-1zM24 25h3v1h-3zM12 27h1v2h-1zM17 27h2v1h-2zM21 27h2v1h-2zM25 27h1v2h-1zM27 27h1v2h-1z" />
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 13. Hoja (bottom sheet) ═══
+     Fuente: app/comercio/(protegido)/MenuOpciones.tsx (.sheet-panel, .menu-destacado, .sheet-fila,
+     .sheet-fila-activa) — con tablero-estatico agregada porque .sheet-panel es fixed. -->
+<section class="tablero-seccion">
+  <h2>13. Hoja (bottom sheet)</h2>
+  <div
+    class="sheet-panel tablero-estatico"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Más opciones"
+  >
+    <a href="#" class="menu-destacado menu-destacado-activo" aria-current="page">
+      <span class="icono-circulo acento" aria-hidden="true">
+        <span class="icono icono-lleno">insights</span>
+      </span>
+      <span>
+        <span class="admin-fila-nombre" style="display: block;">Reportes</span>
+        <span class="admin-fila-slug">Ventas, canjes y clientes nuevos</span>
+      </span>
+      <span class="icono icono-chevron" aria-hidden="true">chevron_right</span>
+    </a>
+    <p class="titulo-seccion menu-rotulo">Configuración</p>
+    <a href="#" class="sheet-fila sheet-fila-activa" aria-current="page">
+      <span class="icono" aria-hidden="true">store</span>
+      <span>Sucursales</span>
+    </a>
+    <a href="#" class="sheet-fila">
+      <span class="icono" aria-hidden="true">badge</span>
+      <span>Cajeros</span>
+    </a>
+    <form class="menu-salir">
+      <button class="sheet-fila" type="submit">
+        <span class="icono" aria-hidden="true">logout</span>
+        <span>Cerrar sesión</span>
+      </button>
+    </form>
+  </div>
+</section>
+
+<!-- ═══ 14. Barra inferior ═══
+     Fuente: app/comercio/(protegido)/NavInferior.tsx — position:fixed, va al final. -->
+<nav class="nav-inferior" aria-label="Secciones del panel">
+  <div class="nav-fila" style="--columnas: 5;">
+    <a href="#" class="activo" aria-current="page" data-par="nav-activo">
+      <span class="icono icono-lleno" aria-hidden="true">home</span>
+      <span class="nav-etiqueta">Resumen</span>
+    </a>
+    <a href="#" data-par="nav-inactivo">
+      <span class="icono" aria-hidden="true">group</span>
+      <span class="nav-etiqueta">Clientes</span>
+    </a>
+    <a href="#" class="nav-destacado">
+      <span class="icono icono-lleno" aria-hidden="true">qr_code_scanner</span>
+      <span class="nav-etiqueta">Escanear</span>
+    </a>
+    <a href="#">
+      <span class="icono" aria-hidden="true">redeem</span>
+      <span class="nav-etiqueta">Premios</span>
+    </a>
+    <a href="#">
+      <span class="icono" aria-hidden="true">insights</span>
+      <span class="nav-etiqueta">Reportes</span>
+    </a>
+  </div>
+</nav>
+
+</body>
+</html>
