@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
-import { CLAVE_TEMA, SCRIPT_TEMA, TEMAS, TEMA_POR_DEFECTO, esTema, normalizarTema } from './tema';
+import { CLAVE_TEMA, SCRIPT_TEMA, TEMAS, TEMA_POR_DEFECTO, esTema, normalizarTema, type Tema } from './tema';
+import { bloque, regla } from './diseno/tokensCss';
 
 // MUTATION-TESTING: lo que estas pruebas protegen es el CONTRATO ENTRE DOS MUNDOS — el script que
 // corre en el <head> (texto plano, sin tipos) y el selector de React. Mutaciones que deben fallar:
@@ -70,15 +71,10 @@ describe('tema', () => {
 describe('temas contra app/globals.css', () => {
   const css = readFileSync(fileURLToPath(new URL('../app/globals.css', import.meta.url)), 'utf8');
 
-  // Declaraciones de un bloque, hasta su primer '}' (los bloques de tema no anidan nada).
-  const tokensDe = (selector: string): Set<string> => {
-    const desde = css.indexOf(`${selector} {`);
-    expect(desde, `no existe el bloque ${selector} en globals.css`).toBeGreaterThan(-1);
-    const hasta = css.indexOf('}', desde);
-    return new Set(
-      [...css.slice(desde, hasta).matchAll(/^\s{2}(--[a-z0-9-]+)\s*:/gm)].map((m) => m[1]),
-    );
-  };
+  // Los tokens de un bloque, leídos con el parser único (lib/diseno/tokensCss.ts): quita los
+  // comentarios, así que un `}` adentro de uno ya no corta el bloque, y lanza ante un token con
+  // otra indentación en vez de no verlo.
+  const tokensDe = (selector: string): Set<string> => new Set(bloque(css, selector).keys());
 
   // Tokens que a propósito NO cambian con el tema. Si agregás uno acá, que sea porque es una
   // constante (marca, forma, espaciado) — no para silenciar la prueba de abajo.
@@ -100,7 +96,7 @@ describe('temas contra app/globals.css', () => {
   it('cada tema que no es el default tiene su bloque :root[data-tema=…]', () => {
     for (const t of TEMAS) {
       if (t === TEMA_POR_DEFECTO) continue; // el default ES :root, no lleva bloque propio
-      expect(css, `falta el bloque de CSS del tema "${t}"`).toContain(`:root[data-tema="${t}"] {`);
+      expect(() => bloque(css, `:root[data-tema="${t}"]`), `falta el bloque de CSS del tema "${t}"`).not.toThrow();
     }
   });
 
@@ -122,16 +118,22 @@ describe('temas contra app/globals.css', () => {
     }
   });
 
-  it('color-scheme se declara en cada tema (form controls y scrollbars nativos)', () => {
+  // La fuente de verdad del esquema de cada tema es ESTE mapa, no el CSS: comparar el CSS contra sí
+  // mismo seguiría verde con html en dark y el default en claro.
+  const ESQUEMA: Record<Tema, 'light' | 'dark'> = { oscuro: 'dark', claro: 'light', 'alto-contraste': 'dark' };
+
+  it('color-scheme: cada bloque el de su tema, y html el del default', () => {
     // Sin esto el navegador pinta los <select>, los scrollbars y el autofill con el esquema del
     // tema anterior: campos oscuros dentro de un panel claro.
     for (const t of TEMAS) {
       if (t === TEMA_POR_DEFECTO) continue;
-      const bloque = css.slice(
-        css.indexOf(`:root[data-tema="${t}"] {`),
-        css.indexOf('}', css.indexOf(`:root[data-tema="${t}"] {`)),
-      );
-      expect(bloque, `el tema "${t}" no declara color-scheme`).toMatch(/color-scheme:\s*(light|dark)/);
+      const esquema = regla(css, `:root[data-tema="${t}"]`).get('color-scheme');
+      expect(esquema, `el tema "${t}" declara color-scheme ${esquema} y es ${ESQUEMA[t]}`).toBe(ESQUEMA[t]);
     }
+    const html = regla(css, 'html').get('color-scheme');
+    expect(
+      html,
+      `html declara color-scheme ${html} y el default (${TEMA_POR_DEFECTO}) es ${ESQUEMA[TEMA_POR_DEFECTO]}`,
+    ).toBe(ESQUEMA[TEMA_POR_DEFECTO]);
   });
 });
