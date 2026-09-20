@@ -51,11 +51,12 @@ export default function SelectorTema() {
       </button>
 
       {/* PORTAL A document.body, NO lo saques: la hoja es position:fixed y se ancla al viewport SOLO
-          si ningún ancestro crea un containing block. Este botón vive dentro de .admin-top — la
-          MISMA clase que usa el header de /comercio, con su `backdrop-filter` para el efecto vidrio
-          — y backdrop-filter (igual que transform o filter) convierte al elemento en el marco de
-          referencia de sus descendientes fixed. Sin el portal la hoja se dibuja pegada al header,
-          cortada y sin scroll: el bug que ya se reportó en producción con el switcher de contexto
+          si ningún ancestro crea un containing block. Este botón vive dentro de .admin-top, que ya
+          no es translúcido (sin backdrop-filter) — pero si alguna vez vuelve un backdrop-filter, un
+          transform o un filter al header, ese elemento pasaría a ser el marco de referencia de sus
+          descendientes fixed y el position: fixed de acá adentro dejaría de ser relativo a la
+          ventana. El portal se mantiene por eso: es la misma hoja que se dibujaba pegada al header,
+          cortada y sin scroll, en el bug reportado en producción con el switcher de contexto
           (2026-07-26) y antes con el modal de Sucursales. */}
       {abierto && enCliente && createPortal(
         <div className="sheet-fondo" onClick={() => setAbierto(false)}>

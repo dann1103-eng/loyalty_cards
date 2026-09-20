@@ -69,11 +69,12 @@ export default function MenuOpciones({ rol, tipoTarjeta }: { rol: string; tipoTa
 
       {/* PORTAL A document.body, NO lo saques: el sheet es position:fixed y se ancla al viewport
           SOLO si ningún ancestro crea un containing block. Este botón vive dentro de .admin-top,
-          que tiene `backdrop-filter` para el efecto vidrio — y backdrop-filter (igual que transform
-          o filter) convierte al elemento en el marco de referencia de sus descendientes fixed. Sin
-          el portal el panel se dibuja pegado al header en vez de subir desde abajo, cortado y sin
-          scroll: exactamente el bug que se reportó en producción con el switcher de contexto
-          (2026-07-26) y antes con el modal de Sucursales. */}
+          que ya no es translúcido (sin backdrop-filter) — pero si alguna vez vuelve un
+          backdrop-filter, un transform o un filter al header, ese elemento pasaría a ser el marco
+          de referencia de sus descendientes fixed y el position: fixed de acá adentro dejaría de
+          ser relativo a la ventana. El portal se mantiene por eso: es el mismo bug que se reportó
+          en producción con el switcher de contexto (2026-07-26) y antes con el modal de
+          Sucursales. */}
       {abierto && enCliente && createPortal(
         <div className="sheet-fondo" onClick={() => setAbierto(false)}>
           <div

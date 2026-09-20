@@ -88,12 +88,13 @@ export default function SelectorContexto({
       </button>
 
       {/* PORTAL A document.body, NO lo saques: el sheet es position:fixed y se ancla al viewport
-          SOLO si ningún ancestro crea un containing block. Este vive dentro de .admin-top, que
-          tiene `backdrop-filter` para el efecto vidrio — y backdrop-filter (igual que transform o
-          filter) convierte al elemento en el marco de referencia de sus descendientes fixed. Sin el
-          portal, el panel se dibujaba pegado al header en vez de subir desde abajo, cortado y sin
-          scroll (reportado en producción el 2026-07-26). El mismo bug tenía el modal de Sucursales,
-          ahí por el transform que deja la animación .reveal al terminar con `forwards`. */}
+          SOLO si ningún ancestro crea un containing block. Este vive dentro de .admin-top, que ya
+          no es translúcido (sin backdrop-filter) — pero si alguna vez vuelve un backdrop-filter, un
+          transform o un filter al header, ese elemento pasaría a ser el marco de referencia de sus
+          descendientes fixed y el position: fixed de acá adentro dejaría de ser relativo a la
+          ventana (reportado en producción el 2026-07-26). El mismo bug tenía el modal de
+          Sucursales, ahí por el transform que deja la animación .reveal al terminar con
+          `forwards`. */}
       {abierto && enCliente && createPortal(
         <div className="sheet-fondo" onClick={() => setAbierto(false)}>
           <div

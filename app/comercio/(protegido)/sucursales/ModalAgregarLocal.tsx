@@ -132,7 +132,8 @@ export default function ModalAgregarLocal({
           por el `forwards` — un transform, aunque sea cero, convierte al elemento en el marco de
           referencia de sus descendientes fixed. Sin el portal el modal se dibujaba dentro de ese div
           (del alto del botón): recortado por arriba y sin scroll posible. Reportado en producción el
-          2026-07-26; el switcher del header tenía el mismo bug por el backdrop-filter de .admin-top. */}
+          2026-07-26; el switcher del header tenía el mismo bug por el `backdrop-filter` de
+          `.admin-top`, que ya no existe (ver el comentario en SelectorContexto.tsx). */}
       {createPortal(
         <div className="sheet-fondo" onClick={cerrar}>
           <div
