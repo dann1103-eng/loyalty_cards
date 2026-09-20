@@ -162,8 +162,46 @@ const PARES_REGLA: ParRegla[] = [
     uso: 'pastilla inactiva, dentro de una fila',
   },
   { color: '.alerta', fondo: '.alerta', contenedor: '--superficie-1', minimo: 7, texto: true, uso: 'alerta, dentro del panel' },
-  { color: '.metric-carta.naranja', fondo: '.metric-carta.naranja', minimo: 4.5, texto: true, uso: 'métrica' },
-  { color: '.metric-carta.menta', fondo: '.metric-carta.menta', minimo: 4.5, texto: true, uso: 'métrica' },
+  // Las cinco métricas de la app llevan .naranja o .menta: medir la regla base (.metric-carta,
+  // neutra) mediría un color que nunca se ve. Por variante y no por la regla base, y por elemento
+  // coloreado (.metric-valor es texto grande, mínimo 3; .metric-etiqueta es texto normal, 4.5),
+  // sobre el fondo real que las contiene: .metric-carta.
+  {
+    color: '.metric-carta.naranja .metric-valor',
+    fondo: '.metric-carta',
+    minimo: 3,
+    texto: true,
+    uso: 'valor de métrica naranja',
+  },
+  {
+    color: '.metric-carta.menta .metric-valor',
+    fondo: '.metric-carta',
+    minimo: 3,
+    texto: true,
+    uso: 'valor de métrica menta',
+  },
+  {
+    color: '.metric-carta.naranja .metric-etiqueta',
+    fondo: '.metric-carta',
+    minimo: 4.5,
+    texto: true,
+    uso: 'etiqueta de métrica naranja',
+  },
+  {
+    color: '.metric-carta.menta .metric-etiqueta',
+    fondo: '.metric-carta',
+    minimo: 4.5,
+    texto: true,
+    uso: 'etiqueta de métrica menta',
+  },
+  { color: '.campo-suelto', fondo: '.campo-suelto', minimo: 7, texto: true, uso: 'lo que se escribe en un campo suelto' },
+  {
+    color: '.campo-suelto::placeholder',
+    fondo: '.campo-suelto',
+    minimo: 4.5,
+    texto: true,
+    uso: 'el ejemplo del campo suelto',
+  },
 ];
 
 // Alto contraste existe para atender bajo el sol: todo texto sube a 7:1 (AAA).

@@ -317,8 +317,8 @@ export default async function PaginaReportes({
                       <span className="dato-mono" style={{ width: 46, fontSize: '0.72rem', color: 'var(--texto-2)' }}>
                         {etiquetaDia(d.dia)}
                       </span>
-                      <div style={{ flex: 1, height: 10, background: 'var(--superficie-3)', borderRadius: 999, overflow: 'hidden' }}>
-                        <div style={{ width: `${pct}%`, height: '100%', background: 'var(--acento)' }} />
+                      <div className="pista" style={{ flex: 1 }}>
+                        <div className="pista-relleno" style={{ width: `${pct}%` }} />
                       </div>
                       <span className="dato-mono" style={{ width: 58, textAlign: 'right', fontSize: '0.72rem', color: 'var(--texto-2)' }}>
                         {d.operaciones}/{d.canjes}

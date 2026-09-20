@@ -124,22 +124,14 @@ export default function FormularioAccesoDueno({
               lo selecciona entero, sin pelear con la selección de texto suelto. */}
           <input
             ref={campoLink}
-            className="dato-mono"
+            className="campo-suelto"
             type="text"
             readOnly
             value={estado.link}
             aria-label="Link de acceso del dueño"
             onFocus={(e) => e.currentTarget.select()}
             onClick={(e) => e.currentTarget.select()}
-            style={{
-              width: '100%',
-              fontSize: '0.78rem',
-              padding: '10px 12px',
-              color: 'var(--texto)',
-              background: 'var(--superficie-1)',
-              border: '1px solid var(--linea)',
-              borderRadius: 'var(--radius-field)',
-            }}
+            style={{ width: '100%', fontSize: '0.78rem', padding: '10px 12px' }}
           />
           <button
             className="btn-borde"

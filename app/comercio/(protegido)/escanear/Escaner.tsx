@@ -412,16 +412,8 @@ export default function Escaner({
               step="1"
               value={deltaPuntos}
               onChange={(e) => setDeltaPuntos(e.target.value)}
-              className="dato-mono"
-              style={{
-                width: 90,
-                background: 'var(--superficie-1)',
-                border: '1px solid var(--linea)',
-                borderRadius: 12,
-                color: 'var(--texto)',
-                padding: '0 12px',
-                fontSize: '1rem',
-              }}
+              className="dato-mono campo-suelto"
+              style={{ width: 90, padding: '0 12px' }}
             />
             <button className="btn-acento" style={{ flex: 1 }} onClick={operacionPrincipal} disabled={pendiente}>
               {pendiente ? 'Guardando...' : resultado.etiquetaAccion}

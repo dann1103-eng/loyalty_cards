@@ -303,7 +303,7 @@
   <h2>7. Métricas</h2>
   <section class="metric-pila">
     <div class="metric-carta naranja">
-      <div class="metric-etiqueta">
+      <div class="metric-etiqueta" data-par="metrica-clientes-etiqueta">
         <span>Clientes con tarjeta</span>
         <span class="icono" aria-hidden="true">groups</span>
       </div>
@@ -313,7 +313,7 @@
       </div>
     </div>
     <div class="metric-carta menta">
-      <div class="metric-etiqueta">
+      <div class="metric-etiqueta" data-par="metrica-programa-etiqueta">
         <span>Sellos</span>
         <span class="icono" aria-hidden="true">auto_awesome</span>
       </div>
@@ -510,6 +510,42 @@
     </a>
   </div>
 </nav>
+
+<!-- ═══ 15. Piezas hundidas sueltas ═══
+     Nuevas en la Tarea 9. Fuentes: app/comercio/(protegido)/escanear/Escaner.tsx y
+     app/admin/(protegido)/comercios/FormularioAccesoDueno.tsx (.campo-suelto),
+     app/comercio/(protegido)/programas/FormularioConfiguracionPrograma.tsx (.pozo),
+     app/comercio/(protegido)/reportes/page.tsx (.pista), app/registro-comercio/FormularioRegistro.tsx
+     (.opcion-plan). -->
+<section class="tablero-seccion">
+  <h2>15. Piezas hundidas sueltas</h2>
+  <input
+    class="dato-mono campo-suelto"
+    type="text"
+    value="184"
+    aria-label="Puntos a sumar"
+    style="width: 120px;"
+    data-par="campo-suelto"
+    data-min="7"
+  >
+  <div class="pozo" style="margin-top: 14px; max-width: 360px;">
+    <p class="admin-fila-slug" style="margin: 0;">Así le llega al cliente:</p>
+    <p style="margin: 6px 0 0; line-height: 1.5;">Tu tarjeta vence en 5 días. ¡No la pierdas!</p>
+  </div>
+  <div class="pista" style="margin-top: 14px; max-width: 280px;">
+    <div class="pista-relleno" style="width: 60%;"></div>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 14px; max-width: 320px;">
+    <label class="opcion-plan opcion-plan-activa" style="display: flex; align-items: center; gap: 10px;">
+      <input type="radio" name="tablero-plan" checked style="width: 18px; height: 18px; flex-shrink: 0;">
+      <span>Plan Estándar — elegido</span>
+    </label>
+    <label class="opcion-plan" style="display: flex; align-items: center; gap: 10px;">
+      <input type="radio" name="tablero-plan" style="width: 18px; height: 18px; flex-shrink: 0;">
+      <span>Plan Plus</span>
+    </label>
+  </div>
+</section>
 
 </body>
 </html>

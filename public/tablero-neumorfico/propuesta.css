@@ -621,6 +621,67 @@ a {
   line-height: 1.5;
 }
 
+/* ---------- piezas hundidas sueltas ----------
+   El hundido de .field para un control que no vive dentro de un .field (el "Puntos a sumar" del
+   escáner, el link de acceso del dueño). Sin font-family A PROPÓSITO: el del escáner lleva además
+   .dato-mono, y con la misma especificidad la que apareciera después en el archivo le pisaría la
+   tipografía a los puntos. */
+.campo-suelto {
+  font-size: 1rem;
+  color: var(--texto);
+  background: var(--superficie-0);
+  border: 1px solid var(--borde-relieve);
+  border-radius: var(--radius-control);
+  box-shadow: var(--hundido-1);
+  padding: 13px 14px;
+  transition: border-color 0.18s ease;
+}
+.campo-suelto::placeholder {
+  color: var(--texto-3);
+}
+.campo-suelto:focus {
+  border-color: var(--acento);
+}
+
+/* Contenedor hundido de solo lectura: algo que se muestra pero no se edita ahí. */
+.pozo {
+  background: var(--superficie-0);
+  border: 1px solid var(--borde-relieve);
+  border-radius: var(--radius-control);
+  box-shadow: var(--hundido-1);
+  padding: 12px 14px;
+}
+
+/* Barra de progreso o de gráfico: la pista hundida, el relleno de acento. El ancho del relleno lo
+   pone el JSX: es un dato, no un estilo. */
+.pista {
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--superficie-0);
+  box-shadow: var(--hundido-1);
+  overflow: hidden;
+}
+.pista-relleno {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--acento);
+}
+
+/* Una opción elegible (el plan en el alta de comercio). La elegida se marca con el acento y no con
+   el relieve: el relieve comunica forma, nunca estado. */
+.opcion-plan {
+  background: var(--superficie-1);
+  border: 1px solid var(--borde-relieve);
+  border-radius: var(--radius-control);
+  box-shadow: var(--relieve-1);
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.opcion-plan-activa {
+  border-color: var(--acento);
+  outline: 1px solid var(--acento);
+}
+
 /* ---------- tarjeta wallet (vista previa, estilo C3) ----------
    EXCEPCIÓN DELIBERADA A LOS TEMAS: de acá para abajo (.cardface*, .sello*) los literales se
    quedan. Esto no es cromo del panel, es la RÉPLICA de la tarjeta como se va a ver en la billetera
@@ -1065,37 +1126,28 @@ a {
 /* ---------- métricas (C2) ----------
    En móvil NO se apilan encima (el diseño original dependía del hover para destapar la de
    atrás y en pantallas táctiles no hay hover: la segunda quedaba invisible). Van en flujo,
-   ambas completas, con una rotación leve que conserva el aire juguetón. */
+   ambas completas. */
 .metric-pila {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
   margin-bottom: 26px;
 }
+/* Neutra: la tarjeta ya no es un bloque de color saturado (violeta/menta), porque el relieve
+   comunica forma y el acento se reserva para lo interactivo activo — una métrica no lo es. El
+   color queda solo en .metric-valor y .metric-etiqueta, más abajo. */
 .metric-carta {
   width: 100%;
   min-height: 172px;
   border-radius: var(--radius);
-  padding: 22px;
+  padding: 21px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  box-shadow: var(--shadow-2);
-  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease;
-}
-.metric-carta:hover {
-  transform: scale(1.02) translateY(-4px) rotate(0deg) !important;
-  box-shadow: var(--shadow-3);
-}
-.metric-carta.naranja {
-  background: var(--acento);
-  color: var(--sobre-acento);
-  transform: rotate(0.8deg);
-}
-.metric-carta.menta {
-  background: var(--menta);
-  color: var(--sobre-menta);
-  transform: rotate(-0.8deg);
+  background: var(--superficie-1);
+  color: var(--texto);
+  border: 1px solid var(--borde-relieve);
+  box-shadow: var(--relieve-2);
 }
 .metric-etiqueta {
   font-family: var(--font-mono);
@@ -1106,7 +1158,7 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  opacity: 0.9;
+  color: var(--texto-2);
 }
 .metric-valor {
   font-family: var(--font-mono);
@@ -1119,17 +1171,27 @@ a {
   font-size: 0.66rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  opacity: 0.75;
+  color: var(--texto-3);
   margin-top: 4px;
+}
+.metric-carta.naranja .metric-valor {
+  color: var(--acento);
+}
+.metric-carta.naranja .metric-etiqueta {
+  color: var(--acento);
+}
+.metric-carta.menta .metric-valor {
+  color: var(--menta);
+}
+.metric-carta.menta .metric-etiqueta {
+  color: var(--menta);
 }
 @media (min-width: 760px) {
   .metric-pila {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 16px;
+    gap: 20px;
   }
-  .metric-carta.naranja { transform: rotate(0.6deg); }
-  .metric-carta.menta { transform: rotate(-0.6deg); }
 }
 
 /* ---------- accesos rápidos (C2) ---------- */
@@ -1158,21 +1220,21 @@ a {
   gap: 12px;
   margin-bottom: 12px;
   padding: 12px 14px;
-  background: var(--superficie-1);
-  border: 1px solid var(--linea);
-  border-radius: var(--radius-field);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background: var(--superficie-0);
+  border: 1px solid var(--borde-relieve);
+  border-radius: var(--radius-control);
+  box-shadow: var(--hundido-1);
+  transition: border-color 0.2s ease;
 }
 .subida-imagen:focus-within,
 .subida-imagen:hover {
   border-color: var(--acento-borde);
-  /* Este naranja SE QUEDA literal, y se revisó a propósito al agregar los temas. No es que "falte
-     migrarlo": a 5% de alpha y 12px de difuminado no es visible en NINGUNO de los tres — en oscuro
-     apenas entibia el borde interno, en claro se pierde sobre blanco y en alto contraste sobre
-     negro. Lo que de verdad comunica el hover/focus es el border-color de arriba, que sí es del
-     tema. Tokenizarlo sería inventar una variable para un efecto que nadie ve; borrarlo sería
-     tocar el tema oscuro (el único donde algo aporta) sin poder mirarlo. */
-  box-shadow: inset 0 0 12px rgba(255, 157, 66, 0.05);
+  /* No es que sobre esta línea: box-shadow no se ACUMULA entre reglas de la misma propiedad, la
+     de mayor especificidad reemplaza a la de la base entera. Este es un pozo (--hundido-1 es
+     inset), así que si acá hubiera cualquier otro valor — el naranja que hubo antes, o directamente
+     nada — el hover/focus aplanaría el campo en vez de solo resaltar el borde. Por eso se repite
+     el mismo token en vez de heredarlo. */
+  box-shadow: var(--hundido-1);
 }
 .subida-imagen .field {
   flex: 1;
@@ -1769,7 +1831,7 @@ a {
 .portal-cuentas {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   margin: 8px 0 4px;
 }
 .portal-cuenta {
@@ -1779,20 +1841,27 @@ a {
   gap: 12px;
   padding: 14px 16px;
   background: var(--superficie-2);
-  border: 1px solid var(--linea);
+  border: 1px solid var(--borde-relieve);
   border-radius: var(--radius-field);
   cursor: pointer;
   color: var(--texto);
   font-family: var(--font-body);
   text-align: left;
+  box-shadow: var(--relieve-1);
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
 }
 .portal-cuenta:active {
+  box-shadow: var(--hundido-2);
   transform: scale(0.98);
 }
 .portal-cuenta-activa {
   border-color: var(--acento);
-  box-shadow: var(--ring);
+  outline: 1px solid var(--acento);
+  box-shadow: var(--hundido-1);
+}
+.portal-cuenta-activa:focus-visible {
+  outline-width: 3px;
+  outline-offset: 2px;
 }
 .portal-cuenta-nombre {
   font-family: var(--font-display);
@@ -1806,7 +1875,7 @@ a {
 .portal-recompensas {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 .portal-recompensa {
   display: flex;
@@ -1814,9 +1883,10 @@ a {
   justify-content: space-between;
   gap: 12px;
   padding: 13px 15px;
-  border: 1px solid var(--linea);
-  border-radius: var(--radius-field);
+  border: 1px solid var(--borde-relieve);
+  border-radius: var(--radius-control);
   background: var(--superficie-1);
+  box-shadow: var(--relieve-1);
 }
 .portal-recompensa-nombre {
   font-weight: 600;
@@ -1867,11 +1937,14 @@ a {
 }
 
 /* ---------- escáner del cajero (/comercio/escanear) ---------- */
+/* Elevada y no hundida: una sombra inset se pinta debajo del contenido y el <video> la taparía
+   entera. Si algún día se quiere hundida hace falta un ::after superpuesto. */
 .escaner-marco {
   position: relative;
   background: var(--superficie-1);
-  border: 1px solid var(--linea);
+  border: 1px solid var(--borde-relieve);
   border-radius: var(--radius);
+  box-shadow: var(--relieve-2);
   overflow: hidden;
 }
 .escaner-video {

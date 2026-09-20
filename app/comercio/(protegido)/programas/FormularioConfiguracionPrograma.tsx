@@ -218,13 +218,8 @@ function BloqueAvisoVencimiento({ programa, fechaEjemplo }: { programa: Programa
           se envía: si la regla de la fecha o del texto por defecto cambia, esto cambia con ella. */}
       <div
         aria-live="polite"
-        style={{
-          border: '1px solid var(--linea)',
-          borderRadius: 'var(--radius-field)',
-          background: 'var(--superficie-1)',
-          padding: '12px 14px',
-          marginBottom: 16,
-        }}
+        className="pozo"
+        style={{ marginBottom: 16 }}
       >
         <p className="admin-fila-slug" style={{ margin: 0 }}>Así le llega al cliente:</p>
         <p style={{ margin: '6px 0 0', lineHeight: 1.5 }}>{textoAviso(mensaje, programa.tipoTarjeta, fechaEjemplo)}</p>

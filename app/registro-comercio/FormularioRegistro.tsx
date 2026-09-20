@@ -139,21 +139,13 @@ export default function FormularioRegistro({ planInicial }: { planInicial?: stri
 
       <fieldset style={{ border: 0, padding: 0, margin: '0 0 16px' }}>
         <legend className="titulo-seccion" style={{ marginBottom: 8 }}>Elegí tu plan</legend>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {PLANES.map((p) => (
             <label
               key={p.valor}
               htmlFor={`plan-${p.valor}`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '12px 14px',
-                borderRadius: 12,
-                cursor: 'pointer',
-                border: `1px solid ${plan === p.valor ? 'var(--acento)' : 'var(--linea)'}`,
-                background: plan === p.valor ? 'var(--superficie-1)' : 'transparent',
-              }}
+              className={`opcion-plan${plan === p.valor ? ' opcion-plan-activa' : ''}`}
+              style={{ display: 'flex', alignItems: 'center', gap: 10 }}
             >
               <input
                 id={`plan-${p.valor}`}
