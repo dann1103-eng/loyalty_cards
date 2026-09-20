@@ -2115,7 +2115,9 @@ L3, y `useState` si queda sin uso. Correr `npm run lint -- "app/comercio/(proteg
 
 Pruebas de diseño en verde. Mutaciones:
 - en `.field :is(…)::placeholder`, `color: var(--texto-3)` → `var(--linea-fuerte)` → debe fallar el
-  par por regla del placeholder en los tres temas;
+  par por regla del placeholder en **claro y oscuro** (≈1.6:1 y ≈1.7:1). **No falla en
+  alto-contraste**, y está bien: ahí `--linea-fuerte` es blanco al 82% sobre negro, que por sí solo
+  da contraste de sobra. La mutación protege los dos temas donde ese token es tenue;
 - en `.btn-borde:active:not(:disabled)` (ese es el selector real, L538), escribir
   `box-shadow: var(--hundido-2), 0 0 0 2px var(--acento)` → debe fallar la prueba de composición con
   `[composición] .btn-borde:active:not(:disabled) compone var(--hundido-2), que vale none en

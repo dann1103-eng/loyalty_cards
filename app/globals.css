@@ -1145,7 +1145,9 @@ a {
 .panel-atajos {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* 14px y no 10: sus hijas son .admin-fila, y la extensión de --relieve-1 es 4 + 10 = 14px. Con
+     10px la sombra de una fila le pisa el brillo a la de abajo. */
+  gap: 14px;
   margin-top: 14px;
 }
 .panel-atajos .admin-fila .icono-chevron {
