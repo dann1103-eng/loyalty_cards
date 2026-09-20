@@ -124,7 +124,7 @@ export default function FormularioAccesoDueno({
               lo selecciona entero, sin pelear con la selección de texto suelto. */}
           <input
             ref={campoLink}
-            className="campo-suelto"
+            className="dato-mono campo-suelto"
             type="text"
             readOnly
             value={estado.link}

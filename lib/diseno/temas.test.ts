@@ -386,3 +386,30 @@ describe('el tablero de revisión', () => {
     expect(sinFinDeLinea(readFileSync(copia, 'utf8'))).toBe(sinFinDeLinea(css));
   });
 });
+
+describe('foco', () => {
+  it('el foco se dibuja con outline, y ninguna regla de :focus vuelve a pintar un anillo con box-shadow', () => {
+    // Antes el foco era `box-shadow: var(--ring)`. En un campo hundido eso REEMPLAZA al hundido (el
+    // pozo se aplana al enfocarlo), y en forced-colors el box-shadow desaparece. La regla global con
+    // outline es la red: sin esta prueba se la podía borrar entera y las demás seguían verdes.
+    const todas = reglas(css);
+    const global = todas.find(
+      (r) => !r.dentroDeArroba && r.selectores.some((s) => s.startsWith(':where(') && s.endsWith(':focus-visible')),
+    );
+    expect(global, 'falta la regla global :where(…):focus-visible').toBeDefined();
+    expect(global?.declaraciones.get('outline')).toBe('2px solid var(--acento)');
+
+    // Un :focus PUEDE declarar box-shadow para conservar el relieve (el pozo de .subida-imagen lo
+    // hace), pero no un ANILLO: ni el token --ring ni una sombra de expansión `0 0 0 Npx`.
+    const fallas = todas
+      .filter((r) => r.selectores.some((s) => s.includes(':focus')))
+      .flatMap((r) => {
+        const sombra = r.declaraciones.get('box-shadow');
+        if (sombra === undefined) return [];
+        return /var\(\s*--ring\s*\)|\b0 0 0 \d/.test(sombra)
+          ? [`${r.selectores.join(', ')} dibuja el foco con un anillo de box-shadow: ${sombra}`]
+          : [];
+      });
+    expect(fallas).toEqual([]);
+  });
+});

@@ -133,7 +133,6 @@
 
   /* ---------- tintes suaves (fondos de chip / ícono-círculo / hover) ----------
      Un alpha del color de texto NO sobrevive el cambio de tema: cada tema declara el suyo. */
-  --hover-suave: rgba(24, 24, 73, 0.05);
   --neutro-suave: rgba(24, 24, 73, 0.07);
   --acento-suave: rgba(81, 75, 168, 0.12);
   --acento-borde: rgba(81, 75, 168, 0.4);
@@ -205,7 +204,6 @@
 
   --velo: rgba(6, 7, 20, 0.6);
 
-  --hover-suave: rgba(245, 245, 240, 0.05);
   --neutro-suave: rgba(245, 245, 240, 0.08);
   --acento-suave: rgba(143, 134, 224, 0.12);
   --acento-borde: rgba(143, 134, 224, 0.4);
@@ -281,7 +279,6 @@
 
   --velo: rgba(0, 0, 0, 0.85);
 
-  --hover-suave: rgba(255, 255, 255, 0.18);
   --neutro-suave: rgba(255, 255, 255, 0.18);
   --acento-suave: rgba(201, 236, 94, 0.22);
   --acento-borde: rgba(201, 236, 94, 0.85);
@@ -565,6 +562,7 @@ a {
 .btn-acento:disabled {
   opacity: 0.55;
   cursor: progress;
+  box-shadow: none; /* deshabilitado no puede verse levantado (mismo argumento que .btn-primary) */
 }
 
 /* secundario elevado, neutro */
@@ -574,7 +572,10 @@ a {
   font-weight: 600;
   color: var(--texto);
   background: var(--superficie-1);
-  border: 1px solid var(--borde-relieve);
+  /* --linea-fuerte y no --borde-relieve: en un BOTÓN el borde es la afordancia, no solo el límite
+     para forced-colors. Con --borde-relieve, en alto contraste quedaba en 6.27:1 contra el 13.77
+     que tenía; y ahí el relieve vale none, así que el borde es lo único que lo dibuja. */
+  border: 1px solid var(--linea-fuerte);
   border-radius: var(--radius-pill);
   padding: 10px 18px;
   cursor: pointer;
@@ -583,9 +584,12 @@ a {
   justify-content: center;
   gap: 8px;
   box-shadow: var(--relieve-1);
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
 }
+/* El hover sube Y se marca con el acento: en alto contraste --relieve-2 vale none, y sin el borde
+   de acento el botón no reaccionaría al mouse en el tema que más lo necesita. */
 .btn-borde:hover:not(:disabled) {
+  border-color: var(--acento);
   box-shadow: var(--relieve-2);
 }
 .btn-borde:active:not(:disabled) {
@@ -1039,14 +1043,21 @@ a {
   box-shadow: var(--relieve-1);
   transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
-/* El hover/active solo en filas TOCABLES (Link o button): hay filas <div>/<details> estáticas que
-   comparten la clase por el aspecto pero no son interactivas, y no deben "levantarse" al pasar el
-   mouse. El background ya no cambia en hover: lo dice el relieve, no un color distinto. */
-:is(a, button).admin-fila:hover {
+/* El hover/active solo en filas TOCABLES. Las <a> y <button> lo son, y las <details> TAMBIÉN: la
+   lista de clientes del comercio y la del admin se abren al tocarlas. Pero `details:hover` se
+   dispararía sobre todo el contenido desplegado, así que se engancha al <summary>. Las <div>
+   estáticas comparten la clase solo por el aspecto y no deben "levantarse" al pasar el mouse.
+   El background ya no cambia en hover: lo dice el relieve. Y como en alto contraste el relieve vale
+   none, cada estado lleva además una señal que no es sombra: el desplazamiento en hover, el borde de
+   acento al presionar. */
+:is(a, button).admin-fila:hover,
+details.admin-fila:has(> summary:hover) {
   transform: translateY(-2px);
   box-shadow: var(--relieve-2);
 }
-:is(a, button).admin-fila:active {
+:is(a, button).admin-fila:active,
+details.admin-fila:has(> summary:active) {
+  border-color: var(--acento);
   box-shadow: var(--hundido-2);
 }
 .admin-fila-nombre {
@@ -1272,10 +1283,6 @@ a {
   background: transparent;
   border: none;
   padding: 4px 0;
-}
-.field input[type="file"]:focus {
-  box-shadow: none;
-  background: transparent;
 }
 /* Pasa a E: es un botón, no un pozo. Del color de la página (--superficie-1), así que lleva borde
    de 1px (regla 4) — y el padding baja de 7px 14px a 6px 13px para compensarlo y que la caja no
