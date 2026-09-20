@@ -2094,10 +2094,17 @@ Fila por fila, de la tabla de la spec. Precisiones:
   `box-shadow: none;`.
 - `.btn-acento`: `border-radius: var(--radius-control)`; `box-shadow: var(--relieve-1)` en reposo;
   el hover conserva `box-shadow: var(--sombra-acento)`; `:active` suma `box-shadow: none;`.
-- `.btn-borde`: `background: var(--superficie-1)`; `border: 1px solid var(--borde-relieve)`;
-  `box-shadow: var(--relieve-1)` en reposo; hover `box-shadow: var(--relieve-2)` (sin el cambio de
-  `background` de hoy); `:active` `box-shadow: var(--hundido-2); transform: scale(0.97);`; sumá
-  `box-shadow` a su `transition`.
+- `.btn-borde`: `background: var(--superficie-1)`; **`border: 1px solid var(--linea-fuerte)`**
+  (corregido tras la revisión: en un botón el borde es la afordancia, y con `--borde-relieve` en alto
+  contraste bajaba de 13.77:1 a 6.27:1); `box-shadow: var(--relieve-1)` en reposo; hover
+  `border-color: var(--acento)` **y** `box-shadow: var(--relieve-2)` (en alto contraste el relieve
+  vale `none`: sin el borde de acento el botón no reacciona al mouse); `:active`
+  `box-shadow: var(--hundido-2); transform: scale(0.97);`; en la `transition`, `box-shadow` sí y
+  `background` no (ya no cambia).
+- `.btn-acento:disabled` suma `box-shadow: none` (mismo argumento que `.btn-primary`).
+- Las filas `<details className="admin-fila">` **sí son interactivas** (se abren al tocarlas): su
+  hover y active se enganchan con `details.admin-fila:has(> summary:hover)` / `:active`, y el
+  active de las filas marca `border-color: var(--acento)` para que haya señal en alto contraste.
 - `.admin-fila`: el hover y el active de hoy pasan a `:is(a, button).admin-fila:hover` /
   `:is(a, button).admin-fila:active`. Usá la curva `cubic-bezier(0.22, 1, 0.36, 1)` para el
   `transform`.
@@ -2303,7 +2310,9 @@ Al final de la sección de formularios:
 `style={{ width: 90, padding: '0 12px' }}` (el `padding` vertical 0 se conserva: la fila estira el
 campo a la altura del botón).
 
-`FormularioAccesoDueno.tsx` L134-142: `className="campo-suelto"` y
+`FormularioAccesoDueno.tsx` L134-142: `className="dato-mono campo-suelto"` (el input **ya** tenía
+`dato-mono`, en L127, afuera del rango del `style`; la clase se SUMA, no se reemplaza — por eso
+`.campo-suelto` no declara `font-family`) y
 `style={{ width: '100%', fontSize: '0.78rem', padding: '10px 12px' }}`.
 
 `FormularioConfiguracionPrograma.tsx` L219-228: el `<div aria-live="polite">` queda con
