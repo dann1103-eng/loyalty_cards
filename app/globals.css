@@ -45,7 +45,9 @@
 
   /* ---------- acento único: violeta de marca (antes naranja cálido) ---------- */
   --acento: #8f86e0; /* Soft */
-  --acento-fuerte: #514ba8; /* --violeta oficial */
+  /* Lavanda, más CLARO que el acento: en un tema oscuro, "fuerte" es más lejos del fondo. El
+     #514ba8 que tenía dejaba --sobre-acento (Deep) a 2.31:1 en el botón Acreditar del escáner. */
+  --acento-fuerte: #a49df0;
   --sobre-acento: #181849; /* Deep — texto oscuro SOLO sobre superficies acento (contraste) */
 
   /* ---------- secundario menta (datos/éxito) ---------- */
@@ -250,7 +252,9 @@
   --acento-suave: rgba(201, 236, 94, 0.22);
   --acento-borde: rgba(201, 236, 94, 0.85);
   --menta-suave: rgba(0, 229, 140, 0.22);
-  --error-suave: rgba(255, 138, 122, 0.22);
+  /* 16% y no 22%: con 22% la pastilla "inactivo" daba 6.67:1, y en este tema todo texto pide 7:1.
+     Es su único uso. */
+  --error-suave: rgba(255, 138, 122, 0.16);
 
   --btn-primario-fondo: #ffffff;
   --btn-primario-texto: #000000;
