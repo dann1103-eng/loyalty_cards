@@ -143,10 +143,6 @@ const PARES_REGLA: ParRegla[] = [
     uso: 'pastilla inactiva, dentro de una fila',
   },
   { color: '.alerta', fondo: '.alerta', contenedor: '--superficie-1', minimo: 7, texto: true, uso: 'alerta, dentro del panel' },
-  // Las cinco métricas de la app llevan .naranja o .menta: medir la regla base (.metric-carta,
-  // neutra) mediría un color que nunca se ve. Por variante y no por la regla base, y por elemento
-  // coloreado (.metric-valor es texto grande, mínimo 3; .metric-etiqueta es texto normal, 4.5),
-  // sobre el fondo real que las contiene: .metric-carta.
   // Las filas de una hoja (menú de opciones, selector de contexto, selector de tema). Se miden POR
   // REGLA y no con pares de tokens: estos pares vivían como tokens (el acento sobre --superficie-3 y
   // -4) y quedaron decorativos cuando la fila activa pasó al pozo (--superficie-0): medían superficies
@@ -160,17 +156,24 @@ const PARES_REGLA: ParRegla[] = [
     texto: true,
     uso: 'fila de una hoja con el mouse encima',
   },
+  // Las cinco métricas de la app llevan .naranja o .menta: medir la regla base (.metric-carta,
+  // neutra) mediría un color que nunca se ve. Por variante y no por la regla base, y por elemento
+  // coloreado, sobre el fondo real que las contiene: .metric-carta. Mínimo 4.5 también para
+  // .metric-valor: el número es texto grande, pero adentro lleva la unidad ("con 8 sellos"), que es
+  // 0.95rem en negrita y NO cuenta como texto grande para WCAG. .metric-sub no lleva color de
+  // variante: se mide en la regla base, que es la que se ve.
   {
     color: '.metric-carta.naranja .metric-valor',
     fondo: '.metric-carta',
-    minimo: 3,
+    minimo: 4.5,
     texto: true,
     uso: 'valor de métrica naranja',
   },
+  { color: '.metric-sub', fondo: '.metric-carta', minimo: 4.5, texto: true, uso: 'subtítulo de una métrica' },
   {
     color: '.metric-carta.menta .metric-valor',
     fondo: '.metric-carta',
-    minimo: 3,
+    minimo: 4.5,
     texto: true,
     uso: 'valor de métrica menta',
   },
@@ -393,8 +396,8 @@ describe('foco', () => {
     expect(global, 'falta la regla global :where(…):focus-visible').toBeDefined();
     expect(global?.declaraciones.get('outline')).toBe('2px solid var(--acento)');
 
-    // Un :focus PUEDE declarar box-shadow para conservar el relieve (el pozo de .subida-imagen lo
-    // hace), pero no un ANILLO: ni el token --ring ni una sombra de expansión `0 0 0 Npx`.
+    // Un :focus PUEDE declarar box-shadow si conserva el relieve del elemento, pero no un ANILLO: ni
+    // el token --ring ni una sombra de expansión `0 0 0 Npx`.
     const fallas = todas
       .filter((r) => r.selectores.some((s) => s.includes(':focus')))
       .flatMap((r) => {
@@ -404,6 +407,30 @@ describe('foco', () => {
           ? [`${r.selectores.join(', ')} dibuja el foco con un anillo de box-shadow: ${sombra}`]
           : [];
       });
+    expect(fallas).toEqual([]);
+  });
+});
+
+describe('estados que se marcan con outline', () => {
+  it('cada uno tiene su regla :focus-visible, o el foco queda indistinguible del estado', () => {
+    // La regla global de foco (:where(…):focus-visible) tiene especificidad (0,1,0) y EMPATA con una
+    // clase de estado como .sheet-fila-activa, que declara su propio outline después y le gana. Sin
+    // una regla :focus-visible propia, la fila activa enfocada se ve igual que sin foco. Se probó
+    // borrando la de .portal-cuenta-activa: las demás pruebas seguían verdes.
+    // Excepción explícita: .opcion-plan-activa es un <label>, y el foco cae en su <input> radio,
+    // que dibuja su propio outline.
+    const SIN_FOCO_PROPIO = new Set(['.opcion-plan-activa']);
+    const todas = reglas(css).filter((r) => !r.dentroDeArroba);
+    const fallas: string[] = [];
+    for (const r of todas) {
+      if (!r.declaraciones.has('outline')) continue;
+      for (const selector of r.selectores) {
+        // Solo clases de estado: un selector con pseudo-clase (:hover, :focus…) no es un estado.
+        if (selector.includes(':') || SIN_FOCO_PROPIO.has(selector)) continue;
+        const guarda = todas.some((g) => g.selectores.includes(`${selector}:focus-visible`));
+        if (!guarda) fallas.push(`${selector} marca su estado con outline y no tiene regla ${selector}:focus-visible`);
+      }
+    }
     expect(fallas).toEqual([]);
   });
 });

@@ -190,7 +190,7 @@ export default async function PaginaReportes({
           ))}
         </div>
         {comercioFiltrado && sucursalesDelComercio.length > 0 && (
-          <div className="filtro-chips" style={{ marginTop: 8 }}>
+          <div className="filtro-chips" style={{ marginTop: 12 }}>
             <Link className={`filtro-chip${!sucursalFiltrada ? ' activo' : ''}`} href={urlSucursal()}>
               Todas
             </Link>

@@ -26,10 +26,10 @@ export default async function LayoutProtegido({ children }: { children: React.Re
             `overflow-x: hidden` en el <body> eso no se ve como desborde: se ve como que "Salir"
             está cortado. Sumar el botón de tema sin esto lo habría dejado fuera de pantalla justo
             en el teléfono, que es donde hace falta para salir de un tema que no se quiere. */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
           {/* Nav interna del panel FM. Reusa el estilo pastilla de .admin-salir para no depender de
               CSS nuevo. */}
-          <nav style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8 }}>
+          <nav style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 12 }}>
             <Link className="admin-salir" style={{ textDecoration: 'none' }} href="/admin/comercios">
               Comercios
             </Link>

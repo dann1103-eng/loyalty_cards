@@ -145,7 +145,8 @@ export default async function PaginaPanel() {
           qué hacer. Se esconde solo cuando los cuatro están hechos. */}
       {pasos && <PrimerosPasos pasos={pasos} />}
 
-      {/* Métricas apiladas (C2): texto oscuro SOLO aquí, sobre acento claro, por contraste. */}
+      {/* Métricas apiladas (C2): tarjetas neutras, con el color del acento o del menta solo en el
+          número y la etiqueta. */}
       <section className="metric-pila reveal d2">
         <div className="metric-carta naranja">
           <div className="metric-etiqueta">

@@ -327,8 +327,11 @@ a {
 }
 
 /* Foco: outline y no box-shadow. No pelea con el relieve ni con el hundido, no se compone con
-   ningún token que valga none, y sobrevive a forced-colors. Especificidad 0 (:where): la regla de
-   foco de cualquier componente le gana. */
+   ningún token que valga none, y sobrevive a forced-colors. Especificidad (0,1,0), no cero: el
+   :where anula la lista de elementos pero :focus-visible queda afuera y suma. Por eso EMPATA con
+   una clase de estado (.sheet-fila-activa, .portal-cuenta-activa), que declara su propio outline
+   después y le gana: cada una necesita su regla :focus-visible propia, o el foco quedaría
+   indistinguible del estado. Lo verifica lib/diseno/temas.test.ts. */
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--acento);
   outline-offset: 2px;
@@ -583,6 +586,13 @@ a {
   box-shadow: var(--relieve-1);
   transition: border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
 }
+/* Deshabilitado no puede verse levantado ni igual que uno activo: la regla fija color: var(--texto),
+   así que el gris nativo de :disabled no aplica (mismo motivo que .sheet-fila:disabled). */
+.btn-borde:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
 /* El hover sube Y se marca con el acento: en alto contraste --relieve-2 vale none, y sin el borde
    de acento el botón no reaccionaría al mouse en el tema que más lo necesita. */
 .btn-borde:hover:not(:disabled) {
@@ -624,9 +634,13 @@ a {
 
 /* ---------- piezas hundidas sueltas ----------
    El hundido de .field para un control que no vive dentro de un .field (el "Puntos a sumar" del
-   escáner, el link de acceso del dueño). Sin font-family A PROPÓSITO: el del escáner lleva además
-   .dato-mono, y con la misma especificidad la que apareciera después en el archivo le pisaría la
-   tipografía a los puntos. */
+   escáner, el link de acceso del dueño). Los dos llevan además .dato-mono, y la fuente NO va en
+   .campo-suelto: con la misma especificidad, la que apareciera después en el archivo le pisaría la
+   tipografía a los puntos. Va en un :where (especificidad cero) como respaldo: cualquier clase de
+   fuente le gana sin importar el orden, y sin ninguna el input no cae en la fuente del sistema. */
+:where(.campo-suelto) {
+  font-family: var(--font-body);
+}
 .campo-suelto {
   font-size: 1rem;
   color: var(--texto);
@@ -655,10 +669,14 @@ a {
 
 /* Barra de progreso o de gráfico: la pista hundida, el relleno de acento. El ancho del relleno lo
    pone el JSX: es un dato, no un estilo. */
+/* Con borde de 1px como toda superficie con relieve: en alto contraste el hundido vale none y la
+   pista (#000) sobre el panel (#000) desaparecía entera — un día con cero operaciones no mostraba
+   nada, y se perdía la escala del 100%. */
 .pista {
   height: 10px;
   border-radius: var(--radius-pill);
   background: var(--superficie-0);
+  border: 1px solid var(--borde-relieve);
   box-shadow: var(--hundido-1);
   overflow: hidden;
 }
@@ -1241,12 +1259,10 @@ details.admin-fila:has(> summary:active) {
 .subida-imagen:focus-within,
 .subida-imagen:hover {
   border-color: var(--acento-borde);
-  /* No es que sobre esta línea: box-shadow no se ACUMULA entre reglas de la misma propiedad, la
-     de mayor especificidad reemplaza a la de la base entera. Este es un pozo (--hundido-1 es
-     inset), así que si acá hubiera cualquier otro valor — el naranja que hubo antes, o directamente
-     nada — el hover/focus aplanaría el campo en vez de solo resaltar el borde. Por eso se repite
-     el mismo token en vez de heredarlo. */
-  box-shadow: var(--hundido-1);
+  /* NO declara box-shadow, a propósito: box-shadow no se acumula entre reglas, la de mayor
+     especificidad reemplaza a la base entera. Cualquier valor acá (el naranja que hubo antes era
+     uno) le cambiaría el pozo hundido de la base y aplanaría el campo en hover/foco. Sin
+     declaración, rige el --hundido-1 de la base. */
 }
 .subida-imagen .field {
   flex: 1;
@@ -1692,6 +1708,13 @@ details.admin-fila:has(> summary:active) {
   max-width: 200px;
   cursor: pointer;
   box-shadow: var(--relieve-1);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+/* Elevada y tocable, como .menu-boton al lado: sube y marca el borde con el acento (en alto
+   contraste el relieve vale none y el borde es la señal). */
+.contexto-pastilla:hover {
+  border-color: var(--acento);
+  box-shadow: var(--relieve-2);
 }
 .contexto-etiqueta {
   overflow: hidden;
