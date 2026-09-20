@@ -358,7 +358,7 @@ git commit -m "Diseno: modulo de contraste WCAG 2.x (parseo, composicion, lumina
 ```ts
 import { describe, it, expect } from 'vitest';
 import { TEMAS, TEMA_POR_DEFECTO } from '../tema';
-import { bloque, mapaDeTema, normalizarSelector, regla, reglas, resolver } from './tokensCss';
+import { bloque, mapaDeTema, normalizarSelector, regla, reglas, resolver, sinComentarios } from './tokensCss';
 
 // MUTATION-TESTING: este parser es lo único que hay entre app/globals.css y las pruebas de diseño;
 // si lee mal, las pruebas miden otra cosa. Mutaciones que deben fallar:
@@ -369,6 +369,14 @@ import { bloque, mapaDeTema, normalizarSelector, regla, reglas, resolver } from 
 // (3) contar como de primer nivel una regla de adentro de un @media → `.a` tomaría el `red`;
 // (4) que la segunda regla `.a` no pise a la primera → background no sería transparent;
 // (5) sacar el chequeo de indentación → el token con cuatro espacios pasa en silencio;
+// (7) sacar cualquiera de las guardas de "lo que no sé leer, lo lanzo" (anidamiento, paréntesis sin
+//     balancear, token que no abre su propia línea) → el parser lee MAL en silencio, que es peor
+//     que romperse: inventa reglas, pierde declaraciones o deja un token fuera del grep de DESIGN.md;
+// (8) angostar la regex de var() a `[a-z0-9-]` → `var( --b )`, `var(--Fondo)` y `var(--x_y)` se
+//     devuelven crudos y el error sale después, desde el parseo de color, apuntando al lugar
+//     equivocado;
+// (9) que sinComentarios borre el comentario en vez de espaciarlo → las posiciones dejan de
+//     corresponder al archivo y los errores mandan a una línea que no es;
 // (6) que resolver no detecte ciclos → el bucle es SÍNCRONO, así que el timeout de vitest no
 //     dispara nunca: `camino` crece hasta que el worker muere sin memoria (~30 s) y se cae la
 //     corrida entera, no solo esta prueba. Falla igual, pero si alguien la corre en CI con un
@@ -466,6 +474,16 @@ describe('resolver', () => {
     expect(resolver('--lista', mapa)).toBe('0 0 0 1px var(--blanco)');
   });
 
+  it('resuelve un var() con espacios, mayúsculas o guion bajo, en vez de devolverlo crudo', () => {
+    // El charset legal de una custom property es más ancho que [a-z0-9-]. Devolver el var() crudo
+    // hacía que el error saliera después, desde el parseo de color, apuntando al lugar equivocado.
+    const otros = new Map([
+      ['--Fondo', '#131313'],
+      ['--x_y', 'var( --Fondo )'],
+    ]);
+    expect(resolver('--x_y', otros)).toBe('#131313');
+  });
+
   it('lanza ante un ciclo, un token que no existe o un valor de respaldo', () => {
     expect(() => resolver('--a', mapa)).toThrow('referencia circular: --a → --b → --a');
     expect(() => resolver('--roto', mapa)).toThrow('el token --no-existe no está definido');
@@ -495,6 +513,43 @@ describe('reglas', () => {
   it('marca las reglas que viven adentro de un @media', () => {
     const deA = reglas(CSS).filter((r) => r.selectores.includes('.a'));
     expect(deA.map((r) => r.dentroDeArroba)).toEqual([false, true, false]);
+  });
+});
+
+describe('sinComentarios', () => {
+  it('espacia cada comentario en vez de borrarlo, para no mover las posiciones del archivo', () => {
+    const css = '.a {\n  /* un comentario con } adentro */\n  color: red;\n}';
+    const limpio = sinComentarios(css);
+    expect(limpio).toHaveLength(css.length);
+    expect(limpio).not.toContain('/*');
+    expect(regla(css, '.a').get('color')).toBe('red');
+  });
+});
+
+describe('lo que no sabe leer, lo lanza', () => {
+  it('lanza ante el anidamiento nativo de CSS, en vez de inventar una regla fantasma', () => {
+    expect(() => reglas('.a {\n  color: red;\n  &:hover { color: blue; }\n}')).toThrow(
+      'anidamiento no soportado en ".a"',
+    );
+  });
+
+  it('lanza ante un paréntesis sin balancear, en vez de tragarse lo que sigue', () => {
+    expect(() => reglas('.a { color: rgb(0, 0, 0; background: red; }')).toThrow('paréntesis sin balancear');
+  });
+
+  it('dice en qué línea está la llave sin cerrar, o la de más', () => {
+    expect(() => reglas('.a {\n  color: red;\n')).toThrow('quedó sin cerrar ".a"');
+    expect(() => reglas('/* }\n */\n.a { color: red; }\n}')).toThrow('llave de cierre sin abrir en línea 4');
+  });
+
+  it('lanza si un token no abre su propia línea, aunque lleve dos espacios adelante', () => {
+    expect(() => bloque(':root {\n  --a: #000; --b: #fff;\n}', ':root')).toThrow('--b no abre su propia línea');
+  });
+
+  it('avisa cuando el bloque existe pero comparte su regla con otros selectores', () => {
+    expect(() => bloque(':root, .panel {\n  --a: #000;\n}', ':root')).toThrow(
+      'pero existe compartiendo regla con otros selectores',
+    );
   });
 });
 
@@ -531,8 +586,16 @@ export type Regla = {
   dentroDeArroba: boolean; // vive dentro de un @media, @keyframes, @supports…
 };
 
+// Reemplaza cada comentario por espacios en vez de borrarlo: así las posiciones del texto limpio
+// siguen coincidiendo con las del archivo en disco y un error puede decir en qué línea está. Con
+// ~100 líneas de comentario en globals.css, un offset sobre el texto recortado no sirve para nada.
 export function sinComentarios(css: string): string {
-  return css.replace(/\/\*[\s\S]*?\*\//g, '');
+  return css.replace(/\/\*[\s\S]*?\*\//g, (comentario) => comentario.replace(/[^\n]/g, ' '));
+}
+
+function ubicacion(texto: string, posicion: number): string {
+  const antes = texto.slice(0, posicion);
+  return `línea ${antes.split('\n').length}, columna ${posicion - antes.lastIndexOf('\n')}`;
 }
 
 // Parte en `separador` solo FUERA de paréntesis: `:is(a, b)` es un selector, no dos, y
@@ -550,6 +613,10 @@ function partirFueraDeParentesis(texto: string, separador: ',' | ';'): string[] 
       desde = i + 1;
     }
   }
+  // Un paréntesis sin cerrar deja la profundidad arriba de cero y se traga todo lo que sigue: sin
+  // esta guarda, `rgb(0, 0, 0; background: red` devuelve UNA declaración ilegible y el background
+  // desaparece en silencio.
+  if (profundidad !== 0) throw new Error(`paréntesis sin balancear en: ${texto.trim().slice(0, 70)}`);
   partes.push(texto.slice(desde));
   return partes;
 }
@@ -563,13 +630,13 @@ export function normalizarSelector(selector: string): string {
     .trim();
 }
 
-function leerDeclaraciones(cuerpo: string): Map<string, string> {
+function leerDeclaraciones(cuerpo: string, selector: string): Map<string, string> {
   const declaraciones = new Map<string, string>();
   for (const cruda of partirFueraDeParentesis(cuerpo, ';')) {
     const declaracion = cruda.trim();
     if (!declaracion) continue;
     const dosPuntos = declaracion.indexOf(':');
-    if (dosPuntos < 0) throw new Error(`declaración ilegible: ${declaracion}`);
+    if (dosPuntos < 0) throw new Error(`declaración ilegible en "${selector}": ${declaracion}`);
     const nombre = declaracion.slice(0, dosPuntos).trim();
     const propiedad = nombre.startsWith('--') ? nombre : nombre.toLowerCase();
     declaraciones.set(propiedad, declaracion.slice(dosPuntos + 1).replace(/\s+/g, ' ').trim());
@@ -591,12 +658,20 @@ export function reglas(css: string): Regla[] {
       desde = i + 1;
     } else if (c === '}') {
       const abierto = abiertos.pop();
-      if (!abierto) throw new Error(`llave de cierre sin abrir en la posición ${i}`);
+      if (!abierto) throw new Error(`llave de cierre sin abrir en ${ubicacion(limpio, i)}`);
       if (!abierto.arroba) {
         const cuerpo = limpio.slice(abierto.cuerpoDesde, i);
+        // El anidamiento nativo de CSS (`.a { &:hover { … } }`) no se soporta, y sin esta guarda no
+        // se rompe: se lee MAL en silencio, inventando una regla con un selector basura y perdiendo
+        // declaraciones. El contrato de este módulo es lanzar ante lo que no sabe leer.
+        if (cuerpo.includes('{')) {
+          throw new Error(
+            `anidamiento no soportado en "${abierto.prelude}" (${ubicacion(limpio, abierto.cuerpoDesde)})`,
+          );
+        }
         resultado.push({
           selectores: partirFueraDeParentesis(abierto.prelude, ',').map(normalizarSelector),
-          declaraciones: leerDeclaraciones(cuerpo),
+          declaraciones: leerDeclaraciones(cuerpo, abierto.prelude),
           cuerpo,
           dentroDeArroba: abiertos.some((a) => a.arroba),
         });
@@ -604,7 +679,10 @@ export function reglas(css: string): Regla[] {
       desde = i + 1;
     }
   }
-  if (abiertos.length > 0) throw new Error('quedó una llave sin cerrar');
+  const sinCerrar = abiertos[abiertos.length - 1];
+  if (sinCerrar) {
+    throw new Error(`quedó sin cerrar "${sinCerrar.prelude}" (${ubicacion(limpio, sinCerrar.cuerpoDesde)})`);
+  }
   return resultado;
 }
 
@@ -629,14 +707,30 @@ export function bloque(css: string, selector: string): Map<string, string> {
     (r) => !r.dentroDeArroba && r.selectores.length === 1 && r.selectores[0] === buscado,
   );
   if (candidatos.length !== 1) {
-    throw new Error(`el bloque ${selector} aparece ${candidatos.length} veces en el CSS (se esperaba 1)`);
+    const enGrupo = reglas(css).some((r) => !r.dentroDeArroba && r.selectores.includes(buscado));
+    const detalle = enGrupo && candidatos.length === 0 ? ', pero existe compartiendo regla con otros selectores' : '';
+    throw new Error(
+      `el bloque ${selector} aparece ${candidatos.length} veces en el CSS (se esperaba 1)${detalle}`,
+    );
   }
   const [unico] = candidatos;
+  const enSuPropiaLinea = new Set<string>();
   for (const linea of unico.cuerpo.split(/\r?\n/)) {
-    const token = /^(\s*)(--[a-z0-9-]+)\s*:/.exec(linea);
-    if (token && token[1] !== '  ') throw new Error(`indentación distinta de dos espacios en ${token[2]}`);
+    const token = /^(\s*)(--[\w-]+)\s*:/.exec(linea);
+    if (!token) continue;
+    if (token[1] !== '  ') throw new Error(`indentación distinta de dos espacios en ${token[2]}`);
+    enSuPropiaLinea.add(token[2]);
   }
-  return new Map([...unico.declaraciones].filter(([nombre]) => nombre.startsWith('--')));
+  const tokens = new Map([...unico.declaraciones].filter(([nombre]) => nombre.startsWith('--')));
+  // El lint de arriba solo mira el token que ABRE cada línea. Sin este cruce contra lo que de verdad
+  // se devuelve, `--a: #000; --b: #fff;` en una sola línea pasa, y `--b` queda invisible para el
+  // grep de `^  --` que documenta DESIGN.md: justo lo que el lint existe para impedir.
+  for (const nombre of tokens.keys()) {
+    if (!enSuPropiaLinea.has(nombre)) {
+      throw new Error(`${nombre} no abre su propia línea: un grep de "^  --" no lo encontraría`);
+    }
+  }
+  return tokens;
 }
 
 // Los tokens tal como los ve el <html> con ese tema aplicado: el default es :root; cualquier otro
@@ -657,7 +751,10 @@ export function resolver(nombre: string, mapa: Map<string, string>): string {
     camino.push(actual);
     const valor = mapa.get(actual);
     if (valor === undefined) throw new Error(`el token ${actual} no está definido`);
-    const referencia = /^var\((--[a-z0-9-]+)(\s*,[\s\S]*)?\)$/.exec(valor);
+    // `[\w-]+` y no `[a-z0-9-]+`: el charset legal de una custom property incluye mayúsculas y guion
+    // bajo, y con la regex estrecha un `var(--Fondo)` o un `var( --b )` no encajaba, se devolvía
+    // CRUDO y el error terminaba saliendo desde el parseo de color, apuntando al lugar equivocado.
+    const referencia = /^var\(\s*(--[\w-]+)\s*(,[\s\S]*)?\)$/.exec(valor);
     if (!referencia) return valor;
     if (referencia[2] !== undefined) {
       throw new Error(`var() con valor de respaldo no soportado: ${actual}: ${valor}`);
@@ -727,7 +824,9 @@ Y el cuerpo de `it('cada tema que no es el default tiene su bloque :root[data-te
 ```ts
     for (const t of TEMAS) {
       if (t === TEMA_POR_DEFECTO) continue; // el default ES :root, no lleva bloque propio
-      expect(() => bloque(css, `:root[data-tema="${t}"]`), `falta el bloque de CSS del tema "${t}"`).not.toThrow();
+      // El mensaje NO afirma la causa: bloque() lanza por tres motivos (no existe, está repetido, o
+      // tiene un token mal indentado), y el suyo es más preciso que cualquier cosa que digamos acá.
+      expect(() => bloque(css, `:root[data-tema="${t}"]`), `no se pudo leer el bloque del tema "${t}"`).not.toThrow();
     }
 ```
 
@@ -746,15 +845,29 @@ Reemplazar el `it('color-scheme se declara en cada tema …'` completo (L125-136
     for (const t of TEMAS) {
       if (t === TEMA_POR_DEFECTO) continue;
       const esquema = regla(css, `:root[data-tema="${t}"]`).get('color-scheme');
-      expect(esquema, `el tema "${t}" declara color-scheme ${esquema} y es ${ESQUEMA[t]}`).toBe(ESQUEMA[t]);
+      expect(esquema, `el tema "${t}" declara color-scheme ${esquema} y debería ser ${ESQUEMA[t]}`).toBe(
+        ESQUEMA[t],
+      );
     }
     const html = regla(css, 'html').get('color-scheme');
     expect(
       html,
       `html declara color-scheme ${html} y el default (${TEMA_POR_DEFECTO}) es ${ESQUEMA[TEMA_POR_DEFECTO]}`,
     ).toBe(ESQUEMA[TEMA_POR_DEFECTO]);
+    // El del default vive en `html` (0,0,1) y NO en `:root` (0,1,0), que le ganaría por
+    // especificidad: si alguien lo agregara ahí, el navegador usaría ese y la aserción de arriba
+    // seguiría verde mirando una declaración que ya no manda.
+    expect(
+      regla(css, ':root').get('color-scheme'),
+      ':root declara color-scheme y le gana a html por especificidad: el default se declara en html',
+    ).toBeUndefined();
   });
 ```
+
+**Y corregí el comentario de cabecera del segundo `describe`** (L66-70), que afirma que agregar un
+tema a `TEMAS` y olvidar el CSS "compila": ya no es cierto — `ETIQUETAS_TEMA` es un
+`Record<Tema, …>` y `ESQUEMA` suma otro, así que `tsc` obliga a llenar las dos tablas. Lo que sigue
+sin estar atado es el bloque de CSS, y eso es lo que la prueba atrapa.
 
 - [ ] **Paso 4: correr**
 
@@ -766,7 +879,8 @@ Esperado: `lib/tema.test.ts` en verde, 7 pruebas (las mismas que antes).
 |---|---|
 | `html { color-scheme: dark }` (L271) → `light` | `html declara color-scheme light y el default (oscuro) es dark` |
 | en el bloque claro (L129) `color-scheme: light` → `dark` | `el tema "claro" declara color-scheme dark y es light` |
-| declarar un token del bloque claro con 4 espacios | `indentación distinta de dos espacios en --x` |
+| declarar un token del bloque claro con 4 espacios | `indentación distinta de dos espacios en --x` — ojo: fallan **dos** pruebas, porque la de bloques y la de tokens pasan las dos por `bloque()` |
+| agregar `color-scheme: dark` al bloque `:root` | `:root declara color-scheme y le gana a html por especificidad` |
 | borrar `--menta` del bloque de alto contraste | `el tema "alto-contraste" no redefine estos tokens` con `--menta` en la lista |
 
 - [ ] **Paso 6: commit**

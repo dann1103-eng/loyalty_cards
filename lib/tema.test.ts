@@ -63,10 +63,12 @@ describe('tema', () => {
   });
 });
 
-// El otro contrato entre dos mundos: TEMAS (TypeScript) contra los bloques de globals.css. Nada en
-// el compilador los ata. Agregar 'sepia' a TEMAS y olvidar el CSS compila, pasa el lint y se ve como
-// un botón más en el selector que no hace absolutamente nada; y agregar una variable a :root sin
-// darle valor en los otros dos temas deja esa pantalla con el color del tema oscuro incrustado.
+// El otro contrato entre dos mundos: TEMAS (TypeScript) contra los bloques de globals.css. Nada ata
+// el uno al otro. Los `Record<Tema, …>` (ETIQUETAS_TEMA acá abajo, ESQUEMA más adelante) te obligan
+// a llenar las tablas de TypeScript al agregar un tema, pero NADIE te obliga a escribir su bloque de
+// CSS: con las tablas llenas, 'sepia' compila, pasa el lint y sale como un botón más en el selector
+// que no hace absolutamente nada. Y agregar una variable a :root sin darle valor en los otros temas
+// deja esa pantalla con el color del tema por defecto incrustado.
 // Las dos cosas se descubrirían mirando el panel en tres temas, que es justo lo que nadie rehace.
 describe('temas contra app/globals.css', () => {
   const css = readFileSync(fileURLToPath(new URL('../app/globals.css', import.meta.url)), 'utf8');
@@ -96,7 +98,9 @@ describe('temas contra app/globals.css', () => {
   it('cada tema que no es el default tiene su bloque :root[data-tema=…]', () => {
     for (const t of TEMAS) {
       if (t === TEMA_POR_DEFECTO) continue; // el default ES :root, no lleva bloque propio
-      expect(() => bloque(css, `:root[data-tema="${t}"]`), `falta el bloque de CSS del tema "${t}"`).not.toThrow();
+      // El mensaje NO afirma la causa: bloque() lanza por tres motivos (no existe, está repetido, o
+      // tiene un token mal indentado), y el suyo es más preciso que cualquier cosa que digamos acá.
+      expect(() => bloque(css, `:root[data-tema="${t}"]`), `no se pudo leer el bloque del tema "${t}"`).not.toThrow();
     }
   });
 
@@ -128,12 +132,21 @@ describe('temas contra app/globals.css', () => {
     for (const t of TEMAS) {
       if (t === TEMA_POR_DEFECTO) continue;
       const esquema = regla(css, `:root[data-tema="${t}"]`).get('color-scheme');
-      expect(esquema, `el tema "${t}" declara color-scheme ${esquema} y es ${ESQUEMA[t]}`).toBe(ESQUEMA[t]);
+      expect(esquema, `el tema "${t}" declara color-scheme ${esquema} y debería ser ${ESQUEMA[t]}`).toBe(
+        ESQUEMA[t],
+      );
     }
     const html = regla(css, 'html').get('color-scheme');
     expect(
       html,
       `html declara color-scheme ${html} y el default (${TEMA_POR_DEFECTO}) es ${ESQUEMA[TEMA_POR_DEFECTO]}`,
     ).toBe(ESQUEMA[TEMA_POR_DEFECTO]);
+    // El del default vive en `html` (0,0,1) y NO en `:root` (0,1,0), que le ganaría por
+    // especificidad: si alguien lo agregara ahí, el navegador usaría ese y la aserción de arriba
+    // seguiría verde mirando una declaración que ya no manda.
+    expect(
+      regla(css, ':root').get('color-scheme'),
+      ':root declara color-scheme y le gana a html por especificidad: el default se declara en html',
+    ).toBeUndefined();
   });
 });
