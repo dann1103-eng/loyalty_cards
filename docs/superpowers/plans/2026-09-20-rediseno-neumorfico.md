@@ -1897,14 +1897,15 @@ en los tres temas, simetría completa, relieve plano en alto contraste, pisos 1.
   --vidrio-panel: #000000;
   --velo: rgba(0, 0, 0, 0.85);
 
-  /* --error-suave al 16% y no al 22%: con 22% la pastilla "inactivo" daba 6.67:1, y en este tema
-     todo texto pide 7:1. Es su único uso. */
+  /* 12% y no 22%: la pastilla "inactivo" (su único uso) no se apoya en el fondo de la página sino
+     en la fila que la contiene (--superficie-2). Medida ahí, con 22% daba 5.97:1 y con 16% daba
+     6.78:1; en este tema todo texto pide 7:1. Con 12% da 7.31:1. */
   --hover-suave: rgba(255, 255, 255, 0.18);
   --neutro-suave: rgba(255, 255, 255, 0.18);
   --acento-suave: rgba(201, 236, 94, 0.22);
   --acento-borde: rgba(201, 236, 94, 0.85);
   --menta-suave: rgba(0, 229, 140, 0.22);
-  --error-suave: rgba(255, 138, 122, 0.16);
+  --error-suave: rgba(255, 138, 122, 0.12);
 
   --btn-primario-fondo: #ffffff;
   --btn-primario-texto: #000000;

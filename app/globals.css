@@ -1,72 +1,93 @@
 /* ============================================================
-   Cardly SV — sistema visual v2 "Stitch dark"
-   Fuente: docs/design/C1-C7 (Google Stitch) unificado a mano:
-   - UN solo blanco (--blanco #F5F5F0) para TODO el texto sobre
-     fondo oscuro; jerarquía por opacidad, no por marrones.
-   - UN solo acento (violeta de marca). El cian suelto de C3 se
-     descartó; el menta queda como secundario de datos/éxito.
-   - Bordes en blanco-alpha (nunca marrón #544337 / #a28d7d).
+   Cardly SV — sistema visual v3 "neumórfico" (2026-09-20)
+   Antes: v2 "Stitch dark". El porqué de cada decisión vive en
+   DESIGN.md y en docs/superpowers/specs/2026-09-20-rediseno-
+   neumorfico-design.md.
+   - Lo que se levanta es DEL MISMO COLOR que la página: la forma
+     sale del relieve (luz arriba-izquierda, sombra abajo-derecha),
+     no de un borde ni de otro color.
+   - El relieve comunica FORMA, nunca ESTADO. Activo, elegido y con
+     foco se marcan con el acento (relleno, borde, outline): un
+     chip que solo "se hunde" desaparece bajo el sol.
+   - UN solo acento (violeta de marca), solo en lo interactivo
+     activo. El menta queda como secundario de datos/éxito.
    Tipografía: Outfit (display) + Hanken Grotesk (cuerpo) +
    Geist Mono (números/códigos), inyectadas por next/font.
 
-   TRES TEMAS (2026-07-26): oscuro (el de siempre, y el default),
-   claro y alto contraste. Se implementan REDEFINIENDO estas
-   mismas variables en :root[data-tema=…] — ninguna pantalla
-   sabe qué tema está activo. Regla de oro para código nuevo:
-   si escribís un color literal fuera de este bloque, en dos de
-   los tres temas va a estar mal. Las únicas excepciones son las
-   que representan algo del mundo real y NO del panel (la
-   tarjeta de la billetera, el QR, el botón de Apple Wallet, la
-   guía sobre el video de la cámara); están marcadas una por una.
+   TRES TEMAS: claro (el default desde el 2026-09-20), oscuro y
+   alto contraste. Se implementan REDEFINIENDO estas mismas
+   variables en :root[data-tema=…] — ninguna pantalla sabe qué
+   tema está activo. Regla de oro para código nuevo: si escribís
+   un color literal fuera de este bloque, en dos de los tres temas
+   va a estar mal. Las únicas excepciones son las que representan
+   algo del mundo real y NO del panel (la tarjeta de la billetera,
+   el QR, el botón de Apple Wallet, la guía sobre el video de la
+   cámara); están marcadas una por una.
    ============================================================ */
 
+/* ============================================================
+   TEMA CLARO (el default)
+   Escena: el dueño configura su tarjeta de día, con la vidriera
+   abierta a la calle; el cajero cobra en el mostrador.
+   Toda razón de contraste de este bloque la verifica
+   lib/diseno/temas.test.ts: si tocás un valor, corré la prueba en
+   vez de recalcular a mano (los comentarios a mano se desvían).
+   ============================================================ */
 :root {
-  /* ---------- superficies (oscuro) ---------- */
-  --fondo: #131313;
-  --superficie-0: #0e0e0e;
-  --superficie-1: #1c1b1b;
-  --superficie-2: #201f1f;
-  --superficie-3: #2a2a2a;
-  --superficie-4: #353534;
+  /* ---------- superficies ----------
+     El truco del neumorfismo: lo que se levanta (--superficie-1/-2) es del MISMO color que la
+     página, y se distingue solo por el relieve. --superficie-0 es el pozo (campos, chips inactivos,
+     pistas), un escalón más oscuro: 1.11:1 contra el fondo. --superficie-3/-4 son el escalón de la
+     fila activa y su hover (1.15 y 1.14:1). El fondo es gris-lavanda y no blanco porque la luz del
+     relieve necesita margen para verse: sobre el hueso #f4f1ec de antes quedaba en 1.13:1. */
+  --fondo: #e7e6f0;
+  --superficie-0: #dcdbe8;
+  --superficie-1: var(--fondo);
+  --superficie-2: var(--fondo);
+  --superficie-3: #d8d7e5;
+  --superficie-4: #cbcadb;
 
-  /* ---------- EL blanco único + jerarquía por opacidad ----------
+  /* ---------- texto: Deep del kit, jerarquía por alpha ----------
      OJO: --blanco es una CONSTANTE DE MARCA (el hueso #F5F5F0), no un token de tema. Los otros
-     temas NO la redefinen: sus dos usos que quedan (.cardface y .cardface-logo) son la tarjeta de
-     la billetera, que se ve igual esté el panel claro u oscuro. El color de texto del panel es
-     --texto, que sí cambia. */
+     temas NO la redefinen: sus usos (.cardface y .cardface-logo, y el texto del oscuro) son la
+     tarjeta de la billetera y el hueso de siempre. --texto-3 va al 66% y no al 62%: con 0.62 da
+     4.42:1 sobre este fondo. */
   --blanco: #f5f5f0;
-  --texto: var(--blanco);
-  --texto-2: rgba(245, 245, 240, 0.72);
-  --texto-3: rgba(245, 245, 240, 0.48);
+  --texto: #181849;
+  --texto-2: rgba(24, 24, 73, 0.75);
+  --texto-3: rgba(24, 24, 73, 0.66);
 
-  /* ---------- bordes blanco-alpha ---------- */
-  --linea: rgba(245, 245, 240, 0.1);
-  --linea-fuerte: rgba(245, 245, 240, 0.16);
+  /* ---------- bordes ---------- */
+  --linea: rgba(24, 24, 73, 0.12);
+  --linea-fuerte: rgba(24, 24, 73, 0.24);
 
-  /* ---------- acento único: violeta de marca (antes naranja cálido) ---------- */
-  --acento: #8f86e0; /* Soft */
-  /* Lavanda, más CLARO que el acento: en un tema oscuro, "fuerte" es más lejos del fondo. El
-     #514ba8 que tenía dejaba --sobre-acento (Deep) a 2.31:1 en el botón Acreditar del escáner. */
-  --acento-fuerte: #a49df0;
-  --sobre-acento: #181849; /* Deep — texto oscuro SOLO sobre superficies acento (contraste) */
+  /* ---------- acento único: violeta de marca ---------- */
+  --acento: #514ba8; /* --violeta oficial: el Soft no llega a 4.5:1 sobre claro */
+  --acento-fuerte: #3d3880; /* violeta más oscuro, hover/press */
+  --sobre-acento: #f5f4fc;
 
-  /* ---------- secundario menta (datos/éxito) ---------- */
-  --menta: #8bd6b4;
-  --sobre-menta: #00351f;
+  /* ---------- secundario menta (datos/éxito) ----------
+     #0b6645 y no el #0d6e4a de antes: dentro de .pastilla-activo, sobre su propio tinte, el viejo
+     daba 4.27:1. */
+  --menta: #0b6645;
+  --sobre-menta: #eefff7;
 
   /* ---------- error ---------- */
-  --error: #ffb4ab;
-  --error-fondo: rgba(147, 0, 10, 0.22);
-  --error-borde: rgba(255, 180, 171, 0.35);
+  --error: #a4231c;
+  --error-fondo: rgba(164, 35, 28, 0.08);
+  --error-borde: rgba(164, 35, 28, 0.32);
 
   /* ---------- tipografía ----------
      OJO: --font-display / --font-body / --font-mono las INYECTA next/font en <html>
      (app/layout.tsx). NO redeclararlas aquí: `--x: var(--x, …)` es una referencia circular
      que invalida la variable y tira toda la tipografía al serif del navegador. */
 
-  /* ---------- forma ---------- */
+  /* ---------- forma (constantes: no cambian con el tema) ----------
+     --radius-control es el radio de los controles (campos, .btn-acento, alertas). No se cambió
+     --radius-field porque la portada lo usa y está fuera de este rediseño. */
   --radius: 20px;
   --radius-field: 12px;
+  --radius-control: 16px;
   --radius-pill: 999px;
 
   /* ---------- espaciado ---------- */
@@ -78,26 +99,125 @@
   --sp-6: 32px;
   --sp-7: 48px;
 
-  /* ---------- elevación ---------- */
-  --shadow-1: 0 6px 18px -10px rgba(0, 0, 0, 0.55);
-  --shadow-2: 0 18px 44px -20px rgba(0, 0, 0, 0.6);
-  --shadow-3: 0 26px 60px -18px rgba(0, 0, 0, 0.72);
+  /* ---------- sombras de lo que FLOTA ----------
+     La tarjeta del pase, el botón de Wallet, la vista previa: objetos que flotan SOBRE la página.
+     Lo que se levanta o se hunde DE la página usa el relieve, más abajo. */
+  --shadow-1: 0 6px 18px -10px rgba(24, 24, 73, 0.28);
+  --shadow-2: 0 18px 44px -20px rgba(24, 24, 73, 0.32);
+  --shadow-3: 0 26px 60px -18px rgba(24, 24, 73, 0.36);
   --shadow-card: var(--shadow-2); /* alias de compatibilidad */
-  --ring: 0 0 0 4px rgba(143, 134, 224, 0.22);
-  --sombra-acento: 0 0 24px rgba(81, 75, 168, 0.25);
-  --sombra-menta: 0 10px 22px -10px rgba(139, 214, 180, 0.6);
+  --ring: 0 0 0 4px rgba(81, 75, 168, 0.22);
+  --sombra-acento: 0 8px 20px -8px rgba(61, 56, 128, 0.45);
+  --sombra-menta: 0 10px 22px -10px rgba(11, 102, 69, 0.45);
 
-  /* ---------- superficies translúcidas (vidrio) ----------
-     Eran literales dentro de cada regla; con tres temas tenían que salir del token, porque un
-     rgba de gris oscuro sobre un panel claro se ve como una mancha. */
-  --vidrio-top: rgba(19, 19, 19, 0.8); /* header pegajoso */
-  --vidrio-nav: rgba(28, 27, 27, 0.92); /* barra inferior */
-  --vidrio-panel: rgba(32, 31, 31, 0.6); /* tarjetas .panel */
-  --velo: rgba(0, 0, 0, 0.55); /* fondo detrás de los bottom sheets */
+  /* ---------- relieve ----------
+     --luz y --sombra-relieve son COLORES: se pueden usar dentro de una lista de sombras, porque en
+     alto contraste valen transparent, que es un color válido. Los --relieve-* y --hundido-* son
+     COMPUESTOS: van SOLOS en su box-shadow, nunca en una lista. En alto contraste valen none, y
+     `none, 0 0 0 3px x` es una declaración inválida que tira la sombra entera (lo verifica
+     lib/diseno/temas.test.ts). --borde-relieve es el borde de 1px que lleva toda superficie con
+     relieve: casi no se ve acá, pero mantiene la caja del mismo tamaño en los tres temas y es el
+     único límite que queda en forced-colors. */
+  --luz: rgba(255, 255, 255, 0.9);
+  --sombra-relieve: rgba(24, 24, 73, 0.2);
+  --relieve-1: 4px 4px 10px var(--sombra-relieve), -4px -4px 10px var(--luz);
+  --relieve-2: 6px 6px 14px var(--sombra-relieve), -6px -6px 14px var(--luz);
+  --relieve-3: 0 -1px 0 var(--luz), 0 -8px 24px -12px var(--sombra-relieve);
+  --hundido-1: inset 3px 3px 6px var(--sombra-relieve), inset -3px -3px 6px var(--luz);
+  --hundido-2: inset 5px 5px 10px var(--sombra-relieve), inset -5px -5px 10px var(--luz);
+  --borde-relieve: rgba(24, 24, 73, 0.06);
+
+  /* ---------- vidrio (EN RETIRO) ----------
+     El vidrio esmerilado no convive con el neumorfismo: una superficie translúcida no puede ser
+     del mismo color que la página. Mientras sus tres consumidores (.panel, .admin-top,
+     .nav-inferior) no migren, valen el fondo; después se borran de los tres temas. */
+  --vidrio-top: var(--fondo);
+  --vidrio-nav: var(--fondo);
+  --vidrio-panel: var(--fondo);
+  --velo: rgba(24, 24, 73, 0.45); /* fondo detrás de los bottom sheets */
 
   /* ---------- tintes suaves (fondos de chip / ícono-círculo / hover) ----------
-     Un alpha del color de texto NO sobrevive el cambio de tema: blanco al 5% sobre un fondo claro
-     es invisible. Cada tema declara su propia versión. */
+     Un alpha del color de texto NO sobrevive el cambio de tema: cada tema declara el suyo. */
+  --hover-suave: rgba(24, 24, 73, 0.05);
+  --neutro-suave: rgba(24, 24, 73, 0.07);
+  --acento-suave: rgba(81, 75, 168, 0.12);
+  --acento-borde: rgba(81, 75, 168, 0.4);
+  --menta-suave: rgba(11, 102, 69, 0.12);
+  --error-suave: rgba(164, 35, 28, 0.1);
+
+  /* ---------- botón primario: Deep sólido ---------- */
+  --btn-primario-fondo: #181849;
+  --btn-primario-texto: #f5f4fc;
+
+  /* ---------- atmósfera (EN RETIRO) ----------
+     Cualquier degradado debajo de una superficie con relieve rompe el truco de que la superficie
+     tenga el color de la página. Se borra junto con el background-image del body. */
+  --atmosfera: none;
+}
+
+/* ============================================================
+   TEMA OSCURO
+   Escena: el dueño revisa las ventas del día a las once de la
+   noche, en la cama, con el brillo al mínimo.
+   Azul marino sacado de Deep, no carbón: el neumorfismo necesita
+   un fondo con algo de luminancia para que la luz del relieve se
+   vea. #1c1e3a es el techo: el acento #8f86e0 se usa como texto y
+   con un fondo más claro (#25284d) ya cae a 4.47:1.
+   ============================================================ */
+:root[data-tema="oscuro"] {
+  color-scheme: dark;
+
+  --fondo: #1c1e3a;
+  --superficie-0: #15172e;
+  --superficie-1: var(--fondo);
+  --superficie-2: var(--fondo);
+  --superficie-3: #262947;
+  --superficie-4: #303455;
+
+  /* 0.56 y no el 0.48 de antes: este fondo es más claro que #131313, y con 0.48 da 4.44:1. */
+  --texto: var(--blanco);
+  --texto-2: rgba(245, 245, 240, 0.74);
+  --texto-3: rgba(245, 245, 240, 0.56);
+
+  --linea: rgba(245, 245, 240, 0.1);
+  --linea-fuerte: rgba(245, 245, 240, 0.18);
+
+  /* --acento-fuerte es lavanda, más CLARO que el acento: en un tema oscuro, "fuerte" es más lejos
+     del fondo. El #514ba8 que tenía llevaba --sobre-acento (Deep) a 2.31:1 en el botón Acreditar
+     del escáner. */
+  --acento: #8f86e0; /* Soft */
+  --acento-fuerte: #a49df0;
+  --sobre-acento: #181849; /* Deep */
+
+  --menta: #8bd6b4;
+  --sobre-menta: #00351f;
+
+  --error: #ffb4ab;
+  --error-fondo: rgba(147, 0, 10, 0.22);
+  --error-borde: rgba(255, 180, 171, 0.35);
+
+  --shadow-1: 0 6px 18px -10px rgba(4, 5, 18, 0.6);
+  --shadow-2: 0 18px 44px -20px rgba(4, 5, 18, 0.65);
+  --shadow-3: 0 26px 60px -18px rgba(4, 5, 18, 0.75);
+  --ring: 0 0 0 4px rgba(143, 134, 224, 0.3);
+  --sombra-acento: 0 0 24px rgba(143, 134, 224, 0.3);
+  --sombra-menta: 0 10px 22px -10px rgba(139, 214, 180, 0.6);
+
+  /* La luz apenas se insinúa (7%): en oscuro, un brillo fuerte se lee como un borde blanco. */
+  --luz: rgba(255, 255, 255, 0.07);
+  --sombra-relieve: rgba(4, 5, 18, 0.6);
+  --relieve-1: 4px 4px 10px var(--sombra-relieve), -3px -3px 8px var(--luz);
+  --relieve-2: 6px 6px 16px var(--sombra-relieve), -5px -5px 12px var(--luz);
+  --relieve-3: 0 -1px 0 var(--luz), 0 -10px 28px -12px var(--sombra-relieve);
+  --hundido-1: inset 3px 3px 7px var(--sombra-relieve), inset -2px -2px 5px var(--luz);
+  --hundido-2: inset 5px 5px 12px var(--sombra-relieve), inset -4px -4px 8px var(--luz);
+  --borde-relieve: rgba(245, 245, 240, 0.05);
+
+  --vidrio-top: var(--fondo);
+  --vidrio-nav: var(--fondo);
+  --vidrio-panel: var(--fondo);
+  --velo: rgba(6, 7, 20, 0.6);
+
   --hover-suave: rgba(245, 245, 240, 0.05);
   --neutro-suave: rgba(245, 245, 240, 0.08);
   --acento-suave: rgba(143, 134, 224, 0.12);
@@ -105,104 +225,27 @@
   --menta-suave: rgba(139, 214, 180, 0.13);
   --error-suave: rgba(255, 180, 171, 0.12);
 
-  /* ---------- botón primario ----------
-     .btn-primary era "píldora hueso con texto oscuro" escrito como --blanco sobre --superficie-0.
-     Con tema claro eso queda hueso sobre casi-blanco: ilegible. Ahora es un par explícito que cada
-     tema invierte. */
   --btn-primario-fondo: var(--blanco);
   --btn-primario-texto: var(--superficie-0);
 
-  /* ---------- atmósfera del <body> (glows de fondo) ---------- */
-  --atmosfera:
-    radial-gradient(110% 70% at 8% -10%, rgba(81, 75, 168, 0.09) 0%, transparent 55%),
-    radial-gradient(90% 60% at 100% 110%, rgba(139, 214, 180, 0.05) 0%, transparent 55%);
-}
-
-/* ============================================================
-   TEMA CLARO
-   Los nombres siguen siendo los del tema oscuro (--superficie-3
-   = "un escalón por encima de la superficie base"), no una
-   descripción del color: acá ese escalón es más OSCURO que el
-   fondo, porque en claro los chips se hunden en vez de subir.
-   Los acentos se OSCURECEN: el naranja pálido #ffc495 nació
-   para leerse sobre negro y sobre blanco da ~1.6:1.
-   ============================================================ */
-:root[data-tema="claro"] {
-  color-scheme: light;
-
-  --fondo: #f4f1ec;
-  --superficie-0: #e7e2d9;
-  --superficie-1: #ffffff;
-  --superficie-2: #ffffff;
-  /* Los escalones se calibraron para IGUALAR el contraste que ya tenían en oscuro, no a ojo:
-     superficie-2/fondo da 1.13 en los dos temas, superficie-3/fondo 1.27 (oscuro: 1.29) y
-     superficie-4/superficie-3 1.17 (oscuro: 1.17). Con el #eae5dc que tenía antes, las pastillas
-     y los chips quedaban en 1.11 — planos contra la página justo en el tema donde el ojo tiene
-     menos margen. Si tocás uno, recalculá el escalón, no elijas el hex que "se ve parecido". */
-  --superficie-3: #ded7ca;
-  --superficie-4: #d0c7b6;
-
-  --texto: #1c1917;
-  --texto-2: rgba(28, 25, 23, 0.72);
-  /* 0.62 y no 0.48 como en oscuro: el mismo alpha sobre fondo claro da 3.4:1 (el oscuro da 4.5) y
-     --texto-3 pinta las etiquetas inactivas de la barra a 0.62rem. Con 0.62 quedan en 4.7:1 —
-     paridad con el tema oscuro, no una mejora sacada de la nada. */
-  --texto-3: rgba(28, 25, 23, 0.62);
-
-  --linea: rgba(28, 25, 23, 0.12);
-  --linea-fuerte: rgba(28, 25, 23, 0.24);
-
-  --acento: #514ba8; /* --violeta oficial */
-  --acento-fuerte: #3d3880; /* violeta más oscuro, hover/press */
-  --sobre-acento: #f5f4fc;
-
-  --menta: #0d6e4a;
-  --sobre-menta: #eefff7;
-
-  --error: #a4231c;
-  --error-fondo: rgba(164, 35, 28, 0.08);
-  --error-borde: rgba(164, 35, 28, 0.32);
-
-  --shadow-1: 0 6px 18px -10px rgba(28, 25, 23, 0.24);
-  --shadow-2: 0 18px 44px -20px rgba(28, 25, 23, 0.3);
-  --shadow-3: 0 26px 60px -18px rgba(28, 25, 23, 0.32);
-  --ring: 0 0 0 4px rgba(81, 75, 168, 0.18);
-  --sombra-acento: 0 0 24px rgba(61, 56, 128, 0.22);
-  --sombra-menta: 0 10px 22px -10px rgba(13, 110, 74, 0.45);
-
-  --vidrio-top: rgba(244, 241, 236, 0.82);
-  --vidrio-nav: rgba(255, 255, 255, 0.92);
-  --vidrio-panel: rgba(255, 255, 255, 0.72);
-  --velo: rgba(28, 25, 23, 0.45);
-
-  --hover-suave: rgba(28, 25, 23, 0.05);
-  --neutro-suave: rgba(28, 25, 23, 0.07);
-  --acento-suave: rgba(81, 75, 168, 0.12);
-  --acento-borde: rgba(81, 75, 168, 0.4);
-  --menta-suave: rgba(13, 110, 74, 0.12);
-  --error-suave: rgba(164, 35, 28, 0.1);
-
-  --btn-primario-fondo: #1c1917;
-  --btn-primario-texto: #faf8f5;
-
-  --atmosfera:
-    radial-gradient(110% 70% at 8% -10%, rgba(81, 75, 168, 0.16) 0%, transparent 55%),
-    radial-gradient(90% 60% at 100% 110%, rgba(13, 110, 74, 0.08) 0%, transparent 55%);
+  --atmosfera: none;
 }
 
 /* ============================================================
    TEMA ALTO CONTRASTE
    No es decorativo: es el modo para atender bajo el sol (local
    con vidriera, puesto al aire libre), donde el gris sobre gris
-   del tema oscuro directamente desaparece. Por eso:
+   directamente desaparece. Por eso:
    - negro PURO de fondo (un #131313 ya refleja y lava);
    - la jerarquía por opacidad casi se elimina — --texto-2 y
      --texto-3 se acercan al blanco en vez de desvanecerse;
    - los bordes suben a alpha alto: son la única separación que
      queda cuando el brillo del sol come las diferencias sutiles;
-   - los acentos se SATURAN (ámbar/verde puros sobre negro);
-   - se apagan sombras y glows: bajo el sol no aportan
-     profundidad, solo ensucian el borde.
+   - los acentos se SATURAN (lima/verde puros sobre negro);
+   - es PLANO a propósito: sin relieve, sin sombras ni glows. Bajo
+     el sol no aportan profundidad, solo ensucian el borde. Las
+     mismas reglas que en claro y oscuro dibujan relieve, acá
+     dibujan un borde blanco (--borde-relieve) y nada más.
    ============================================================ */
 :root[data-tema="alto-contraste"] {
   color-scheme: dark;
@@ -241,20 +284,30 @@
   --sombra-acento: none;
   --sombra-menta: none;
 
+  /* Plano: los colores valen transparent (se pueden componer) y los compuestos, none (van solos). */
+  --luz: transparent;
+  --sombra-relieve: transparent;
+  --relieve-1: none;
+  --relieve-2: none;
+  --relieve-3: none;
+  --hundido-1: none;
+  --hundido-2: none;
+  --borde-relieve: rgba(255, 255, 255, 0.55);
+
   /* Sin translucidez: el vidrio esmerilado es lo primero que se pierde con reflejo en pantalla. */
   --vidrio-top: #000000;
   --vidrio-nav: #000000;
   --vidrio-panel: #000000;
   --velo: rgba(0, 0, 0, 0.85);
 
+  /* 12% y no 22%: la pastilla "inactivo" (su único uso) no se apoya en el fondo de la página sino
+     en la fila que la contiene (--superficie-2). Medida ahí, con 22% daba 5.97:1 y con 16% daba
+     6.78:1; en este tema todo texto pide 7:1. Con 12% da 7.31:1. */
   --hover-suave: rgba(255, 255, 255, 0.18);
   --neutro-suave: rgba(255, 255, 255, 0.18);
   --acento-suave: rgba(201, 236, 94, 0.22);
   --acento-borde: rgba(201, 236, 94, 0.85);
   --menta-suave: rgba(0, 229, 140, 0.22);
-  /* 12% y no 22%: la pastilla "inactivo" (su único uso) no se apoya en el fondo de la página sino
-     en la fila que la contiene (--superficie-2). Medida ahí, con 22% daba 5.97:1 y con 16% daba
-     6.78:1; en este tema todo texto pide 7:1. Con 12% da 7.31:1. */
   --error-suave: rgba(255, 138, 122, 0.12);
 
   --btn-primario-fondo: #ffffff;
@@ -271,9 +324,10 @@
 
 html {
   height: 100%;
-  /* Default del tema oscuro. Los bloques :root[data-tema=…] de arriba lo pisan por especificidad
-     (0,2,0 contra 0,0,1), así que el orden en el archivo no importa acá. */
-  color-scheme: dark;
+  /* El del tema por defecto (claro). Los bloques :root[data-tema=…] de arriba lo pisan por
+     especificidad (0,2,0 contra 0,0,1), así que el orden en el archivo no importa acá. Si cambia
+     el default, cambia esto: lo verifica lib/tema.test.ts. */
+  color-scheme: light;
 }
 
 html,

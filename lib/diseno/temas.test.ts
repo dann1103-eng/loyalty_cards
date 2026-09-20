@@ -82,6 +82,7 @@ const PARES: Par[] = [
 // Solo alto contraste: sin sombras, el borde es la única separación que queda.
 const PARES_ALTO_CONTRASTE: Par[] = [
   { frente: '--linea', fondo: ['--fondo'], minimo: 3, texto: false, uso: 'bordes: la única separación bajo el sol' },
+  { frente: '--borde-relieve', fondo: ['--fondo'], minimo: 3, texto: false, uso: 'el borde de toda superficie con relieve' },
 ];
 
 // Pares por regla: el color y el fondo se leen DE LA REGLA CSS, para medir lo que ve el usuario y no
@@ -214,6 +215,43 @@ describe.each(TEMAS)('tema %s', (tema) => {
         }
       } catch (error) {
         fallas.push(`[tema ${tema}] regla ${par.color}: ${(error as Error).message}`);
+      }
+    }
+    expect(fallas).toEqual([]);
+  });
+});
+
+const RELIEVES = ['--relieve-1', '--relieve-2', '--relieve-3', '--hundido-1', '--hundido-2'];
+const CON_RELIEVE = TEMAS.filter((t) => t !== 'alto-contraste');
+
+describe('relieve', () => {
+  it('alto contraste es plano a propósito; claro y oscuro no', () => {
+    const fallas: string[] = [];
+    const alto = mapaDeTema(css, 'alto-contraste');
+    for (const token of RELIEVES) {
+      const valor = resolver(token, alto);
+      if (valor !== 'none') fallas.push(`[alto-contraste] ${token} debe ser none (tema plano a propósito) y vale "${valor}"`);
+    }
+    for (const token of ['--luz', '--sombra-relieve']) {
+      const valor = resolver(token, alto);
+      if (valor !== 'transparent') fallas.push(`[alto-contraste] ${token} debe ser transparent y vale "${valor}"`);
+    }
+    for (const tema of CON_RELIEVE) {
+      const mapa = mapaDeTema(css, tema);
+      for (const token of RELIEVES) {
+        if (resolver(token, mapa) === 'none') fallas.push(`[tema ${tema}] ${token} vale none: sin relieve no hay neumorfismo`);
+      }
+    }
+    expect(fallas).toEqual([]);
+  });
+
+  it('piso de relieve: la luz y la sombra se tienen que ver contra el fondo', () => {
+    const fallas: string[] = [];
+    for (const tema of CON_RELIEVE) {
+      const mapa = mapaDeTema(css, tema);
+      for (const token of ['--luz', '--sombra-relieve']) {
+        const { razon: r, fondo } = medir(mapa, token, ['--fondo']);
+        if (r < 1.12) fallas.push(`[tema ${tema}] piso de relieve: ${token}∘${fondo} ${r.toFixed(2)}:1 < 1.12`);
       }
     }
     expect(fallas).toEqual([]);

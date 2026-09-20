@@ -9,7 +9,9 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: 'Mi Tarjeta',
-    statusBarStyle: 'black-translucent',
+    // 'default' (íconos oscuros) y no 'black-translucent' (íconos blancos): desde el 2026-09-20 el
+    // tema por defecto es claro, y los íconos blancos sobre un fondo claro no se ven.
+    statusBarStyle: 'default',
   },
 };
 

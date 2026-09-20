@@ -9,12 +9,12 @@
 export const TEMAS = ['oscuro', 'claro', 'alto-contraste'] as const;
 export type Tema = (typeof TEMAS)[number];
 
-export const TEMA_POR_DEFECTO: Tema = 'oscuro';
+export const TEMA_POR_DEFECTO: Tema = 'claro';
 export const CLAVE_TEMA = 'cardly-tema';
 
 export const ETIQUETAS_TEMA: Record<Tema, { nombre: string; ayuda: string; icono: string }> = {
-  oscuro: { nombre: 'Oscuro', ayuda: 'El de siempre', icono: 'dark_mode' },
-  claro: { nombre: 'Claro', ayuda: 'Fondo blanco', icono: 'light_mode' },
+  oscuro: { nombre: 'Oscuro', ayuda: 'Para usar de noche', icono: 'dark_mode' },
+  claro: { nombre: 'Claro', ayuda: 'El predeterminado', icono: 'light_mode' },
   'alto-contraste': { nombre: 'Alto contraste', ayuda: 'Para usar bajo el sol', icono: 'contrast' },
 };
 

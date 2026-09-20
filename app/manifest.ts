@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'Consulta el saldo de tus tarjetas de lealtad y las recompensas que puedes canjear.',
     start_url: '/mi-tarjeta',
     display: 'standalone',
-    background_color: '#131313',
-    theme_color: '#131313',
+    background_color: '#e7e6f0',
+    theme_color: '#e7e6f0',
     icons: [
       // Rutas estables servidas por los Route Handlers (PNG real cada una). El campo
       // `type` le dice al navegador el MIME aunque la URL no termine en .png.

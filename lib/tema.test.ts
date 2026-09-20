@@ -7,7 +7,7 @@ import { bloque, regla } from './diseno/tokensCss';
 // MUTATION-TESTING: lo que estas pruebas protegen es el CONTRATO ENTRE DOS MUNDOS — el script que
 // corre en el <head> (texto plano, sin tipos) y el selector de React. Mutaciones que deben fallar:
 // (1) cambiar CLAVE_TEMA en un lado y no en el otro → el script leería una clave que nadie escribe
-//     y el tema volvería a oscuro en cada recarga (destello permanente, no un bug visible en dev);
+//     y el tema volvería al default en cada recarga (destello permanente, no un bug visible en dev);
 // (2) que normalizarTema devuelva el valor crudo → un data-tema basura del inspector se propagaría
 //     a localStorage y dejaría el panel sin ningún bloque de tema aplicado;
 // (3) que el script acepte cualquier string → mismo agujero, pero desde el HTML.
@@ -22,12 +22,12 @@ describe('tema', () => {
     expect(esTema(0)).toBe(false);
   });
 
-  it('normalizarTema degrada a oscuro cualquier valor que no sea un tema', () => {
+  it('normalizarTema degrada al default cualquier valor que no sea un tema', () => {
     expect(normalizarTema('claro')).toBe('claro');
     expect(normalizarTema('alto-contraste')).toBe('alto-contraste');
     expect(normalizarTema('lo-que-sea')).toBe(TEMA_POR_DEFECTO);
     expect(normalizarTema(undefined)).toBe(TEMA_POR_DEFECTO);
-    expect(TEMA_POR_DEFECTO).toBe('oscuro'); // el default NO cambia: es el tema que ya tenían
+    expect(TEMA_POR_DEFECTO).toBe('claro'); // el default desde el rediseño neumórfico (2026-09-20)
   });
 
   it('el script del <head> lee LA MISMA clave y valida contra LOS MISMOS temas', () => {
@@ -58,7 +58,7 @@ describe('tema', () => {
     };
     expect(correr('claro')).toBe('claro');
     expect(correr('alto-contraste')).toBe('alto-contraste');
-    expect(correr('inventado')).toBeUndefined(); // sin atributo → :root, que es el tema oscuro
+    expect(correr('inventado')).toBeUndefined(); // sin atributo → :root, que es el default (claro)
     expect(correr(null)).toBeUndefined();
   });
 });
@@ -84,6 +84,7 @@ describe('temas contra app/globals.css', () => {
     '--blanco', // constante de marca: el hueso de la tarjeta de billetera
     '--radius',
     '--radius-field',
+    '--radius-control',
     '--radius-pill',
     '--sp-1',
     '--sp-2',
