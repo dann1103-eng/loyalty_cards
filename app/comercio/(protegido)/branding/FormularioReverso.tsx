@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, type ChangeEvent, type CSSProperties } from 'react';
+import { useState, useRef, useEffect, type ChangeEvent } from 'react';
 import { useActionState } from 'react';
 import {
   accionGuardarReverso,
@@ -136,26 +136,6 @@ export default function FormularioReverso({
     setValores((v) => ({ ...v, terminos_uso: borradorTerminos(tipoTarjeta, nombreComercio) }));
   };
 
-  // globals.css estiliza `.field input` y `.field select`, pero no tiene regla para textarea y este
-  // trabajo no toca la hoja de estilos: el textarea trae su propio estilo, anillo de foco incluido
-  // (sin él sería el del navegador y desentonaría con el resto del formulario).
-  const [textareaEnfocado, setTextareaEnfocado] = useState(false);
-  const estiloTextarea: CSSProperties = {
-    fontFamily: 'var(--font-body)',
-    fontSize: '1rem',
-    lineHeight: 1.55,
-    color: 'var(--texto)',
-    width: '100%',
-    padding: '13px 14px',
-    borderRadius: 'var(--radius-field)',
-    resize: 'vertical',
-    outline: 'none',
-    transition: 'border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease',
-    background: textareaEnfocado ? 'var(--superficie-2)' : 'var(--superficie-1)',
-    border: `1px solid ${textareaEnfocado ? 'var(--acento)' : 'var(--linea)'}`,
-    boxShadow: textareaEnfocado ? 'var(--ring)' : 'none',
-  };
-
   // Placeholder = lo que esta tarjeta toma del negocio. Un texto largo heredado se recorta: el
   // placeholder de un textarea no hace scroll y una pared de texto gris tapa el campo.
   const placeholderHeredado = (campo: ClaveTexto, porDefecto: string): string => {
@@ -187,8 +167,11 @@ export default function FormularioReverso({
             : 'Todo lo que dejes vacío simplemente no aparece.'}
         </p>
 
-        {/* Fuera de `.field` a propósito: la regla `.field input` le pone padding, fondo y borde de
-            caja de texto a TODO input, y a un checkbox nativo eso lo deforma. */}
+        {/* El checkbox de abajo queda fuera de `.field` a propósito: `.field` es un layout vertical
+            (rótulo arriba, control abajo) y acá el checkbox va en línea junto a su texto. El
+            :not() de la regla del pozo ya excluye [type="checkbox"], así que no deformaría el
+            control aunque viviera adentro — la razón para dejarlo afuera es de layout, no de
+            estilo. */}
         <div style={{ marginBottom: 16 }}>
           {programaId ? (
             // Tres posiciones y no dos: "como en mi negocio" es un estado distinto de "apagada", y
@@ -262,8 +245,6 @@ export default function FormularioReverso({
             rows={8}
             value={valores.terminos_uso}
             onChange={cambiarTexto('terminos_uso')}
-            onFocus={() => setTextareaEnfocado(true)}
-            onBlur={() => setTextareaEnfocado(false)}
             placeholder={
               programaId
                 ? placeholderHeredado(
@@ -272,7 +253,6 @@ export default function FormularioReverso({
                   )
                 : 'Opcional. Escribí las condiciones de tu programa, o partí del borrador sugerido.'
             }
-            style={estiloTextarea}
           />
           <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>
             El borrador es un punto de partida, no un contrato revisado: leelo y ajustalo antes de

@@ -129,11 +129,10 @@
 
   /* ---------- vidrio (EN RETIRO) ----------
      El vidrio esmerilado no convive con el neumorfismo: una superficie translúcida no puede ser
-     del mismo color que la página. Mientras sus tres consumidores (.panel, .admin-top,
-     .nav-inferior) no migren, valen el fondo; después se borran de los tres temas. */
+     del mismo color que la página. .panel ya migró (--vidrio-panel se borró); mientras
+     .admin-top y .nav-inferior no migren, estos dos siguen valiendo el fondo. */
   --vidrio-top: var(--fondo);
   --vidrio-nav: var(--fondo);
-  --vidrio-panel: var(--fondo);
   --velo: rgba(24, 24, 73, 0.45); /* fondo detrás de los bottom sheets */
 
   /* ---------- tintes suaves (fondos de chip / ícono-círculo / hover) ----------
@@ -148,11 +147,6 @@
   /* ---------- botón primario: Deep sólido ---------- */
   --btn-primario-fondo: #181849;
   --btn-primario-texto: #f5f4fc;
-
-  /* ---------- atmósfera (EN RETIRO) ----------
-     Cualquier degradado debajo de una superficie con relieve rompe el truco de que la superficie
-     tenga el color de la página. Se borra junto con el background-image del body. */
-  --atmosfera: none;
 }
 
 /* ============================================================
@@ -215,7 +209,6 @@
 
   --vidrio-top: var(--fondo);
   --vidrio-nav: var(--fondo);
-  --vidrio-panel: var(--fondo);
   --velo: rgba(6, 7, 20, 0.6);
 
   --hover-suave: rgba(245, 245, 240, 0.05);
@@ -227,8 +220,6 @@
 
   --btn-primario-fondo: var(--blanco);
   --btn-primario-texto: var(--superficie-0);
-
-  --atmosfera: none;
 }
 
 /* ============================================================
@@ -297,7 +288,6 @@
   /* Sin translucidez: el vidrio esmerilado es lo primero que se pierde con reflejo en pantalla. */
   --vidrio-top: #000000;
   --vidrio-nav: #000000;
-  --vidrio-panel: #000000;
   --velo: rgba(0, 0, 0, 0.85);
 
   /* 12% y no 22%: la pastilla "inactivo" (su único uso) no se apoya en el fondo de la página sino
@@ -312,8 +302,6 @@
 
   --btn-primario-fondo: #ffffff;
   --btn-primario-texto: #000000;
-
-  --atmosfera: none;
 }
 
 * {
@@ -344,14 +332,21 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: transparent;
-  /* atmósfera: glow violeta arriba-izquierda + viñeta profunda (por tema; `none` en alto contraste) */
-  background-image: var(--atmosfera);
-  background-attachment: fixed;
+  /* radios, checkboxes y rangos nativos en el acento del tema, no el azul por defecto del navegador. */
+  accent-color: var(--acento);
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/* Foco: outline y no box-shadow. No pelea con el relieve ni con el hundido, no se compone con
+   ningún token que valga none, y sobrevive a forced-colors. Especificidad 0 (:where): la regla de
+   foco de cualquier componente le gana. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
 }
 
 /* ---------- íconos Material Symbols ---------- */
@@ -454,15 +449,13 @@ a {
   color: var(--acento);
 }
 
-/* ---------- panel de vidrio (glass card) ---------- */
+/* ---------- panel elevado ---------- */
 .panel {
   margin-top: 26px;
-  background: var(--vidrio-panel);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--linea);
+  background: var(--superficie-1);
+  border: 1px solid var(--borde-relieve);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--relieve-2);
   padding: 24px 22px 26px;
 }
 
@@ -480,26 +473,31 @@ a {
   text-transform: uppercase;
   color: var(--texto-2);
 }
-.field input,
-.field select {
+/* El hundido: el campo es un pozo en la superficie. Los :not() dejan afuera los controles que no
+   son un campo de texto (radios, checkboxes, rangos, archivos, colores), que viven dentro de un
+   .field pero no son un pozo. */
+.field :is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"]) {
   font-family: var(--font-body);
   font-size: 1rem;
   color: var(--texto);
-  background: var(--superficie-1);
-  border: 1px solid var(--linea);
-  border-radius: var(--radius-field);
+  background: var(--superficie-0);
+  border: 1px solid var(--borde-relieve);
+  border-radius: var(--radius-control);
+  box-shadow: var(--hundido-1);
   padding: 13px 14px;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  transition: border-color 0.18s ease;
 }
-.field input::placeholder {
+.field textarea {
+  resize: vertical;
+  line-height: 1.55;
+}
+.field :is(input, textarea)::placeholder {
   color: var(--texto-3);
 }
-.field input:focus,
-.field select:focus {
-  outline: none;
+/* Al enfocar cambia SOLO el borde: el pozo sigue hundido, y el anillo lo dibuja el outline global
+   de :focus-visible. */
+.field :is(input, select, textarea):focus {
   border-color: var(--acento);
-  box-shadow: var(--ring);
-  background: var(--superficie-2);
 }
 .field select option {
   background: var(--superficie-2);
@@ -530,17 +528,20 @@ a {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: opacity 0.18s ease, transform 0.12s ease;
+  box-shadow: var(--relieve-1);
+  transition: opacity 0.18s ease, transform 0.12s ease, box-shadow 0.18s ease;
 }
 .btn-primary:hover:not(:disabled) {
   opacity: 0.92;
 }
 .btn-primary:active:not(:disabled) {
   transform: scale(0.98);
+  box-shadow: none;
 }
 .btn-primary:disabled {
   opacity: 0.55;
   cursor: progress;
+  box-shadow: none;
 }
 
 /* acento violeta (acciones destacadas tipo "Publicar cambios") */
@@ -552,13 +553,14 @@ a {
   color: var(--sobre-acento);
   background: var(--acento-fuerte);
   border: none;
-  border-radius: var(--radius-field);
+  border-radius: var(--radius-control);
   padding: 14px 18px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  box-shadow: var(--relieve-1);
   transition: filter 0.18s ease, transform 0.12s ease, box-shadow 0.2s ease;
 }
 .btn-acento:hover:not(:disabled) {
@@ -567,20 +569,21 @@ a {
 }
 .btn-acento:active:not(:disabled) {
   transform: scale(0.97);
+  box-shadow: none;
 }
 .btn-acento:disabled {
   opacity: 0.55;
   cursor: progress;
 }
 
-/* secundario delineado */
+/* secundario elevado, neutro */
 .btn-borde {
   font-family: var(--font-body);
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--texto);
-  background: transparent;
-  border: 1px solid var(--linea-fuerte);
+  background: var(--superficie-1);
+  border: 1px solid var(--borde-relieve);
   border-radius: var(--radius-pill);
   padding: 10px 18px;
   cursor: pointer;
@@ -588,13 +591,14 @@ a {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+  box-shadow: var(--relieve-1);
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
 }
 .btn-borde:hover:not(:disabled) {
-  border-color: var(--texto-3);
-  background: var(--hover-suave);
+  box-shadow: var(--relieve-2);
 }
 .btn-borde:active:not(:disabled) {
+  box-shadow: var(--hundido-2);
   transform: scale(0.97);
 }
 
@@ -607,7 +611,7 @@ a {
   color: var(--texto);
   background: var(--error-fondo);
   border: 1px solid var(--error-borde);
-  border-radius: var(--radius-field);
+  border-radius: var(--radius-control);
   padding: 10px 12px;
 }
 .alerta::before {
@@ -967,7 +971,9 @@ a {
 .admin-lista {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* 14px y no 10: la extensión de --relieve-1 es 4 + 10 = 14px, y con 10px de gap la sombra de una
+     fila se comía el brillo de la siguiente. */
+  gap: 14px;
 }
 .admin-fila {
   display: flex;
@@ -976,14 +982,20 @@ a {
   gap: 14px;
   padding: 15px 16px;
   background: var(--superficie-2);
-  border: 1px solid transparent;
+  border: 1px solid var(--borde-relieve);
   border-radius: var(--radius);
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s ease, border-color 0.2s ease;
+  box-shadow: var(--relieve-1);
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.admin-fila:hover {
+/* El hover/active solo en filas TOCABLES (Link o button): hay filas <div>/<details> estáticas que
+   comparten la clase por el aspecto pero no son interactivas, y no deben "levantarse" al pasar el
+   mouse. El background ya no cambia en hover: lo dice el relieve, no un color distinto. */
+:is(a, button).admin-fila:hover {
   transform: translateY(-2px);
-  background: var(--superficie-3);
-  border-color: var(--linea);
+  box-shadow: var(--relieve-2);
+}
+:is(a, button).admin-fila:active {
+  box-shadow: var(--hundido-2);
 }
 .admin-fila-nombre {
   font-family: var(--font-display);
@@ -1210,15 +1222,19 @@ a {
   box-shadow: none;
   background: transparent;
 }
+/* Pasa a E: es un botón, no un pozo. Del color de la página (--superficie-1), así que lleva borde
+   de 1px (regla 4) — y el padding baja de 7px 14px a 6px 13px para compensarlo y que la caja no
+   crezca. */
 .field input[type="file"]::file-selector-button {
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 0.8rem;
   color: var(--texto);
-  background: var(--superficie-3);
-  border: none;
+  background: var(--superficie-1);
+  border: 1px solid var(--borde-relieve);
   border-radius: var(--radius-pill);
-  padding: 7px 14px;
+  box-shadow: var(--relieve-1);
+  padding: 6px 13px;
   margin-right: 10px;
   cursor: pointer;
 }
@@ -1401,8 +1417,8 @@ a {
   text-transform: none;
   color: var(--texto);
 }
-/* `.field input` le pone borde, fondo y 13px de padding a todo input: en un range eso deja el
-   riel dentro de una caja de formulario. */
+/* El :not([type="range"]) de la regla base de .field ya deja afuera a este input del pozo hundido
+   — esto es el reset del estilo nativo del navegador para el riel, no una pelea contra .field. */
 .encuadre-franja input[type='range'] {
   width: 100%;
   padding: 0;

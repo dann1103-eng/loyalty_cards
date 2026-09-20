@@ -100,8 +100,20 @@ type ParRegla = {
 };
 
 const PARES_REGLA: ParRegla[] = [
-  { color: '.field input', fondo: '.field input', minimo: 7, texto: true, uso: 'lo que se escribe en un campo' },
-  { color: '.field input::placeholder', fondo: '.field input', minimo: 4.5, texto: true, uso: 'el ejemplo del campo' },
+  {
+    color: '.field :is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"])',
+    fondo: '.field :is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"])',
+    minimo: 7,
+    texto: true,
+    uso: 'lo que se escribe en un campo',
+  },
+  {
+    color: '.field :is(input, textarea)::placeholder',
+    fondo: '.field :is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"])',
+    minimo: 4.5,
+    texto: true,
+    uso: 'el ejemplo del campo',
+  },
   { color: '.btn-primary', fondo: '.btn-primary', minimo: 7, texto: true, uso: 'botón primario' },
   { color: '.btn-acento', fondo: '.btn-acento', minimo: 4.5, texto: true, uso: 'Acreditar, Publicar cambios' },
   { color: '.nav-inferior a', fondo: '.nav-inferior', minimo: 4.5, texto: true, uso: 'destinos de la barra' },
