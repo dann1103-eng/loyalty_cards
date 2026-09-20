@@ -59,6 +59,15 @@ config del repo). Mensaje con `-m` plano, sin here-strings, y el trailer
 **No inicies el dev server** (deja el puerto 3000 tomado). La verificación en el navegador la hace
 el controlador.
 
+**Qué se puede verificar hoy en el navegador, y qué no.** Comprobado el 2026-09-20 en este worktree:
+el dev server arranca sin `.env.local` y sirve el `public/` **del worktree** (se verificó con un
+archivo marcador), pero **ninguna pantalla de la app renderiza**: el proxy de Next
+(`proxy.ts` → `lib/supabase/proxy.ts:13`) lanza `Falta la variable de entorno
+NEXT_PUBLIC_SUPABASE_URL` en toda ruta. Por eso el tablero es el único vehículo de verificación
+visual hasta que Daniel copie `.env.local`, y por eso su marcado se copia de los TSX reales en vez
+de inventarse. El recorrido de las pantallas reales y de `/` queda como pendiente de Daniel, anotado
+en la Tarea 10.
+
 **Reglas de redacción del CSS** (las exige el parser): tokens con exactamente dos espacios de
 indentación; nada de `var(--x, respaldo)` en los bloques de tema.
 
@@ -328,12 +337,16 @@ import { bloque, mapaDeTema, normalizarSelector, regla, reglas, resolver } from 
 // MUTATION-TESTING: este parser es lo único que hay entre app/globals.css y las pruebas de diseño;
 // si lee mal, las pruebas miden otra cosa. Mutaciones que deben fallar:
 // (1) no quitar comentarios → el `}` del comentario de la fixture cierra una llave nunca abierta;
-// (2) partir por coma o punto y coma ADENTRO de paréntesis → se rompen `.b:is(x, y)` y el rgba de
-//     `--sombra`;
+// (2) partir los SELECTORES por coma adentro de paréntesis → se rompe `.b:is(x, y)`. Ojo: el mismo
+//     guardia en el split de `;` (el de las declaraciones) es defensivo y NINGUNA prueba lo cubre,
+//     porque hoy ningún valor de globals.css tiene un `;` adentro de un paréntesis;
 // (3) contar como de primer nivel una regla de adentro de un @media → `.a` tomaría el `red`;
 // (4) que la segunda regla `.a` no pise a la primera → background no sería transparent;
 // (5) sacar el chequeo de indentación → el token con cuatro espacios pasa en silencio;
-// (6) que resolver no detecte ciclos → se cuelga (lo corta el timeout) en vez de lanzar.
+// (6) que resolver no detecte ciclos → el bucle es SÍNCRONO, así que el timeout de vitest no
+//     dispara nunca: `camino` crece hasta que el worker muere sin memoria (~30 s) y se cae la
+//     corrida entera, no solo esta prueba. Falla igual, pero si alguien la corre en CI con un
+//     límite de tiempo corto, lo va a ver como un cuelgue y no como lo que es.
 
 // El tema que NO es el default: la fixture no puede fijar cuál es, porque el default cambia (era
 // oscuro, pasa a claro) y esta prueba tiene que seguir midiendo lo mismo.
@@ -630,13 +643,14 @@ export function resolver(nombre: string, mapa: Map<string, string>): string {
 
 - [ ] **Paso 4: correr y ver que pasa**
 
-Esperado: `tokensCss.test.ts` en verde (15 pruebas); `contraste.test.ts` y `lib/tema.test.ts`
-siguen en verde.
+Esperado: `tokensCss.test.ts` en verde (13 pruebas); `contraste.test.ts` (9) y `lib/tema.test.ts`
+(7) siguen en verde. Total 29.
 
 - [ ] **Paso 5: mutaciones**
 
 Las seis del comentario del archivo de prueba. Reportá, para cada una, qué prueba falla y con qué
-mensaje. La (1) debe fallar con `llave de cierre sin abrir`; la (6), con un timeout.
+mensaje. La (1) debe fallar con `llave de cierre sin abrir`; la (6) mata el worker por falta de
+memoria a los ~30 s (el bucle es síncrono: el timeout de vitest no llega a dispararse).
 
 - [ ] **Paso 6: commit**
 

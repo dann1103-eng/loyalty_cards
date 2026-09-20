@@ -5,12 +5,16 @@ import { bloque, mapaDeTema, normalizarSelector, regla, reglas, resolver } from 
 // MUTATION-TESTING: este parser es lo único que hay entre app/globals.css y las pruebas de diseño;
 // si lee mal, las pruebas miden otra cosa. Mutaciones que deben fallar:
 // (1) no quitar comentarios → el `}` del comentario de la fixture cierra una llave nunca abierta;
-// (2) partir por coma o punto y coma ADENTRO de paréntesis → se rompen `.b:is(x, y)` y el rgba de
-//     `--sombra`;
+// (2) partir los SELECTORES por coma adentro de paréntesis → se rompe `.b:is(x, y)`. Ojo: el mismo
+//     guardia en el split de `;` (el de las declaraciones) es defensivo y NINGUNA prueba lo cubre,
+//     porque hoy ningún valor de globals.css tiene un `;` adentro de un paréntesis;
 // (3) contar como de primer nivel una regla de adentro de un @media → `.a` tomaría el `red`;
 // (4) que la segunda regla `.a` no pise a la primera → background no sería transparent;
 // (5) sacar el chequeo de indentación → el token con cuatro espacios pasa en silencio;
-// (6) que resolver no detecte ciclos → se cuelga (lo corta el timeout) en vez de lanzar.
+// (6) que resolver no detecte ciclos → el bucle es SÍNCRONO, así que el timeout de vitest no
+//     dispara nunca: `camino` crece hasta que el worker muere sin memoria (~30 s) y se cae la
+//     corrida entera, no solo esta prueba. Falla igual, pero si alguien la corre en CI con un
+//     límite de tiempo corto, lo va a ver como un cuelgue y no como lo que es.
 
 // El tema que NO es el default: la fixture no puede fijar cuál es, porque el default cambia (era
 // oscuro, pasa a claro) y esta prueba tiene que seguir midiendo lo mismo.
