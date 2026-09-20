@@ -87,14 +87,13 @@ export default function SelectorContexto({
         <span className="contexto-etiqueta">{etiqueta}</span>
       </button>
 
-      {/* PORTAL A document.body, NO lo saques: el sheet es position:fixed y se ancla al viewport
-          SOLO si ningún ancestro crea un containing block. Este vive dentro de .admin-top, que ya
-          no es translúcido (sin backdrop-filter) — pero si alguna vez vuelve un backdrop-filter, un
-          transform o un filter al header, ese elemento pasaría a ser el marco de referencia de sus
-          descendientes fixed y el position: fixed de acá adentro dejaría de ser relativo a la
-          ventana (reportado en producción el 2026-07-26). El mismo bug tenía el modal de
-          Sucursales, ahí por el transform que deja la animación .reveal al terminar con
-          `forwards`. */}
+      {/* PORTAL A document.body, NO lo saques. La razón es VIVA, no hipotética: .admin-top es
+          `position: sticky` con `z-index: 40`, y eso crea un contexto de apilamiento. Un sheet que se
+          pinte adentro queda atrapado en él, y la barra inferior (`z-index: 50`, hermana del header)
+          le pasa por ENCIMA. Además, si alguna vez vuelve un backdrop-filter, un transform o un
+          filter al header, el position: fixed de acá adentro dejaría de ser relativo a la ventana
+          (reportado en producción el 2026-07-26). El mismo bug tenía el modal de Sucursales, ahí
+          por el transform que deja la animación .reveal al terminar con `forwards`. */}
       {abierto && enCliente && createPortal(
         <div className="sheet-fondo" onClick={() => setAbierto(false)}>
           <div

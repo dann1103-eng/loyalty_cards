@@ -67,14 +67,14 @@ export default function MenuOpciones({ rol, tipoTarjeta }: { rol: string; tipoTa
         <span className="icono" aria-hidden="true">menu</span>
       </button>
 
-      {/* PORTAL A document.body, NO lo saques: el sheet es position:fixed y se ancla al viewport
-          SOLO si ningún ancestro crea un containing block. Este botón vive dentro de .admin-top,
-          que ya no es translúcido (sin backdrop-filter) — pero si alguna vez vuelve un
-          backdrop-filter, un transform o un filter al header, ese elemento pasaría a ser el marco
-          de referencia de sus descendientes fixed y el position: fixed de acá adentro dejaría de
-          ser relativo a la ventana. El portal se mantiene por eso: es el mismo bug que se reportó
-          en producción con el switcher de contexto (2026-07-26) y antes con el modal de
-          Sucursales. */}
+      {/* PORTAL A document.body, NO lo saques. La razón es VIVA, no hipotética: .admin-top es
+          `position: sticky` con `z-index: 40`, y eso crea un contexto de apilamiento. Un sheet que se
+          pinte adentro queda atrapado en él, y la barra inferior (`z-index: 50`, hermana del header)
+          le pasa por ENCIMA: "Cerrar sesión" queda tapada (medido con elementsFromPoint a 360×740).
+          Además, si alguna vez vuelve un backdrop-filter, un transform o un filter al header, el
+          position: fixed de acá adentro dejaría de ser relativo a la ventana y el sheet se dibujaría
+          pegado al header: el bug reportado en producción con el switcher de contexto (2026-07-26),
+          y antes con el modal de Sucursales. */}
       {abierto && enCliente && createPortal(
         <div className="sheet-fondo" onClick={() => setAbierto(false)}>
           <div

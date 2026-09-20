@@ -23,7 +23,6 @@ type Par = { frente: string; fondo: string[]; minimo: number; texto: boolean; us
 const PARES: Par[] = [
   { frente: '--texto', fondo: ['--fondo'], minimo: 7, texto: true, uso: 'todo el texto principal' },
   { frente: '--texto-2', fondo: ['--fondo'], minimo: 4.5, texto: true, uso: 'rótulos y subtítulos de fila' },
-  { frente: '--texto-2', fondo: ['--superficie-3'], minimo: 4.5, texto: true, uso: 'la fila activa' },
   {
     frente: '--texto-3',
     fondo: ['--fondo'],
@@ -50,24 +49,6 @@ const PARES: Par[] = [
   },
   { frente: '--menta', fondo: ['--fondo'], minimo: 4.5, texto: true, uso: 'mensajes de éxito' },
   { frente: '--error', fondo: ['--fondo'], minimo: 4.5, texto: true, uso: 'avisos de campo' },
-  // El acento sobre los escalones de superficie (la fila activa y su hover). El mínimo es 3 y no 4.5
-  // porque hoy su único uso ahí es un GLIFO (.menu-tick dentro de .sheet-fila-activa), y WCAG 1.4.11
-  // le pide 3:1. Vale saber el número igual: en oscuro da 4.46 sobre --superficie-3 y 3.81 sobre
-  // --superficie-4, así que el día que alguien ponga TEXTO de acento en una fila activa no alcanza.
-  {
-    frente: '--acento',
-    fondo: ['--superficie-3'],
-    minimo: 3,
-    texto: false,
-    uso: 'glifo de acento en la fila activa',
-  },
-  {
-    frente: '--acento',
-    fondo: ['--superficie-4'],
-    minimo: 3,
-    texto: false,
-    uso: 'glifo de acento en el hover de la fila',
-  },
   // Los tintes translúcidos se apoyan en la SUPERFICIE QUE LOS CONTIENE, no en la página: ninguna
   // .pastilla declara fondo propio y todas viven dentro de una .admin-fila (--superficie-2) o de un
   // .panel (--superficie-1). Medirlas sobre --fondo mide una pila que en pantalla no existe, y da
@@ -166,6 +147,19 @@ const PARES_REGLA: ParRegla[] = [
   // neutra) mediría un color que nunca se ve. Por variante y no por la regla base, y por elemento
   // coloreado (.metric-valor es texto grande, mínimo 3; .metric-etiqueta es texto normal, 4.5),
   // sobre el fondo real que las contiene: .metric-carta.
+  // Las filas de una hoja (menú de opciones, selector de contexto, selector de tema). Se miden POR
+  // REGLA y no con pares de tokens: estos pares vivían como tokens (el acento sobre --superficie-3 y
+  // -4) y quedaron decorativos cuando la fila activa pasó al pozo (--superficie-0): medían superficies
+  // donde el tick ya no estaba, y las pruebas seguían verdes con el tick a 1:1.
+  { color: '.sheet-fila', fondo: '.sheet-fila-activa', minimo: 4.5, texto: true, uso: 'texto de la fila activa de una hoja' },
+  { color: '.menu-tick', fondo: '.sheet-fila-activa', minimo: 3, texto: false, uso: 'tick de la fila activa (glifo)' },
+  {
+    color: '.sheet-fila',
+    fondo: '.sheet-fila:not(.sheet-fila-activa):hover:not(:disabled)',
+    minimo: 4.5,
+    texto: true,
+    uso: 'fila de una hoja con el mouse encima',
+  },
   {
     color: '.metric-carta.naranja .metric-valor',
     fondo: '.metric-carta',

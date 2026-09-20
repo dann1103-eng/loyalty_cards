@@ -50,14 +50,14 @@ export default function SelectorTema() {
         <span className="icono" aria-hidden="true">contrast</span>
       </button>
 
-      {/* PORTAL A document.body, NO lo saques: la hoja es position:fixed y se ancla al viewport SOLO
-          si ningún ancestro crea un containing block. Este botón vive dentro de .admin-top, que ya
-          no es translúcido (sin backdrop-filter) — pero si alguna vez vuelve un backdrop-filter, un
-          transform o un filter al header, ese elemento pasaría a ser el marco de referencia de sus
-          descendientes fixed y el position: fixed de acá adentro dejaría de ser relativo a la
-          ventana. El portal se mantiene por eso: es la misma hoja que se dibujaba pegada al header,
-          cortada y sin scroll, en el bug reportado en producción con el switcher de contexto
-          (2026-07-26) y antes con el modal de Sucursales. */}
+      {/* PORTAL A document.body, NO lo saques. La razón es VIVA, no hipotética: este botón vive
+          dentro de .admin-top (`position: sticky`, `z-index: 40`) y en /admin/login dentro de un
+          contenedor absoluto con `z-index: 1`. Los dos crean un contexto de apilamiento que
+          atraparía a la hoja: quedaría debajo de lo que la página pinte encima de ese contexto.
+          Además, si alguna vez vuelve un backdrop-filter, un transform o un filter al header, el
+          position: fixed de acá adentro dejaría de ser relativo a la ventana y la hoja se dibujaría
+          pegada al header, cortada y sin scroll: el bug reportado en producción con el switcher de
+          contexto (2026-07-26), y antes con el modal de Sucursales. */}
       {abierto && enCliente && createPortal(
         <div className="sheet-fondo" onClick={() => setAbierto(false)}>
           <div

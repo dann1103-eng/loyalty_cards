@@ -38,8 +38,8 @@
   /* ---------- superficies ----------
      El truco del neumorfismo: lo que se levanta (--superficie-1/-2) es del MISMO color que la
      página, y se distingue solo por el relieve. --superficie-0 es el pozo (campos, chips inactivos,
-     pistas), un escalón más oscuro: 1.11:1 contra el fondo. --superficie-3/-4 son el escalón de la
-     fila activa y su hover (superficie-3/fondo 1.15, superficie-4/superficie-3 1.14). El fondo es
+     pistas, la fila activa de una hoja), un escalón más oscuro: 1.11:1 contra el fondo.
+     --superficie-3 es el escalón de hover de una fila de hoja (1.15:1 contra el fondo). El fondo es
      gris-lavanda y no blanco porque la luz del relieve necesita margen para verse: sobre el hueso
      #f4f1ec de antes, --luz quedaba en 1.11:1, debajo del piso de 1.12 que fija la prueba. */
   --fondo: #e7e6f0;
@@ -47,7 +47,6 @@
   --superficie-1: var(--fondo);
   --superficie-2: var(--fondo);
   --superficie-3: #d8d7e5;
-  --superficie-4: #cbcadb;
 
   /* ---------- texto: Deep del kit, jerarquía por alpha ----------
      OJO: --blanco es una CONSTANTE DE MARCA (el hueso #F5F5F0), no un token de tema. Los otros
@@ -129,7 +128,7 @@
   --hundido-2: inset 5px 5px 10px var(--sombra-relieve), inset -5px -5px 10px var(--luz);
   --borde-relieve: rgba(24, 24, 73, 0.06);
 
-  --velo: rgba(24, 24, 73, 0.45); /* el velo de los bottom sheets NO está en retiro: no es vidrio */
+  --velo: rgba(24, 24, 73, 0.45); /* fondo detrás de los bottom sheets */
 
   /* ---------- tintes suaves (fondos de chip / ícono-círculo / hover) ----------
      Un alpha del color de texto NO sobrevive el cambio de tema: cada tema declara el suyo. */
@@ -161,7 +160,6 @@
   --superficie-1: var(--fondo);
   --superficie-2: var(--fondo);
   --superficie-3: #262947;
-  --superficie-4: #303455;
 
   /* 0.56 y no el 0.48 de antes: este fondo es más claro que #131313, y con 0.48 da 4.44:1. */
   --texto: var(--blanco);
@@ -238,7 +236,6 @@
   --superficie-1: #000000;
   --superficie-2: #0b0b0b;
   --superficie-3: #1c1c1c;
-  --superficie-4: #2e2e2e;
 
   --texto: #ffffff;
   --texto-2: #ededed;
@@ -964,9 +961,10 @@ a {
   justify-content: space-between;
   padding: 14px 20px;
   border-bottom: 1px solid var(--linea);
-  /* Ya no es vidrio esmerilado: el header es opaco, del color de la página. SelectorContexto.tsx
-     y MenuOpciones.tsx igual portalean sus hojas a document.body, por si algún día vuelve un
-     backdrop-filter, transform o filter acá (ver el comentario en esos archivos). */
+  /* Ya no es vidrio esmerilado: el header es opaco, del color de la página. Pero sigue siendo
+     sticky con z-index 40, y eso crea un contexto de apilamiento: por eso SelectorTema.tsx,
+     SelectorContexto.tsx y MenuOpciones.tsx portalean sus hojas a document.body. Sin el portal, la
+     barra inferior (z-index 50) les pasaría por encima. */
   background: var(--fondo);
 }
 .admin-marca {
@@ -998,10 +996,13 @@ a {
   padding: 7px 15px;
   cursor: pointer;
   box-shadow: var(--relieve-1);
-  transition: color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+  transition: color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
 }
+/* El hover sube Y marca el borde con el acento: en alto contraste --relieve-2 vale none, y el color
+   del texto solo pasa de #ededed a #ffffff (1.17:1). Sin el borde, el hover no se veía. */
 .admin-salir:hover {
   color: var(--texto);
+  border-color: var(--acento);
   box-shadow: var(--relieve-2);
 }
 .admin-salir:active {
@@ -1610,10 +1611,12 @@ details.admin-fila:has(> summary:active) {
   border-radius: var(--radius-pill);
   cursor: pointer;
   box-shadow: var(--relieve-1);
-  transition: color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+  transition: color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
 }
+/* Mismo motivo que .admin-salir: en alto contraste el relieve vale none y el borde es la señal. */
 .menu-boton:hover {
   color: var(--texto);
+  border-color: var(--acento);
   box-shadow: var(--relieve-2);
 }
 .menu-boton:active {
@@ -1778,10 +1781,11 @@ details.admin-fila:has(> summary:active) {
   cursor: pointer;
 }
 /* El :not(:disabled) NO es decorativo: sin él una fila muerta se ilumina al pasar el mouse como si
-   respondiera. Va en el :hover y no en una regla `:disabled:hover` aparte a propósito — esa regla
-   le ganaría en especificidad a .sheet-fila-activa (0,3,0 contra 0,1,0) y le borraría el fondo a la
-   fila ACTIVA del switcher mientras el cambio está en vuelo (ahí todas las filas están disabled). */
-.sheet-fila:hover:not(:disabled) { background: var(--superficie-3); }
+   respondiera. Y el :not(.sheet-fila-activa) tampoco: este hover (0,4,0) le gana a
+   .sheet-fila-activa (0,1,0), y sin la exclusión le cambiaría el pozo hundido (--superficie-0) por
+   el escalón de hover a la fila ACTIVA — en claro quedaba más oscura una fila cualquiera con hover
+   que la activa. La fila activa no reacciona al hover: ya es la elegida. */
+.sheet-fila:not(.sheet-fila-activa):hover:not(:disabled) { background: var(--superficie-3); }
 /* Fila deshabilitada: hace falta explícitamente porque .sheet-fila fija `color` y `cursor: pointer`
    — con `color` propio, el gris de :disabled del navegador no aplica, así que una fila muerta se
    veía idéntica a una viva. Cubre a las dos usuarias de la clase: el switcher (filas en vuelo,
