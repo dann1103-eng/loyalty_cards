@@ -4,6 +4,12 @@
 // Solo entiende los formatos que usan los tokens de tema: hex y rgb()/rgba() con comas. Cualquier
 // otra cosa LANZA en vez de devolver un valor aproximado — una prueba de contraste que se saltea en
 // silencio el color que no sabe leer certifica justo lo que no midió.
+//
+// Mide el color SIN cuantizar a 8 bits, y el navegador sí cuantiza el color que compone. Se comparó
+// par por par contra una versión que redondea cada paso, sobre el CSS de hoy y el del rediseño: la
+// diferencia llega a 0.05 en la razón, va para los DOS lados (no es un sesgo optimista) y no cambia
+// el veredicto de ningún par en los tres temas. Con los márgenes actuales — el más ajustado es
+// 4.76 contra 4.5 — no compensa imitar el redondeo del compositor.
 
 export type Rgba = { r: number; g: number; b: number; a: number };
 
@@ -71,6 +77,12 @@ function lineal(canal: number): number {
 
 export function luminancia(color: Rgba): number {
   if (color.a !== 1) throw new Error('la luminancia solo existe para un color opaco: componelo primero');
+  // Rgba es un tipo exportado, así que un color armado a mano no pasó por parsearColor y puede traer
+  // cualquier cosa. Sin esta guarda, un canal fuera de rango devuelve un número igual y se certifica
+  // un contraste inventado, que es exactamente lo que este módulo existe para evitar.
+  for (const canal of [color.r, color.g, color.b]) {
+    if (canal < 0 || canal > 255) throw new Error(`canal fuera de rango: ${canal}`);
+  }
   return 0.2126 * lineal(color.r) + 0.7152 * lineal(color.g) + 0.0722 * lineal(color.b);
 }
 

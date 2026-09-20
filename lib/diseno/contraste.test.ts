@@ -10,12 +10,19 @@ import { componer, luminancia, parsearColor, razon } from './contraste';
 // (3) sacar el +0.05 → negro contra blanco deja de dar 21;
 // (4) componer de arriba hacia abajo en vez de abajo hacia arriba → la pila de tres capas;
 // (5) redondear a 8 bits dentro de componer → 127.5 pasa a 128 y el gris da 3.95, no 3.98;
-// (6) que parsearColor devuelva algo para un formato que no conoce → oklch, hsl, nombres.
-// Mutante equivalente, no vale la pena: 0.04045 → 0.03928 no altera ningún valor de 8 bits.
+// (6) que parsearColor devuelva algo para un formato que no conoce → oklch, hsl, nombres;
+// (7) permutar los canales del hex CORTO → lo atrapa `#f0a`, que no es gris (los grises `#fff`,
+//     `#000` y `#777` no notan ninguna permutación, por eso hace falta uno de color);
+// (8) sacar la guarda de alpha fuera de rango, o la de canal fuera de rango de luminancia → las
+//     atrapan `rgba(0, 0, 0, 5)` y el color armado a mano.
+// Mutante equivalente, no vale la pena: 0.04045 → 0.03928. No altera ningún valor de 8 bits, y con
+// un canal compuesto entre los dos umbrales mueve la razón en la sexta cifra decimal.
 
 describe('parsearColor', () => {
   it('lee hex corto, hex largo, rgb, rgba y transparent', () => {
     expect(parsearColor('#fff')).toEqual({ r: 255, g: 255, b: 255, a: 1 });
+    // De color a propósito: un hex corto gris no delata una permutación de canales.
+    expect(parsearColor('#f0a')).toEqual({ r: 255, g: 0, b: 170, a: 1 });
     expect(parsearColor('#181849')).toEqual({ r: 24, g: 24, b: 73, a: 1 });
     expect(parsearColor('  #E7E6F0 ')).toEqual({ r: 231, g: 230, b: 240, a: 1 });
     expect(parsearColor('rgb(1, 2, 3)')).toEqual({ r: 1, g: 2, b: 3, a: 1 });
@@ -37,6 +44,7 @@ describe('parsearColor', () => {
       expect(() => parsearColor(valor)).toThrow(`formato de color no soportado: ${valor}`);
     }
     expect(() => parsearColor('rgba(300, 0, 0, 1)')).toThrow('color fuera de rango: rgba(300, 0, 0, 1)');
+    expect(() => parsearColor('rgba(0, 0, 0, 5)')).toThrow('color fuera de rango: rgba(0, 0, 0, 5)');
   });
 });
 
@@ -94,5 +102,11 @@ describe('razon (WCAG 2.x)', () => {
     expect(() => luminancia(parsearColor('rgba(0, 0, 0, 0.5)'))).toThrow(
       'la luminancia solo existe para un color opaco',
     );
+  });
+
+  it('la luminancia rechaza un canal fuera de rango, aunque el color no venga de parsearColor', () => {
+    // Rgba es un tipo exportado: un color armado a mano se saltea toda la validación del parseo.
+    expect(() => luminancia({ r: 999, g: 0, b: 0, a: 1 })).toThrow('canal fuera de rango: 999');
+    expect(() => luminancia({ r: 0, g: -50, b: 0, a: 1 })).toThrow('canal fuera de rango: -50');
   });
 });
