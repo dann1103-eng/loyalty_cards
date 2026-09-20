@@ -14,8 +14,16 @@ export type Regla = {
   dentroDeArroba: boolean; // vive dentro de un @media, @keyframes, @supports…
 };
 
+// Reemplaza cada comentario por espacios en vez de borrarlo: así las posiciones del texto limpio
+// siguen coincidiendo con las del archivo en disco y un error puede decir en qué línea está. Con
+// ~100 líneas de comentario en globals.css, un offset sobre el texto recortado no sirve para nada.
 export function sinComentarios(css: string): string {
-  return css.replace(/\/\*[\s\S]*?\*\//g, '');
+  return css.replace(/\/\*[\s\S]*?\*\//g, (comentario) => comentario.replace(/[^\n]/g, ' '));
+}
+
+function ubicacion(texto: string, posicion: number): string {
+  const antes = texto.slice(0, posicion);
+  return `línea ${antes.split('\n').length}, columna ${posicion - antes.lastIndexOf('\n')}`;
 }
 
 // Parte en `separador` solo FUERA de paréntesis: `:is(a, b)` es un selector, no dos, y
@@ -33,6 +41,10 @@ function partirFueraDeParentesis(texto: string, separador: ',' | ';'): string[] 
       desde = i + 1;
     }
   }
+  // Un paréntesis sin cerrar deja la profundidad arriba de cero y se traga todo lo que sigue: sin
+  // esta guarda, `rgb(0, 0, 0; background: red` devuelve UNA declaración ilegible y el background
+  // desaparece en silencio.
+  if (profundidad !== 0) throw new Error(`paréntesis sin balancear en: ${texto.trim().slice(0, 70)}`);
   partes.push(texto.slice(desde));
   return partes;
 }
@@ -46,13 +58,13 @@ export function normalizarSelector(selector: string): string {
     .trim();
 }
 
-function leerDeclaraciones(cuerpo: string): Map<string, string> {
+function leerDeclaraciones(cuerpo: string, selector: string): Map<string, string> {
   const declaraciones = new Map<string, string>();
   for (const cruda of partirFueraDeParentesis(cuerpo, ';')) {
     const declaracion = cruda.trim();
     if (!declaracion) continue;
     const dosPuntos = declaracion.indexOf(':');
-    if (dosPuntos < 0) throw new Error(`declaración ilegible: ${declaracion}`);
+    if (dosPuntos < 0) throw new Error(`declaración ilegible en "${selector}": ${declaracion}`);
     const nombre = declaracion.slice(0, dosPuntos).trim();
     const propiedad = nombre.startsWith('--') ? nombre : nombre.toLowerCase();
     declaraciones.set(propiedad, declaracion.slice(dosPuntos + 1).replace(/\s+/g, ' ').trim());
@@ -74,12 +86,20 @@ export function reglas(css: string): Regla[] {
       desde = i + 1;
     } else if (c === '}') {
       const abierto = abiertos.pop();
-      if (!abierto) throw new Error(`llave de cierre sin abrir en la posición ${i}`);
+      if (!abierto) throw new Error(`llave de cierre sin abrir en ${ubicacion(limpio, i)}`);
       if (!abierto.arroba) {
         const cuerpo = limpio.slice(abierto.cuerpoDesde, i);
+        // El anidamiento nativo de CSS (`.a { &:hover { … } }`) no se soporta, y sin esta guarda no
+        // se rompe: se lee MAL en silencio, inventando una regla con un selector basura y perdiendo
+        // declaraciones. El contrato de este módulo es lanzar ante lo que no sabe leer.
+        if (cuerpo.includes('{')) {
+          throw new Error(
+            `anidamiento no soportado en "${abierto.prelude}" (${ubicacion(limpio, abierto.cuerpoDesde)})`,
+          );
+        }
         resultado.push({
           selectores: partirFueraDeParentesis(abierto.prelude, ',').map(normalizarSelector),
-          declaraciones: leerDeclaraciones(cuerpo),
+          declaraciones: leerDeclaraciones(cuerpo, abierto.prelude),
           cuerpo,
           dentroDeArroba: abiertos.some((a) => a.arroba),
         });
@@ -87,7 +107,10 @@ export function reglas(css: string): Regla[] {
       desde = i + 1;
     }
   }
-  if (abiertos.length > 0) throw new Error('quedó una llave sin cerrar');
+  const sinCerrar = abiertos[abiertos.length - 1];
+  if (sinCerrar) {
+    throw new Error(`quedó sin cerrar "${sinCerrar.prelude}" (${ubicacion(limpio, sinCerrar.cuerpoDesde)})`);
+  }
   return resultado;
 }
 
@@ -112,14 +135,30 @@ export function bloque(css: string, selector: string): Map<string, string> {
     (r) => !r.dentroDeArroba && r.selectores.length === 1 && r.selectores[0] === buscado,
   );
   if (candidatos.length !== 1) {
-    throw new Error(`el bloque ${selector} aparece ${candidatos.length} veces en el CSS (se esperaba 1)`);
+    const enGrupo = reglas(css).some((r) => !r.dentroDeArroba && r.selectores.includes(buscado));
+    const detalle = enGrupo && candidatos.length === 0 ? ', pero existe compartiendo regla con otros selectores' : '';
+    throw new Error(
+      `el bloque ${selector} aparece ${candidatos.length} veces en el CSS (se esperaba 1)${detalle}`,
+    );
   }
   const [unico] = candidatos;
+  const enSuPropiaLinea = new Set<string>();
   for (const linea of unico.cuerpo.split(/\r?\n/)) {
-    const token = /^(\s*)(--[a-z0-9-]+)\s*:/.exec(linea);
-    if (token && token[1] !== '  ') throw new Error(`indentación distinta de dos espacios en ${token[2]}`);
+    const token = /^(\s*)(--[\w-]+)\s*:/.exec(linea);
+    if (!token) continue;
+    if (token[1] !== '  ') throw new Error(`indentación distinta de dos espacios en ${token[2]}`);
+    enSuPropiaLinea.add(token[2]);
   }
-  return new Map([...unico.declaraciones].filter(([nombre]) => nombre.startsWith('--')));
+  const tokens = new Map([...unico.declaraciones].filter(([nombre]) => nombre.startsWith('--')));
+  // El lint de arriba solo mira el token que ABRE cada línea. Sin este cruce contra lo que de verdad
+  // se devuelve, `--a: #000; --b: #fff;` en una sola línea pasa, y `--b` queda invisible para el
+  // grep de `^  --` que documenta DESIGN.md: justo lo que el lint existe para impedir.
+  for (const nombre of tokens.keys()) {
+    if (!enSuPropiaLinea.has(nombre)) {
+      throw new Error(`${nombre} no abre su propia línea: un grep de "^  --" no lo encontraría`);
+    }
+  }
+  return tokens;
 }
 
 // Los tokens tal como los ve el <html> con ese tema aplicado: el default es :root; cualquier otro
@@ -140,7 +179,10 @@ export function resolver(nombre: string, mapa: Map<string, string>): string {
     camino.push(actual);
     const valor = mapa.get(actual);
     if (valor === undefined) throw new Error(`el token ${actual} no está definido`);
-    const referencia = /^var\((--[a-z0-9-]+)(\s*,[\s\S]*)?\)$/.exec(valor);
+    // `[\w-]+` y no `[a-z0-9-]+`: el charset legal de una custom property incluye mayúsculas y guion
+    // bajo, y con la regex estrecha un `var(--Fondo)` o un `var( --b )` no encajaba, se devolvía
+    // CRUDO y el error terminaba saliendo desde el parseo de color, apuntando al lugar equivocado.
+    const referencia = /^var\(\s*(--[\w-]+)\s*(,[\s\S]*)?\)$/.exec(valor);
     if (!referencia) return valor;
     if (referencia[2] !== undefined) {
       throw new Error(`var() con valor de respaldo no soportado: ${actual}: ${valor}`);

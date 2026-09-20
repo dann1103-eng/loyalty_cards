@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TEMAS, TEMA_POR_DEFECTO } from '../tema';
-import { bloque, mapaDeTema, normalizarSelector, regla, reglas, resolver } from './tokensCss';
+import { bloque, mapaDeTema, normalizarSelector, regla, reglas, resolver, sinComentarios } from './tokensCss';
 
 // MUTATION-TESTING: este parser es lo único que hay entre app/globals.css y las pruebas de diseño;
 // si lee mal, las pruebas miden otra cosa. Mutaciones que deben fallar:
@@ -11,6 +11,14 @@ import { bloque, mapaDeTema, normalizarSelector, regla, reglas, resolver } from 
 // (3) contar como de primer nivel una regla de adentro de un @media → `.a` tomaría el `red`;
 // (4) que la segunda regla `.a` no pise a la primera → background no sería transparent;
 // (5) sacar el chequeo de indentación → el token con cuatro espacios pasa en silencio;
+// (7) sacar cualquiera de las guardas de "lo que no sé leer, lo lanzo" (anidamiento, paréntesis sin
+//     balancear, token que no abre su propia línea) → el parser lee MAL en silencio, que es peor
+//     que romperse: inventa reglas, pierde declaraciones o deja un token fuera del grep de DESIGN.md;
+// (8) angostar la regex de var() a `[a-z0-9-]` → `var( --b )`, `var(--Fondo)` y `var(--x_y)` se
+//     devuelven crudos y el error sale después, desde el parseo de color, apuntando al lugar
+//     equivocado;
+// (9) que sinComentarios borre el comentario en vez de espaciarlo → las posiciones dejan de
+//     corresponder al archivo y los errores mandan a una línea que no es;
 // (6) que resolver no detecte ciclos → el bucle es SÍNCRONO, así que el timeout de vitest no
 //     dispara nunca: `camino` crece hasta que el worker muere sin memoria (~30 s) y se cae la
 //     corrida entera, no solo esta prueba. Falla igual, pero si alguien la corre en CI con un
@@ -108,6 +116,16 @@ describe('resolver', () => {
     expect(resolver('--lista', mapa)).toBe('0 0 0 1px var(--blanco)');
   });
 
+  it('resuelve un var() con espacios, mayúsculas o guion bajo, en vez de devolverlo crudo', () => {
+    // El charset legal de una custom property es más ancho que [a-z0-9-]. Devolver el var() crudo
+    // hacía que el error saliera después, desde el parseo de color, apuntando al lugar equivocado.
+    const otros = new Map([
+      ['--Fondo', '#131313'],
+      ['--x_y', 'var( --Fondo )'],
+    ]);
+    expect(resolver('--x_y', otros)).toBe('#131313');
+  });
+
   it('lanza ante un ciclo, un token que no existe o un valor de respaldo', () => {
     expect(() => resolver('--a', mapa)).toThrow('referencia circular: --a → --b → --a');
     expect(() => resolver('--roto', mapa)).toThrow('el token --no-existe no está definido');
@@ -137,6 +155,43 @@ describe('reglas', () => {
   it('marca las reglas que viven adentro de un @media', () => {
     const deA = reglas(CSS).filter((r) => r.selectores.includes('.a'));
     expect(deA.map((r) => r.dentroDeArroba)).toEqual([false, true, false]);
+  });
+});
+
+describe('sinComentarios', () => {
+  it('espacia cada comentario en vez de borrarlo, para no mover las posiciones del archivo', () => {
+    const css = '.a {\n  /* un comentario con } adentro */\n  color: red;\n}';
+    const limpio = sinComentarios(css);
+    expect(limpio).toHaveLength(css.length);
+    expect(limpio).not.toContain('/*');
+    expect(regla(css, '.a').get('color')).toBe('red');
+  });
+});
+
+describe('lo que no sabe leer, lo lanza', () => {
+  it('lanza ante el anidamiento nativo de CSS, en vez de inventar una regla fantasma', () => {
+    expect(() => reglas('.a {\n  color: red;\n  &:hover { color: blue; }\n}')).toThrow(
+      'anidamiento no soportado en ".a"',
+    );
+  });
+
+  it('lanza ante un paréntesis sin balancear, en vez de tragarse lo que sigue', () => {
+    expect(() => reglas('.a { color: rgb(0, 0, 0; background: red; }')).toThrow('paréntesis sin balancear');
+  });
+
+  it('dice en qué línea está la llave sin cerrar, o la de más', () => {
+    expect(() => reglas('.a {\n  color: red;\n')).toThrow('quedó sin cerrar ".a"');
+    expect(() => reglas('/* }\n */\n.a { color: red; }\n}')).toThrow('llave de cierre sin abrir en línea 4');
+  });
+
+  it('lanza si un token no abre su propia línea, aunque lleve dos espacios adelante', () => {
+    expect(() => bloque(':root {\n  --a: #000; --b: #fff;\n}', ':root')).toThrow('--b no abre su propia línea');
+  });
+
+  it('avisa cuando el bloque existe pero comparte su regla con otros selectores', () => {
+    expect(() => bloque(':root, .panel {\n  --a: #000;\n}', ':root')).toThrow(
+      'pero existe compartiendo regla con otros selectores',
+    );
   });
 });
 
