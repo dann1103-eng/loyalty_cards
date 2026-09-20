@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { TEMAS, type Tema } from '../tema';
@@ -50,6 +50,24 @@ const PARES: Par[] = [
   },
   { frente: '--menta', fondo: ['--fondo'], minimo: 4.5, texto: true, uso: 'mensajes de éxito' },
   { frente: '--error', fondo: ['--fondo'], minimo: 4.5, texto: true, uso: 'avisos de campo' },
+  // El acento sobre los escalones de superficie (la fila activa y su hover). El mínimo es 3 y no 4.5
+  // porque hoy su único uso ahí es un GLIFO (.menu-tick dentro de .sheet-fila-activa), y WCAG 1.4.11
+  // le pide 3:1. Vale saber el número igual: en oscuro da 4.46 sobre --superficie-3 y 3.81 sobre
+  // --superficie-4, así que el día que alguien ponga TEXTO de acento en una fila activa no alcanza.
+  {
+    frente: '--acento',
+    fondo: ['--superficie-3'],
+    minimo: 3,
+    texto: false,
+    uso: 'glifo de acento en la fila activa',
+  },
+  {
+    frente: '--acento',
+    fondo: ['--superficie-4'],
+    minimo: 3,
+    texto: false,
+    uso: 'glifo de acento en el hover de la fila',
+  },
   // Los tintes translúcidos se apoyan en la SUPERFICIE QUE LOS CONTIENE, no en la página: ninguna
   // .pastilla declara fondo propio y todas viven dentro de una .admin-fila (--superficie-2) o de un
   // .panel (--superficie-1). Medirlas sobre --fondo mide una pila que en pantalla no existe, y da
@@ -314,5 +332,19 @@ describe('composición de sombras', () => {
       }
     }
     expect(fallas).toEqual([]);
+  });
+});
+
+describe('el tablero de revisión', () => {
+  it('su copia del CSS está sincronizada con app/globals.css', () => {
+    // public/tablero-neumorfico/propuesta.css es una copia byte a byte del sistema, servida como
+    // página suelta para revisar el rediseño. Un espejo que nada obliga a sincronizar vuelve
+    // DECORATIVA la revisión que cuelga de él: se aprueba un diseño distinto del que se publica.
+    // Es el mismo modo de falla que el fixture que copiaba la config del comercio al programa.
+    // El tablero se borra antes de integrar a master; cuando no exista, no hay nada que comparar.
+    const copia = fileURLToPath(new URL('../../public/tablero-neumorfico/propuesta.css', import.meta.url));
+    if (!existsSync(copia)) return;
+    const sinFinDeLinea = (texto: string) => texto.replace(/\r\n/g, '\n');
+    expect(sinFinDeLinea(readFileSync(copia, 'utf8'))).toBe(sinFinDeLinea(css));
   });
 });

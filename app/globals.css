@@ -1,8 +1,9 @@
 /* ============================================================
    Cardly SV — sistema visual v3 "neumórfico" (2026-09-20)
    Antes: v2 "Stitch dark". El porqué de cada decisión vive en
-   DESIGN.md y en docs/superpowers/specs/2026-09-20-rediseno-
-   neumorfico-design.md.
+   docs/superpowers/specs/2026-09-20-rediseno-neumorfico-design.md.
+   (DESIGN.md se actualiza al cierre del rediseño: hasta entonces
+   describe el sistema viejo y no hay que creerle.)
    - Lo que se levanta es DEL MISMO COLOR que la página: la forma
      sale del relieve (luz arriba-izquierda, sombra abajo-derecha),
      no de un borde ni de otro color.
@@ -38,8 +39,9 @@
      El truco del neumorfismo: lo que se levanta (--superficie-1/-2) es del MISMO color que la
      página, y se distingue solo por el relieve. --superficie-0 es el pozo (campos, chips inactivos,
      pistas), un escalón más oscuro: 1.11:1 contra el fondo. --superficie-3/-4 son el escalón de la
-     fila activa y su hover (1.15 y 1.14:1). El fondo es gris-lavanda y no blanco porque la luz del
-     relieve necesita margen para verse: sobre el hueso #f4f1ec de antes quedaba en 1.13:1. */
+     fila activa y su hover (superficie-3/fondo 1.15, superficie-4/superficie-3 1.14). El fondo es
+     gris-lavanda y no blanco porque la luz del relieve necesita margen para verse: sobre el hueso
+     #f4f1ec de antes, --luz quedaba en 1.11:1, debajo del piso de 1.12 que fija la prueba. */
   --fondo: #e7e6f0;
   --superficie-0: #dcdbe8;
   --superficie-1: var(--fondo);
@@ -68,7 +70,7 @@
 
   /* ---------- secundario menta (datos/éxito) ----------
      #0b6645 y no el #0d6e4a de antes: dentro de .pastilla-activo, sobre su propio tinte, el viejo
-     daba 4.27:1. */
+     daba 4.27:1 (revirtiendo solo --menta; es la mutación que registra la spec). */
   --menta: #0b6645;
   --sobre-menta: #eefff7;
 
@@ -133,7 +135,8 @@
      .admin-top y .nav-inferior no migren, estos dos siguen valiendo el fondo. */
   --vidrio-top: var(--fondo);
   --vidrio-nav: var(--fondo);
-  --velo: rgba(24, 24, 73, 0.45); /* fondo detrás de los bottom sheets */
+
+  --velo: rgba(24, 24, 73, 0.45); /* el velo de los bottom sheets NO está en retiro: no es vidrio */
 
   /* ---------- tintes suaves (fondos de chip / ícono-círculo / hover) ----------
      Un alpha del color de texto NO sobrevive el cambio de tema: cada tema declara el suyo. */
@@ -207,8 +210,10 @@
   --hundido-2: inset 5px 5px 12px var(--sombra-relieve), inset -4px -4px 8px var(--luz);
   --borde-relieve: rgba(245, 245, 240, 0.05);
 
+  /* vidrio EN RETIRO — el porqué está en el bloque :root */
   --vidrio-top: var(--fondo);
   --vidrio-nav: var(--fondo);
+
   --velo: rgba(6, 7, 20, 0.6);
 
   --hover-suave: rgba(245, 245, 240, 0.05);
@@ -285,19 +290,21 @@
   --hundido-2: none;
   --borde-relieve: rgba(255, 255, 255, 0.55);
 
-  /* Sin translucidez: el vidrio esmerilado es lo primero que se pierde con reflejo en pantalla. */
+  /* vidrio EN RETIRO — acá además era opaco, porque el vidrio esmerilado es lo primero que se
+     pierde con reflejo en pantalla. Se borra cuando migren .admin-top y .nav-inferior. */
   --vidrio-top: #000000;
   --vidrio-nav: #000000;
+
   --velo: rgba(0, 0, 0, 0.85);
 
-  /* 12% y no 22%: la pastilla "inactivo" (su único uso) no se apoya en el fondo de la página sino
-     en la fila que la contiene (--superficie-2). Medida ahí, con 22% daba 5.97:1 y con 16% daba
-     6.78:1; en este tema todo texto pide 7:1. Con 12% da 7.31:1. */
   --hover-suave: rgba(255, 255, 255, 0.18);
   --neutro-suave: rgba(255, 255, 255, 0.18);
   --acento-suave: rgba(201, 236, 94, 0.22);
   --acento-borde: rgba(201, 236, 94, 0.85);
   --menta-suave: rgba(0, 229, 140, 0.22);
+  /* 12% y no 22%: la pastilla "inactivo" (su único uso) no se apoya en el fondo de la página sino
+     en la fila que la contiene (--superficie-2). Medida ahí, con 22% daba 5.97:1 y con 16% daba
+     6.78:1; en este tema todo texto pide 7:1. Con 12% da 7.31:1. */
   --error-suave: rgba(255, 138, 122, 0.12);
 
   --btn-primario-fondo: #ffffff;

@@ -7,6 +7,9 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'Consulta el saldo de tus tarjetas de lealtad y las recompensas que puedes canjear.',
     start_url: '/mi-tarjeta',
     display: 'standalone',
+    // El fondo del tema por defecto (claro). Es un valor ESTÁTICO y el tema es de runtime: quien
+    // elija oscuro o alto contraste va a ver el cromo del sistema operativo en claro igual. El
+    // manifest no tiene forma de seguir al tema; no es un descuido.
     background_color: '#e7e6f0',
     theme_color: '#e7e6f0',
     icons: [
