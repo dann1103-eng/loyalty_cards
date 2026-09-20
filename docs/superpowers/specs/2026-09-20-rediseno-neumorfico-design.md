@@ -208,8 +208,8 @@ que es constante.
 | botón primario | 15.19 | 16.08 | 7 |
 | piso de relieve: `--luz` · `--sombra-relieve` / `--fondo` | 1.21 · 1.50 | 1.22 · 1.17 | 1.12 |
 
-Los dos 4.76 de claro son el margen más chico: **si el tablero aclara el fondo, se recalculan antes
-de aprobar**.
+Los dos 4.76 de claro son el margen más chico: **si en la revisión se aclara el fondo, la prueba los
+recalcula sola y avisa**.
 
 ### Se eliminan
 
@@ -263,7 +263,7 @@ corrige esa regla en `DESIGN.md`.
 | `.admin-fila` (913-928) | E | `border: 1px solid var(--borde-relieve)`; `box-shadow: var(--relieve-1)`. El hover aplica **solo a `:is(a, button).admin-fila`**: hay 14 filas `<div>` estáticas que hoy "se levantan" sin ser tocables. Hover: `translateY(-2px)` + `var(--relieve-2)` con `cubic-bezier(0.22, 1, 0.36, 1)`; `:active` `var(--hundido-2)`. Se deja de cambiar el `background` en hover. |
 | `.icono-circulo` (315-325) | P | Sin cambio: el tinte identifica, no es un control (`aria-hidden`). Levantarlo lo haría parecer tocable. |
 | `.pastilla` (943-959) | P | Solo hereda los valores nuevos. |
-| `.metric-carta` (1013-1071) | E, **neutra** | `background: var(--superficie-1)`; `color: var(--texto)`; `border: 1px solid var(--borde-relieve)` con padding 22 → 21px; `box-shadow: var(--relieve-2)`. Se quitan también las rotaciones del `@media` de L1069-1070. `.naranja`/`.menta` solo colorean `.metric-valor` y `.metric-etiqueta` (`var(--acento)` / `var(--menta)`). Se quitan la rotación y el hover: no es interactiva. `.metric-etiqueta`/`.metric-sub` cambian `opacity` por `color: var(--texto-2)` / `var(--texto-3)`, así entran en la prueba. Hoy son bloques violeta saturados, lo que contradice "un acento, solo en lo interactivo activo". **Punto de aprobación del tablero.** |
+| `.metric-carta` (1013-1071) | E, **neutra** | `background: var(--superficie-1)`; `color: var(--texto)`; `border: 1px solid var(--borde-relieve)` con padding 22 → 21px; `box-shadow: var(--relieve-2)`. Se quitan también las rotaciones del `@media` de L1069-1070. `.naranja`/`.menta` solo colorean `.metric-valor` y `.metric-etiqueta` (`var(--acento)` / `var(--menta)`). Se quitan la rotación y el hover: no es interactiva. `.metric-etiqueta`/`.metric-sub` cambian `opacity` por `color: var(--texto-2)` / `var(--texto-3)`, así entran en la prueba. Hoy son bloques violeta saturados, lo que contradice "un acento, solo en lo interactivo activo". **En la lista de revisión de Daniel.** |
 | `.nav-inferior` / `.nav-destacado` (1372-1456) | barra E hacia arriba, ítems P | Barra: `background: var(--fondo)`; borrar `backdrop-filter`; `border-top: 1px solid var(--borde-relieve)`; `box-shadow: var(--relieve-3)`. Ítem activo: píldora de acento sólido (como hoy). Destacado: como hoy. Barra a lo ancho, no isla flotante: no toca el `padding-bottom: 96px` de `.admin-shell`. |
 | `.filtro-chip` (1824-1838) | inactivo H, activo E acento | Inactivo: `background: var(--superficie-0)`, `box-shadow: var(--hundido-1)`, borde `--borde-relieve`. Activo: relleno de acento + `var(--relieve-1)`. El estado lo da el relleno, no el relieve. |
 | `.menu-boton` (1464-1484) | E | `background: var(--superficie-1)`; `border: 1px solid var(--borde-relieve)` con padding 10 → 9px (se mantiene 44×44); `var(--relieve-1)`; `:active` `var(--hundido-2)`. |
@@ -296,7 +296,9 @@ corrige esa regla en `DESIGN.md`.
 - Los resets de `.field input[type="file"]` (L1142) y `.encuadre-franja input[type='range']`
   (L1347) **no** necesitan `box-shadow: none`: los `:not()` ya excluyen esos inputs de la regla del
   hundido.
-- `::file-selector-button` pasa a E: fondo `--superficie-1` + `var(--relieve-1)`.
+- `::file-selector-button` pasa a E: fondo `--superficie-1` (hoy `--superficie-3`) +
+  `var(--relieve-1)` + `border: 1px solid var(--borde-relieve)` con padding 7px 14px → **6px 13px**
+  (regla 4: es del color de la página, así que lleva borde, y la caja no cambia).
 
 ### Base nueva
 
@@ -430,6 +432,15 @@ la prueba que medía la tarjeta seguía verde con el QR corrido). El color y el 
 regla CSS**, y cada uno tiene que ser un único `var(--x)` o `transparent` (que equivale al fondo de
 la página). Si no, lanza `la regla X pinta <prop> con <valor>, no con un token`.
 
+**El refuerzo de alto contraste (7:1) aplica también acá**, con la misma marca de "texto" que en los
+pares de tokens: `.nav-destacado .icono` es un glifo y se queda en 3. Sin eso, la pastilla inactiva
+(6.67:1) pasaría por regla y fallaría solo por token, y la Fase 2 arrancaría con 4 fallas en vez de 5.
+
+**Selectores repetidos:** se toman solo las reglas de primer nivel (fuera de `@media` y
+`@keyframes`) y se fusionan en orden, la última gana, como la cascada entre reglas de la misma
+especificidad. Hace falta porque `.metric-carta.naranja`, `.metric-carta.menta` y `.nav-inferior`
+aparecen también dentro de un `@media`, solo con `transform` o con medidas.
+
 | Regla | Mínimo |
 |---|---|
 | `.field input` (Fases 2-3) → el selector nuevo de `.field` (Fase 4+): texto sobre su fondo | 7 |
@@ -443,8 +454,12 @@ la página). Si no, lanza `la regla X pinta <prop> con <valor>, no con un token`
 | `.pastilla-activo`, `.pastilla-inactivo` | 4.5 |
 | `.alerta` | 7 |
 | `.metric-carta.naranja` y `.metric-carta.menta` (Fases 2 a 5: hoy son bloques de color) | 4.5 |
-| desde la Fase 6: `.metric-valor` de cada variante sobre `.metric-carta` | 3 (texto grande, 2.9rem) |
-| desde la Fase 6: `.metric-etiqueta` sobre `.metric-carta` | 4.5 |
+| desde la Fase 6: `.metric-carta.naranja .metric-valor` y `.metric-carta.menta .metric-valor`, sobre `.metric-carta` | 3 (texto grande, 2.9rem) |
+| desde la Fase 6: `.metric-carta.naranja .metric-etiqueta` y `.metric-carta.menta .metric-etiqueta`, sobre `.metric-carta` | 4.5 |
+
+Las métricas se miden **por variante y no en la regla base**: las cinco `.metric-carta` de la app
+llevan `.naranja` o `.menta`, y esas variantes pisan el color. Medir la base sería medir un color
+que nunca se ve — el mismo patrón que la prueba que seguía verde con el QR descentrado.
 
 El valor de medir por regla se ve con el placeholder: un par fijo `--texto-3`/`--superficie-0`
 fallaría hoy (4.46:1 en el claro actual) por una combinación que hoy no existe en pantalla, porque
@@ -541,7 +556,7 @@ integrar**, después de la revisión de Daniel, y no en la Fase 7.
   `MenuOpciones.tsx`, los 15 tipos de input dentro de `.field`, filas, métricas, chips, pastillas,
   alertas, una pista con relleno, y las excepciones (`.cardface` con `.sello.lleno`, `.qr-tile`,
   `.wallet-btn`) sobre el fondo nuevo.
-- `propuesta.css` — **copia íntegra** del futuro `app/globals.css`.
+- `propuesta.css` — **copia** de `app/globals.css`.
 - `tablero.css` — solo el marco del tablero y las variables de fuente.
 - `medir.js` — lee `getComputedStyle` de los elementos `[data-par]` y calcula razones sobre la
   cascada real del navegador.
@@ -549,10 +564,13 @@ integrar**, después de la revisión de Daniel, y no en la Fase 7.
 Se ve en el navegador integrado, y se ofrece publicarlo como Artifact privado para abrirlo en el
 teléfono, que es donde de verdad se juzga el relieve.
 
-Verificación: `medir.js` vía `javascript_tool` en cada iframe; capturas a 375 y 320px en los tres
-temas; recorrido con Tab (el foco se ve en los tres); interruptores **"sol"**
-(`filter: contrast(.6) brightness(1.2)`) y **"grises"**: los estados activos tienen que seguir
-distinguiéndose.
+**Cuándo se verifica qué.** En la Fase 1 el tablero muestra el CSS de hoy: ahí solo se sacan las
+capturas del "antes". **La verificación visual del rediseño corre sobre el `propuesta.css` final,
+al cierre de la Fase 6**, antes de la revisión de Daniel: `medir.js` vía `javascript_tool` en cada
+iframe (contrasta la cascada real del navegador contra lo que calcula la prueba desde el CSS);
+capturas a 375 y 320px en los tres temas; recorrido con Tab (el foco se ve en los tres);
+interruptores **"sol"** (`filter: contrast(.6) brightness(1.2)`) y **"grises"**: los estados activos
+tienen que seguir distinguiéndose. Correrla en la Fase 1 mediría el vidrio viejo.
 
 **Daniel aprueba:** fondo lavanda y azul marino · intensidad del relieve · métricas neutras · chips
 inactivos hundidos · `--borde-relieve` tenue · `--acento-fuerte` oscuro lavanda (y cómo queda
@@ -570,8 +588,15 @@ inactivos hundidos · `--borde-relieve` tenue · `--acento-fuerte` oscuro lavand
 | 6 · Pantallas y JSX inline | `.metric-*`, `.portal-*`, `.escaner-*`, `.subida-imagen`, gaps, y las clases nuevas en los 5 archivos TSX. | Panel, reportes, mi-tarjeta, branding. `grep -rn "var(--superficie" app --include=*.tsx \| grep -v _inicio` solo deja las excepciones del pase. El escáner con cámara lo prueba Daniel en un teléfono real. |
 | 7 · Cierre | `git diff --no-index --ignore-cr-at-eol public/tablero-neumorfico/propuesta.css app/globals.css` **vacío**. `DESIGN.md`, `PRODUCT.md`, `ESTADO-Y-PLAN`. El tablero queda para la revisión de Daniel (ver "Tablero de componentes"). | Suite completa, `npm run lint`, `npm run typecheck`, `npx next build` (`/` sigue `○ Static`). Lo que no se pueda correr sin `.env.local` queda anotado como pendiente de Daniel, con el comando. |
 
+**Hovers que oscurecen.** `.admin-salir` y `.menu-boton` hoy hacen hover con `--superficie-4`, y
+`.menu-destacado` con `--superficie-3`. Con relieve eso oscurece una superficie que debería seguir
+siendo del color de la página: el hover pasa a **subir** (`box-shadow: var(--relieve-2)`) y el
+`background` no cambia.
+
 **Integración.** Salvo la Fase 2, todo se integra junto al final: los estados intermedios de 3 a 6
-no deben llegar a los comercios piloto. La Fase 2 **puede** publicarse sola — arregla hoy el botón
+no deben llegar a los comercios piloto. Si la Fase 2 se publica sola, se hace **cherry-pick de sus
+commits**: el tablero de la Fase 1 ya está en `public/` de la rama y no debe llegar a producción.
+La Fase 2 **puede** publicarse sola — arregla hoy el botón
 "Acreditar" del cajero — pero solo con el OK explícito de Daniel en ese momento. Antes de publicar
 el rediseño, avisar a los pilotos: los cajeros que nunca tocaron el selector de tema pasan a claro de
 golpe, a mitad de turno.
@@ -605,8 +630,8 @@ tarea aparte por pantalla (toca JSX con comportamiento). Nunca se importa su HTM
 1. **El relieve es el único límite entre superficies en claro y oscuro** (1.1 a 1.5:1). En un LCD
    barato bajo el sol, paneles y campos se funden con la página. → La regla "forma, nunca estado";
    el borde de 1px siempre; el piso de relieve en la prueba; el interruptor "sol" y el teléfono real
-   en la Fase 1; alto contraste a un toque en el menú para todos los roles, incluido el cajero
-   (`MenuOpciones.tsx:124-127`).
+   **al cierre de la Fase 6**, sobre el CSS nuevo; alto contraste a un toque en el menú para todos
+   los roles, incluido el cajero (`MenuOpciones.tsx:124-127`).
 2. **Colisiones de `box-shadow`**: el foco que borra el hundido; `none` dentro de una lista; el
    literal naranja que aplana el pozo; el hundido cayendo sobre radios y checkboxes nativos. → Foco
    con `outline`; la prueba de composición; borrar L1111; los `:not()` más los resets; los 15 inputs
@@ -626,7 +651,7 @@ tarea aparte por pantalla (toca JSX con comportamiento). Nunca se importa su HTM
 5. **Una verificación que parece hecha sin estarlo**: sin `.env.local` no corre nada, y un parser
    que resuelva `var()` distinto que el navegador certificaría contrastes falsos. → El `.env.local`
    como prerrequisito; confirmar con una mutación que la prueba de verdad corrió; contrastar el
-   parser con `getComputedStyle` en las Fases 1 y 3.
+   parser con `getComputedStyle` en las Fases 3 y 6 (antes de la 2, el parser no existe).
 
 ## Fuera de alcance
 
