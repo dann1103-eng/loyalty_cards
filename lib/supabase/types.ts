@@ -23,6 +23,7 @@
 //   - supabase/migrations/0035_sin_saldo_circulante.sql (reporte_fm_comercios() deja de devolver saldo_circulante)
 //   - supabase/migrations/0036_apellido_cliente.sql (clientes.apellido, nullable)
 //   - supabase/migrations/0029_reverso_por_programa.sql (reverso por programa en programas_tarjeta)
+//   - supabase/migrations/0037_pagos_wompi.sql (cobros.tipo/plan_destino/wompi_*; tabla pagos_wompi)
 //   - supabase/migrations/0027_branding_por_programa.sql (branding por programa en programas_tarjeta)
 //   - supabase/migrations/0026_notificaciones_push.sql (tablas difusiones y notificaciones_enviadas; tarjetas.aviso_texto/aviso_hasta/aviso_inactividad_enviado_en; comercios.aviso_inactividad_activo/dias/mensaje)
 //   - supabase/migrations/0025_backfill_programas_principales_faltantes.sql (solo datos, no cambia columnas: programa principal para comercios que la 0024 no alcanzó a cubrir)
@@ -820,6 +821,16 @@ export type Database = {
           // La BD garantiza que esté presente si y solo si el estado es 'pagado'.
           pagado_en: string | null;
           created_at: string;
+          // Migración 0037. 'periodo' = un mes completo; 'ajuste' = la diferencia prorrateada de subir de
+          // plan a mitad de período (no abre período). La BD garantiza que un ajuste tenga plan_destino.
+          tipo: string;
+          // El plan que se aplica al confirmarse el pago. null = solo renovar el plan actual.
+          plan_destino: string | null;
+          wompi_id_enlace: number | null;
+          wompi_url_enlace: string | null;
+          wompi_enlace_vence: string | null;
+          // La transacción que pagó este cobro (índice único: una transacción paga como máximo un cobro).
+          wompi_id_transaccion: string | null;
         };
         Insert: {
           id?: string;
@@ -832,6 +843,12 @@ export type Database = {
           nota?: string | null;
           pagado_en?: string | null;
           created_at?: string;
+          tipo?: string;
+          plan_destino?: string | null;
+          wompi_id_enlace?: number | null;
+          wompi_url_enlace?: string | null;
+          wompi_enlace_vence?: string | null;
+          wompi_id_transaccion?: string | null;
         };
         Update: {
           id?: string;
@@ -844,10 +861,85 @@ export type Database = {
           nota?: string | null;
           pagado_en?: string | null;
           created_at?: string;
+          tipo?: string;
+          plan_destino?: string | null;
+          wompi_id_enlace?: number | null;
+          wompi_url_enlace?: string | null;
+          wompi_enlace_vence?: string | null;
+          wompi_id_transaccion?: string | null;
         };
         Relationships: [
           {
             foreignKeyName: 'cobros_cuenta_id_fkey';
+            columns: ['cuenta_id'];
+            isOneToOne: false;
+            referencedRelation: 'cuentas_comercio';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      // Migración 0037: un registro por cada transacción que Wompi nos informa (o que confirmamos por
+      // consulta, o que FM aplica a mano). `payload` es jsonb: `type` y no `interface` (ver la nota de
+      // `Json`), y `unknown` al escribirlo lo valida quien llama.
+      pagos_wompi: {
+        Row: {
+          id: string;
+          id_transaccion: string;
+          fuente: string;
+          cobro_id: string | null;
+          cuenta_id: string | null;
+          identificador_enlace: string | null;
+          monto: number;
+          es_real: boolean;
+          fecha_transaccion: string | null;
+          conciliacion: string;
+          detalle: string | null;
+          revisado_en: string | null;
+          payload: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          id_transaccion: string;
+          fuente: string;
+          cobro_id?: string | null;
+          cuenta_id?: string | null;
+          identificador_enlace?: string | null;
+          monto?: number;
+          es_real?: boolean;
+          fecha_transaccion?: string | null;
+          conciliacion?: string;
+          detalle?: string | null;
+          revisado_en?: string | null;
+          payload: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          id_transaccion?: string;
+          fuente?: string;
+          cobro_id?: string | null;
+          cuenta_id?: string | null;
+          identificador_enlace?: string | null;
+          monto?: number;
+          es_real?: boolean;
+          fecha_transaccion?: string | null;
+          conciliacion?: string;
+          detalle?: string | null;
+          revisado_en?: string | null;
+          payload?: Json;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'pagos_wompi_cobro_id_fkey';
+            columns: ['cobro_id'];
+            isOneToOne: false;
+            referencedRelation: 'cobros';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'pagos_wompi_cuenta_id_fkey';
             columns: ['cuenta_id'];
             isOneToOne: false;
             referencedRelation: 'cuentas_comercio';
