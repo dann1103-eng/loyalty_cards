@@ -120,7 +120,8 @@ confirma (detalle en la sección "A verificar" de la spec):
 - El formato real del cuerpo del webhook. Un cuerpo firmado que no se reconoce se guarda con id
   `sin-id-…` y se ve en `/admin/pagos` con su cuerpo crudo; "Reintentar" lo reprocesa cuando el parser se
   arregla.
-- Qué variante de hash trae el redirect. Es un aviso que no bloquea: la verdad la da la consulta a la API.
+- ~~Qué variante de hash trae el redirect.~~ **Resuelto el 2026-09-21**: la de 4 campos. Y
+  `datosAdicionales.cobro` SÍ vuelve en la transacción (con un pago de prueba real, sin advertencias).
 - Cómo reintenta Wompi si la ruta responde 500.
 
 ## Preguntas abiertas para Daniel

@@ -444,9 +444,14 @@ concurrentes del mismo cobro, y `aplicarPlanDestino`. Cada rama crítica lleva s
 1. La forma **real** del webhook frente al ejemplo de 2020. El cuerpo crudo queda guardado para esto.
 2. Que `wompi_hash`, con guion bajo, llegue por Vercel. Si no llegara, el camino de vuelta sigue
    confirmando pagos y se decide ahí. El log de la ruta imprime los nombres de los headers.
-3. Cuál de las dos variantes del hash del redirect usa Wompi (la doc se contradice).
+3. Cuál de las dos variantes del hash del redirect usa Wompi (la doc se contradice). **RESUELTO el 2026-09-21
+   con un pago de prueba real**: coincide la de 4 campos (`identificadorEnlaceComercio + idTransaccion +
+   idEnlace + monto`, con los valores tal como vienen en la URL, `monto=89.00` incluido). Sigue siendo un
+   aviso que no bloquea, pero ya se sabe que es la buena.
 4. Que `GET /TransaccionCompra/{id}` devuelva las transacciones de un enlace con las credenciales del
-   negocio, y si `datosAdicionales` (que el enlace acepta) vuelve ahí. **La página de vuelta ya lo usa**: si
+   negocio, y si `datosAdicionales` (que el enlace acepta) vuelve ahí. **RESUELTO el 2026-09-21: SÍ vuelve**
+   (un pago de prueba real no dejó la advertencia "no trae datosAdicionales.cobro"). Con una sola muestra el
+   chequeo se dejó tolerante; se puede volver estricto tras un par de pagos más. **La página de vuelta ya lo usa**: si
    `datosAdicionales.cobro` vuelve y no coincide con el cobro, rechaza; si no vuelve, sigue y deja una
    advertencia en el log (`La transacción de Wompi no trae datosAdicionales.cobro…`). Esa advertencia es la
    respuesta: si aparece en el primer pago real, Wompi no copia los datos y el vínculo entre la transacción
