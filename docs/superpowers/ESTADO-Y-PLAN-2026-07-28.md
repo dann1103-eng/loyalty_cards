@@ -1078,7 +1078,8 @@ verificada** (`scripts/verificar-0036.ts`).
 
 Spec: `specs/2026-09-20-rediseno-neumorfico-design.md` (la sección final, "Cambios al implementar",
 PREVALECE sobre la tabla de migración). Plan: `plans/2026-09-20-rediseno-neumorfico.md`. Rama
-`claude/app-neumorphism-redesign-f8c05a`, **SIN publicar**. Sin migraciones de base.
+`claude/app-neumorphism-redesign-f8c05a`, **integrada a `master` el 2026-09-20** (fast-forward, a
+pedido de Daniel), con el tablero de revisión borrado en el commit previo. Sin migraciones de base.
 
 ### Lo que entró
 
@@ -1162,16 +1163,18 @@ decían cosas falsas; y el plan, que había quedado distinto del CSS publicado e
 - `--shadow-card` (alias sin consumidores) y las reglas `.sello*`, que ninguna pantalla pinta: la
   vista previa del editor de marca dibuja sus sellos con estilos inline.
 
-### Pendiente de Daniel, en este orden
+### Pendiente de Daniel, después de publicar
 
-1. **Copiar `.env.local` al worktree** (en tu terminal; el asistente no lo lee ni lo copia) y correr
-   la suite completa: `npm test`. En esta sesión corrieron solo las pruebas de diseño (51/51), con
-   una config aparte sin Supabase.
-2. **Revisar el tablero**: `npm run dev` y abrir `http://localhost:3000/tablero-neumorfico/index.html`.
-   Probá el interruptor "Antes" y el de "Sol". Lista de decisiones abiertas: el fondo lavanda y el
-   azul marino; la intensidad del relieve; las métricas neutras; el borde visible de `.btn-borde` en
-   claro y oscuro; en alto contraste, que "fila con foco" y "fila activa" se parecen; el aro del
-   activo de "Escanear".
+1. **Correr la suite completa en el checkout principal** (`git pull` y `npm test`, que ahí tiene
+   `.env.local`). En la sesión corrieron solo las pruebas de diseño (51/51), con una config aparte
+   sin Supabase. Se revisó que ninguna otra prueba importe lo que cambió salvo
+   `programas/actions.test.ts`, que dibuja `FormularioConfiguracionPrograma`: ahí solo cambió el
+   estilo del contenedor de la vista previa, y la prueba mira nombres, valores y texto.
+2. **Decisiones de diseño abiertas** (se ajustan con un token, sin tocar pantallas): el fondo
+   lavanda y el azul marino; la intensidad del relieve; las métricas neutras; el borde visible de
+   `.btn-borde` en claro y oscuro; en alto contraste, que "fila con foco" y "fila activa" se
+   parecen; el aro del activo de "Escanear". El tablero de revisión se borró al integrar, pero vive
+   en la historia (commit `a0cc9e1`, `public/tablero-neumorfico/`) si hace falta volver a verlo.
 3. **Recorrer las pantallas reales** en los tres temas, a ancho de teléfono: sobre todo
    `/comercio/panel`, `/comercio/escanear`, `/comercio/clientes`, `/registro/<slug>` y
    `/admin/comercios` (`/mi-tarjeta` y `/registro-comercio` ya se recorrieron sin `.env.local`; con
@@ -1179,8 +1182,5 @@ decían cosas falsas; y el plan, que había quedado distinto del CSS publicado e
    navegador, visible sobre todas las bandas. De la portada solo cambió esa regla; de su formulario
    de demo siguen al tema la alerta, la tilde de éxito y el anillo de los campos.
 4. **Teléfono real a pleno sol**, con el escáner y la cámara.
-5. **Decidir si el arreglo del botón "Acreditar" se publica solo, antes del rediseño.** Arregla hoy
-   un fallo de accesibilidad en el botón más usado. Si se publica solo, con cherry-pick de los
-   commits de contraste: el tablero ya está en `public/` de esta rama.
-6. **Avisar a los comercios piloto** antes de publicar el rediseño.
-7. **Antes de integrar: borrar `public/tablero-neumorfico/`.**
+5. **Avisar a los comercios piloto**: los cajeros que nunca eligieron tema pasan del oscuro al
+   claro de golpe. Si alguno lo pide, el oscuro y el alto contraste están a un toque en el menú.
