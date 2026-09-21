@@ -1184,3 +1184,92 @@ decían cosas falsas; y el plan, que había quedado distinto del CSS publicado e
 4. **Teléfono real a pleno sol**, con el escáner y la cámara.
 5. **Avisar a los comercios piloto**: los cajeros que nunca eligieron tema pasan del oscuro al
    claro de golpe. Si alguno lo pide, el oscuro y el alto contraste están a un toque en el menú.
+
+## 2026-09-21 — Pasarela de pagos con Wompi (en la rama `claude/pasarela-wompi`, SIN desplegar)
+
+Spec: `docs/superpowers/specs/2026-09-21-pasarela-wompi-design.md` (v2). Registro por tarea, con commits y
+lo que falta correr: `docs/superpowers/plans/2026-09-21-pasarela-wompi.md`. **Nada de esto está en master ni
+en producción**, y no debe desplegarse hasta aplicar la migración `0037`.
+
+### Lo que entró
+
+- **El dueño paga con un botón** en `/comercio/plan`: cada intento es un `cobros` con `metodo = 'Wompi'` y
+  un enlace de pago de Wompi (vigente 2 horas; se reusa mientras dure). El plan cambia **solo cuando el pago
+  se confirma**, nunca al pedirlo. Suscripciones recurrentes de Wompi: descartadas (un cobro por mes).
+- **Prorrateo** al subir de plan a mitad de período (centavos enteros), precio completo al renovar (ventana
+  de los últimos 7 días) y al activar. Las fases son disjuntas. Una sola tabla (`opcionesPago.ts`) alimenta
+  la pantalla y la acción.
+- **Webhook firmado** (`/api/wompi/webhook`) y **página de vuelta** del dueño: los dos terminan en
+  `confirmarPagoCobro`, así que un pago no depende de que llegue el webhook.
+- **`/admin/pagos`**: cada transacción con lo que el sistema hizo con ella, filtro "Necesitan atención"
+  (con contador en la nav), y las salidas: reintentar, aplicar a mano, marcar revisado. En la ficha de la
+  cuenta: "Marcar pagado" para un cobro pendiente de la app, insignias de ajuste/plan y la línea de
+  vencimiento del período.
+- Se borró `accionSubirPlan` (subir de plan gratis) y `subirPlanPorElDueno`.
+
+### Lo que NO es obvio y hay que recordar
+
+1. **Primero el servicio, después el pago.** `confirmarPagoCobro` aplica el plan y la licencia (idempotente)
+   ANTES de reclamar el cobro. Al revés, un fallo entre las dos cosas dejaría un cliente que pagó sin plan y
+   un cobro "pagado" que ya no se puede reprocesar. Un reintento de la misma transacción se distingue de un
+   doble pago por `cobros.wompi_id_transaccion`.
+2. **La firma se calcula sobre los BYTES** del cuerpo (`request.arrayBuffer()`), no sobre un JSON
+   re-serializado ni sobre `text()` (que descarta un BOM). El header se llama `wompi_hash`, **con guion
+   bajo**, y algunos proxies descartan esos headers: si falta, la ruta deja en el log los NOMBRES de los
+   headers recibidos (nunca los valores). Es lo que responde si Vercel lo entrega.
+3. **Un pago de prueba no aplica nada en producción.** La guarda es una lista de permitidos: se aceptan
+   pruebas solo con `WOMPI_ACEPTAR_PRUEBAS=1` **y** `VERCEL_ENV` ausente o `development`. Una guarda inversa
+   (`!== 'production'`) habría aceptado pruebas en los Preview, que comparten la base real.
+4. **Un cuerpo firmado que no se reconoce no se pierde**: se guarda con id `sin-id-<huella>` y conciliación
+   `error`, y se responde 200 (un reintento infinito no arregla un parser). "Reintentar" re-lee el CUERPO
+   guardado; si ahora trae un id de transacción, nace un evento nuevo y el viejo queda revisado con nota.
+5. **Dos índices únicos parciales hacen el trabajo sucio**: un solo intento pendiente de la app por cuenta, y
+   una transacción paga a lo sumo un cobro. La ruta clasifica el error 23505 en vez de lanzarlo: lanzarlo
+   haría que Wompi reintentara para siempre algo que reintentar no arregla.
+6. **`confirmarPagoCobro` valida el UUID del identificador antes de tocar la base.** Un enlace hecho a mano
+   en el panel de Wompi trae otro identificador, y un no-UUID en una consulta da un error de sintaxis de
+   Postgres que se leería como falla interna.
+7. **Las acciones de FM revalidan el estado en el servidor** (`accionesDisponibles`): el botón de la
+   pantalla puede estar viejo. Los tres botones de un pago comparten UNA acción con `name="accion"`; con
+   tres estados separados, un error viejo taparía el resultado nuevo.
+8. **El repositorio falso es un espejo, y un espejo que nada obliga a sincronizar vuelve decorativa la
+   suite** (la misma lección que el fixture de `entornoComercio`). Su semántica tiene que ser la del
+   adaptador de Supabase; `repositorioPagosSupabase.test.ts` corre los mismos casos contra la base, **pero
+   esas pruebas todavía no se han ejecutado** (falta `.env.local` y la migración).
+9. **Lo que sale de `pagos_wompi.payload` es dato hostil** y trae nombre y correo del pagador: solo se
+   muestra en `/admin/pagos`, plegado, y `aJson` lo normaliza antes de guardarlo.
+10. **La nav de `/admin` cuenta los pagos por revisar en el layout**: `contarPagosAtencion` devuelve `null`
+    (y la nav no muestra número) si la consulta falla o si la migración no está aplicada, en vez de romper
+    todo el panel o mostrar un cero falso.
+11. **Hueco que ya existía y NO se arregló**: el alta pública (`altaAutoservicio`) le da a la cuenta el
+    cupo de su plan sin cobrar, y `licencia_estado` no gatea nada. La pasarela cobra, pero no hace cumplir
+    el pago: un período vencido solo se muestra. Es una decisión de producto (pregunta abierta 1 de la spec).
+
+### Verificación
+
+`tsc --noEmit` y `eslint` limpios; **248 pruebas puras** en verde con `TZ=UTC` y con
+`TZ=America/El_Salvador`; todas las mutaciones de los módulos puros medidas y muertas por la prueba correcta
+(tablas en los encabezados de cada `.test.ts`). **No se corrió** ninguna prueba con base de datos, ni se
+vieron las pantallas en el navegador: este worktree no tiene `.env.local`.
+
+### Pendiente de Daniel, en este orden
+
+1. Traer la rama al checkout principal y correr `npm test` (las pruebas con base fallarán hasta el paso 2).
+2. **Aplicar `0037_pagos_wompi.sql` en Studio**, correr `scripts/verificar-0037.ts` y volver a correr
+   `npm test`: ahí se ve si el adaptador real se comporta como el falso.
+3. `WOMPI_CLIENT_ID` y `WOMPI_CLIENT_SECRET` en `.env.local` y en Vercel. **Regenerar el API Secret**: se
+   vio en una captura.
+4. Correr `scripts/probar-wompi.ts` y pasar lo que imprime: responde si las credenciales del negocio alcanzan
+   para crear enlaces (el "punto 0"). Si no, el diseño cambia.
+5. Con tu permiso, desplegar (migración primero) y **después** poner la URL del webhook en el panel de
+   Wompi: `https://www.cardly-sv.site/api/wompi/webhook`.
+6. Mirar `/comercio/plan`, `/comercio/plan/pago/resultado`, `/admin/pagos` y la ficha de una cuenta a ancho
+   de teléfono, y hacer la primera prueba real.
+7. Contestar las preguntas abiertas de la spec (qué pasa al vencer un período, downgrade, Meta en ajustes,
+   si el negocio de Wompi es solo de Cardly).
+
+### Fase 2, anotada
+
+App instalable (PWA) para el dueño y avisos al celular (Web Push, VAPID): pago pendiente y pago próximo,
+derivados de las fechas de los períodos y enviados desde el cron que ya existe (Vercel Hobby permite dos).
+Necesita su propia spec.

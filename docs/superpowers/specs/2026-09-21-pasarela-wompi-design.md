@@ -1,7 +1,9 @@
 # Pasarela de pagos con Wompi
 
 **Fecha:** 2026-09-21 · **Rama:** `claude/pasarela-wompi` · **Estado:** v2, después de la revisión
-independiente del 2026-09-21. Nada de esto está implementado.
+independiente del 2026-09-21. **Implementado en la rama** (tareas 1 a 11; ver
+`docs/superpowers/plans/2026-09-21-pasarela-wompi.md`), **sin desplegar**: falta que Daniel aplique la migración
+`0037`, corra las pruebas con base de datos y responda el punto 0.
 
 ## Por qué
 
@@ -284,7 +286,10 @@ inverso dejaba "cobro pagado y plan sin aplicar": plata tomada sin servicio.
 
 Sin esto, los estados de "necesita atención" no tendrían salida.
 
-- **Reintentar** (eventos en `error`): vuelve a correr `confirmarPagoCobro` con el cuerpo guardado.
+- **Reintentar** (eventos en `error`): vuelve a correr `confirmarPagoCobro` **re-leyendo el cuerpo guardado**,
+  no las columnas: un webhook que llegó irreconocible (id `sin-id-…`, monto 0) puede entenderse después con un
+  parser arreglado. Si el cuerpo trae otro id de transacción, el reproceso nace como evento nuevo y el viejo
+  queda revisado con la nota "Reprocesado como la transacción …".
 - **Aplicar a mano** (eventos en `monto_distinto` o `cobro_anulado`): FM decide aceptar ese pago. Corre
   `confirmarPagoCobro` con `fuente = 'manual'`, saltando las comprobaciones de monto y de anulado, y un
   cobro anulado vuelve a `pendiente` antes de reclamarse.
@@ -321,8 +326,15 @@ Sin esto, los estados de "necesita atención" no tendrían salida.
   dependencias inyectables por la misma razón.
 - `app/api/wompi/webhook/route.ts`: ruta pública (`/api/*` ya queda fuera del matcher del proxy).
 - `app/comercio/(protegido)/plan/`: acción de iniciar pago, opciones en pantalla y `pago/resultado/page.tsx`.
-- `app/admin/(protegido)/pagos/`: la pantalla y sus acciones, más un enlace "Pagos" con la cuenta de los
-  que necesitan atención.
+- `lib/comercios/pagosAdmin.ts`: las reglas **puras** del panel (`necesitaAtencion`, `accionesDisponibles`,
+  `entradaParaReintentar`, `describirPeriodo`) y las consultas (`listarPagos`, `obtenerPago`,
+  `contarPagosAtencion`, `marcarRevisado`). `lib/comercios/resolverPagos.ts`: `reintentarPago`,
+  `aplicarPagoAMano` y `marcarCobroPagadoAMano`, con el repositorio inyectable; cada una **revalida el estado
+  del evento en el servidor** (el botón de la pantalla puede estar viejo).
+- `app/admin/(protegido)/pagos/`: la pantalla y **una sola acción** (`accionResolverPago`, con `accion` en el
+  formulario: un estado único hace que el mensaje sea el de lo último que hizo FM), más un enlace "Pagos" con
+  la cuenta de los que necesitan atención. En la ficha de la cuenta: `accionMarcarCobroPagado`, las insignias
+  de tipo y plan, y la línea de vencimiento.
 
 ## Pantallas
 
