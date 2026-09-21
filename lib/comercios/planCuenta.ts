@@ -1,13 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { PLANES, cupoDeCuenta } from './cuentas';
+import type { ResultadoAplicarPlan } from './confirmarPago';
+import { escalonDePlan, limiteResultante } from './limitePlan';
 
 // Autogestión de plan (migración 0017). El dueño ve y SOLICITA; FM aprueba.
 //
-// Por qué no se aplica solo: no hay cobro automático detrás (Stripe no acepta negocios de El
-// Salvador y N1co espera la personería jurídica). Sin cobro, un cambio inmediato dejaría que
-// cualquiera pase a Pro sin pagarlo. Cuando exista la pasarela, este flujo ya está construido y
-// solo cambia quién aprueba.
+// BAJAR de plan a mitad de período sigue siendo una solicitud que FM resuelve: ahí FM tiene un interés
+// legítimo en la conversación (entender por qué se va, ofrecerle algo). SUBIR y RENOVAR pasan por el
+// pago (migración 0037): el plan se aplica cuando Wompi confirma el cobro, con `aplicarPlanDestino`
+// (abajo), que llama `confirmarPagoCobro` (confirmarPago.ts). Ya no existe un camino que suba el plan
+// sin cobrar: hasta el 2026-09-21 lo hacía `subirPlanPorElDueno`, y se borró.
 
 export const ESTADOS_SOLICITUD = ['pendiente', 'aprobada', 'rechazada'] as const;
 
@@ -245,37 +248,32 @@ export async function resolverSolicitud(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Autogestión: el dueño sube de plan sin esperar a FM
+// Aplicar el plan de un cobro pagado (migración 0037)
 // ─────────────────────────────────────────────────────────────────────────────
-// Hasta acá TODO cambio de plan pasaba por la bandeja de FM. Eso significa que un comercio que
-// llega a su tope un sábado a las nueve de la noche —justo cuando quiere abrir otro local y pagar
-// más— queda bloqueado hasta que alguien vea su solicitud.
+// Lo llama `confirmarPagoCobro` cuando Wompi confirma un cobro con `plan_destino`. Tiene que ser
+// IDEMPOTENTE: el webhook se reintenta, el redirect puede llegar dos veces, y FM puede reintentar a mano.
 //
-// ══ POR QUÉ SOLO SUBIR ══
-// Subir es el dueño pidiendo MÁS capacidad y aceptando pagar MÁS: no hay nada que negociar y
-// hacerlo esperar solo cuesta plata de los dos lados. Bajar es lo contrario, y ahí FM tiene un
-// interés legítimo en la conversación (entender por qué se va, ofrecerle algo). Por eso bajar sigue
-// pasando por `solicitarCambioPlan` y esta función lo rechaza nombrando el camino.
+// La DIRECCIÓN (subir o bajar) la decide la INTENCIÓN del cobro, no solo el plan que la cuenta tiene al
+// confirmar:
+//   - Un AJUSTE (subir a mitad de período) NUNCA baja. Si la cuenta ya está en ese plan o en uno más caro
+//     (FM se lo subió a mano mientras el dueño pagaba, o pagó otro ajuste antes), no hace nada: convertir
+//     un ajuste pagado en una bajada le quitaría al dueño lo que acaba de pagar.
+//   - Un PERÍODO (renovar) fija el plan exacto, sea más caro, más chico o el mismo.
 //
-// ══ SIN PASARELA, Y ESO ESTÁ BIEN ══
-// El cobro no cambia: el monto de la cuenta se actualiza y FM factura como siempre. El pago online
-// depende de una entidad legal que todavía no existe (ver lib/comercios/cobros.ts), y atar la
-// autogestión a esa espera sería dejar bloqueado al cliente por un trámite ajeno a él.
-
-// Cuánto vale un plan según el catálogo, para poder ordenarlos. Una cuenta SIN plan vale -1: desde
-// ahí cualquier plano del catálogo es "subir".
-function escalonDe(plan: string | null): number {
-  const i = PLANES.findIndex((p) => p.valor === plan);
-  return i < 0 ? -1 : i;
-}
-
-export async function subirPlanPorElDueno(
+// El límite lo decide `limiteResultante` (limitePlan.ts): al subir nunca baja (un límite negociado por FM
+// se respeta, y el "sin tope" de las cuentas viejas sobrevive); al bajar rige el sugerido del plan. Y en
+// AMBOS casos se comprueba que la cuenta quepa, porque entre el cobro y el pago el dueño pudo agregar
+// negocios. Si no cabe devuelve `motivo: 'cupo'`: la plata ya entró, y `confirmarPagoCobro` lo deja como
+// `plan_no_aplicable` para que FM lo resuelva, en vez de dejar una cuenta que el propio sistema considera
+// inválida (`verificarLimiteCuenta` la bloquearía en la siguiente alta).
+export async function aplicarPlanDestino(
   supabase: SupabaseClient<Database>,
   cuentaId: string,
   planDestino: string,
-): Promise<ResultadoSolicitud> {
+  tipo: 'periodo' | 'ajuste',
+): Promise<ResultadoAplicarPlan> {
   const destino = PLANES.find((p) => p.valor === planDestino);
-  if (!destino) return { ok: false, error: 'Ese plan no existe.' };
+  if (!destino) return { ok: false, motivo: 'error', error: 'Ese plan no existe.' };
 
   const { data: cuenta, error: eLeer } = await supabase
     .from('cuentas_comercio')
@@ -283,38 +281,26 @@ export async function subirPlanPorElDueno(
     .eq('id', cuentaId)
     .maybeSingle();
   if (eLeer) {
-    console.error('[plan] no se pudo leer la cuenta para subir de plan:', eLeer);
-    return { ok: false, error: 'No se pudo cambiar tu plan.' };
+    console.error('[plan] no se pudo leer la cuenta para aplicar el plan:', eLeer);
+    return { ok: false, motivo: 'error', error: 'No se pudo leer la cuenta.' };
   }
-  if (!cuenta) return { ok: false, error: 'No se pudo leer tu cuenta.' };
+  if (!cuenta) return { ok: false, motivo: 'error', error: 'La cuenta no existe.' };
 
-  if (cuenta.plan === destino.valor) return { ok: false, error: 'Ya estás en ese plan.' };
+  if (cuenta.plan === destino.valor) return { ok: true, cambio: false };
+  if (tipo === 'ajuste' && escalonDePlan(cuenta.plan) >= escalonDePlan(destino.valor)) {
+    return { ok: true, cambio: false };
+  }
 
-  if (escalonDe(destino.valor) < escalonDe(cuenta.plan)) {
+  const limiteNuevo = limiteResultante({ plan: cuenta.plan, limite: cuenta.limite_negocios }, destino);
+  const cupo = await cupoDeCuenta(supabase, cuentaId);
+  if (!cupo.ok) return { ok: false, motivo: 'error', error: cupo.error };
+  if (limiteNuevo !== null && cupo.usadas > limiteNuevo) {
     return {
       ok: false,
-      error: 'Para bajar de plan mandanos una solicitud desde esta misma pantalla y lo vemos con vos.',
+      motivo: 'cupo',
+      error: `La cuenta usa ${cupo.usadas} unidades y el plan ${destino.etiqueta} permite ${limiteNuevo}.`,
     };
   }
-
-  // El límite NUNCA baja al subir de plan. `limite_negocios` es un DEFAULT sugerido por plan y FM lo
-  // ajusta por cuenta en tratos negociados (decisión cerrada del proyecto): a un Starter con cupo 5
-  // negociado, aplicarle el sugerido de Growth —que es 3— le quitaría capacidad justo cuando acaba
-  // de aceptar pagar más. Gana el mayor.
-  //
-  // `null` EN LA CUENTA significa SIN TOPE, y sin tope le gana a cualquier número. Hasta el
-  // 2026-08-13 el catálogo tenía a Pro con `limiteSugerido: null`, así que el único null posible
-  // venía del PLAN destino y esta cuenta se resolvía sola. Ahora que Pro tiene tope de 10, el null
-  // sobrevive únicamente en las cuentas viejas —las que ya compraron "sin límite"— y un
-  // `?? 0` las mandaría a `Math.max(10, 0) = 10`: les revocaríamos lo que ya pagaron, en silencio y
-  // en el momento exacto en que aceptan pagar más. Por eso se chequea ANTES del Math.max.
-  //
-  // Se exige `cuenta.plan !== null` para no confundir "sin tope negociado" con "cuenta recién
-  // creada a la que todavía nadie le asignó nada": esa segunda sí toma el sugerido del destino.
-  const yaEstabaSinTope = cuenta.limite_negocios === null && cuenta.plan !== null;
-  const limiteNuevo = yaEstabaSinTope
-    ? null
-    : Math.max(destino.limiteSugerido, cuenta.limite_negocios ?? 0);
 
   const { error } = await supabase
     .from('cuentas_comercio')
@@ -324,10 +310,34 @@ export async function subirPlanPorElDueno(
       limite_negocios: limiteNuevo,
     })
     .eq('id', cuentaId);
-
   if (error) {
-    console.error('[plan] no se pudo subir el plan:', error);
-    return { ok: false, error: 'No se pudo cambiar tu plan.' };
+    console.error('[plan] no se pudo aplicar el plan:', error);
+    return { ok: false, motivo: 'error', error: 'No se pudo cambiar el plan.' };
   }
-  return { ok: true };
+  return { ok: true, cambio: true };
+}
+
+// La licencia queda activa desde el primer pago. Idempotente: `licencia_activa_desde` solo se llena si
+// estaba vacía, así un pago posterior (una renovación, o el reintento de este) no le corre la fecha de
+// alta al dueño. LANZA si algo falla: `confirmarPagoCobro` la llama antes de reclamar el cobro, y un
+// error acá tiene que cortar el flujo para que el reintento lo complete.
+export async function activarLicencia(
+  supabase: SupabaseClient<Database>,
+  cuentaId: string,
+  hoy: string,
+): Promise<void> {
+  const { data: cuenta, error: eLeer } = await supabase
+    .from('cuentas_comercio')
+    .select('licencia_activa_desde')
+    .eq('id', cuentaId)
+    .maybeSingle();
+  if (eLeer || !cuenta) {
+    throw new Error(`No se pudo leer la cuenta para activar la licencia${eLeer ? `: ${eLeer.message}` : ''}`);
+  }
+
+  const { error } = await supabase
+    .from('cuentas_comercio')
+    .update({ licencia_estado: 'activo', licencia_activa_desde: cuenta.licencia_activa_desde ?? hoy })
+    .eq('id', cuentaId);
+  if (error) throw new Error(`No se pudo activar la licencia: ${error.message}`);
 }

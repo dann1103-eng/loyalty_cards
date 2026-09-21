@@ -48,10 +48,13 @@ export function vencimientoInicialCupon(hoyIso: string, dias: number | null): st
 
 // El "hoy" del comercio, no el del servidor. Un cupón emitido a las 7 de la tarde en El Salvador
 // ya es del día siguiente en UTC, y esa diferencia le regalaría o le quitaría un día entero.
-export function hoyEnZona(zonaHoraria: string | null): string {
+//
+// `ahora` es opcional y por defecto es el instante actual: se puede pasar otro para calcular "qué día era
+// en El Salvador cuando pasó esto" (la fecha de un pago, por ejemplo) y para probar sin depender del reloj.
+export function hoyEnZona(zonaHoraria: string | null, ahora: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: zonaHoraria || 'America/El_Salvador',
-  }).format(new Date());
+  }).format(ahora);
 }
 
 // AAAA-MM-DD → "12 de octubre de 2026". EL formateador de fechas para una persona: lo usan los

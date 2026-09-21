@@ -5,7 +5,8 @@ import {
   solicitarCambioPlan,
   listarSolicitudes,
   resolverSolicitud,
-  subirPlanPorElDueno,
+  aplicarPlanDestino,
+  activarLicencia,
   etiquetaDePlan,
   SIN_PLAN,
   ETIQUETA_SIN_PLAN,
@@ -235,10 +236,10 @@ describe('resolverSolicitud', () => {
 // significa que un comercio que llega a su tope un sábado a las 9 de la noche —justo cuando quiere
 // abrir otro local y pagar más— queda bloqueado hasta que alguien vea la solicitud.
 //
-// La asimetría que ordena el diseño: SUBIR es el dueño pidiendo más capacidad y aceptando pagar
-// más, así que se aplica solo. BAJAR sigue siendo una solicitud, porque ahí FM tiene un interés
-// legítimo en la conversación.
-describe('subirPlanPorElDueno', () => {
+// `aplicarPlanDestino` es lo que ejecuta `confirmarPagoCobro` cuando Wompi confirma un cobro. Antes de la
+// pasarela el dueño subía de plan al instante (`subirPlanPorElDueno`, borrada); estas pruebas conservan
+// los casos de LÍMITE que aquélla protegía, porque la regla no cambió: al subir el límite nunca baja.
+describe('aplicarPlanDestino', () => {
   async function planDe(cuentaId: string) {
     const { data } = await supabase
       .from('cuentas_comercio')
@@ -248,87 +249,188 @@ describe('subirPlanPorElDueno', () => {
     return data!;
   }
 
-  it('subir de Starter a Growth se aplica al instante', async () => {
+  // Deja la cuenta usando EXACTAMENTE `n` unidades de cupo (n >= 1). `cupoDeCuenta` cuenta cada comercio
+  // más cada sucursal que NO es la principal: un comercio es 1 unidad y su principal no suma.
+  async function consumirCupo(cuentaId: string, n: number) {
+    const comercioId = await crearComercio(cuentaId);
+    await crearSucursal(comercioId, true);
+    for (let i = 1; i < n; i++) await crearSucursal(comercioId);
+  }
+
+  it('subir de Starter a Growth aplica el plan, su precio y su límite', async () => {
     const cuentaId = await crearCuenta({ plan: 'starter', licencia_monto_mensual: 29, limite_negocios: 1 });
 
-    const res = await subirPlanPorElDueno(supabase, cuentaId, 'growth');
+    const res = await aplicarPlanDestino(supabase, cuentaId, 'growth', 'periodo');
 
-    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    expect(res).toEqual({ ok: true, cambio: true });
     const cuenta = await planDe(cuentaId);
     expect(cuenta.plan).toBe('growth');
     expect(Number(cuenta.licencia_monto_mensual)).toBe(49);
     expect(cuenta.limite_negocios).toBe(3);
   });
 
-  it('BAJAR no se autogestiona: se rechaza indicando que va por solicitud', async () => {
-    // Es la mitad que protege el negocio. Si bajar fuera instantáneo, la conversación de retención
-    // no existiría nunca.
-    const cuentaId = await crearCuenta({ plan: 'growth', licencia_monto_mensual: 49, limite_negocios: 2 });
-
-    const res = await subirPlanPorElDueno(supabase, cuentaId, 'starter');
-
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error.toLowerCase()).toContain('solicitud');
-    expect((await planDe(cuentaId)).plan, 'le bajó el plan por su cuenta').toBe('growth');
-  });
-
   it('subir NUNCA reduce un límite que FM negoció', async () => {
     // El caso que rompe lo obvio: FM le dio a un Starter un cupo de 5 (trato negociado; el límite
-    // siempre fue un default sugerido, no una regla). Aplicar el sugerido de Growth —que es 2— al
+    // siempre fue un default sugerido, no una regla). Aplicar el sugerido de Growth —que es 3— al
     // subir de plan le QUITARÍA capacidad al cliente que acaba de pagar más. Gana el mayor.
     const cuentaId = await crearCuenta({ plan: 'starter', licencia_monto_mensual: 29, limite_negocios: 5 });
 
-    const res = await subirPlanPorElDueno(supabase, cuentaId, 'growth');
+    const res = await aplicarPlanDestino(supabase, cuentaId, 'growth', 'periodo');
 
-    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    expect(res.ok).toBe(true);
     expect((await planDe(cuentaId)).limite_negocios, 'le quitó cupo al subir de plan').toBe(5);
   });
 
   it('subir a Pro aplica su tope de 10 y le gana a un cupo negociado menor', async () => {
     const cuentaId = await crearCuenta({ plan: 'starter', licencia_monto_mensual: 29, limite_negocios: 5 });
 
-    const res = await subirPlanPorElDueno(supabase, cuentaId, 'pro');
-
-    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    expect((await aplicarPlanDestino(supabase, cuentaId, 'pro', 'periodo')).ok).toBe(true);
     expect((await planDe(cuentaId)).limite_negocios, 'Pro sugiere 10 y el negociado era 5').toBe(10);
   });
 
   // EL CASO QUE SE ROMPIÓ AL PONERLE TOPE A PRO (2026-08-13). Antes, Pro era `limiteSugerido: null`,
-  // así que el único null posible venía del plan destino. Ahora el null sobrevive solo en las
-  // cuentas viejas —las que YA compraron "sin límite"— y el `?? 0` del Math.max las mandaba a
-  // Math.max(10, 0) = 10: les revocaba en silencio lo que ya habían pagado, justo en el momento en
-  // que aceptaban pagar más. Sin esta prueba, la regresión no la atrapa nada.
+  // así que el único null posible venía del plan destino. Ahora el null sobrevive solo en las cuentas
+  // viejas —las que YA compraron "sin límite"— y el `?? 0` del Math.max las mandaba a Math.max(10, 0) = 10:
+  // les revocaba en silencio lo que ya habían pagado, justo en el momento en que aceptaban pagar más.
   it('subir NO le quita el sin-tope a una cuenta que ya lo tenía', async () => {
-    const cuentaId = await crearCuenta({
-      plan: 'growth',
-      licencia_monto_mensual: 49,
-      limite_negocios: null,
-    });
+    const cuentaId = await crearCuenta({ plan: 'growth', licencia_monto_mensual: 49, limite_negocios: null });
 
-    const res = await subirPlanPorElDueno(supabase, cuentaId, 'pro');
-
-    expect(res.ok, res.ok ? '' : res.error).toBe(true);
-    expect(
-      (await planDe(cuentaId)).limite_negocios,
-      'le revocó el sin-tope que ya tenía comprado',
-    ).toBeNull();
+    expect((await aplicarPlanDestino(supabase, cuentaId, 'pro', 'periodo')).ok).toBe(true);
+    expect((await planDe(cuentaId)).limite_negocios, 'le revocó el sin-tope que ya tenía comprado').toBeNull();
   });
 
-  it('rechaza un plan que no está en el catálogo, y el mismo plan', async () => {
-    const cuentaId = await crearCuenta({ plan: 'starter', licencia_monto_mensual: 29, limite_negocios: 1 });
-
-    expect((await subirPlanPorElDueno(supabase, cuentaId, 'enterprise')).ok).toBe(false);
-    expect((await subirPlanPorElDueno(supabase, cuentaId, 'starter')).ok).toBe(false);
-    expect((await planDe(cuentaId)).plan).toBe('starter');
-  });
-
-  it('una cuenta SIN plan puede tomar cualquiera del catálogo', async () => {
-    // Nace así toda cuenta del alta self-service: sin plan asignado hasta que elige.
+  it('una cuenta SIN plan toma cualquiera del catálogo', async () => {
+    // Nace así toda cuenta del alta self-service: sin plan asignado hasta que paga.
     const cuentaId = await crearCuenta({ plan: null, licencia_monto_mensual: null, limite_negocios: null });
 
-    const res = await subirPlanPorElDueno(supabase, cuentaId, 'starter');
-
-    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    expect((await aplicarPlanDestino(supabase, cuentaId, 'starter', 'periodo')).ok).toBe(true);
     expect((await planDe(cuentaId)).plan).toBe('starter');
+  });
+
+  it('rechaza un plan que no está en el catálogo, sin tocar la cuenta', async () => {
+    const cuentaId = await crearCuenta({ plan: 'starter', licencia_monto_mensual: 29, limite_negocios: 1 });
+
+    const res = await aplicarPlanDestino(supabase, cuentaId, 'enterprise', 'periodo');
+
+    expect(res).toMatchObject({ ok: false, motivo: 'error' });
+    expect((await planDe(cuentaId)).plan).toBe('starter');
+  });
+
+  it('una cuenta que no existe es un error, no una excepción', async () => {
+    const res = await aplicarPlanDestino(supabase, '00000000-0000-0000-0000-000000000000', 'growth', 'periodo');
+    expect(res).toMatchObject({ ok: false, motivo: 'error' });
+  });
+
+  it('aplicar el MISMO plan es un éxito sin cambios, y no pisa un precio negociado', async () => {
+    // Es lo que pasa al reintentar un webhook, o al renovar sin cambiar de plan.
+    const cuentaId = await crearCuenta({ plan: 'starter', licencia_monto_mensual: 20, limite_negocios: 4 });
+
+    const res = await aplicarPlanDestino(supabase, cuentaId, 'starter', 'periodo');
+
+    expect(res).toEqual({ ok: true, cambio: false });
+    const cuenta = await planDe(cuentaId);
+    expect(Number(cuenta.licencia_monto_mensual), 'le pisó el precio negociado').toBe(20);
+    expect(cuenta.limite_negocios).toBe(4);
+  });
+
+  it('aplicarlo dos veces deja lo mismo que aplicarlo una', async () => {
+    const cuentaId = await crearCuenta({ plan: 'starter', licencia_monto_mensual: 29, limite_negocios: 1 });
+
+    await aplicarPlanDestino(supabase, cuentaId, 'growth', 'periodo');
+    const segunda = await aplicarPlanDestino(supabase, cuentaId, 'growth', 'periodo');
+
+    expect(segunda).toEqual({ ok: true, cambio: false });
+    expect(await planDe(cuentaId)).toMatchObject({ plan: 'growth', limite_negocios: 3 });
+  });
+
+  describe('un AJUSTE nunca baja', () => {
+    it('sobre una cuenta que ya está en un plan más caro no hace nada', async () => {
+      // FM le subió el plan a mano mientras el dueño pagaba el ajuste a Growth.
+      const cuentaId = await crearCuenta({ plan: 'pro', licencia_monto_mensual: 89, limite_negocios: 10 });
+
+      const res = await aplicarPlanDestino(supabase, cuentaId, 'growth', 'ajuste');
+
+      expect(res).toEqual({ ok: true, cambio: false });
+      expect(await planDe(cuentaId)).toMatchObject({ plan: 'pro', limite_negocios: 10 });
+    });
+
+    it('sobre una cuenta más chica sí sube', async () => {
+      const cuentaId = await crearCuenta({ plan: 'starter', licencia_monto_mensual: 29, limite_negocios: 1 });
+
+      expect(await aplicarPlanDestino(supabase, cuentaId, 'growth', 'ajuste')).toEqual({ ok: true, cambio: true });
+      expect((await planDe(cuentaId)).plan).toBe('growth');
+    });
+  });
+
+  describe('bajar (solo lo hace una renovación)', () => {
+    it('baja el plan, su precio y fija el límite sugerido cuando la cuenta cabe', async () => {
+      const cuentaId = await crearCuenta({ plan: 'growth', licencia_monto_mensual: 49, limite_negocios: 3 });
+
+      const res = await aplicarPlanDestino(supabase, cuentaId, 'starter', 'periodo');
+
+      expect(res).toEqual({ ok: true, cambio: true });
+      const cuenta = await planDe(cuentaId);
+      expect(cuenta.plan).toBe('starter');
+      expect(Number(cuenta.licencia_monto_mensual)).toBe(29);
+      expect(cuenta.limite_negocios).toBe(1);
+    });
+
+    it('NO baja si la cuenta quedaría por encima del nuevo cupo, y lo dice con motivo "cupo"', async () => {
+      const cuentaId = await crearCuenta({ plan: 'growth', licencia_monto_mensual: 49, limite_negocios: 3 });
+      await consumirCupo(cuentaId, 2); // 2 unidades: en Starter (tope 1) no caben
+
+      const res = await aplicarPlanDestino(supabase, cuentaId, 'starter', 'periodo');
+
+      expect(res).toEqual({
+        ok: false,
+        motivo: 'cupo',
+        error: 'La cuenta usa 2 unidades y el plan Starter permite 1.',
+      });
+      expect(await planDe(cuentaId)).toMatchObject({ plan: 'growth', limite_negocios: 3 });
+    });
+  });
+
+  it('un piloto sin plan que ya usa más de lo que cabe en el plan elegido no lo recibe', async () => {
+    // Sin este chequeo, pagar Starter dejaría a una cuenta con 3 unidades y un tope de 1.
+    const cuentaId = await crearCuenta({ plan: null, licencia_monto_mensual: null, limite_negocios: null });
+    await consumirCupo(cuentaId, 3);
+
+    const res = await aplicarPlanDestino(supabase, cuentaId, 'starter', 'periodo');
+
+    expect(res).toMatchObject({ ok: false, motivo: 'cupo' });
+    expect((await planDe(cuentaId)).plan).toBeNull();
+  });
+});
+
+describe('activarLicencia', () => {
+  async function licenciaDe(cuentaId: string) {
+    const { data } = await supabase
+      .from('cuentas_comercio')
+      .select('licencia_estado, licencia_activa_desde')
+      .eq('id', cuentaId)
+      .single();
+    return data!;
+  }
+
+  it('pasa la cuenta a activo y le pone la fecha de alta', async () => {
+    const cuentaId = await crearCuenta({ licencia_estado: 'inactivo', licencia_activa_desde: null });
+
+    await activarLicencia(supabase, cuentaId, '2026-09-15');
+
+    expect(await licenciaDe(cuentaId)).toEqual({ licencia_estado: 'activo', licencia_activa_desde: '2026-09-15' });
+  });
+
+  it('no le corre la fecha de alta a una cuenta que ya la tenía (una renovación, o un reintento)', async () => {
+    const cuentaId = await crearCuenta({ licencia_estado: 'activo', licencia_activa_desde: '2026-01-10' });
+
+    await activarLicencia(supabase, cuentaId, '2026-09-15');
+
+    expect(await licenciaDe(cuentaId)).toEqual({ licencia_estado: 'activo', licencia_activa_desde: '2026-01-10' });
+  });
+
+  it('LANZA si la cuenta no existe: un error acá tiene que cortar el flujo para que el reintento lo complete', async () => {
+    await expect(activarLicencia(supabase, '00000000-0000-0000-0000-000000000000', '2026-09-15')).rejects.toThrow(
+      'No se pudo leer la cuenta',
+    );
   });
 });

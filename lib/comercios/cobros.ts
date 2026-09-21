@@ -1,5 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
+import type { CobroParaPago } from './confirmarPago';
+import type { IntentoAbierto, ResultadoCrearCobro } from './iniciarPagoPlan';
+import type { PeriodoPagado } from './prorrateo';
 
 // Seguimiento de cobros (migración 0017). NO es contabilidad ni facturación fiscal: sin personería
 // jurídica no hay DTE, y el comprobante que se imprime lo dice en el propio documento.
@@ -20,6 +23,17 @@ export interface Cobro {
   metodo: string | null;
   nota: string | null;
   pagadoEn: string | null;
+  // Migración 0037. 'periodo' = un mes completo; 'ajuste' = la diferencia prorrateada de subir de plan.
+  tipo: 'periodo' | 'ajuste';
+  planDestino: string | null;
+  wompiIdEnlace: number | null;
+  wompiUrlEnlace: string | null;
+  wompiEnlaceVence: string | null;
+  wompiIdTransaccion: string | null;
+  creadoEn: string;
+  // La URL para SEGUIR este intento de pago, o null si no corresponde (ver urlParaContinuarPago). Depende
+  // de la hora: se calcula al leer el cobro.
+  continuarUrl: string | null;
 }
 
 export interface DatosCobro {
@@ -67,6 +81,23 @@ function validar(datos: DatosCobro): string | null {
   return null;
 }
 
+// Los cobros que crea la app llevan este `metodo` mientras están pendientes: así se distinguen de los que
+// registra FM a mano, que la app NUNCA anula ni toca (ver la sección de la pasarela, más abajo).
+export const METODO_WOMPI = 'Wompi';
+
+// Un intento de pago de la app con su enlace TODAVÍA VIGENTE se puede seguir desde el mismo cobro. Uno ya
+// pagado o anulado, uno que registró FM a mano (`metodo` distinto de 'Wompi'), uno sin enlace, o uno con el
+// enlace vencido, no: se vuelve a empezar desde las opciones de /comercio/plan. La hora entra por
+// parámetro para poder probarlo, y porque una función de una página no puede leer el reloj.
+export function urlParaContinuarPago(
+  cobro: { estado: string; metodo: string | null; wompiUrlEnlace: string | null; wompiEnlaceVence: string | null },
+  ahoraMs: number,
+): string | null {
+  if (cobro.estado !== 'pendiente' || cobro.metodo !== METODO_WOMPI) return null;
+  if (cobro.wompiUrlEnlace === null || cobro.wompiEnlaceVence === null) return null;
+  return new Date(cobro.wompiEnlaceVence).getTime() > ahoraMs ? cobro.wompiUrlEnlace : null;
+}
+
 function mapear(fila: Database['public']['Tables']['cobros']['Row']): Cobro {
   return {
     id: fila.id,
@@ -81,6 +112,17 @@ function mapear(fila: Database['public']['Tables']['cobros']['Row']): Cobro {
     metodo: fila.metodo,
     nota: fila.nota,
     pagadoEn: fila.pagado_en,
+    tipo: fila.tipo === 'ajuste' ? 'ajuste' : 'periodo',
+    planDestino: fila.plan_destino,
+    wompiIdEnlace: fila.wompi_id_enlace,
+    wompiUrlEnlace: fila.wompi_url_enlace,
+    wompiEnlaceVence: fila.wompi_enlace_vence,
+    wompiIdTransaccion: fila.wompi_id_transaccion,
+    creadoEn: fila.created_at,
+    continuarUrl: urlParaContinuarPago(
+      { estado: fila.estado, metodo: fila.metodo, wompiUrlEnlace: fila.wompi_url_enlace, wompiEnlaceVence: fila.wompi_enlace_vence },
+      Date.now(),
+    ),
   };
 }
 
@@ -147,28 +189,230 @@ export async function registrarCobro(
   return { ok: true, id: data.id };
 }
 
-// OJO (2026-09-13): hoy no la llama ninguna pantalla; los pagos entran por registrarCobro con estado
-// `pagado`. Si algún día se conecta, tiene que avisarle a Meta igual que accionRegistrarCobro
-// (notificarPagoAMeta), y SOLO si el cobro no estaba pagado ya: si no, Subscribe se perdería o se
-// contaría dos veces.
-export async function marcarCobroPagado(
+// ─────────────────────────────────────────────────────────────────────────────
+// Pasarela Wompi (migración 0037)
+// ─────────────────────────────────────────────────────────────────────────────
+// Los cobros que crea la app llevan `metodo = 'Wompi'` mientras están pendientes: así se distinguen de
+// los que registra FM a mano, que la app NUNCA anula ni toca. El índice único parcial
+// `cobros_un_intento_pendiente` garantiza como máximo uno abierto por cuenta.
+//
+// Reemplaza a `marcarCobroPagado`, que nadie llamaba y actualizaba SIN condición de estado: podía
+// "pagar" un cobro anulado o pisar la fecha de uno ya pagado, y no aplicaba el plan ni avisaba a Meta.
+// El camino de pago es `reclamarCobroPagado`, llamado por `confirmarPagoCobro` (confirmarPago.ts).
+
+export async function crearCobroPendiente(
+  supabase: SupabaseClient<Database>,
+  cuentaId: string,
+  datos: {
+    tipo: 'periodo' | 'ajuste';
+    periodoDesde: string;
+    periodoHasta: string;
+    monto: number;
+    planDestino: string;
+    nota: string | null;
+  },
+): Promise<ResultadoCrearCobro> {
+  const problema = validar({
+    periodoDesde: datos.periodoDesde,
+    periodoHasta: datos.periodoHasta,
+    monto: datos.monto,
+    estado: 'pendiente',
+    metodo: METODO_WOMPI,
+    nota: datos.nota,
+    pagadoEn: null,
+  });
+  if (problema) return { ok: false, error: problema };
+
+  const { data, error } = await supabase
+    .from('cobros')
+    .insert({
+      cuenta_id: cuentaId,
+      tipo: datos.tipo,
+      periodo_desde: datos.periodoDesde,
+      periodo_hasta: datos.periodoHasta,
+      monto: datos.monto,
+      estado: 'pendiente',
+      metodo: METODO_WOMPI,
+      plan_destino: datos.planDestino,
+      nota: datos.nota,
+    })
+    .select('id')
+    .single();
+
+  // 23505 = el índice único parcial de "un solo intento abierto por cuenta": dos toques a la vez, o dos
+  // pestañas. No es un fallo, es la regla haciendo su trabajo.
+  if (error?.code === '23505') {
+    return { ok: false, error: 'Ya hay un pago en curso.', intentoAbierto: true };
+  }
+  if (error || !data) {
+    console.error('[cobros] no se pudo crear el cobro pendiente:', error);
+    return { ok: false, error: 'No se pudo registrar el cobro.' };
+  }
+  return { ok: true, id: data.id };
+}
+
+// LANZA si falla: quien llama (iniciarPagoPlan) lo trata como "no se pudo generar el enlace".
+export async function guardarEnlaceDelCobro(
   supabase: SupabaseClient<Database>,
   cobroId: string,
-  pagadoEn: string,
-  metodo: string,
-): Promise<ResultadoCobro> {
-  if (!FORMATO_FECHA.test(pagadoEn)) {
-    return { ok: false, error: 'La fecha de pago no es válida.' };
-  }
-
+  enlace: { idEnlace: number; url: string; vence: string },
+): Promise<void> {
   const { error } = await supabase
     .from('cobros')
-    .update({ estado: 'pagado', pagado_en: pagadoEn, metodo: metodo.trim() || null })
+    .update({ wompi_id_enlace: enlace.idEnlace, wompi_url_enlace: enlace.url, wompi_enlace_vence: enlace.vence })
     .eq('id', cobroId);
+  if (error) throw new Error(`No se pudo guardar el enlace del cobro: ${error.message}`);
+}
 
+// Anula los intentos pendientes de la APP de una cuenta (`metodo = 'Wompi'`), nunca los de FM. Un pago
+// que llegue después a uno de estos cobros queda como `cobro_anulado` en /admin/pagos.
+export async function anularIntentosPendientes(
+  supabase: SupabaseClient<Database>,
+  cuentaId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('cobros')
+    .update({ estado: 'anulado' })
+    .eq('cuenta_id', cuentaId)
+    .eq('estado', 'pendiente')
+    .eq('metodo', METODO_WOMPI);
+  if (error) throw new Error(`No se pudieron anular los intentos pendientes: ${error.message}`);
+}
+
+// Anula UN cobro, solo si sigue pendiente (uno que ya se pagó no se toca).
+export async function anularCobroPendiente(
+  supabase: SupabaseClient<Database>,
+  cobroId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('cobros')
+    .update({ estado: 'anulado' })
+    .eq('id', cobroId)
+    .eq('estado', 'pendiente');
+  if (error) throw new Error(`No se pudo anular el cobro: ${error.message}`);
+}
+
+export async function obtenerIntentoAbierto(
+  supabase: SupabaseClient<Database>,
+  cuentaId: string,
+): Promise<IntentoAbierto | null> {
+  const { data, error } = await supabase
+    .from('cobros')
+    .select('id, tipo, plan_destino, monto, periodo_desde, created_at, wompi_url_enlace, wompi_enlace_vence')
+    .eq('cuenta_id', cuentaId)
+    .eq('estado', 'pendiente')
+    .eq('metodo', METODO_WOMPI)
+    .maybeSingle();
+  if (error) throw new Error(`No se pudo leer el intento abierto: ${error.message}`);
+  if (!data) return null;
+  return {
+    cobroId: data.id,
+    tipo: data.tipo === 'ajuste' ? 'ajuste' : 'periodo',
+    planDestino: data.plan_destino,
+    monto: Number(data.monto),
+    periodoDesde: data.periodo_desde,
+    creadoEn: data.created_at,
+    enlaceUrl: data.wompi_url_enlace,
+    enlaceVence: data.wompi_enlace_vence,
+  };
+}
+
+// Los períodos PAGADOS (cobros `tipo = 'periodo'`): de ellos sale en qué momento de su ciclo está la
+// cuenta. Un ajuste no abre período, así que no entra. `null` ante un error (no `[]`): una lista vacía
+// diría "esta cuenta nunca pagó" y le ofrecería pagar de nuevo un mes que ya pagó.
+export async function listarPeriodosPagados(
+  supabase: SupabaseClient<Database>,
+  cuentaId: string,
+): Promise<PeriodoPagado[] | null> {
+  const { data, error } = await supabase
+    .from('cobros')
+    .select('periodo_desde, periodo_hasta')
+    .eq('cuenta_id', cuentaId)
+    .eq('estado', 'pagado')
+    .eq('tipo', 'periodo');
   if (error) {
-    console.error('[cobros] no se pudo marcar como pagado:', error);
-    return { ok: false, error: 'No se pudo marcar el cobro como pagado.' };
+    console.error('[cobros] no se pudieron leer los períodos pagados:', error);
+    return null;
   }
-  return { ok: true };
+  return (data ?? []).map((f) => ({ desde: f.periodo_desde, hasta: f.periodo_hasta }));
+}
+
+const COLUMNAS_PARA_PAGO = 'id, cuenta_id, tipo, estado, monto, plan_destino, wompi_id_transaccion';
+
+function paraPago(fila: {
+  id: string;
+  cuenta_id: string;
+  tipo: string;
+  estado: string;
+  monto: number;
+  plan_destino: string | null;
+  wompi_id_transaccion: string | null;
+}): CobroParaPago {
+  return {
+    id: fila.id,
+    cuentaId: fila.cuenta_id,
+    tipo: fila.tipo === 'ajuste' ? 'ajuste' : 'periodo',
+    estado: fila.estado,
+    monto: Number(fila.monto),
+    planDestino: fila.plan_destino,
+    wompiIdTransaccion: fila.wompi_id_transaccion,
+  };
+}
+
+// Un cobro por id, SIN acotar por cuenta: lo usa el flujo del webhook, que no tiene sesión y que resuelve
+// la cuenta desde el propio cobro. La página del dueño usa `obtenerCobro`, que sí acota.
+export async function obtenerCobroParaPago(
+  supabase: SupabaseClient<Database>,
+  cobroId: string,
+): Promise<CobroParaPago | null> {
+  const { data, error } = await supabase.from('cobros').select(COLUMNAS_PARA_PAGO).eq('id', cobroId).maybeSingle();
+  if (error) throw new Error(`No se pudo leer el cobro: ${error.message}`);
+  return data ? paraPago(data) : null;
+}
+
+// El mismo cobro, PERO solo si es de esta cuenta. Lo usa la página de vuelta del dueño: el id llega por la
+// URL, y uno ajeno no puede aplicar ni consultar el cobro de otra cuenta.
+export async function obtenerCobroParaPagoDeLaCuenta(
+  supabase: SupabaseClient<Database>,
+  cuentaId: string,
+  cobroId: string,
+): Promise<CobroParaPago | null> {
+  const { data, error } = await supabase
+    .from('cobros')
+    .select(COLUMNAS_PARA_PAGO)
+    .eq('id', cobroId)
+    .eq('cuenta_id', cuentaId)
+    .maybeSingle();
+  if (error) throw new Error(`No se pudo leer el cobro: ${error.message}`);
+  return data ? paraPago(data) : null;
+}
+
+// EL CANDADO. Pasa el cobro a pagado solo si su estado está entre los permitidos, en UNA sentencia: dos
+// llamadas simultáneas no pueden reclamar los dos. Devuelve el cobro tal como quedó, o tal como está si
+// no lo reclamó (así quien llama distingue un reintento propio, `wompiIdTransaccion` igual al suyo, de un
+// doble pago con otra transacción).
+//
+// 23505 = el índice único de `wompi_id_transaccion`: ESTA transacción ya pagó OTRO cobro. Tampoco es una
+// falla interna: se devuelve "no reclamado" y `confirmarPagoCobro` lo clasifica como ya_pagado. Lanzarlo
+// haría que Wompi reintentara para siempre algo que no se arregla reintentando.
+export async function reclamarCobroPagado(
+  supabase: SupabaseClient<Database>,
+  cobroId: string,
+  datos: { hoy: string; idTransaccion: string; estadosPermitidos: string[] },
+): Promise<{ reclamado: boolean; cobro: CobroParaPago | null }> {
+  if (!FORMATO_FECHA.test(datos.hoy)) throw new Error('La fecha de pago no es válida.');
+
+  const { data, error } = await supabase
+    .from('cobros')
+    .update({ estado: 'pagado', pagado_en: datos.hoy, wompi_id_transaccion: datos.idTransaccion })
+    .eq('id', cobroId)
+    .in('estado', datos.estadosPermitidos)
+    .select(COLUMNAS_PARA_PAGO);
+
+  if (error && error.code !== '23505') {
+    throw new Error(`No se pudo reclamar el cobro: ${error.message}`);
+  }
+  if (!error && data && data.length === 1) return { reclamado: true, cobro: paraPago(data[0]) };
+
+  return { reclamado: false, cobro: await obtenerCobroParaPago(supabase, cobroId) };
 }

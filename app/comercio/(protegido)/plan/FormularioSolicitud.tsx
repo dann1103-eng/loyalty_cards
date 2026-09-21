@@ -17,8 +17,8 @@ export default function FormularioSolicitud({ planActual }: { planActual: string
   return (
     <form className="panel" style={{ marginTop: 0 }} action={ejecutar}>
       <h2 className="subtitle" style={{ marginTop: 0 }}>¿Querés bajar de plan o pedir otra cosa?</h2>
-      {/* Subir ya no pasa por acá: tiene sus propios botones arriba y es inmediato. Este formulario
-          queda para bajar de plan y para cualquier pedido que necesite una conversación. */}
+      {/* Subir y renovar se PAGAN en las opciones de arriba. Este formulario queda para bajar de plan a
+          mitad de período y para cualquier pedido que necesite una conversación. */}
       <p className="admin-fila-slug" style={{ marginTop: -6, marginBottom: 16 }}>
         Escribinos y lo vemos con vos. Este cambio no es automático: te confirmamos antes de
         aplicarlo.

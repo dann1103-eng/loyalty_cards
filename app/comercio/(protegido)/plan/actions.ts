@@ -1,9 +1,12 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
-import { solicitarCambioPlan, subirPlanPorElDueno } from '@/lib/comercios/planCuenta';
+import { iniciarPagoPlanDelDueno } from '@/lib/comercios/iniciarPagoPlanSupabase';
+import type { AccionPago } from '@/lib/comercios/opcionesPago';
+import { solicitarCambioPlan } from '@/lib/comercios/planCuenta';
 
 export type EstadoSolicitudPlan = { error: string } | { ok: true } | undefined;
 
@@ -40,28 +43,41 @@ export async function accionSolicitarPlan(
   return { ok: true };
 }
 
-// Subir de plan AL INSTANTE, sin pasar por la bandeja de FM. Bajar sigue siendo una solicitud, y la
-// capa de datos lo rechaza nombrando ese camino (ver subirPlanPorElDueno).
+// Iniciar un pago del plan: elegir, subir o renovar. Crea el cobro y el enlace de Wompi y lleva al dueño a
+// la pantalla de pago. El plan NO cambia acá: cambia cuando Wompi confirma el pago (webhook, o la página
+// de vuelta), ver lib/comercios/confirmarPago.ts.
 //
-// La cuenta se deriva del comercio del gate igual que arriba: nunca del formulario.
-export async function accionSubirPlan(
-  _estadoPrevio: EstadoSolicitudPlan,
+// El formulario manda SOLO el plan y la acción. El importe, el período y si la opción está disponible los
+// decide el servidor (lib/comercios/opcionesPago.ts): un monto que viniera del navegador dejaría que
+// cualquiera pagara $0.01 por un plan de $89. Y la cuenta se deriva del comercio del gate, nunca del
+// formulario.
+export type EstadoPagoPlan = { error: string } | undefined;
+
+const ACCIONES: readonly AccionPago[] = ['activar', 'cambiar', 'renovar'];
+
+export async function accionIniciarPago(
+  _estadoPrevio: EstadoPagoPlan,
   formData: FormData,
-): Promise<EstadoSolicitudPlan> {
+): Promise<EstadoPagoPlan> {
+  // OJO: verifyComercioOwner() y redirect() funcionan LANZANDO. Nunca los envuelvas en try/catch.
   const { comercioId } = await verifyComercioOwner();
 
   const cuentaId = await cuentaDelComercio(comercioId);
   if (!cuentaId) return { error: 'Tu comercio todavía no está asociado a una cuenta.' };
 
-  const res = await subirPlanPorElDueno(
-    createServiceClient(),
-    cuentaId,
-    String(formData.get('plan') ?? ''),
-  );
-  if (!res.ok) return { error: res.error };
+  const accion = ACCIONES.find((a) => a === String(formData.get('accion') ?? ''));
+  if (accion === undefined) return { error: 'Esa opción no es válida. Recargá la página.' };
 
-  // El cupo del plan lo leen varias pantallas (sucursales, el modal de agregar local): sin esto, el
-  // dueño sube de plan y sigue viendo "alcanzaste el límite" hasta que recargue a mano.
-  revalidatePath('/comercio', 'layout');
-  return { ok: true };
+  let resultado;
+  try {
+    resultado = await iniciarPagoPlanDelDueno(cuentaId, String(formData.get('plan') ?? ''), accion);
+  } catch (error) {
+    // Falta configuración (variables de Wompi, URL base) o se cayó algo inesperado: el dueño no necesita el detalle.
+    console.error('[pagos] no se pudo iniciar el pago:', error);
+    return { error: 'No pudimos iniciar el pago. Probá de nuevo en un rato.' };
+  }
+  if (!resultado.ok) return { error: resultado.error };
+
+  // Fuera del try: redirect() lanza NEXT_REDIRECT (en una acción de servidor responde 303 a la URL de Wompi).
+  redirect(resultado.url);
 }

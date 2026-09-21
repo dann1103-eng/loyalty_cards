@@ -34,6 +34,12 @@ export const CONCILIACIONES = [
 ] as const;
 export type Conciliacion = (typeof CONCILIACIONES)[number];
 
+// Lo que sale de la base es un texto: se estrecha a la lista, y un valor desconocido se lee como `error`
+// (que un humano tiene que mirar) en vez de colarse como si fuera uno de los conocidos.
+export function aConciliacion(valor: string): Conciliacion {
+  return (CONCILIACIONES as readonly string[]).includes(valor) ? (valor as Conciliacion) : 'error';
+}
+
 // Un evento ya resuelto no se vuelve a procesar. `pendiente` y `error` SÍ: son los que un reintento
 // tiene que completar.
 const REPROCESABLES: ReadonlySet<Conciliacion> = new Set(['pendiente', 'error']);

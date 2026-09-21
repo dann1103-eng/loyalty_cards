@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { RepositorioPagosFalso, type Fallos } from '@/test/fixtures/repositorioPagosFalso';
-import { confirmarPagoCobro, type CobroParaPago, type EntradaPago } from './confirmarPago';
+import { CONCILIACIONES, aConciliacion, confirmarPagoCobro, type CobroParaPago, type EntradaPago } from './confirmarPago';
 
 // La lógica se prueba con un repositorio FALSO en memoria (test/fixtures/repositorioPagosFalso.ts). Lo que
 // hay que cuidar es que el falso tenga la MISMA semántica que la base (`reclamarCobro` es atómico y
@@ -301,5 +301,16 @@ describe('las acciones de FM a mano (forzar)', () => {
     const r = await confirmarPagoCobro(repo, pago({ monto: 29, fuente: 'manual', forzar: true }), opciones);
     expect(r.conciliacion).toBe('aplicado');
     expect(r.repetido).toBe(false);
+  });
+});
+
+describe('aConciliacion', () => {
+  it('reconoce cada conciliación conocida', () => {
+    for (const c of CONCILIACIONES) expect(aConciliacion(c)).toBe(c);
+  });
+
+  it('un valor desconocido se lee como error, para que alguien lo mire', () => {
+    expect(aConciliacion('inventada')).toBe('error');
+    expect(aConciliacion('')).toBe('error');
   });
 });
