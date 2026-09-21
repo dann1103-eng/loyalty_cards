@@ -1914,6 +1914,12 @@ en los tres temas, simetría completa, relieve plano en alto contraste, pisos 1.
 }
 ```
 
+> **Si releés este bloque después de la Tarea 6:** es el estado de los tokens AL TERMINAR esa tarea,
+> no el final. Después se borraron `--vidrio-*` y `--atmosfera` (Tareas 7 y 8, previsto), y también
+> `--hover-suave` y `--superficie-4`, que quedaron sin consumidores (correcciones de las revisiones).
+> **No los restaures.** El estado final está en `app/globals.css`, y la lista de lo que cambió al
+> implementar, en la sección "Cambios al implementar" de la spec.
+
 - [ ] **Paso 3: la regla `html`**
 
 Reemplazar el cuerpo de la primera regla `html` (L267-272 originales):

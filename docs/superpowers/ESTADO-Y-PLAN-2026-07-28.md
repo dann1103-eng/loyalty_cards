@@ -1073,3 +1073,72 @@ verificada** (`scripts/verificar-0036.ts`).
 - **Objeto creado solo por el JWT** (cuando `syncObjetoTarjeta` falló en `linkGuardar`): queda en
   Google con `google_object_id` null en la base, el script no lo ve y no se repara solo.
 - **Google no pone separador de miles** en el estado de puntos (viaja como texto).
+
+## 2026-09-20 — Rediseño neumórfico de la app, y la prueba de contraste que no existía
+
+Spec: `specs/2026-09-20-rediseno-neumorfico-design.md` (la sección final, "Cambios al implementar",
+PREVALECE sobre la tabla de migración). Plan: `plans/2026-09-20-rediseno-neumorfico.md`. Rama
+`claude/app-neumorphism-redesign-f8c05a`, **SIN publicar**. Sin migraciones de base.
+
+### Lo que entró
+
+- **La app entera (34 pantallas, no la portada) pasó a neumórfico, con el tema CLARO por defecto.**
+  Lo que se levanta es del mismo color que la página y la forma sale de dos sombras; los campos se
+  hunden. El oscuro pasó de carbón a azul marino (sacado del Deep del kit). El alto contraste quedó
+  **plano a propósito**: las mismas clases, ahí, dibujan un borde blanco y nada de sombra. Todo el
+  cambio es `app/globals.css` más seis TSX con estilos inline que pasaron a clases.
+- **Una prueba de contraste WCAG que hoy no existía** (`lib/diseno/`): mide los tres temas leyendo
+  el CSS con un parser único, en pares de tokens y en pares por regla (el color y el fondo de la
+  regla real, sobre la superficie que de verdad la contiene). También verifica que ningún
+  `box-shadow` meta en una lista un token que vale `none`, que el foco sea `outline`, y que la copia
+  del CSS del tablero de revisión esté sincronizada. 49 pruebas nuevas, todas con mutación
+  verificada.
+- **Destapó dos fallos que estaban EN PRODUCCIÓN** y los arregló:
+  - el botón **"Acreditar" del escáner** (el que más toca el cajero) estaba a **2.31:1** en el tema
+    oscuro, el default de hoy; pasó a 6.84:1 (`--acento-fuerte` del oscuro, `#514ba8` → `#a49df0`);
+  - la **pastilla "inactivo"** en alto contraste estaba a 5.97:1 sobre su fila, cuando ese tema pide
+    7:1; pasó a 7.31:1 (`--error-suave`, alpha 0.22 → 0.12).
+- **Tablero de revisión** en `public/tablero-neumorfico/`: todos los componentes, con marcado copiado
+  de los TSX reales, en los tres temas a la vez, con interruptores "Antes/Después", "Sol" y "Grises".
+
+### Lo que NO es obvio y hay que recordar
+
+1. **Ninguna pantalla de la app renderiza sin `.env.local`.** El proxy de Next lanza en toda ruta
+   (`lib/supabase/proxy.ts:13`). Por eso la verificación visual se hizo sobre el tablero, que es
+   estático, y su marcado se copió de los TSX en vez de inventarse. El recorrido de las pantallas
+   reales queda pendiente (abajo).
+2. **El relieve comunica FORMA, nunca ESTADO.** Lo activo se marca con el acento. Verificado con un
+   filtro de sol: el relieve se lava y el chip activo sigue clarísimo. **Y todo estado tiene una
+   señal que no es sombra**, porque en alto contraste el relieve vale `none`: un hover que solo
+   "sube" ahí no se ve (apareció tres veces en las revisiones).
+3. **Un token compuesto de relieve va SOLO en su `box-shadow`.** `none, x` invalida la declaración
+   entera y la sombra desaparece justo en alto contraste. Lo vigila una prueba.
+4. **Los portales de las hojas NO se sacan**, aunque el header ya no sea vidrio: es `sticky` con
+   `z-index: 40` y crea un contexto de apilamiento; sin portal, la barra inferior le pasa por encima
+   a la hoja y tapa "Cerrar sesión".
+5. **El tablero está en `public/`, o sea que integrado a `master` se serviría en producción.** Se
+   borra en el commit previo a integrar. Mientras exista, una prueba exige que
+   `propuesta.css` sea idéntica a `globals.css`.
+6. **Colores de tokens de tema en hex o `rgba()`, no en `oklch()`** (se cambió la regla de
+   `DESIGN.md`): la prueba de contraste no puede imitar el mapeo de gamut del navegador.
+7. **El cambio de default llega de golpe a quien nunca eligió tema** (casi todos los cajeros): pasan
+   del oscuro al claro sin aviso.
+
+### Pendiente de Daniel, en este orden
+
+1. **Copiar `.env.local` al worktree** (en tu terminal; el asistente no lo lee ni lo copia) y correr
+   la suite completa: `npm test`. En esta sesión corrieron solo las pruebas de diseño (49/49), con
+   una config aparte sin Supabase.
+2. **Revisar el tablero**: `npm run dev` y abrir `http://localhost:3000/tablero-neumorfico/index.html`.
+   Probá el interruptor "Antes" y el de "Sol". Lista de decisiones abiertas: el fondo lavanda y el
+   azul marino; la intensidad del relieve; las métricas neutras; el borde visible de `.btn-borde` en
+   claro y oscuro; en alto contraste, que "fila con foco" y "fila activa" se parecen.
+3. **Recorrer las pantallas reales** en los tres temas, a ancho de teléfono: sobre todo
+   `/comercio/panel`, `/comercio/escanear`, `/comercio/clientes`, `/mi-tarjeta`, `/registro/<slug>`
+   y `/admin/comercios`. Y `/` (la portada no se tocó, pero su formulario de demo sigue al tema).
+4. **Teléfono real a pleno sol**, con el escáner y la cámara.
+5. **Decidir si el arreglo del botón "Acreditar" se publica solo, antes del rediseño.** Arregla hoy
+   un fallo de accesibilidad en el botón más usado. Si se publica solo, con cherry-pick de los
+   commits de contraste: el tablero ya está en `public/` de esta rama.
+6. **Avisar a los comercios piloto** antes de publicar el rediseño.
+7. **Antes de integrar: borrar `public/tablero-neumorfico/`.**

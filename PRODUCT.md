@@ -50,8 +50,10 @@ quien está usando la pantalla.
    *Superficie **product**, herramienta interna.*
 
 ## Marca y tono
-- **Oscuro por defecto, con tres temas.** No es una preferencia estética suelta: el cajero atiende
-  bajo el sol y el dueño revisa sus números de noche. Ver `DESIGN.md`.
+- **Claro por defecto, con tres temas** (desde el 2026-09-20; antes era oscuro). El claro es
+  neumórfico: superficies suaves del color de la página, que se levantan o se hunden. No es una
+  preferencia estética suelta: el dueño configura de día, revisa sus números de noche (tema oscuro)
+  y el cajero atiende bajo el sol (alto contraste, plano a propósito). Ver `DESIGN.md`.
 - **Confiable y directo, no corporativo frío.** El interlocutor es una PyME salvadoreña, no una
   fintech ni un departamento de compras.
 - **Honesto:** los tipos de tarjeta que todavía no funcionan se muestran deshabilitados y con
@@ -62,7 +64,9 @@ quien está usando la pantalla.
 
 ## Anti-referencias (qué NO queremos parecer)
 - **SaaS genérico**: navy y gris, tarjetas idénticas en grilla, la plantilla de "número gigante +
-  label + estadísticas".
+  label + estadísticas". *El tema oscuro es azul marino y no lo contradice:* sale del Deep del kit de
+  marca (`#181849`), no de un navy de plantilla, y es el tema de la noche, no la identidad. La
+  identidad es el claro.
 - **El sitio de marketing prometiendo de más.** Ocho tipos de tarjeta como si los ocho anduvieran.
 - Cripto y neón, glassmorphism decorativo, dashboards fríos "de agencia".
 - Cualquier cosa que grite "lo hizo una IA": grillas de cards repetidas con ícono + título + texto,

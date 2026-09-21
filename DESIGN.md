@@ -1,81 +1,118 @@
 # DESIGN.md — Cardly SV
 
-> **Reescrito el 2026-07-27 contra `app/globals.css` y `lib/tema.ts`.** La versión anterior
-> describía una identidad de cafetería en tema claro (espresso, papel crema, caramelo) y se declaraba
-> supersedida por un rediseño de Stitch que ya se aplicó y siguió evolucionando. Nada de eso está
-> vivo. **La fuente de verdad es el código**: los bloques `:root`, `:root[data-tema="claro"]` y
-> `:root[data-tema="alto-contraste"]` de `app/globals.css`. Este documento explica el porqué; si los
-> dos se contradicen, gana el CSS y hay que corregir acá.
+> **Reescrito el 2026-09-20 con el rediseño neumórfico** (spec:
+> `docs/superpowers/specs/2026-09-20-rediseno-neumorfico-design.md`). La versión anterior describía
+> el sistema v2 "vidrio sobre carbón", con el oscuro por defecto y un acento naranja que ya no
+> existía desde el reskin del 2026-07-30. **La fuente de verdad es el código**: los bloques `:root`,
+> `:root[data-tema="oscuro"]` y `:root[data-tema="alto-contraste"]` de `app/globals.css`. Este
+> documento explica el porqué; si los dos se contradicen, gana el CSS y hay que corregir acá.
 
 ## Identidad
-**Oscuro por defecto, hueso sobre carbón, un solo acento naranja cálido.** Sin marrones, sin
-degradados de marca, sin vidrio decorativo. La calidez viene del acento y del hueso `#f5f5f0` (no
-blanco puro), no de saturar las superficies.
+**Neumórfico, claro por defecto, un solo acento violeta.** Lo que se levanta es DEL MISMO COLOR que
+la página: la forma sale del relieve (luz arriba-izquierda, sombra abajo-derecha), no de un borde ni
+de otro color. Nada de vidrio esmerilado, nada de degradados de fondo. El acento marca lo que está
+activo y nada más; el menta queda como secundario de datos y éxito.
 
 ## Los tres temas
-`lib/tema.ts` define `TEMAS = ['oscuro', 'claro', 'alto-contraste']` y `TEMA_POR_DEFECTO = 'oscuro'`.
-Es **preferencia de dispositivo**, no dato de negocio: vive en `localStorage` (`cardly-tema`), y un
-script síncrono en el `<head>` (`SCRIPT_TEMA`, montado desde `app/layout.tsx`) lo aplica antes del
-primer pintado para que no haya destello. El estado real es el atributo `data-tema` del `<html>`:
-el selector de React lo lee del DOM, no de `localStorage`.
+`lib/tema.ts` define `TEMAS = ['oscuro', 'claro', 'alto-contraste']` (el orden no cambia: el script
+del `<head>` y la prueba lo fijan como literal) y `TEMA_POR_DEFECTO = 'claro'`. Es **preferencia de
+dispositivo**, no dato de negocio: vive en `localStorage` (`cardly-tema`), y un script síncrono en
+el `<head>` (`SCRIPT_TEMA`, montado desde `app/layout.tsx`) lo aplica antes del primer pintado para
+que no haya destello. El estado real es el atributo `data-tema` del `<html>`: el selector de React
+lo lee del DOM, no de `localStorage`. El claro es `:root`; los otros dos son bloques
+`:root[data-tema="…"]` que pisan los mismos tokens.
 
-Cada tema tiene su frase de escena física. Si una decisión de color no se puede justificar con una
-de estas tres frases, la decisión está mal:
+Cada tema tiene su escena física. Si una decisión de color no se puede justificar con una de estas
+tres frases, la decisión está mal:
 
 | Tema | Escena | Consecuencias |
 |---|---|---|
-| **oscuro** (default) | El dueño revisa las ventas del día a las once de la noche, en la cama, con el teléfono al mínimo de brillo. | Carbón, no negro. Jerarquía por opacidad del mismo hueso. Glows de atmósfera muy tenues. |
-| **claro** | El dueño configura su tarjeta en su laptop, de día, con la vidriera abierta a la calle. | Los acentos se **oscurecen**: el naranja pálido nació para leerse sobre negro y sobre blanco da 1.6:1. Los escalones de superficie se hunden en vez de subir. |
-| **alto contraste** | El cajero cobra en un puesto al aire libre, mediodía, el sol pegando en la pantalla. | Negro **puro** (un `#131313` refleja y se lava), bordes a alpha alto, acentos saturados, sombras y glows apagados: bajo el sol no dan profundidad, solo ensucian el borde. |
+| **claro** (default) | El dueño configura su tarjeta de día, con la vidriera abierta a la calle; el cajero cobra en el mostrador. | Gris-lavanda y no blanco: la luz del relieve necesita margen para verse (sobre el hueso `#f4f1ec` de antes, `--luz` quedaba en 1.11:1). Texto en Deep, el azul casi negro del kit. |
+| **oscuro** | El dueño revisa las ventas del día a las once de la noche, en la cama, con el brillo al mínimo. | Azul marino sacado de Deep, no carbón: el neumorfismo necesita algo de luminancia para que la luz se vea. `#1c1e3a` es el techo, porque el acento se usa como texto y con un fondo más claro cae bajo 4.5:1. |
+| **alto contraste** | El cajero cobra en un puesto al aire libre, mediodía, el sol pegando en la pantalla. | **Plano a propósito.** Negro puro, bordes a alpha alto, acentos saturados, y el relieve en `none`: bajo el sol la sombra no da profundidad, solo ensucia el borde. Las mismas reglas que en los otros dos dibujan relieve, acá dibujan un borde blanco. Todo texto pide 7:1. |
+
+**El cambio de default (2026-09-20) llega a gente que nunca eligió nada.** Quien tenía el tema
+guardado lo conserva; quien nunca tocó el selector (la mayoría de los cajeros) pasa del oscuro al
+claro de golpe. Avisar a los comercios piloto antes de publicar.
 
 ## Estrategia de color: **Restrained** en los paneles
-Neutros (hueso sobre carbón) más **un** acento naranja, por debajo del 10% de la superficie, y un
-menta secundario para datos y éxito. El cian suelto que proponía Stitch se descartó; los marrones de
-borde también. Esto vale para `/comercio`, `/admin`, `/registro` y `/mi-tarjeta`, donde el color
-tiene que señalar dónde tocar y nada más.
+Neutros más **un** acento violeta, por debajo del 10% de la superficie, y un menta secundario para
+datos y éxito. Vale para `/comercio`, `/admin`, `/registro` y `/mi-tarjeta`, donde el color tiene
+que señalar dónde tocar y nada más. Por eso las tarjetas de métricas son **neutras** y el color va
+solo en el número y la etiqueta: hasta el 2026-09-20 eran bloques de acento saturado, y eso
+contradecía "un acento, solo en lo interactivo activo".
 
 **La página pública `/` tiene permiso para otra estrategia**, más comprometida: es brand, no
 herramienta. Ver "Página pública", abajo.
 
 ### Tokens (nombres estables; los valores los redefine cada tema)
 
-| Rol | Token | Oscuro | Claro | Alto contraste |
+| Rol | Token | Claro (`:root`) | Oscuro | Alto contraste |
 |---|---|---|---|---|
-| Fondo de página | `--fondo` | `#131313` | `#f4f1ec` | `#000000` |
-| Superficies | `--superficie-0…4` | `#0e0e0e` → `#353534` | `#e7e2d9`, blanco, blanco, `#ded7ca`, `#d0c7b6` | `#000000` → `#2e2e2e` |
-| Texto | `--texto` / `-2` / `-3` | hueso al 100 / 72 / 48% | tinta al 100 / 72 / 62% | `#fff` / `#ededed` / `#d4d4d4` |
-| Bordes | `--linea` / `--linea-fuerte` | hueso al 10 / 16% | tinta al 12 / 24% | blanco al 55 / 82% |
-| Acento | `--acento` / `--acento-fuerte` | `#ffc495` / `#ff9d42` | `#a8480a` / `#c2410c` | `#ffb01f` / `#ff9500` |
-| Sobre acento | `--sobre-acento` | `#42230a` | `#fff6ee` | `#000000` |
-| Secundario | `--menta` / `--sobre-menta` | `#8bd6b4` / `#00351f` | `#0d6e4a` / `#eefff7` | `#00e58c` / `#000000` |
-| Error | `--error` + `-fondo` / `-borde` / `--error-suave` | `#ffb4ab` | `#a4231c` | `#ff8a7a` |
-| Tintes suaves | `--hover-suave`, `--neutro-suave`, `--acento-suave`, `--acento-borde`, `--menta-suave` | alphas del hueso | alphas de la tinta | alphas altos |
-| Vidrio | `--vidrio-top`, `--vidrio-nav`, `--vidrio-panel`, `--velo` | translúcidos | translúcidos claros | **opacos** |
-| Botón primario | `--btn-primario-fondo` / `-texto` | hueso sobre carbón | tinta sobre hueso | blanco sobre negro |
-| Atmósfera | `--atmosfera` | dos glows radiales | dos glows radiales | `none` |
+| Fondo de página | `--fondo` | `#e7e6f0` | `#1c1e3a` | `#000000` |
+| El pozo (campos, chips inactivos, pistas, fila activa) | `--superficie-0` | `#dcdbe8` | `#15172e` | `#000000` |
+| Lo que se levanta | `--superficie-1` / `-2` | `var(--fondo)` / `var(--fondo)` | `var(--fondo)` / `var(--fondo)` | `#000000` / `#0b0b0b` |
+| Escalón de hover de una fila de hoja | `--superficie-3` | `#d8d7e5` | `#262947` | `#1c1c1c` |
+| Texto | `--texto` / `-2` / `-3` | Deep `#181849` al 100 / 75 / 66% | hueso al 100 / 74 / 56% | `#fff` / `#ededed` / `#d4d4d4` |
+| Bordes | `--linea` / `--linea-fuerte` | Deep al 12 / 24% | hueso al 10 / 18% | blanco al 55 / 82% |
+| Acento | `--acento` / `--acento-fuerte` | `#514ba8` / `#3d3880` | `#8f86e0` / `#a49df0` | `#c9ec5e` / `#a9d13a` |
+| Sobre acento | `--sobre-acento` | `#f5f4fc` | `#181849` | `#000000` |
+| Secundario | `--menta` / `--sobre-menta` | `#0b6645` / `#eefff7` | `#8bd6b4` / `#00351f` | `#00e58c` / `#000000` |
+| Error | `--error` + `-fondo` / `-borde` | `#a4231c` | `#ffb4ab` | `#ff8a7a` |
+| Tintes suaves | `--neutro-suave`, `--acento-suave`, `--acento-borde`, `--menta-suave`, `--error-suave` | alphas de Deep y del acento | alphas del hueso y del acento | alphas altos |
+| **Relieve (colores)** | `--luz` / `--sombra-relieve` | blanco al 90% / Deep al 20% | blanco al 7% / casi negro al 60% | `transparent` / `transparent` |
+| **Relieve (compuestos)** | `--relieve-1/2/3`, `--hundido-1/2` | dos sombras cada uno | dos sombras cada uno | `none` |
+| **Borde de relieve** | `--borde-relieve` | Deep al 6% | hueso al 5% | blanco al 55% |
+| Lo que flota | `--shadow-1/2/3` | sombras en Deep | sombras casi negras | `none` |
+| Velo de las hojas | `--velo` | Deep al 45% | casi negro al 60% | negro al 85% |
+| Botón primario | `--btn-primario-fondo` / `-texto` | Deep sobre lavanda | hueso sobre el pozo | blanco sobre negro |
 
-**`--blanco` (`#f5f5f0`) no es un token de tema: es una constante de marca.** Los otros dos temas no
-lo redefinen a propósito, porque sus dos usos que quedan (`.cardface`, `.cardface-logo`) son la
-tarjeta de la billetera, que se ve igual esté el panel claro u oscuro.
+Hay dos **constantes de marca y forma** que no cambian con el tema: `--blanco` (`#f5f5f0`, el hueso
+de la tarjeta de billetera) y los radios `--radius` 20px, `--radius-field` 12px, `--radius-control`
+16px, `--radius-pill` 999px, más el espaciado `--sp-1…7`.
+
+**Se retiraron** el 2026-09-20: `--vidrio-top`, `--vidrio-nav`, `--vidrio-panel` y `--atmosfera`
+(una superficie translúcida no puede ser del color de la página, y un degradado debajo del relieve
+rompe el truco), `--hover-suave` y `--superficie-4` (quedaron sin consumidores). No los restaures
+si releés un plan viejo.
 
 ### El contrato que hay que respetar
-`lib/tema.test.ts` lo verifica y falla el build de pruebas:
-1. Cada tema que no es el default tiene su bloque `:root[data-tema="…"] {`.
-2. **Cada tema redefine TODOS los tokens variables de `:root`.** Un token nuevo declarado solo en
-   `:root` deja esa pantalla con el color del tema oscuro incrustado en claro y en alto contraste.
-   Y al revés: un token que solo existe en un tema no lo hereda nadie.
-3. Cada tema declara `color-scheme` (si no, los `<select>`, los scrollbars y el autofill nativos
-   salen con el esquema anterior).
-4. Las excepciones viven en `CONSTANTES` dentro de la prueba (`--blanco`, radios, espaciado,
-   `--shadow-card`). Agregar algo ahí es decir "esto no cambia con el tema", no "callá la prueba".
+Tres pruebas leen `app/globals.css` con **un solo parser** (`lib/diseno/tokensCss.ts`), que quita
+los comentarios y **lanza** ante lo que no sabe leer (anidamiento de CSS, paréntesis sueltos, un
+`var()` con valor de respaldo) en vez de leerlo mal en silencio:
 
-La prueba lee el CSS con una regex que exige **exactamente dos espacios** de indentación antes del
-`--token:`. Un token declarado con otra indentación es invisible para ella.
+1. **`lib/tema.test.ts`** — cada tema que no es el default tiene su bloque; cada tema redefine TODOS
+   los tokens variables de `:root` (y ninguno de más); cada bloque declara su `color-scheme`, y el
+   de `html` es el del default. La fuente de verdad del esquema es un mapa escrito en la prueba, no
+   el CSS: comparar el CSS contra sí mismo sería una tautología. Un token nuevo va en los tres
+   bloques, con **exactamente dos espacios** de indentación y abriendo su propia línea (el parser
+   lanza si no). Las excepciones viven en `CONSTANTES`: agregar algo ahí es decir "esto no cambia
+   con el tema", no "callá la prueba".
+2. **`lib/diseno/temas.test.ts`** — el contraste WCAG 2.x de los tres temas:
+   - **pares de tokens** (`--texto` sobre `--fondo`, etc.) y **pares por regla**, que leen el color
+     y el fondo de la regla CSS real para medir lo que ve el usuario y no un token intermediario;
+   - un **tinte translúcido se mide sobre la superficie que lo contiene**, no sobre la página: la
+     pastilla vive en una fila (`--superficie-2`), la alerta en un panel (`--superficie-1`). Medirla
+     sobre `--fondo` daba más contraste del real;
+   - en alto contraste, todo texto pide **7:1**;
+   - **composición**: ninguna `box-shadow` mete en una lista un token que vale `none` en algún tema
+     (ni directamente ni a través de otro token), porque `none, x` invalida la declaración entera;
+   - **relieve**: alto contraste es plano; claro y oscuro tienen un piso (la luz y la sombra tienen
+     que verse contra el fondo);
+   - **foco**: existe la regla global con `outline`, ningún `:focus` pinta un anillo con
+     `box-shadow`, y cada estado que se marca con `outline` tiene su propia regla `:focus-visible`;
+   - la copia del CSS del tablero de revisión (`public/tablero-neumorfico/propuesta.css`), mientras
+     exista, es idéntica a `globals.css`.
+3. **`lib/diseno/contraste.test.ts`** y **`tokensCss.test.ts`** — la matemática y el parser.
 
-**Color nuevo se escribe en `oklch()`**, con los neutros tintados hacia el matiz del acento (chroma
-0.005 a 0.01 alcanza). Los hex de arriba son historia: vinieron de Stitch y se conservan porque
-están calibrados y probados, no porque sean el estándar. Los `#000000` y `#ffffff` del tema de alto
-contraste son **deliberados**: ahí el extremo puro es justamente el punto.
+Correr: `npx vitest run lib/diseno lib/tema.test.ts` (necesita `.env.local`, porque
+`vitest.setup.ts` lanza si falta aunque estas pruebas no toquen Supabase).
+
+**Color nuevo en los tokens de tema va en hex o `rgba()`, no en `oklch()`.** Hasta el 2026-09-20 la
+regla era la contraria. Se cambió porque la prueba de contraste tendría que imitar el mapeo al gamut
+sRGB que hace el navegador, y un recorte ingenuo podría certificar un contraste que la pantalla no
+muestra. El kit de marca ya viene en hex. Los `#000000` y `#ffffff` del alto contraste son
+deliberados: ahí el extremo puro es justamente el punto.
 
 ## Tipografía
 Tres familias, inyectadas por `next/font` en `app/layout.tsx` como variables CSS. **No se
@@ -114,15 +151,58 @@ Escala: ratio ≥1.25 entre pasos, `clamp()` en los títulos. Cuerpo entre 65 y 
 línea. Texto claro sobre fondo oscuro lleva 0.05 a 0.1 más de interlineado que el mismo texto en
 tema claro (el tipo claro se lee más liviano y necesita aire).
 
-## Forma, espaciado, elevación
-- **Radios:** `--radius` 20px (paneles, filas), `--radius-field` 12px (campos), `--radius-pill` 999px.
+## Relieve, forma y espaciado
+
+### Las cinco reglas del relieve
+1. **El relieve comunica FORMA, nunca ESTADO.** Activo, elegido y con foco se marcan con el acento
+   (relleno, borde, `outline`, una marca de verificación). Un chip que solo "se hunde" al activarse
+   desaparece bajo el sol, en escala de grises y para quien no distingue bien el contraste bajo.
+   Verificado: con un filtro de sol (contraste 0.6, brillo 1.2) el relieve se lava y el chip activo
+   sigue clarísimo; en grises, activo e inactivo se separan por 5.25:1.
+2. **Los tokens compuestos van SOLOS en su `box-shadow`.** `box-shadow: var(--relieve-2);` y nada más
+   en esa línea. Los colores (`--luz`, `--sombra-relieve`) sí pueden ir en una lista, porque en alto
+   contraste valen `transparent`, que es un color válido. Los compuestos valen `none`, y
+   `none, 0 0 0 3px x` es una declaración inválida: se cae la sombra entera.
+3. **El foco es `outline`, no `box-shadow`.** No pelea con el relieve ni con el hundido (un anillo de
+   `box-shadow` le reemplazaba el pozo al campo enfocado), no se compone con ningún token que valga
+   `none`, y sobrevive a `forced-colors`. La regla global es
+   `:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible`, con
+   especificidad (0,1,0): EMPATA con una clase de estado que declare su propio `outline`, así que
+   cada una (`.sheet-fila-activa`, `.portal-cuenta-activa`) necesita su regla `:focus-visible`.
+4. **Toda superficie con relieve del color de la página lleva borde de 1px** (`--borde-relieve`),
+   aunque casi no se vea. La caja mide igual en los tres temas, y en `forced-colors` el borde es el
+   único límite que queda. Donde no había borde, se descontó 1px del padding para que la caja no
+   crezca. **Exentos:** los botones rellenos (`.btn-primary`, `.btn-acento`), que ya se separan por
+   el relleno. **`.btn-borde` usa `--linea-fuerte` y no `--borde-relieve`:** en un botón el borde es
+   la afordancia; con `--borde-relieve`, en alto contraste bajaba de 13.77:1 a 6.27:1.
+5. **Todo estado tiene una señal que no es sombra.** En alto contraste el relieve vale `none`, así
+   que un hover que solo "sube" ahí no se ve. Los hovers de los botones elevados suben **y** marcan
+   el borde con el acento; las filas tocables se desplazan 2px.
+
+### Qué es elevado, qué es hundido y qué es plano
+- **Elevado:** `.panel`, `.btn-*`, `.admin-fila` (las tocables: `<a>`, `<button>` y `<details>`),
+  `.metric-carta`, `.menu-boton`, `.menu-destacado`, `.admin-salir`, `.contexto-pastilla`,
+  `.portal-cuenta`, `.portal-recompensa`, `.escaner-marco`, `.opcion-plan`, `::file-selector-button`.
+  `.escaner-marco` no puede ir hundido: una sombra `inset` se pinta debajo del contenido y el
+  `<video>` la taparía entera.
+- **Elevado hacia arriba** (`--relieve-3`, la sombra sube): lo anclado abajo, `.nav-inferior` y
+  `.sheet-panel`.
+- **Hundido:** `.field` (campos de texto, selects y textareas; los `:not()` dejan afuera radios,
+  checkboxes, rangos, archivos y colores), `.campo-suelto`, `.pozo`, `.pista`, `.filtro-chip`
+  inactivo, `.subida-imagen`, la fila activa de una hoja.
+- **Plano:** `.icono-circulo` (identifica, no se toca), `.pastilla`, `.alerta`/`.nota`, `.admin-top`.
+- **Lo que flota** usa `--shadow-1/2/3`, no el relieve: la tarjeta del pase, el botón de Wallet, la
+  vista previa del editor de marca.
+
+### Forma y espaciado
+- **Radios:** `--radius` 20px (paneles, filas, métricas), `--radius-control` 16px (campos,
+  `.btn-acento`, alertas, cuentas del portal), `--radius-pill` 999px. `--radius-field` (12px) sigue
+  existiendo porque la portada lo usa; los paneles migraron a `--radius-control`.
 - **Espaciado:** `--sp-1…7` = 4 / 8 / 12 / 16 / 24 / 32 / 48. Variar el ritmo; el mismo padding en
   todos lados es monotonía.
-- **Elevación:** `--shadow-1` (filas, inputs), `--shadow-2` (paneles), `--shadow-3` (tarjeta del
-  pass, botón primario), `--ring` (foco), `--sombra-acento`, `--sombra-menta`. En alto contraste las
-  sombras valen `none` literal, no un rgba transparente: una sombra invisible igual cuesta pintura
-  por scroll en el teléfono barato del mostrador. **Ojo al componer:** `0 0 0 3px x, var(--sombra-acento)`
-  es inválido cuando esa variable vale `none`, y se cae la sombra entera.
+- **Separación entre superficies con relieve:** 12 a 14px. La extensión de `--relieve-1` es 4 + 10 =
+  14px, así que con 8 o 10 px la sombra de una pieza le pisa el brillo a la de al lado. Las listas
+  densas de filas usan 14; los chips, las cuentas del portal y los botones en fila, 12.
 
 ## Excepciones deliberadas al tema (no son deuda)
 Cada una está marcada en el CSS con su porqué. No "migrarlas" sin leerlo:
@@ -133,8 +213,10 @@ Cada una está marcada en el CSS con su porqué. No "migrarlas" sin leerlo:
 - `.wallet-btn`: negro oficial de Apple.
 - `.escaner-guia`: se dibuja sobre el video de la cámara, no sobre el panel.
 - `.subida-preview`: damero fijo, lienzo neutro para juzgar un PNG con transparencia.
-- El naranja al 5% del `:focus-within` de `.subida-imagen`: se revisó y no es visible en ninguno de
-  los tres temas; tokenizarlo sería inventar una variable para un efecto que nadie ve.
+- `.cartel-manija*`: se dibujan sobre el cartel del comercio.
+
+(El naranja al 5% que tenía `.subida-imagen` en hover **ya no existe**: con el campo hundido, ese
+`box-shadow` le reemplazaba el pozo y lo aplanaba.)
 
 ## Componentes (clases estables; no se renombran)
 `.shell`/`.stack` (layout de auth y registro) · `.kicker`/`.title`/`.lede`/`.titulo-seccion` ·
@@ -145,6 +227,14 @@ peligro) · `.pastilla*` · `.metric-*` (métricas del panel) · `.nav-inferior`
 (barra móvil de 5 destinos) · `.menu-*` y `.sheet-*` (menú de opciones y bottom sheets) ·
 `.contexto-pastilla` (switcher de comercio y sucursal) · `.portal-*` (portal del cliente) ·
 `.escaner-*` · `.filtro-chip` · `.subida-imagen`/`.subida-preview` · `.reveal` (entrada escalonada).
+Desde el 2026-09-20, para lo que antes era estilo inline en el JSX: `.campo-suelto` (el hundido de
+un campo fuera de un `.field`), `.pozo` (contenedor hundido de solo lectura), `.pista` /
+`.pista-relleno` (barra de progreso o de gráfico) y `.opcion-plan` / `.opcion-plan-activa`.
+
+**Los portales no se sacan.** `SelectorTema`, `SelectorContexto` y `MenuOpciones` montan sus hojas
+con `createPortal` sobre `document.body`. El header ya no es vidrio, pero sigue siendo `sticky` con
+`z-index: 40`, y eso crea un contexto de apilamiento: sin el portal, la barra inferior
+(`z-index: 50`) le pasaría por encima a la hoja y taparía "Cerrar sesión".
 
 ## Movimiento
 - Nunca se animan propiedades de layout. Transform y opacidad, y nada más. Un `inset`, un `width` o
@@ -162,9 +252,10 @@ peligro) · `.pastilla*` · `.metric-*` (métricas del panel) · `.nav-inferior`
   se acomodan alrededor (en el abanico de `/`: 440 ms la tarjeta señalada, 600 ms sus vecinas), y la
   vuelta al reposo es más lenta que la ida. Con una sola duración para todos, el conjunto se mueve
   en bloque y se siente mecánico.
-- Quedan tres usos con overshoot heredados de Stitch (`sello-pop`, el hover de `.admin-fila` y el
-  de `.metric-carta`, todos `cubic-bezier(0.34, 1.56, 0.64, 1)`): son celebraciones cortas dentro
-  del panel, no el patrón a copiar.
+- Queda un solo uso con overshoot heredado de Stitch: `sello-pop`
+  (`cubic-bezier(0.34, 1.56, 0.64, 1)`), una celebración corta cuando se llena un sello. No es el
+  patrón a copiar. Los otros dos se fueron con el rediseño: el hover de `.admin-fila` pasó a la
+  quíntica de la casa, y `.metric-carta` ya no tiene hover porque no es interactiva.
 - `.reveal` escalona la entrada (`d1`…`d6`) y `@media (prefers-reduced-motion: reduce)` la apaga
   junto con las demás transiciones.
 

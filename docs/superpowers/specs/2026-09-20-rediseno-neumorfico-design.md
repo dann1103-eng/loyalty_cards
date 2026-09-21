@@ -254,6 +254,11 @@ corrige esa regla en `DESIGN.md`.
 
 ## Migración por familia de clases
 
+> **Leé también "Cambios al implementar", al final de esta spec: PREVALECE sobre esta tabla.**
+> Varias filas cambiaron al implementarse, por hallazgos de las revisiones (por ejemplo, `.btn-borde`
+> usa `--linea-fuerte` y no `--borde-relieve`, y las filas `<details>` sí son interactivas).
+> Aplicar esta tabla tal cual restauraría errores ya corregidos.
+
 **E** elevada · **H** hundida · **P** plana · **NT** no se toca. Números de línea de `3db8bf0`.
 
 | Familia | Queda | Cambios |
@@ -676,3 +681,81 @@ tarea aparte por pantalla (toca JSX con comportamiento). Nunca se importa su HTM
 - `PRODUCT.md`: "claro por defecto"; revisar la anti-referencia "navy y gris" frente al azul marino
   del oscuro.
 - `docs/superpowers/ESTADO-Y-PLAN-2026-07-28.md`: sección nueva con lo hecho y lo pendiente.
+
+## Cambios al implementar (prevalecen sobre la tabla de migración)
+
+Cada tarea pasó por una revisión de cumplimiento y otra de calidad. Estas son las decisiones que
+cambiaron respecto de lo escrito arriba, con el porqué. **El CSS de `app/globals.css` es la fuente
+de verdad; esta lista explica cómo se llegó.**
+
+**Contraste y medición**
+- `--error-suave` de alto contraste quedó en **0.12**, no 0.16. La pastilla no se apoya en la
+  página sino en la fila que la contiene (`--superficie-2`): medida ahí, 0.16 daba 6.78:1 contra el
+  7:1 de ese tema. Con 0.12 da 7.31:1.
+- **Todo tinte translúcido se mide sobre la superficie que lo contiene**, no sobre `--fondo`. Los
+  pares de tokens nombran la superficie; los pares por regla tienen un campo `contenedor`. Medir
+  sobre la página daba más contraste del real (el patrón "medir la tarjeta en vez del QR").
+- `.metric-valor` se mide a **4.5**, no a 3: el número es texto grande, pero adentro lleva la unidad
+  ("con 8 sellos"), que no lo es. Se agregó el par de `.metric-sub`.
+- Las filas de una hoja se miden **por regla** (`.menu-tick` y `.sheet-fila` sobre
+  `.sheet-fila-activa`, y `.sheet-fila` sobre su hover). Los pares de tokens que había (el acento
+  sobre `--superficie-3` y `-4`) quedaron decorativos cuando la fila activa pasó al pozo.
+- La medición no cuantiza a 8 bits como el navegador. Se comparó par por par: la diferencia llega a
+  0.05, va para los dos lados y no cambia ningún veredicto. Documentado en `lib/diseno/contraste.ts`.
+
+**Pruebas nuevas que no estaban en la spec**
+- **Foco:** existe la regla global con `outline`; ningún `:focus` pinta un anillo con `box-shadow`;
+  cada estado que se marca con `outline` tiene su propia regla `:focus-visible` (la global tiene
+  especificidad (0,1,0) y empata con la clase de estado).
+- **Composición a través de tokens:** un token que mete en una lista a otro que vale `none` también
+  se atrapa, no solo una `box-shadow` de regla.
+- **Tablero:** mientras exista `public/tablero-neumorfico/propuesta.css`, tiene que ser idéntico a
+  `globals.css`. Un espejo que nada obliga a sincronizar vuelve decorativa la revisión.
+- El parser **lanza** ante anidamiento de CSS, paréntesis sin balancear y un token que no abre su
+  propia línea, y resuelve `var()` con cualquier nombre legal (mayúsculas, guion bajo, espacios).
+
+**Regla del sistema que se agregó: todo estado tiene una señal que no es sombra.** En alto
+contraste el relieve vale `none`, y un hover que solo "sube" ahí no se ve. Apareció tres veces:
+- `.btn-borde`: borde **`--linea-fuerte`** (no `--borde-relieve`; en un botón el borde es la
+  afordancia, y con `--borde-relieve` en alto contraste bajaba de 13.77 a 6.27:1), y el hover suma
+  `border-color: var(--acento)`. Nueva regla `.btn-borde:disabled` (opacidad, cursor y sin relieve).
+- `.admin-salir`, `.menu-boton` y `.contexto-pastilla`: el hover suma `border-color: var(--acento)`.
+- `.admin-fila`: el active suma `border-color: var(--acento)`; el hover conserva el desplazamiento.
+
+**Filas y hojas**
+- Las filas `<details className="admin-fila">` **sí son interactivas** (la lista de clientes del
+  comercio y la del admin se abren al tocarlas). Su hover y active se enganchan con
+  `details.admin-fila:has(> summary:hover)` / `:active`.
+- `.sheet-fila:not(.sheet-fila-activa):hover:not(:disabled)`: sin la exclusión, el hover (0,4,0) le
+  ganaba a la fila activa (0,1,0) y le cambiaba el pozo por el escalón de hover.
+- Los portales se mantienen por una razón **viva**, no hipotética: el header es `sticky` con
+  `z-index: 40` y crea un contexto de apilamiento; sin el portal, la barra inferior (`z-index: 50`)
+  le pasaría por encima a la hoja y taparía "Cerrar sesión".
+
+**Piezas sueltas**
+- `.btn-acento:disabled` apaga el relieve, igual que `.btn-primary`.
+- `.pista` lleva borde de 1px: en alto contraste la pista (`#000`) sobre el panel (`#000`)
+  desaparecía entera.
+- `.subida-imagen:hover` **no declara** `box-shadow`: el comentario original decía que hacía falta
+  repetir el hundido, y no era cierto (sin declaración, rige el de la base).
+- `.campo-suelto` tiene su fuente en un `:where(.campo-suelto)` de especificidad cero: respaldo que
+  cualquier clase de fuente (`.dato-mono`) pisa sin importar el orden.
+- `FormularioAccesoDueno.tsx`: `className="dato-mono campo-suelto"`. El input ya tenía `dato-mono` y
+  el plan lo había omitido por error.
+- `.panel-atajos` pasó a gap 14 en la Tarea 7 (sus hijas son `.admin-fila`, ya elevadas). La barra
+  de `/admin` y la fila de chips de reportes pasaron de 8 a 12.
+
+**Tokens retirados además de los previstos:** `--hover-suave` y `--superficie-4`, que quedaron sin
+consumidores.
+
+**Comentarios corregidos:** el de `lib/tema.test.ts` que decía que agregar un tema "compila" (ya no:
+los `Record<Tema, …>` obligan a llenar las tablas), el de la regla global de foco (que decía
+especificidad cero), y los de `panel/page.tsx` y `admin/reportes/page.tsx` que el CSS nuevo
+desmentía.
+
+**Queda para Daniel decidir** (no son errores, son decisiones de diseño):
+- En alto contraste, "fila de hoja con foco" y "fila de hoja activa" se ven parecidas (las dos son
+  un anillo lima de 2px; solo cambia el offset).
+- `.btn-borde` con `--linea-fuerte` hace visible su borde también en claro y oscuro (1.64 y 1.72:1,
+  contra 1.12 y 1.14 con `--borde-relieve`). Si se quiere solo en alto contraste, hace falta un
+  token propio.
