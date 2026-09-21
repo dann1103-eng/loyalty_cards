@@ -42,7 +42,9 @@ export function describirOpciones(calculo: OpcionesDePago, planActual: string | 
 
   let titulo: string;
   let explicacion: string;
-  if (estado.tipo === 'en_curso' && estado.fase === 'mitad') {
+  // Sin ninguna opción (la cuenta ya está en el plan más alto, o una solicitud pendiente oculta las de
+  // subir) no se pregunta "¿Necesitás más lugar?" ni se promete un cobro que no tiene botón.
+  if (estado.tipo === 'en_curso' && estado.fase === 'mitad' && calculo.opciones.length > 0) {
     titulo = '¿Necesitás más lugar?';
     explicacion =
       'Pagás solo la diferencia por los días que le quedan a tu período. El plan cambia apenas se confirma el pago.';

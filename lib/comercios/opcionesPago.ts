@@ -4,6 +4,7 @@ import { escalonDePlan, limiteResultante, type PlanCatalogo } from './limitePlan
 import {
   aCentavos,
   calcularAjuste,
+  deCentavos,
   estadoDelPeriodo,
   periodoNuevo,
   type EstadoPeriodo,
@@ -66,7 +67,11 @@ function catalogoDe(plan: string | null): PlanCatalogo | null {
   return PLANES.find((p) => p.valor === plan) ?? null;
 }
 
+// Renovar el MISMO plan no cambia nada en la cuenta (`aplicarPlanDestino` sale sin tocar el límite), así
+// que no puede bloquearse por cupo: comparar contra el límite SUGERIDO del plan le prohibiría pagar su
+// propio plan a una cuenta con un límite negociado mayor, o a una Pro heredada "sin tope".
 function bloqueoPorCupo(cuenta: CuentaParaPagos, destino: PlanCatalogo): string | null {
+  if (destino.valor === cuenta.plan) return null;
   const limite = limiteResultante(cuenta, destino);
   if (limite === null || cuenta.unidadesUsadas <= limite) return null;
   const unidades = cuenta.unidadesUsadas === 1 ? 'unidad' : 'unidades';
@@ -74,11 +79,13 @@ function bloqueoPorCupo(cuenta: CuentaParaPagos, destino: PlanCatalogo): string 
 }
 
 // Renovar el MISMO plan respeta el precio negociado (si es mayor que cero); cambiar de plan cobra el del catálogo.
+// El importe se lleva a CENTAVOS: `licencia_monto_mensual` es un numeric sin escala y admite 12.345, que
+// Wompi redondearía por su lado y la conciliación vería como "monto distinto" en un cobro legítimo.
 function precioDePeriodo(cuenta: CuentaParaPagos, destino: PlanCatalogo): number {
   const mismoPlan = destino.valor === cuenta.plan;
-  return mismoPlan && cuenta.precioActual !== null && cuenta.precioActual > 0
-    ? cuenta.precioActual
-    : destino.montoMensual;
+  const precio =
+    mismoPlan && cuenta.precioActual !== null && cuenta.precioActual > 0 ? cuenta.precioActual : destino.montoMensual;
+  return deCentavos(aCentavos(precio));
 }
 
 export function calcularOpcionesPago(cuenta: CuentaParaPagos, hoy: string): OpcionesDePago {

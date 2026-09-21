@@ -219,11 +219,15 @@ export async function marcarRevisado(
 }
 
 // La línea de la ficha de cuenta que dice hasta cuándo tiene pagado. Sale de los cobros de la app
-// (`estadoDelPeriodo`): un cobro registrado a mano por FM sin período no aparece acá.
-export function describirPeriodo(estado: EstadoPeriodo): string {
+// (`estadoDelPeriodo`): un cobro registrado a mano por FM sin período no aparece acá. `ultimoPagadoHasta`
+// es el fin del último período pagado: distingue "nunca pagó" de "el período venció el …", que para FM son
+// dos conversaciones distintas con el cliente.
+export function describirPeriodo(estado: EstadoPeriodo, ultimoPagadoHasta: string | null = null): string {
   switch (estado.tipo) {
     case 'sin_periodo':
-      return 'Sin período pagado en la app.';
+      return ultimoPagadoHasta === null
+        ? 'Sin período pagado en la app.'
+        : `Su último período pagado venció el ${formatearFecha(ultimoPagadoHasta)}.`;
     case 'futuro':
       return `Su primer período pagado empieza el ${formatearFecha(estado.desde)}.`;
     case 'en_curso': {

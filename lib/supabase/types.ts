@@ -880,7 +880,7 @@ export type Database = {
       };
       // Migración 0037: un registro por cada transacción que Wompi nos informa (o que confirmamos por
       // consulta, o que FM aplica a mano). `payload` es jsonb: `type` y no `interface` (ver la nota de
-      // `Json`), y `unknown` al escribirlo lo valida quien llama.
+      // `Json`). Al escribirlo se pasa por `aJson` (repositorioPagosSupabase.ts), que lo normaliza a JSON.
       pagos_wompi: {
         Row: {
           id: string;

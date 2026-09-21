@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { RepositorioPagosFalso, type Fallos } from '@/test/fixtures/repositorioPagosFalso';
-import { CONCILIACIONES, aConciliacion, confirmarPagoCobro, type CobroParaPago, type EntradaPago } from './confirmarPago';
+import { CONCILIACIONES, aConciliacion, confirmarPagoCobro, type CobroParaPago, type EntradaPago, type ResultadoAplicarPlan } from './confirmarPago';
 
 // La lógica se prueba con un repositorio FALSO en memoria (test/fixtures/repositorioPagosFalso.ts). Lo que
 // hay que cuidar es que el falso tenga la MISMA semántica que la base (`reclamarCobro` es atómico y
@@ -22,6 +22,10 @@ import { CONCILIACIONES, aConciliacion, confirmarPagoCobro, type CobroParaPago, 
 //   - no lanzar cuando aplicarPlan falla de verdad        → falla "una falla interna al aplicar el plan se lanza…"
 //   - aplicar un pago a un cobro anulado                  → falla "un cobro anulado no se aplica"
 //   - forzar no revive un cobro anulado                   → falla "revive un cobro anulado"
+//   - aplicar el plan de un cobro que ya pagó OTRA transacción → falla "un cobro que ya pagó otra transacción NO vuelve a aplicar el plan ni la licencia"
+//   - no asociar la cuenta o el cobro al evento (o su detalle) → fallan las de "lo que FM ve en el panel de pagos"
+//   - pasar otro día que `hoy` a la licencia o al reclamo     → falla "el día de hoy llega a la licencia y al reclamo del cobro"
+//   - el webhook no deja su cuerpo en un evento del redirect  → falla "el webhook posterior al redirect deja su cuerpo real en el evento"
 
 const CUENTA = '11111111-1111-4111-8111-111111111111';
 const COBRO = '22222222-2222-4222-8222-222222222222';
@@ -127,6 +131,18 @@ describe('idempotencia', () => {
     expect(repo.cobros.get(COBRO)?.wompiIdTransaccion).toBe('tx-1');
     expect(avisos).toHaveLength(1);
     expect(conciliacionDe(repo)).toEqual(['aplicado', 'ya_pagado']);
+  });
+
+  it('un cobro que ya pagó otra transacción NO vuelve a aplicar el plan ni la licencia', async () => {
+    const repo = new RepoFalso();
+    await confirmarPagoCobro(repo, pago({ idTransaccion: 'tx-1' }), conMeta().opciones);
+    // Entre las dos, la cuenta cambió de plan por otro lado: reaplicar el plan de ESTE cobro la bajaría.
+    const r = await confirmarPagoCobro(repo, pago({ idTransaccion: 'tx-2' }), conMeta().opciones);
+
+    expect(r).toMatchObject({ conciliacion: 'ya_pagado', repetido: false });
+    expect(repo.planesAplicados).toHaveLength(1);
+    expect(repo.licencias).toHaveLength(1);
+    expect(repo.llamadas).toEqual(['aplicarPlan', 'reclamarCobro']);
   });
 
   it('dos llamadas simultáneas de la MISMA transacción reclaman una sola vez', async () => {
@@ -301,6 +317,82 @@ describe('las acciones de FM a mano (forzar)', () => {
     const r = await confirmarPagoCobro(repo, pago({ monto: 29, fuente: 'manual', forzar: true }), opciones);
     expect(r.conciliacion).toBe('aplicado');
     expect(r.repetido).toBe(false);
+  });
+});
+
+// Lo que FM ve en /admin/pagos sale de estas columnas del evento: sin la cuenta y el cobro, un pago que
+// necesita atención aparece como "Sin cuenta" y sin vínculo, y sin el detalle nadie sabe por qué.
+describe('lo que FM ve en el panel de pagos', () => {
+  const evento = (repo: RepoFalso, n = 0) => [...repo.eventos.values()][n];
+
+  it.each([
+    ['monto_distinto', () => ({ repo: new RepoFalso(), entrada: pago({ monto: 29 }) }), 'cobró 29'],
+    ['cobro_anulado', () => ({ repo: new RepoFalso(cobroBase({ estado: 'anulado' })), entrada: pago() }), 'anulado'],
+  ])('un %s queda con su cuenta, su cobro y el motivo', async (conciliacion, armar, texto) => {
+    const { repo, entrada } = armar();
+    await confirmarPagoCobro(repo, entrada, conMeta().opciones);
+    expect(evento(repo)).toMatchObject({ conciliacion, cuentaId: CUENTA, cobroId: COBRO });
+    expect(evento(repo).detalle).toContain(texto);
+  });
+
+  it('un doble pago queda con la cuenta y el cobro', async () => {
+    const repo = new RepoFalso();
+    await confirmarPagoCobro(repo, pago({ idTransaccion: 'tx-1' }), conMeta().opciones);
+    await confirmarPagoCobro(repo, pago({ idTransaccion: 'tx-2' }), conMeta().opciones);
+    expect(evento(repo, 1)).toMatchObject({ conciliacion: 'ya_pagado', cuentaId: CUENTA, cobroId: COBRO });
+    expect(evento(repo, 1).detalle).toContain('otra transacción');
+  });
+
+  it('un plan que no cupo queda con la cuenta, el cobro y el detalle del cupo', async () => {
+    const repo = new RepoFalso();
+    repo.resultadoPlan = { ok: false, motivo: 'cupo', error: 'La cuenta usa 3 unidades y el plan Starter permite 1.' };
+    await confirmarPagoCobro(repo, pago(), conMeta().opciones);
+    expect(evento(repo)).toMatchObject({
+      conciliacion: 'plan_no_aplicable', cuentaId: CUENTA, cobroId: COBRO,
+      detalle: 'La cuenta usa 3 unidades y el plan Starter permite 1.',
+    });
+  });
+
+  it('un pago aplicado queda con su cuenta y su cobro', async () => {
+    const repo = new RepoFalso();
+    await confirmarPagoCobro(repo, pago(), conMeta().opciones);
+    expect(evento(repo)).toMatchObject({ conciliacion: 'aplicado', cuentaId: CUENTA, cobroId: COBRO });
+  });
+
+  it('un pago que no corresponde a ningún cobro queda sin cuenta ni cobro, con el motivo', async () => {
+    const repo = new RepoFalso(null);
+    await confirmarPagoCobro(repo, pago(), conMeta().opciones);
+    expect(evento(repo)).toMatchObject({ conciliacion: 'sin_cobro', cuentaId: null, cobroId: null });
+    expect(evento(repo).detalle).toContain('no corresponde a un cobro');
+  });
+
+  it('un error guarda el mensaje, cortado a 300 caracteres, y la falla se sigue lanzando', async () => {
+    class RepoQueFallaLargo extends RepoFalso {
+      async aplicarPlan(): Promise<ResultadoAplicarPlan> {
+        throw new Error('x'.repeat(400));
+      }
+    }
+    const repo = new RepoQueFallaLargo();
+    await expect(confirmarPagoCobro(repo, pago(), conMeta().opciones)).rejects.toThrow('x'.repeat(400));
+    expect(evento(repo)).toMatchObject({ conciliacion: 'error', detalle: 'x'.repeat(300) });
+  });
+
+  it('el día de hoy llega a la licencia y al reclamo del cobro', async () => {
+    const repo = new RepoFalso();
+    await confirmarPagoCobro(repo, pago(), conMeta().opciones);
+    expect(repo.hoyDeLicencias).toEqual([HOY]);
+    expect(repo.reclamos).toEqual([{ cobroId: COBRO, hoy: HOY, idTransaccion: 'tx-1' }]);
+  });
+
+  it('el webhook posterior al redirect deja su cuerpo real en el evento, sin cambiar lo ya resuelto', async () => {
+    const repo = new RepoFalso();
+    await confirmarPagoCobro(repo, pago({ fuente: 'redirect', payload: { fuente: 'api' } }), conMeta().opciones);
+    expect(evento(repo)).toMatchObject({ fuente: 'redirect', payload: { fuente: 'api' } });
+
+    const r = await confirmarPagoCobro(repo, pago({ fuente: 'webhook', payload: { fuente: 'webhook' } }), conMeta().opciones);
+
+    expect(r).toMatchObject({ conciliacion: 'aplicado', repetido: true });
+    expect(evento(repo)).toMatchObject({ fuente: 'webhook', payload: { fuente: 'webhook' }, conciliacion: 'aplicado' });
   });
 });
 

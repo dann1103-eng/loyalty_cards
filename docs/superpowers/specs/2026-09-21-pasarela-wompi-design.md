@@ -114,10 +114,16 @@ Como el plan solo cambia al confirmarse el pago, un webhook lento no puede dejar
   a la API, para no depender de su disponibilidad. Si trae `ResultadoTransaccion` y no es
   `ExitosaAprobada`, no se aplica.
 - **Página de vuelta** (`/comercio/plan/pago/resultado`): consulta `GET /TransaccionCompra/{idTransaccion}`
-  y solo si `esAprobada` y `esReal` son verdaderos y el monto es el del cobro llama a
-  `confirmarPagoCobro`. Además exige que el cobro sea **de la cuenta de la sesión**. Si Wompi todavía no lo
-  refleja, muestra "Estamos confirmando tu pago" y se recarga sola unos segundos. Un pago de prueba tiene
-  su propio mensaje ("Es un pago de prueba: no cambia tu plan").
+  y solo si `esAprobada` y `esReal` son verdaderos llama a `confirmarPagoCobro` (que compara el monto: uno
+  distinto queda en `monto_distinto` para FM). Además exige que el cobro sea **de la cuenta de la sesión** y
+  que la transacción diga ser **de ese cobro** (`datosAdicionales.cobro`, que la app manda al crear el
+  enlace; si la API no lo devuelve se sigue y queda una advertencia en el log, que es lo que dirá en el
+  primer pago real si el chequeo se puede volver estricto). **Este camino no registra eventos negativos**:
+  un pago de prueba o no aprobado se responde sin tocar la base, porque un evento `prueba` o `no_aprobada`
+  es terminal y taparía al webhook firmado de la misma transacción. Si la lectura del cobro falla, muestra
+  "Estamos confirmando" en vez de romper. Si Wompi todavía no refleja la transacción, muestra "Estamos
+  confirmando tu pago" y se recarga sola unos segundos. Un pago de prueba tiene su propio mensaje ("Es un
+  pago de prueba: no cambia tu plan").
 - **Si el dueño cierra la pestaña antes de volver**, llega el webhook.
 - **Si no llega ninguno**, el cobro sigue pendiente y FM lo resuelve con las acciones de `/admin/pagos`
   (abajo). No existe hoy una acción que marque como pagado un cobro **pendiente**: `registrarCobro` crea
@@ -221,7 +227,7 @@ create table pagos_wompi (
     'ya_pagado', 'plan_no_aplicable', 'no_aprobada', 'error')),
   detalle text,
   revisado_en timestamptz,                   -- FM lo marcó como visto; saca el evento de "necesita atención"
-  payload jsonb not null,                    -- el cuerpo crudo: trae nombre y correo del pagador
+  payload jsonb not null,                    -- el cuerpo crudo del webhook (trae nombre y correo del pagador); en un evento del redirect, el subconjunto que parsea `cliente.ts`
   created_at timestamptz not null default now()
 );
 create index pagos_wompi_created_idx on pagos_wompi (created_at desc);
@@ -242,7 +248,7 @@ del navegador.
 
 | # | Situación | `conciliacion` | Efecto |
 |---|---|---|---|
-| 0 | Firma inválida o ausente | (no se guarda) | `401`, y una línea en el log con los **nombres** de los headers recibidos (para diagnosticar el guion bajo de `wompi_hash`) |
+| 0 | Firma inválida o ausente | (no se guarda) | `401`. Si **falta** el header, una línea en el log con los **nombres** de los headers recibidos (para diagnosticar el guion bajo de `wompi_hash`); si está y no coincide, no se loguea nada |
 | 1 | Firma válida pero el cuerpo no se reconoce | `error` | se guarda el cuerpo crudo con un id sintético (`sin-id-` + huella del cuerpo) y se responde `200`: mejor un pago visible en el admin que uno perdido por un reintento infinito |
 | 2 | Resultado distinto de `ExitosaAprobada` | `no_aprobada` | se guarda y se ve |
 | 3 | `EsProductiva` falso y las pruebas no están aceptadas | `prueba` | se guarda y se ve; no aplica nada |
@@ -262,16 +268,20 @@ El orden importa: **primero se da el servicio y después se registra el pago**. 
 lo peor que puede pasar es "plan aplicado y cobro todavía pendiente", que el reintento completa. El orden
 inverso dejaba "cobro pagado y plan sin aplicar": plata tomada sin servicio.
 
-1. Validar (filas 2 a 6 de la tabla).
+1. Validar (filas 2 a 6 de la tabla). Un cobro que **ya pagó otra transacción** se corta acá (`ya_pagado`),
+   **antes** de aplicar el plan: reaplicar el de un cobro viejo podría bajar una cuenta que después subió.
 2. **Aplicar plan y licencia**, idempotente:
    - Si el cobro tiene `plan_destino`, `aplicarPlanDestino` junta las dos reglas que hoy viven separadas:
-     **subir** (`subirPlanPorElDueno`: el límite nunca baja, y el "sin tope" de las cuentas viejas
-     sobrevive) y **bajar** (`resolverSolicitud`: comprueba el cupo y fija el límite sugerido).
+     **subir** (el límite nunca baja, y el "sin tope" de las cuentas viejas sobrevive; antes vivía en
+     `subirPlanPorElDueno`, que se borró) y **bajar** (`resolverSolicitud`: comprueba el cupo y fija el
+     límite sugerido). Renovar el **mismo** plan no cambia nada (ni el límite), y por eso tampoco se bloquea
+     por cupo en la pantalla.
    - **La dirección la decide la intención del cobro, no el plan que la cuenta tiene al confirmar.** Un
      **ajuste nunca baja**: si la cuenta ya está en ese plan o en uno más caro, no hace nada y sigue. Un
      **período** fija el plan exacto. Aplicar el mismo plan otra vez es un éxito sin cambios.
-   - Licencia: `licencia_estado = 'activo'`, `licencia_activa_desde` si estaba vacía, y
-     `licencia_monto_mensual` con el precio vigente. Un ajuste no abre ningún período.
+   - Licencia: `licencia_estado = 'activo'` y `licencia_activa_desde` si estaba vacía. El
+     `licencia_monto_mensual` se escribe **al cambiar de plan** (con el del catálogo); renovar el mismo plan
+     lo deja como está, que es el precio pactado. Un ajuste no abre ningún período.
    - Si al bajar el cupo ya no alcanza: la conciliación queda en `plan_no_aplicable`, y se sigue con el 3
      (la plata entró).
 3. **Reclamar el cobro:** `update cobros set estado='pagado', pagado_en=<hoy>, wompi_id_transaccion=$tx
@@ -318,8 +328,8 @@ Sin esto, los estados de "necesita atención" no tendrían salida.
 - `lib/comercios/cobros.ts`: `crearCobroPendiente`, `guardarEnlaceDelCobro`, `reclamarCobroPagado`,
   `anularIntentosPendientes`, `listarPeriodosPagados`.
 - `lib/comercios/planCuenta.ts`: se **extrae** `aplicarPlanDestino` y se agrega `activarLicencia`.
-  `subirPlanPorElDueno` queda como envoltorio delgado para no romper sus pruebas, y **`accionSubirPlan` se
-  borra** (si quedara exportada seguiría siendo una acción de servidor que sube de plan gratis).
+  `subirPlanPorElDueno` y **`accionSubirPlan` se borran** (si quedara exportada seguiría siendo una acción
+  de servidor que sube de plan gratis).
 - `lib/comercios/confirmarPago.ts`: la orquestación de arriba, con un **repositorio inyectable** (una
   interfaz con las operaciones de base de datos): su lógica se prueba sin base de datos y con
   mutaciones. `repositorioPagosSupabase.ts` es el adaptador real, que se prueba contra la base.
@@ -344,7 +354,8 @@ Sin esto, los estados de "necesita atención" no tendrían salida.
   1 de octubre, $49/mes".
 - **En la ventana:** "Renovar con Starter · $29", "Renovar con Growth · $49"… con el precio completo a la
   vista, y el aviso de que cambiar de plan reinicia un precio negociado.
-- **Sin período:** "Elegir Growth · $49". Una cuenta inactiva ve "Activá tu cuenta".
+- **Sin período:** "Elegir Growth · $49". Una cuenta sin plan ve "Elegí tu plan"; una con plan cuyo período
+  venció, "Renová tu plan".
 - **Ya renovado o no mensual:** un texto que manda a escribir a FM. Una opción bloqueada por cupo dice
   cuánto usa y cuánto permite el plan.
 - **Próximo pago:** la fecha siguiente a lo cubierto.
@@ -423,7 +434,7 @@ concurrentes del mismo cobro, y `aplicarPlanDestino`. Cada rama crítica lleva s
 | Precio negociado | usar el precio del catálogo al renovar el mismo plan | una cuenta con precio pactado paga de más |
 | Cupo | quitar la comprobación al bajar | una cuenta con 3 unidades baja a Starter (tope 1) |
 | Fin de mes | sumar 30 días en vez de un mes calendario | un período del 31 de enero no termina el 27 de febrero |
-| `accionSubirPlan` | volver a exportarla | la prueba de que ya no existe falla |
+| `accionSubirPlan` | volver a exportarla | **sin prueba**: no se puede probar que algo no existe. Se verifica con `grep -rn accionSubirPlan app lib` (cero resultados) |
 
 ## A verificar en la primera prueba real (modo prueba)
 
@@ -435,8 +446,11 @@ concurrentes del mismo cobro, y `aplicarPlanDestino`. Cada rama crítica lleva s
    confirmando pagos y se decide ahí. El log de la ruta imprime los nombres de los headers.
 3. Cuál de las dos variantes del hash del redirect usa Wompi (la doc se contradice).
 4. Que `GET /TransaccionCompra/{id}` devuelva las transacciones de un enlace con las credenciales del
-   negocio, y si `datosAdicionales` (que el enlace acepta) vuelve ahí: serviría de segundo vínculo entre
-   la transacción y el cobro.
+   negocio, y si `datosAdicionales` (que el enlace acepta) vuelve ahí. **La página de vuelta ya lo usa**: si
+   `datosAdicionales.cobro` vuelve y no coincide con el cobro, rechaza; si no vuelve, sigue y deja una
+   advertencia en el log (`La transacción de Wompi no trae datosAdicionales.cobro…`). Esa advertencia es la
+   respuesta: si aparece en el primer pago real, Wompi no copia los datos y el vínculo entre la transacción
+   y el cobro sale solo de la sesión y del índice único; si no aparece, se puede volver estricto.
 5. Cuántas veces y por cuánto tiempo reintenta Wompi, y si reintenta ante un `500`.
 6. Si un mismo `identificadorEnlaceComercio` admite un segundo enlace.
 7. Que el redirect admita una URL con querystring.

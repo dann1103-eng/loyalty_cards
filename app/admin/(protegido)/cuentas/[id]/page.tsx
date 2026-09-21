@@ -93,7 +93,13 @@ export default async function PaginaEditarCuenta({
   const cobros = await listarCobros(supabase, id);
   // Hasta cuándo tiene pagado en la app. `null` (error de lectura) no dice nada: mejor sin línea que una falsa.
   const periodos = await listarPeriodosPagados(supabase, id);
-  const lineaPeriodo = periodos === null ? null : describirPeriodo(estadoDelPeriodo(periodos, hoyEnZona(null)));
+  const lineaPeriodo =
+    periodos === null
+      ? null
+      : describirPeriodo(
+          estadoDelPeriodo(periodos, hoyEnZona(null)),
+          periodos.reduce<string | null>((max, p) => (max === null || p.hasta > max ? p.hasta : max), null),
+        );
 
   return (
     <main className="admin-main">

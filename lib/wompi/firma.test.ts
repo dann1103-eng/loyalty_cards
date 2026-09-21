@@ -12,7 +12,8 @@ import { firmaHmac, firmaValida, hashRedirectValido, textoHashRedirect } from '.
 //   - invertir idTransaccion e idEnlace en el hash del redirect     → fallan "concatena en el orden de la doc" y "con otro orden…"
 //   - reformatear el monto                                          → fallan "concatena en el orden de la doc" y "el monto va como llegó"
 // Que la RUTA firme los bytes recibidos y no un JSON re-serializado NO se prueba acá (firmaValida solo
-// ve lo que le pasan): lo prueba procesarWebhook.test.ts.
+// ve lo que le pasan): lo prueba app/api/wompi/webhook/route.test.ts (un cuerpo con otro formato y uno con
+// BOM inicial, que `request.text()` descartaría). procesarWebhook.test.ts recibe bytes y no ejecuta la ruta.
 
 const SECRETO = 'secreto-de-prueba';
 

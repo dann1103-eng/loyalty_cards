@@ -54,7 +54,7 @@ export type ResultadoRegistroCobro = { ok: true; id: string } | { ok: false; err
 
 const FORMATO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
-function validar(datos: DatosCobro): string | null {
+export function validarCobro(datos: DatosCobro): string | null {
   if (!FORMATO_FECHA.test(datos.periodoDesde) || !FORMATO_FECHA.test(datos.periodoHasta)) {
     return 'Las fechas del período son obligatorias.';
   }
@@ -77,6 +77,24 @@ function validar(datos: DatosCobro): string | null {
   }
   if (datos.pagadoEn && !FORMATO_FECHA.test(datos.pagadoEn)) {
     return 'La fecha de pago no es válida.';
+  }
+  return null;
+}
+
+// La validación del cobro que FM registra A MANO. Suma una regla a `validarCobro`: `metodo = 'Wompi'` +
+// pendiente es lo que marca un intento de pago de LA APP (ocupa el único lugar abierto de la cuenta, la app
+// lo anula al crear otro y ofrece "Marcar pagado"), así que un pendiente que FM registre con ese método se
+// confundiría con uno. Uno YA PAGADO con ese método sí es válido: es como FM deja constancia de un cobro
+// que hizo con un enlace de Wompi por fuera de la app.
+//
+// Es una función APARTE, no una regla de `validarCobro`, a propósito: `crearCobroPendiente` (el cobro que
+// crea la propia app) valida con `estado: 'pendiente'` y `metodo: 'Wompi'`, y una regla compartida
+// rechazaría todos los pagos de la app.
+export function validarCobroManual(datos: DatosCobro): string | null {
+  const problema = validarCobro(datos);
+  if (problema) return problema;
+  if (datos.estado === 'pendiente' && datos.metodo?.trim().toLowerCase() === METODO_WOMPI.toLowerCase()) {
+    return 'El método «Wompi» lo reserva la app para los pagos que inicia el dueño. Usá otro método, o registrá el cobro ya pagado.';
   }
   return null;
 }
@@ -168,7 +186,7 @@ export async function registrarCobro(
   cuentaId: string,
   datos: DatosCobro,
 ): Promise<ResultadoRegistroCobro> {
-  const problema = validar(datos);
+  const problema = validarCobroManual(datos);
   if (problema) return { ok: false, error: problema };
 
   const { data, error } = await supabase.from('cobros').insert({
@@ -212,7 +230,7 @@ export async function crearCobroPendiente(
     nota: string | null;
   },
 ): Promise<ResultadoCrearCobro> {
-  const problema = validar({
+  const problema = validarCobro({
     periodoDesde: datos.periodoDesde,
     periodoHasta: datos.periodoHasta,
     monto: datos.monto,

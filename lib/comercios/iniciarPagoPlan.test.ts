@@ -19,6 +19,10 @@ import {
 //   - reusar aunque el intento sea de otro día               → falla "un intento de ayer no se reusa"
 //   - reusar aunque el enlace haya vencido                   → falla "un enlace vencido no se reusa"
 //   - reusar aunque el monto sea otro                        → falla "un intento con otro monto no se reusa"
+//   - reusar aunque el plan destino sea otro                 → falla "un intento con el mismo monto y período pero OTRO plan no se reusa"
+//   - reusar aunque el tipo sea otro                         → falla "un intento de otro tipo no se reusa"
+//   - reusar aunque el período empiece otro día              → falla "un intento de otro período no se reusa"
+//   - comparar el día de creación en UTC y no en la zona     → falla "el día del intento es el de la zona del negocio, no el de UTC"
 //   - vigencia de 48 h en vez de 2 h                         → falla "el enlace vence a las 2 horas"
 //   - el identificador del enlace no es el id del cobro      → falla "el enlace lleva el id del cobro…"
 //   - no anular el cobro si Wompi falla                      → falla "si Wompi falla, el cobro se anula…"
@@ -72,7 +76,7 @@ class RepoIniciarFalso implements RepositorioIniciarPago {
   }
 }
 
-function armar(repo: RepoIniciarFalso, opciones: { wompiFalla?: boolean } = {}) {
+function armar(repo: RepoIniciarFalso, opciones: { wompiFalla?: boolean; ahora?: Date } = {}) {
   const enlaces: DatosEnlace[] = [];
   const deps: DepsIniciarPago = {
     repo,
@@ -83,7 +87,7 @@ function armar(repo: RepoIniciarFalso, opciones: { wompiFalla?: boolean } = {}) 
         return { idEnlace: 15, urlEnlace: 'https://lk.wompi.sv/yhDt', urlEnlaceLargo: null, esProductivo: false };
       },
     },
-    ahora: () => AHORA,
+    ahora: () => opciones.ahora ?? AHORA,
     // El día de El Salvador (UTC−6, sin horario de verano).
     fechaDe: (instante) => new Date(instante.getTime() - 6 * 3_600_000).toISOString().slice(0, 10),
     baseUrl: 'https://www.cardly-sv.site',
@@ -250,6 +254,47 @@ describe('un solo intento abierto', () => {
     const repo = new RepoIniciarFalso(cuentaStarter, abierto({ monto: 10.66 }));
     await iniciarPagoPlan(armar(repo).deps, { cuentaId: CUENTA, plan: 'growth', accion: 'cambiar' });
     expect(repo.cobrosCreados).toHaveLength(1);
+  });
+
+  it('un intento con el mismo monto y período pero OTRO plan no se reusa', async () => {
+    // Un Starter con precio pactado de $49 renueva a $49 con Starter y a $49 con Growth: mismo importe, mismo
+    // período. Reusar el enlace de Starter dejaría el pago con `plan_destino = 'starter'`.
+    const cuenta: CuentaParaPagos = { ...cuentaStarter, precioActual: 49 };
+    const ahora = new Date('2026-09-26T18:00:00.000Z'); // quedan 5 días: ventana de renovación
+    const previo = abierto({
+      tipo: 'periodo', planDestino: 'starter', monto: 49, periodoDesde: '2026-10-01',
+      creadoEn: '2026-09-26T17:00:00.000Z', enlaceVence: '2026-09-26T19:00:00.000Z',
+    });
+    const repo = new RepoIniciarFalso(cuenta, previo);
+
+    await iniciarPagoPlan(armar(repo, { ahora }).deps, { cuentaId: CUENTA, plan: 'growth', accion: 'renovar' });
+
+    expect(repo.cobrosCreados).toHaveLength(1);
+    expect(repo.cobrosCreados[0].datos).toMatchObject({ planDestino: 'growth', monto: 49, tipo: 'periodo' });
+  });
+
+  it('un intento de otro tipo no se reusa', async () => {
+    const repo = new RepoIniciarFalso(cuentaStarter, abierto({ tipo: 'periodo' }));
+    await iniciarPagoPlan(armar(repo).deps, { cuentaId: CUENTA, plan: 'growth', accion: 'cambiar' });
+    expect(repo.cobrosCreados).toHaveLength(1);
+  });
+
+  it('un intento de otro período no se reusa', async () => {
+    const repo = new RepoIniciarFalso(cuentaStarter, abierto({ periodoDesde: '2026-09-14' }));
+    await iniciarPagoPlan(armar(repo).deps, { cuentaId: CUENTA, plan: 'growth', accion: 'cambiar' });
+    expect(repo.cobrosCreados).toHaveLength(1);
+  });
+
+  it('el día del intento es el de la zona del negocio, no el de UTC', async () => {
+    // 21:00 del 15 en El Salvador es el 16 en UTC. El intento se hizo a las 19:00 del 15 (local): mismo día.
+    const ahora = new Date('2026-09-16T03:00:00.000Z');
+    const repo = new RepoIniciarFalso(
+      cuentaStarter,
+      abierto({ creadoEn: '2026-09-16T01:00:00.000Z', enlaceVence: '2026-09-16T04:00:00.000Z' }),
+    );
+    const r = await iniciarPagoPlan(armar(repo, { ahora }).deps, { cuentaId: CUENTA, plan: 'growth', accion: 'cambiar' });
+    expect(r).toEqual({ ok: true, url: 'https://lk.wompi.sv/previo' });
+    expect(repo.cobrosCreados).toEqual([]);
   });
 
   it('un intento sin enlace guardado no se reusa', async () => {

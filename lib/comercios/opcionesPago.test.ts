@@ -10,6 +10,8 @@ import { calcularOpcionesPago, type CuentaParaPagos } from './opcionesPago';
 //   - quitar el bloqueo por cupo                          → fallan "bajar a un plan que no le cabe…", "una cuenta sin tope que baja…" y "no puede elegir Starter con 3 unidades…"
 //   - ofrecer el ajuste hacia el mismo plan o uno menor   → falla "un precio negociado se prorratea contra el precio real" (Starter → Starter ya caía en "sin diferencia", así que solo un precio negociado lo delata)
 //   - prorratear contra el precio del catálogo            → fallan "un precio negociado se prorratea…" y "un precio negociado igual o mayor…"
+//   - bloquear también el MISMO plan por cupo             → falla "renovar el mismo plan nunca se bloquea por cupo…"
+//   - mandar el precio negociado sin llevarlo a centavos  → falla "un precio negociado con tres decimales se cobra en centavos"
 
 const SEP = { desde: '2026-09-01', hasta: '2026-09-30' };
 const OCT = { desde: '2026-10-01', hasta: '2026-10-31' };
@@ -131,6 +133,30 @@ describe('en la ventana de renovación', () => {
   it('una cuenta sin tope que baja a un plan con tope también queda bloqueada', () => {
     const c = cuenta({ plan: 'growth', precioActual: 49, limite: null, unidadesUsadas: 2 });
     expect(calcularOpcionesPago(c, '2026-09-26').opciones.find((o) => o.plan === 'starter')?.bloqueadaPor).toContain('permite 1');
+  });
+});
+
+describe('renovar el mismo plan', () => {
+  it('renovar el mismo plan nunca se bloquea por cupo: la renovación no toca el límite de la cuenta', () => {
+    // Starter con un límite NEGOCIADO de 5: el plan sugiere 1, pero la cuenta ya tiene 3 y así lo pactó FM.
+    const negociada = calcularOpcionesPago(cuenta({ limite: 5, unidadesUsadas: 3 }), '2026-09-26');
+    expect(negociada.opciones.find((o) => o.plan === 'starter')?.bloqueadaPor).toBeNull();
+
+    // Pro heredada "sin tope" con 12 unidades: el plan hoy permite 10, pero renovar Pro no le quita nada.
+    const heredada = cuenta({ plan: 'pro', precioActual: 89, limite: null, unidadesUsadas: 12 });
+    const r = calcularOpcionesPago(heredada, '2026-09-26');
+    expect(r.opciones.find((o) => o.plan === 'pro')?.bloqueadaPor).toBeNull();
+    // Bajar SÍ cambia el límite, y ahí sigue bloqueando.
+    expect(r.opciones.find((o) => o.plan === 'starter')?.bloqueadaPor).toContain('permite 1');
+    expect(r.opciones.find((o) => o.plan === 'growth')?.bloqueadaPor).toContain('permite 3');
+  });
+
+  it('un precio negociado con tres decimales se cobra en centavos', () => {
+    const r = calcularOpcionesPago(cuenta({ precioActual: 12.35 }), '2026-09-26');
+    expect(r.opciones.find((o) => o.plan === 'starter')?.monto).toBe(12.35);
+    // 12.999 no es un importe cobrable: se lleva a 13.00 (mismo resultado en el cobro y en Wompi).
+    const tres = calcularOpcionesPago(cuenta({ precioActual: 12.999 }), '2026-09-26');
+    expect(tres.opciones.find((o) => o.plan === 'starter')?.monto).toBe(13);
   });
 });
 

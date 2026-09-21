@@ -12,11 +12,18 @@ import {
 // como el plan solo cambia al confirmarse el pago, el dueño no puede quedar esperando a que llegue.
 //
 // La verdad es la CONSULTA A LA API de Wompi, no los parámetros de la URL: cualquiera puede escribir una
-// URL. Lo que hace segura la confirmación es la suma de tres cosas: (1) la API dice que la transacción
-// existe, es real y está aprobada; (2) el cobro es de la CUENTA DE LA SESIÓN, no uno cualquiera; (3) una
-// transacción paga como máximo un cobro (índice único). El hash del redirect sería una cuarta capa, pero
+// URL. Lo que hace segura la confirmación es la suma de cuatro cosas: (1) la API dice que la transacción
+// existe, es real y está aprobada; (2) el cobro es de la CUENTA DE LA SESIÓN, no uno cualquiera; (3) la
+// transacción dice ser DE ESE cobro (`datosAdicionales.cobro`, que la app manda al crear el enlace); (4) una
+// transacción paga como máximo un cobro (índice único). El hash del redirect sería una quinta capa, pero
 // la doc de Wompi se contradice sobre cómo se calcula para los enlaces, así que NO es bloqueante: una
 // diferencia se registra como advertencia y se sigue con la API.
+//
+// Este camino NO registra eventos negativos. Un pago de prueba o no aprobado se responde ('prueba',
+// 'rechazado') sin tocar la base: un evento `prueba` o `no_aprobada` es terminal, y si quedara guardado
+// desde acá taparía al webhook FIRMADO de esa misma transacción (que es la fuente que manda) y nadie lo
+// vería en el panel. Solo se llama a `confirmarPagoCobro` con una transacción real y aprobada (o de prueba
+// con las pruebas aceptadas, en desarrollo).
 
 export type ResultadoRetorno =
   | { estado: 'confirmado' } // el pago quedó aplicado (o ya lo estaba)
@@ -62,6 +69,14 @@ const POR_CONCILIACION: Record<Conciliacion, ResultadoRetorno['estado']> = {
   error: 'revision',
 };
 
+// El cobro al que la transacción dice pertenecer, o null si no lo trae. Las llaves se buscan sin distinguir
+// mayúsculas: la doc de Wompi no fija cómo las devuelve.
+function cobroDeclarado(datos: Record<string, string> | null): string | null {
+  if (datos === null) return null;
+  const par = Object.entries(datos).find(([llave]) => llave.toLowerCase() === 'cobro');
+  return par && par[1] !== '' ? par[1] : null;
+}
+
 export async function confirmarDesdeRetorno(
   deps: DepsRetorno,
   cuentaId: string,
@@ -71,7 +86,15 @@ export async function confirmarDesdeRetorno(
   const idTransaccion = params.idTransaccion?.trim() ?? '';
   if (!ES_UUID.test(identificador) || idTransaccion === '') return { estado: 'invalido' };
 
-  const cobro = await deps.obtenerCobroDeLaCuenta(cuentaId, identificador);
+  let cobro: CobroParaPago | null;
+  try {
+    cobro = await deps.obtenerCobroDeLaCuenta(cuentaId, identificador);
+  } catch (error) {
+    // El dueño acaba de pagar: una base caída no puede mostrarle la página de error de Next. El webhook
+    // puede completar el pago, y esta página se recarga sola.
+    deps.advertir(`No se pudo leer el cobro: ${error instanceof Error ? error.message : String(error)}`);
+    return { estado: 'confirmando' };
+  }
   if (cobro === null) return { estado: 'invalido' };
 
   if (params.idEnlace && params.monto && params.hash) {
@@ -107,6 +130,21 @@ export async function confirmarDesdeRetorno(
     return { estado: 'confirmando' };
   }
   if (transaccion.idTransaccion !== idTransaccion) return { estado: 'invalido' };
+
+  // La transacción tiene que decir que es DE ESTE cobro. Una transacción real de otro origen (con el mismo
+  // monto) no puede pagar el cobro del dueño solo porque él escribió su id en la URL. Si la API no devuelve
+  // el dato, se sigue (no está documentado que lo copie del enlace a la transacción) y se deja constancia:
+  // esa advertencia es lo que dice, en el primer pago real, si el chequeo se puede volver estricto.
+  const declarado = cobroDeclarado(transaccion.datosAdicionales);
+  if (declarado === null) {
+    deps.advertir('La transacción de Wompi no trae datosAdicionales.cobro: no se puede atar al cobro. Ver la spec ("A verificar").');
+  } else if (declarado.toLowerCase() !== cobro.id.toLowerCase()) {
+    deps.advertir(`La transacción ${idTransaccion} dice ser de otro cobro (${declarado}); no se aplica al ${cobro.id}.`);
+    return { estado: 'invalido' };
+  }
+
+  if (!transaccion.esAprobada) return { estado: 'rechazado' };
+  if (!transaccion.esReal && !deps.aceptarPruebas) return { estado: 'prueba' };
 
   try {
     const resultado = await confirmarPagoCobro(

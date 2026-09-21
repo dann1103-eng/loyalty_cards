@@ -1245,20 +1245,41 @@ en producción**, y no debe desplegarse hasta aplicar la migración `0037`.
     cupo de su plan sin cobrar, y `licencia_estado` no gatea nada. La pasarela cobra, pero no hace cumplir
     el pago: un período vencido solo se muestra. Es una decisión de producto (pregunta abierta 1 de la spec).
 
+12. **Un validador compartido por dos llamadores con necesidades opuestas.** El método «Wompi» se reservó
+    para el registro manual de cobros pendientes, y el primer intento puso la regla en el validador que
+    también usa `crearCobroPendiente` (el cobro de la propia app, que es justo `pendiente` + `Wompi`):
+    habría rechazado TODOS los pagos. Lo atrapó `tsc` (vitest no chequea tipos, y ninguna prueba pura llama a
+    `crearCobroPendiente`). La regla vive en `validarCobroManual`, y una prueba fija que el cobro de la app
+    SIGUE validando. Es el mismo aprendizaje de "un reemplazo en todos los sitios asume que todos hacen lo
+    mismo".
+13. **Un redirect no puede registrar un evento terminal.** `prueba` y `no_aprobada` no se reprocesan; si la
+    página de vuelta los dejaba guardados, el webhook FIRMADO de la misma transacción llegaba como
+    "repetido" y el cobro quedaba pendiente con la plata cobrada, sin que nadie lo viera.
+14. **Renovar el mismo plan no toca el límite**, así que no puede bloquearse por cupo: comparar contra el
+    límite sugerido le prohibía pagar a una cuenta con un límite negociado mayor o a una Pro "sin tope".
+
+### Revisión final
+
+Dos revisores independientes; cada hallazgo se verificó contra el código y se corrigió con su prueba y su
+mutación. Lo corregido y lo que se dejó (con su porqué) está en
+`docs/superpowers/plans/2026-09-21-pasarela-wompi.md`, sección "Revisión final".
+
 ### Verificación
 
-`tsc --noEmit` y `eslint` limpios; **248 pruebas puras** en verde con `TZ=UTC` y con
-`TZ=America/El_Salvador`; todas las mutaciones de los módulos puros medidas y muertas por la prueba correcta
-(tablas en los encabezados de cada `.test.ts`). **No se corrió** ninguna prueba con base de datos, ni se
-vieron las pantallas en el navegador: este worktree no tiene `.env.local`.
+`tsc --noEmit` y `eslint` limpios; **282 pruebas puras** en verde con `TZ=UTC` y con
+`TZ=America/El_Salvador`; `next build` pasa; todas las mutaciones de los módulos puros medidas y muertas por
+la prueba correcta (tablas en los encabezados de cada `.test.ts`). **No se corrió** ninguna prueba con base de
+datos, ni se vieron las pantallas en el navegador.
 
 ### Pendiente de Daniel, en este orden
 
-1. Traer la rama al checkout principal y correr `npm test` (las pruebas con base fallarán hasta el paso 2).
-2. **Aplicar `0037_pagos_wompi.sql` en Studio**, correr `scripts/verificar-0037.ts` y volver a correr
-   `npm test`: ahí se ve si el adaptador real se comporta como el falso.
-3. `WOMPI_CLIENT_ID` y `WOMPI_CLIENT_SECRET` en `.env.local` y en Vercel. **Regenerar el API Secret**: se
-   vio en una captura.
+1. ~~Aplicar `0037_pagos_wompi.sql` en Studio~~ **HECHO** (2026-09-21): `scripts/verificar-0037.ts` dio 15 de
+   15 OK (columnas, índices únicos parciales y checks).
+2. **Traer la rama al checkout principal y correr `npm test`**: las pruebas con base (`cobros`, `planCuenta`,
+   `repositorioPagosSupabase`, `iniciarPagoPlanSupabase`, `pagosAdminDb`) todavía NO se han ejecutado nunca, y
+   ahí se ve si el adaptador real se comporta como el falso. **Si alguna falla, avisá antes de desplegar.**
+3. `WOMPI_CLIENT_ID` y `WOMPI_CLIENT_SECRET`: ya están en el `.env.local` del checkout principal; **faltan en
+   Vercel**. **Regenerar el API Secret** antes de producción (se vio en una captura y en el chat).
 4. Correr `scripts/probar-wompi.ts` y pasar lo que imprime: responde si las credenciales del negocio alcanzan
    para crear enlaces (el "punto 0"). **RESUELTO el 2026-09-21**: sí alcanzan, en modo prueba (negocio
    `Cardly SV`, no productivo); se creó un enlace de prueba de $1. Las credenciales quedaron en el

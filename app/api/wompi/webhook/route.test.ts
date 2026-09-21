@@ -10,12 +10,14 @@ import { firmaHmac } from '@/lib/wompi/firma';
 //
 // MUTATION-TESTING (cada fila se corrió):
 //   - leer otro nombre de header que `wompi_hash`            → falla "acepta el webhook firmado en el header wompi_hash"
-//   - no leer el cuerpo como bytes                           → falla "la firma se calcula sobre los bytes"
+//   - re-serializar el JSON en vez de firmar lo recibido      → falla "la firma se calcula sobre los bytes: un cuerpo con formato distinto…"
+//   - leer el cuerpo como texto (`request.text()`, que descarta un BOM inicial) → falla "un BOM inicial cuenta para la firma"
 //   - responder 200 sin la variable de entorno del secreto   → falla "sin WOMPI_CLIENT_SECRET responde 500"
 //   - no pasar `alReclamar` a Meta                           → falla "avisa a Meta con el monto del cobro"
 //   - aceptar pruebas siempre                                → falla "un webhook de prueba no aplica nada"
 //   - no invalidar la caché al aplicar                       → falla "al aplicar un pago invalida la caché del panel"
 //   - invalidar la caché siempre                             → falla "un webhook que no aplica nada… no invalida la caché"
+//   - no invalidar la caché cuando el plan no cupo           → falla "si el plan no cupo, la caché también se invalida (el cobro sí quedó pagado)"
 
 const SECRETO = 'secreto-de-prueba';
 const CUENTA = '11111111-1111-4111-8111-111111111111';
@@ -85,6 +87,20 @@ describe('POST /api/wompi/webhook', () => {
     expect(res.status).toBe(200);
   });
 
+  it('un BOM inicial cuenta para la firma: se firma lo que Wompi mandó, no lo que `text()` devuelve', async () => {
+    // `Request.text()` descarta un BOM UTF-8 inicial, y con él cambiarían los bytes firmados.
+    const json = new TextEncoder().encode(JSON.stringify(cuerpoWompi()));
+    const bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...json]);
+    const req = new NextRequest('https://www.cardly-sv.site/api/wompi/webhook', {
+      method: 'POST', body: bytes, headers: { wompi_hash: firmaHmac(bytes, SECRETO) },
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, conciliacion: 'aplicado' });
+  });
+
   it('avisa a Meta con el monto del cobro, una sola vez', async () => {
     await POST(peticion(cuerpoWompi()));
     expect(estado.avisos).toEqual([{ cuentaId: CUENTA, cobroId: COBRO, monto: 49 }]);
@@ -92,6 +108,13 @@ describe('POST /api/wompi/webhook', () => {
 
   it('al aplicar un pago invalida la caché del panel, para que el dueño vea su plan y su cupo nuevos', async () => {
     await POST(peticion(cuerpoWompi()));
+    expect(estado.revalidadas).toEqual([['/comercio', 'layout']]);
+  });
+
+  it('si el plan no cupo, la caché también se invalida (el cobro sí quedó pagado)', async () => {
+    (estado.repo as RepositorioPagosFalso).resultadoPlan = { ok: false, motivo: 'cupo', error: 'La cuenta usa 3 unidades y el plan Starter permite 1.' };
+    const res = await POST(peticion(cuerpoWompi()));
+    expect(await res.json()).toEqual({ ok: true, conciliacion: 'plan_no_aplicable' });
     expect(estado.revalidadas).toEqual([['/comercio', 'layout']]);
   });
 

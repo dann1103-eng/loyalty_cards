@@ -6,11 +6,13 @@ import { idPixelValido } from './pixelMeta';
 
 // Subscribe de Meta por la API de conversiones, DEL LADO DEL SERVIDOR (2026-09-13).
 //
-// ══ POR QUÉ NO VA EN EL PÍXEL ══ Cardly no tiene pasarela de pago: el dueño no ve ninguna pantalla
-// de "pago confirmado". El pago lo confirma FM a mano, al registrar el cobro como `pagado` en
-// /admin/cuentas/[id]. Un píxel en ese momento correría en el navegador de FM (la conversión
-// quedaría atribuida a quien lo registra, no al cliente), y uno en el panel del dueño rompería la
-// regla de no cargar el píxel ahí. Elegido por el dueño del producto entre esas opciones.
+// ══ POR QUÉ NO VA EN EL PÍXEL ══ El pago se confirma en el SERVIDOR, no en una pantalla con píxel: por
+// el webhook de Wompi, por la página de vuelta del dueño, o (hasta el 2026-09-21 era el único camino) por
+// FM al registrar el cobro como `pagado` en /admin/cuentas/[id] o al marcarlo pagado. Un píxel en el
+// último caso correría en el navegador de FM (la conversión quedaría atribuida a quien lo registra, no al
+// cliente), y uno en el panel del dueño rompería la regla de no cargar el píxel ahí. Elegido por el dueño
+// del producto entre esas opciones. Los tres caminos llaman a `notificarPagoAMeta` con el mismo `event_id`
+// (sale del id del cobro), así que un cobro no se cuenta dos veces.
 //
 // ══ QUÉ VIAJA A META ══ Solo el evento, el monto en USD y el correo del dueño de la cuenta CIFRADO
 // con SHA-256: sin un dato de la persona Meta no puede asociar el pago a nadie. Nada del negocio,

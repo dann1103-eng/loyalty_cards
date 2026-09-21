@@ -208,6 +208,12 @@ async function procesar(
   if (cobro.estado === 'anulado' && !entrada.forzar) {
     return terminar('cobro_anulado', 'El cobro estaba anulado cuando llegó el pago.', cobro);
   }
+  // Un cobro que YA pagó OTRA transacción no se toca: aplicar su plan (que puede ser uno más viejo que el
+  // que tiene hoy la cuenta) antes de descubrirlo lo dejaría en un estado que nadie pidió. Si lo pagó ESTA
+  // misma transacción es un reintento propio y sigue: aplicar el plan es idempotente.
+  if (cobro.estado === 'pagado' && cobro.wompiIdTransaccion !== entrada.idTransaccion) {
+    return terminar('ya_pagado', 'El cobro ya lo había pagado otra transacción.', cobro);
+  }
   if (aCentavos(cobro.monto) !== aCentavos(entrada.monto) && !entrada.forzar) {
     return terminar(
       'monto_distinto',

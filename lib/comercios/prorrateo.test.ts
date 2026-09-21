@@ -18,6 +18,7 @@ import {
 //   - 30 fijo en vez de los días reales         → fallan "usa los días REALES" y "la mitad exacta"
 //   - truncar en vez de redondear               → fallan el ejemplo de $10.67, "el último día" y "la mitad exacta"
 //   - `aCentavos` sin redondear (trunc)         → fallan "opera en centavos" y "no se desvía con precios de centavos"
+//   - calcular el ajuste en punto flotante      → falla "un precio con centavos no se desvía por el punto flotante" (los demás casos dan lo mismo en flotante)
 //   - quitar el chequeo `diferencia <= 0`       → falla "un precio negociado igual o mayor al del destino"
 //   - ventana de 30 días                        → fallan "a mitad de período" y "la ventana son los últimos 7 días"
 //   - `cubiertoHasta` = el del período actual   → falla "ya renovado"
@@ -93,6 +94,12 @@ describe('calcularAjuste', () => {
   it('opera en centavos: un precio negociado con centavos no se desvía de a uno', () => {
     // 19.99 → 49: diferencia 2901 centavos. × 16 ÷ 30 = 1547.2 → 1547.
     expect(ajuste(19.99, 49, '2026-09-15')).toMatchObject({ ok: true, centavos: 1547, monto: 15.47 });
+  });
+
+  it('un precio con centavos no se desvía por el punto flotante', () => {
+    // 59.99 → 89: diferencia 2901 centavos. × 5 días ÷ 30 = 483.5 EXACTO → 484 (la mitad sube).
+    // En punto flotante (89 - 59.99) × 5 ÷ 30 × 100 da 483.4999999999999 → 483: un centavo de menos.
+    expect(ajuste(59.99, 89, '2026-09-26')).toMatchObject({ ok: true, diasRestantes: 5, centavos: 484, monto: 4.84 });
   });
 
   it('un precio negociado igual o mayor al del destino no tiene diferencia que cobrar', () => {

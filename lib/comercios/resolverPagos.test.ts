@@ -13,6 +13,7 @@ import { aplicarPagoAMano, marcarCobroPagadoAMano, reintentarPago, type Dependen
 //   - no dejar revisado el evento que se reprocesó bajo otro id → falla "un evento sin identificador reprocesado…"
 //   - dejar revisado siempre, aunque el id no cambie            → falla "reintentar con el mismo id no marca nada como revisado"
 //   - no atrapar el error de confirmarPagoCobro                 → falla "una falla interna se devuelve como error, no se lanza"
+//   - no atrapar la falla de marcarRevisado tras reprocesar     → falla "si no se puede dejar revisado el evento viejo, se dice sin lanzar"
 //   - no exigir cobro pendiente al marcarlo pagado              → falla "no marca pagado un cobro que ya no está pendiente"
 //   - no distinguir el mensaje de un resultado que no es aplicado → falla "un plan que no cupo se informa con su etiqueta y su detalle"
 //   - marcar a mano con un id de transacción que no es por cobro → falla "marcar dos veces el mismo cobro (pantalla vieja) no aplica ni avisa dos veces"
@@ -123,6 +124,19 @@ describe('reintentarPago', () => {
     const { repo, deps, revisados } = entorno();
     await reintentarPago(deps, await sembrar(repo, 'tx-1', 'error', cuerpo()));
     expect(revisados).toEqual([]);
+  });
+
+  it('si no se puede dejar revisado el evento viejo, se dice sin lanzar (el pago ya quedó aplicado)', async () => {
+    const { repo, deps } = entorno();
+    deps.marcarRevisado = async () => {
+      throw new Error('No se pudo marcar el pago como revisado: se cayó la base');
+    };
+    const evento = await sembrar(repo, 'sin-id-abc', 'error', cuerpo({ IdTransaccion: 'tx-real' }));
+
+    const r = await reintentarPago(deps, evento);
+
+    expect(r).toEqual({ ok: false, error: 'No se pudo marcar el pago como revisado: se cayó la base' });
+    expect(repo.cobros.get(COBRO)?.estado).toBe('pagado');
   });
 
   it('un cuerpo que sigue sin reconocerse devuelve el motivo y no toca nada', async () => {

@@ -9,6 +9,7 @@ import { describirOpciones, dinero } from './vistaOpciones';
 //   - no avisar que se reinicia el precio pactado      → falla "avisa cuando cambiar de plan reinicia un precio negociado"
 //   - no mostrar el porqué cuando no hay opciones      → falla "ya renovado: no hay botones y sí un aviso, con el próximo pago"
 //   - formatear siempre con centavos                   → fallan "enteros sin centavos, el resto con dos" y los dos textos con importes enteros
+//   - preguntar "¿Necesitás más lugar?" aunque no haya opciones → falla "a mitad de período sin opciones no promete un cobro"
 
 const cuenta = (extra: Partial<CuentaParaPagos> = {}): CuentaParaPagos => ({
   plan: 'starter',
@@ -86,6 +87,18 @@ describe('sin período', () => {
 });
 
 describe('cuando no hay nada que ofrecer', () => {
+  it('a mitad de período sin opciones no promete un cobro (plan más alto, o una solicitud oculta las de subir)', () => {
+    const enElMasAlto = vista(cuenta({ plan: 'pro', precioActual: 89, limite: 10 }), '2026-09-15');
+    expect(enElMasAlto.opciones).toEqual([]);
+    expect(enElMasAlto.titulo).toBe('Tu plan');
+    expect(enElMasAlto.explicacion).toBe('');
+
+    // La página filtra las opciones de subir mientras hay una solicitud pendiente, ANTES de describirlas.
+    const c = cuenta();
+    const filtradas = { ...calcularOpcionesPago(c, '2026-09-15'), opciones: [] };
+    expect(describirOpciones(filtradas, c.plan)).toMatchObject({ titulo: 'Tu plan', explicacion: '' });
+  });
+
   it('ya renovado: no hay botones y sí un aviso, con el próximo pago', () => {
     const v = vista(cuenta({ periodosPagados: [{ desde: '2026-09-01', hasta: '2026-09-30' }, { desde: '2026-10-01', hasta: '2026-10-31' }] }), '2026-09-26');
     expect(v.opciones).toEqual([]);

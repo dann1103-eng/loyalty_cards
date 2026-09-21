@@ -10,7 +10,9 @@ import { escalonDePlan, limiteResultante } from './limitePlan';
 // legítimo en la conversación (entender por qué se va, ofrecerle algo). SUBIR y RENOVAR pasan por el
 // pago (migración 0037): el plan se aplica cuando Wompi confirma el cobro, con `aplicarPlanDestino`
 // (abajo), que llama `confirmarPagoCobro` (confirmarPago.ts). Ya no existe un camino que suba el plan
-// sin cobrar: hasta el 2026-09-21 lo hacía `subirPlanPorElDueno`, y se borró.
+// SIN INTERVENCIÓN DE FM y sin cobrar: hasta el 2026-09-21 lo hacía `subirPlanPorElDueno`, y se borró.
+// Lo que sigue existiendo es la solicitud de cambio (`FormularioSolicitud`): el dueño la pide y FM la
+// aprueba con `resolverSolicitud`, y ese camino aplica el plan sin pasar por el pago.
 
 export const ESTADOS_SOLICITUD = ['pendiente', 'aprobada', 'rechazada'] as const;
 

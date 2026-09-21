@@ -29,7 +29,7 @@ producción). El dinero se calcula en centavos enteros.
 | 1 | Prorrateo, límite por plan y opciones de pago (puros) | ✅ mutaciones corridas | `def3cad` | `lib/comercios/{prorrateo,limitePlan,opcionesPago}.ts` |
 | 2 | Configuración, firma sobre bytes y parser del webhook | ✅ mutaciones corridas | `f393b4e` | `lib/wompi/{config,firma,webhook}.ts` |
 | 3 | Cliente de la API (token en memoria, reintento ante 401) | ✅ mutaciones corridas | `9f29d26` | `lib/wompi/cliente.ts` |
-| 4 | Migración `0037`, tipos y script de verificación | ⏳ **falta que Daniel la aplique** | `7260101` | `supabase/migrations/0037_pagos_wompi.sql`, `lib/supabase/types.ts`, `scripts/verificar-0037.ts` |
+| 4 | Migración `0037`, tipos y script de verificación | ✅ aplicada por Daniel y verificada el 2026-09-21 (15 de 15 OK) | `7260101` | `supabase/migrations/0037_pagos_wompi.sql`, `lib/supabase/types.ts`, `scripts/verificar-0037.ts` |
 | 5 | Script de conexión (punto 0) | ✅ corrido el 2026-09-21: las credenciales del negocio crean enlaces | `74cf235` | `scripts/probar-wompi.ts` |
 | 6 | `planCuenta` (`aplicarPlanDestino`, `activarLicencia`), `cobros`; se borra `accionSubirPlan` | ✅ lógica; ⏳ pruebas con base sin correr | `e6a42eb` | `lib/comercios/{planCuenta,cobros}.ts` |
 | 7 | `confirmarPagoCobro` y su repositorio | ✅ mutaciones corridas; ⏳ adaptador contra la base sin correr | `9ba3ddc`, `e6a42eb` | `lib/comercios/{confirmarPago,repositorioPagosSupabase}.ts`, `test/fixtures/repositorioPagosFalso.ts` |
@@ -38,7 +38,7 @@ producción). El dinero se calcula en centavos enteros.
 | 10 | Pantalla del dueño, acción y página de vuelta | ✅ tipos y lint; ❌ **no se vio en el navegador** | `e6a42eb` | `app/comercio/(protegido)/plan/**`, `lib/comercios/vistaOpciones.ts` |
 | 11 | `/admin/pagos`, sus acciones, "Marcar pagado" y vencimiento en la ficha | ✅ lógica con mutaciones; ⏳ consultas contra la base sin correr; ❌ **no se vio en el navegador** | `c31f236`, `40e6593` | `lib/comercios/{pagosAdmin,resolverPagos,resolverPagosSupabase}.ts`, `app/admin/(protegido)/pagos/**`, `app/admin/(protegido)/cuentas/**` |
 | 12 | `.env.local.example`, spec, este registro, `ESTADO-Y-PLAN` | ✅ | (este commit) | — |
-| 13 | Revisión final del conjunto | ⏳ ver "Revisión final" abajo | | |
+| 13 | Revisión final del conjunto | ✅ dos revisores; hallazgos verificados y corregidos (ver abajo) | (este commit) | — |
 
 "❌ no se vio en el navegador": este worktree no tiene `.env.local`, y las pantallas del dueño y de FM
 piden sesión y base de datos. Lo que se verificó es tipos, lint y la lógica que las alimenta.
@@ -50,7 +50,7 @@ mutación. Se corrieron todas las de los módulos puros (rompé la línea, confi
 correcta, restaurá). Conteo de mutaciones medidas y muertas por módulo: `prorrateo` 8, `opcionesPago` 6,
 `limitePlan` 3, `wompi/config` 4, `wompi/firma` 5, `wompi/webhook` 4, `wompi/cliente` 8,
 `confirmarPago` 15, `procesarWebhook` 7, `iniciarPagoPlan` 10, `confirmarPorRedirect` 5, ruta del webhook
-7, `vistaOpciones` 4, `urlParaContinuarPago` 4, `pagosAdmin` 12, `resolverPagos` 9.
+7, `vistaOpciones` 4, `urlParaContinuarPago` 4, `pagosAdmin` 13, `resolverPagos` 10, más las de la revisión final (en el encabezado de cada `.test.ts`).
 
 **Sin correr** (necesitan `.env.local` y la migración `0037`): `cobros.test.ts`, `planCuenta.test.ts`,
 `repositorioPagosSupabase.test.ts`, `iniciarPagoPlanSupabase.test.ts` y `pagosAdminDb.test.ts`. Los
@@ -75,20 +75,15 @@ Las pruebas de fechas dependen de la zona horaria del proceso: corré las puras 
 
 ## Lo que solo puede hacer Daniel (en este orden)
 
-1. **En el checkout principal, con `.env.local`:** traer la rama y correr `npm test`. Las pruebas con base
-   fallan hasta el paso 2; eso es lo esperado y es la medida de lo que se rompería en producción sin la
-   migración.
-2. **Aplicar `supabase/migrations/0037_pagos_wompi.sql` en Supabase Studio** y avisar. Después:
-
-   ```bash
-   npx tsx --conditions=react-server scripts/verificar-0037.ts
-   ```
-
-   (solo lectura; confirma columnas, índices y RLS). Volver a correr `npm test`: ahora las pruebas con
-   base tienen que pasar. **Si alguna falla, es información sobre el adaptador real: avisá antes de
+1. ~~Aplicar `supabase/migrations/0037_pagos_wompi.sql`~~ **HECHO y verificado** el 2026-09-21
+   (`scripts/verificar-0037.ts`, solo lectura: 15 de 15 OK).
+2. **En el checkout principal, con `.env.local`:** traer la rama y correr `npm test`. Con la migración ya
+   aplicada, las pruebas con base tienen que pasar; **nunca se han ejecutado**, y son la única verificación
+   del adaptador real. **Si alguna falla, es información sobre el adaptador real: avisá antes de
    desplegar.**
-3. **Poner `WOMPI_CLIENT_ID` y `WOMPI_CLIENT_SECRET` en `.env.local` y en Vercel** (nunca por el chat).
-   **Regenerá el API Secret antes de producción**: apareció en una captura de pantalla.
+3. **`WOMPI_CLIENT_ID` y `WOMPI_CLIENT_SECRET`:** ya están en el `.env.local` del checkout principal;
+   **faltan en Vercel**. **Regenerá el API Secret antes de producción**: apareció en una captura de pantalla
+   y en el chat.
 4. **Punto 0 (YA RESUELTO el 2026-09-21, no repetir salvo que cambien las credenciales):**
 
    ```bash
@@ -143,6 +138,62 @@ Los avisos se derivan de las fechas de los períodos y salen del cron que ya exi
 
 ## Revisión final (Tarea 13)
 
-Pendiente al escribir este registro. Cuando se haga: revisión independiente de cumplimiento de la spec y de
-calidad de código sobre todo el conjunto, verificando cada hallazgo contra el código antes de aplicarlo, y
-`tsc`, `eslint` y `next build` (en este worktree, con `NODE_OPTIONS=--max-old-space-size=6144`).
+Dos revisores independientes (uno de cumplimiento de la spec y seguridad del flujo de dinero, otro de
+calidad del código y de pruebas decorativas). **Cada hallazgo se verificó contra el código antes de
+aplicarlo**; los que se aplicaron llevan su prueba y su mutación (en el encabezado de cada `.test.ts`).
+Ninguno encontró una vía para aplicar un plan o marcar un cobro pagado sin firma válida, ni para ver o
+pagar el cobro de otra cuenta.
+
+**Corregido** (todo con prueba, y cada mutación murió por la prueba correcta):
+
+- **Renovar el MISMO plan quedaba bloqueado por cupo** para una cuenta con límite negociado o una Pro
+  heredada "sin tope": la pantalla comparaba contra el límite sugerido del catálogo, pero la aplicación no
+  toca el límite cuando el plan es el mismo. Eran las primeras cuentas que se iban a cobrar.
+- **La página de vuelta podía tapar al webhook firmado**: registraba eventos `prueba` o `no_aprobada`
+  (terminales), y el webhook real de esa misma transacción llegaba como "repetido". Ahora ese camino no
+  registra eventos negativos. Además ata la transacción al cobro (`datosAdicionales.cobro`), no rompe si la
+  base falla al leer el cobro, y se le agregó la tabla de estados a las pruebas.
+- **`confirmarPagoCobro` aplicaba el plan de un cobro que ya había pagado OTRA transacción** antes de
+  descubrirlo. Ahora corta antes.
+- **Título y explicación sin botones** ("¿Necesitás más lugar?") para una cuenta en el plan más alto o con una
+  solicitud pendiente.
+- **Precio pactado con 3 decimales**: se lleva a centavos antes de mandarlo al cobro y a Wompi.
+- **El método «Wompi» quedó reservado** para el registro manual de cobros pendientes (uno de FM se habría
+  confundido con un intento de la app). Ojo: la regla vive en `validarCobroManual`, NO en el validador
+  compartido, porque el cobro que crea la propia app valida con ese mismo método; `tsc` atrapó el primer
+  intento, que la había puesto en el compartido (vitest no chequea tipos, y ninguna prueba pura llama a
+  `crearCobroPendiente`).
+- **La ficha de la cuenta** dice cuándo venció el último período pagado en vez de "sin período".
+- **Pruebas decorativas**: la firma sobre bytes en la ruta (un BOM inicial), lo que FM ve en el panel
+  (cuenta, cobro y detalle del evento), las condiciones para reusar un intento abierto, el día en UTC contra
+  el de la zona, `hoy` en la licencia y el reclamo, la mutación de punto flotante en el prorrateo, y la
+  falla de `marcarRevisado`.
+- **El repositorio falso ahora espeja al real** en lo que le faltaba (la fuente del evento y el reemplazo
+  del cuerpo cuando el webhook llega después del redirect).
+- **Comentarios y documentos que no coincidían con el código** (spec, `types.ts`, `planCuenta.ts`,
+  `firma.test.ts`, `conversionesMeta.ts`).
+
+**Conocido y NO corregido** (decisión de dejarlo, con su porqué):
+
+- **Dos pestañas a la vez pueden anularse el intento entre sí**: la segunda ve el cobro de la primera sin
+  enlace todavía y lo anula, y el pago de la primera cae como `cobro_anulado`. Es rara y tiene salida
+  (FM lo aplica a mano desde `/admin/pagos`). Un enlace de Wompi no se puede desactivar desde la app.
+- **El aviso de `MarcarPagado` desaparece al tener éxito** (el cobro deja de estar pendiente y el
+  componente ya no se dibuja). Si el plan no cupo, el evento queda en `/admin/pagos` como «Plan no
+  aplicado» y en el contador de la nav.
+- **La solicitud de cambio de plan** (`FormularioSolicitud` + `resolverSolicitud`) sigue aplicando el plan
+  sin pasar por el pago cuando FM aprueba. Es lo que la spec deja para bajar de plan; subir por esa vía es
+  una decisión de producto.
+- **Campos y ramas sin lectores** (`ResultadoAplicarPlan.cambio`, `PagoWebhook.formaPago`, la rama singular
+  de "unidad") y **duplicación menor** (`ES_UUID`, `esObjeto`, formateadores de fecha por pantalla): no
+  cambian el comportamiento.
+- **Accesibilidad menor**: `aria-describedby` en los botones bloqueados y manejo de foco al confirmar. Se
+  agregó `aria-current` a los filtros de `/admin/pagos`.
+- **`cuentaDelComercio`** está exportada desde un archivo `'use server'` sin autenticar (preexistente).
+- El parser exige `EsProductiva` (la API de consulta usa `esReal`) y `RESULTADOS_NUMERICOS` es un mapeo
+  supuesto: si el webhook real difiere, el evento queda guardado como «Error» con su cuerpo y "Reintentar"
+  lo reprocesa cuando se arregle el parser.
+
+**Verificación al cierre:** `tsc --noEmit` y `eslint` limpios; 282 pruebas puras en verde con `TZ=UTC` y con
+`TZ=America/El_Salvador`; `next build` pasa (`NODE_OPTIONS=--max-old-space-size=6144`). Siguen **sin
+correrse** las pruebas con base de datos y **sin verse** las pantallas en el navegador.

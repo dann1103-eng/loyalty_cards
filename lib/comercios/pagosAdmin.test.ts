@@ -14,6 +14,7 @@ import { accionesDisponibles, describirPeriodo, entradaParaReintentar, etiquetaC
 //   - tratar una declinada como aprobada al reintentar            → falla "una transacción declinada se reintenta como no aprobada"
 //   - no separar el singular ("quedan 1 días")                     → falla "un solo día restante va en singular"
 //   - no distinguir un período ya renovado del vigente           → falla "un período ya renovado dice hasta cuándo está pagado"
+//   - decir "sin período" aunque haya uno vencido                → falla "un período vencido dice cuándo venció, no que nunca pagó"
 //   - forzar esReal=true / aprobada=true al reintentar un redirect → falla "un evento del redirect de prueba o no aprobado conserva lo que dice el cuerpo"
 
 describe('necesitaAtencion', () => {
@@ -129,6 +130,10 @@ describe('entradaParaReintentar', () => {
 describe('describirPeriodo', () => {
   it('sin período pagado', () => {
     expect(describirPeriodo({ tipo: 'sin_periodo' })).toBe('Sin período pagado en la app.');
+  });
+
+  it('un período vencido dice cuándo venció, no que nunca pagó', () => {
+    expect(describirPeriodo({ tipo: 'sin_periodo' }, '2026-08-31')).toBe('Su último período pagado venció el 31 de agosto de 2026.');
   });
 
   it('un período pagado que todavía no empezó', () => {

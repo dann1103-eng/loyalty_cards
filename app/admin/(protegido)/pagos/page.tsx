@@ -14,8 +14,8 @@ export const dynamic = 'force-dynamic';
 
 // Cada pago que Wompi le informa a la app (webhook o retorno del cliente), con lo que el sistema hizo con
 // él. Lo importante para FM es lo que NECESITA ATENCIÓN: un pago que entró y no se pudo aplicar solo
-// (monto distinto, cobro anulado, doble pago, un error). Esos aparecen primero con su botón, y el número
-// se ve en la nav.
+// (monto distinto, cobro anulado, doble pago, un error). El filtro "Necesitan atención" los aísla, cada
+// uno con su botón, y el número se ve en la nav.
 //
 // El cuerpo crudo trae nombre y correo de quien pagó: se muestra SOLO acá, plegado, para poder
 // diagnosticar el formato real del webhook.
@@ -46,10 +46,10 @@ export default async function PaginaPagos({ searchParams }: { searchParams: Prom
       </div>
 
       <div className="filtro-chips reveal d2" style={{ marginBottom: 16 }}>
-        <Link className={`filtro-chip${!soloAtencion ? ' activo' : ''}`} href="/admin/pagos">
+        <Link className={`filtro-chip${!soloAtencion ? ' activo' : ''}`} aria-current={!soloAtencion ? 'page' : undefined} href="/admin/pagos">
           Todos
         </Link>
-        <Link className={`filtro-chip${soloAtencion ? ' activo' : ''}`} href="/admin/pagos?atencion=1">
+        <Link className={`filtro-chip${soloAtencion ? ' activo' : ''}`} aria-current={soloAtencion ? 'page' : undefined} href="/admin/pagos?atencion=1">
           Necesitan atención
         </Link>
       </div>
