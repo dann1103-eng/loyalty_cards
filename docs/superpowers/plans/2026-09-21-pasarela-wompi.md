@@ -31,12 +31,12 @@ producción). El dinero se calcula en centavos enteros.
 | 3 | Cliente de la API (token en memoria, reintento ante 401) | ✅ mutaciones corridas | `9f29d26` | `lib/wompi/cliente.ts` |
 | 4 | Migración `0037`, tipos y script de verificación | ✅ aplicada por Daniel y verificada el 2026-09-21 (15 de 15 OK) | `7260101` | `supabase/migrations/0037_pagos_wompi.sql`, `lib/supabase/types.ts`, `scripts/verificar-0037.ts` |
 | 5 | Script de conexión (punto 0) | ✅ corrido el 2026-09-21: las credenciales del negocio crean enlaces | `74cf235` | `scripts/probar-wompi.ts` |
-| 6 | `planCuenta` (`aplicarPlanDestino`, `activarLicencia`), `cobros`; se borra `accionSubirPlan` | ✅ lógica; ⏳ pruebas con base sin correr | `e6a42eb` | `lib/comercios/{planCuenta,cobros}.ts` |
-| 7 | `confirmarPagoCobro` y su repositorio | ✅ mutaciones corridas; ⏳ adaptador contra la base sin correr | `9ba3ddc`, `e6a42eb` | `lib/comercios/{confirmarPago,repositorioPagosSupabase}.ts`, `test/fixtures/repositorioPagosFalso.ts` |
+| 6 | `planCuenta` (`aplicarPlanDestino`, `activarLicencia`), `cobros`; se borra `accionSubirPlan` | ✅ con pruebas de base y mutaciones | `e6a42eb` | `lib/comercios/{planCuenta,cobros}.ts` |
+| 7 | `confirmarPagoCobro` y su repositorio | ✅ mutaciones corridas, adaptador incluido | `9ba3ddc`, `e6a42eb` | `lib/comercios/{confirmarPago,repositorioPagosSupabase}.ts`, `test/fixtures/repositorioPagosFalso.ts` |
 | 8 | Ruta del webhook | ✅ mutaciones corridas | `9ba3ddc`, `e6a42eb` | `lib/wompi/procesarWebhook.ts`, `app/api/wompi/webhook/route.ts` |
-| 9 | `iniciarPagoPlan` (crea el intento y el enlace) | ✅ mutaciones corridas; ⏳ adaptador contra la base sin correr | `9ba3ddc`, `e6a42eb` | `lib/comercios/{iniciarPagoPlan,iniciarPagoPlanSupabase,confirmarPorRedirect,confirmarRetornoSupabase}.ts` |
+| 9 | `iniciarPagoPlan` (crea el intento y el enlace) | ✅ mutaciones corridas, adaptador incluido | `9ba3ddc`, `e6a42eb` | `lib/comercios/{iniciarPagoPlan,iniciarPagoPlanSupabase,confirmarPorRedirect,confirmarRetornoSupabase}.ts` |
 | 10 | Pantalla del dueño, acción y página de vuelta | ✅ tipos y lint; ❌ **no se vio en el navegador** | `e6a42eb` | `app/comercio/(protegido)/plan/**`, `lib/comercios/vistaOpciones.ts` |
-| 11 | `/admin/pagos`, sus acciones, "Marcar pagado" y vencimiento en la ficha | ✅ lógica con mutaciones; ⏳ consultas contra la base sin correr; ❌ **no se vio en el navegador** | `c31f236`, `40e6593` | `lib/comercios/{pagosAdmin,resolverPagos,resolverPagosSupabase}.ts`, `app/admin/(protegido)/pagos/**`, `app/admin/(protegido)/cuentas/**` |
+| 11 | `/admin/pagos`, sus acciones, "Marcar pagado" y vencimiento en la ficha | ✅ lógica y consultas con mutaciones; ❌ **no se vio en el navegador** | `c31f236`, `40e6593` | `lib/comercios/{pagosAdmin,resolverPagos,resolverPagosSupabase}.ts`, `app/admin/(protegido)/pagos/**`, `app/admin/(protegido)/cuentas/**` |
 | 12 | `.env.local.example`, spec, este registro, `ESTADO-Y-PLAN` | ✅ | (este commit) | — |
 | 13 | Revisión final del conjunto | ✅ dos revisores; hallazgos verificados y corregidos (ver abajo) | (este commit) | — |
 
@@ -52,11 +52,18 @@ correcta, restaurá). Conteo de mutaciones medidas y muertas por módulo: `prorr
 `confirmarPago` 15, `procesarWebhook` 7, `iniciarPagoPlan` 10, `confirmarPorRedirect` 5, ruta del webhook
 7, `vistaOpciones` 4, `urlParaContinuarPago` 4, `pagosAdmin` 13, `resolverPagos` 10, más las de la revisión final (en el encabezado de cada `.test.ts`).
 
-**Sin correr** (necesitan `.env.local` y la migración `0037`): `cobros.test.ts`, `planCuenta.test.ts`,
-`repositorioPagosSupabase.test.ts`, `iniciarPagoPlanSupabase.test.ts` y `pagosAdminDb.test.ts`. Los
-encabezados de estos archivos lo dicen. **Hasta que corran, el adaptador real de la base no está
-verificado**: la lógica se probó contra un repositorio falso que tiene que espejar su semántica (ver el
-comentario de `test/fixtures/repositorioPagosFalso.ts`).
+**Pruebas con base de datos** (`cobros`, `planCuenta`, `repositorioPagosSupabase`, `iniciarPagoPlanSupabase`,
+`pagosAdminDb`): corridas el 2026-09-21 contra Supabase, **92 de 92 en verde a la primera**. Se corren desde el
+worktree con el cwd en el checkout principal, para que tomen su `.env.local` sin leerlo ni copiarlo:
+`cd <checkout principal> && npx --prefix <worktree> vitest run --root <worktree> --config <worktree>/vitest.config.ts <archivos>`.
+Después se les hicieron **30 mutaciones** a la capa de base (el filtro de estado del reclamo, el manejo del
+23505, `anularIntentosPendientes` sin filtrar por método, el candado por cuenta, los períodos pagados, la
+idempotencia del evento, "un campo ausente no se toca", ajuste que nunca baja, comprobación de cupo, fecha de
+alta de la licencia, límite, y las consultas del panel): **28 murieron por la prueba correcta**; una
+(`obtenerIntentoAbierto` sin filtrar por método) muere en `iniciarPagoPlanSupabase.test.ts` y no en
+`cobros.test.ts`, y otra (el `detalle` que un campo ausente no debe pisar) era un hueco real de la prueba y
+se cerró. Quedan **dos equivalentes**: la conversión `Number(...)` del precio (PostgREST ya devuelve un número)
+y la falla de `cupoDeCuenta` (no se puede provocar con una base real).
 
 ## Cómo verificar
 
@@ -195,5 +202,4 @@ pagar el cobro de otra cuenta.
   lo reprocesa cuando se arregle el parser.
 
 **Verificación al cierre:** `tsc --noEmit` y `eslint` limpios; 282 pruebas puras en verde con `TZ=UTC` y con
-`TZ=America/El_Salvador`; `next build` pasa (`NODE_OPTIONS=--max-old-space-size=6144`). Siguen **sin
-correrse** las pruebas con base de datos y **sin verse** las pantallas en el navegador.
+`TZ=America/El_Salvador`; `next build` pasa (`NODE_OPTIONS=--max-old-space-size=6144`). Siguen **sin verse** las pantallas en el navegador.

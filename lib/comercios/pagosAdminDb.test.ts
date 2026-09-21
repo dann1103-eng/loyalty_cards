@@ -9,15 +9,13 @@ import { contarPagosAtencion, listarPagos, marcarRevisado, obtenerPago } from '.
 // La tabla es compartida: puede haber pagos ajenos a la prueba. Por eso los conteos se comparan contra lo
 // que había ANTES, y las listas se filtran a los ids que crea cada prueba.
 //
-// MUTATION-TESTING — PENDIENTE DE CORRER: este worktree no tiene .env.local ni la migración 0037 aplicada, así que
-// estas pruebas no se han ejecutado nunca. Cuando corran, cada fila de abajo se rompe, se ve fallar con ESE test y se
-// restaura (hasta entonces es lo que se ESPERA, no lo medido):
+// MUTATION-TESTING (cada fila se corrió el 2026-09-21 contra Supabase: romper, ver fallar con ESE test, restaurar):
 //   - el filtro `soloAtencion` no excluye los ya revisados       → falla "soloAtencion deja solo lo que espera a FM"
 //   - el filtro `soloAtencion` no filtra por conciliación         → falla "soloAtencion deja solo lo que espera a FM"
 //   - el conteo no excluye los ya revisados                       → falla "el contador sube con un pago por revisar y baja al marcarlo revisado"
-//   - marcarRevisado no guarda la fecha                           → falla "el contador sube…" y "marcarRevisado con nota…"
+//   - marcarRevisado no guarda la fecha                           → fallan "el contador sube…" y "marcarRevisado con nota…"
 //   - marcarRevisado pisa el detalle aunque no se pase uno        → falla "marcarRevisado sin nota no toca el detalle"
-//   - obtenerPago no mapea el nombre de la cuenta / la fuente     → falla "obtenerPago devuelve el evento tal como se guardó"
+//   - listarPagos no trae el nombre de la cuenta                  → falla "cada pago trae el nombre de su cuenta"
 
 const supabase = createServiceClient();
 const transacciones: string[] = [];

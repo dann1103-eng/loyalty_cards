@@ -196,6 +196,11 @@ describe('actualizarEvento', () => {
     await repo.actualizarEvento(evento.id, { conciliacion: 'error', detalle: 'se cayó' });
 
     expect(await eventoDe(tx)).toMatchObject({ conciliacion: 'error', detalle: 'se cayó', cobro_id: cobroId, cuenta_id: cuentaId });
+
+    // Y sin `detalle` tampoco se borra el detalle: cambiar solo la conciliación no toca nada más.
+    await repo.actualizarEvento(evento.id, { conciliacion: 'monto_distinto' });
+
+    expect(await eventoDe(tx)).toMatchObject({ conciliacion: 'monto_distinto', detalle: 'se cayó', cobro_id: cobroId, cuenta_id: cuentaId });
   });
 
   it('una conciliación que la base no acepta lanza', async () => {

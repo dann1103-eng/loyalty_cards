@@ -1268,16 +1268,17 @@ mutación. Lo corregido y lo que se dejó (con su porqué) está en
 
 `tsc --noEmit` y `eslint` limpios; **282 pruebas puras** en verde con `TZ=UTC` y con
 `TZ=America/El_Salvador`; `next build` pasa; todas las mutaciones de los módulos puros medidas y muertas por
-la prueba correcta (tablas en los encabezados de cada `.test.ts`). **No se corrió** ninguna prueba con base de
-datos, ni se vieron las pantallas en el navegador.
+la prueba correcta (tablas en los encabezados de cada `.test.ts`). Las 5 pruebas con base de datos de la feature SÍ se corrieron (92 de 92, más 30 mutaciones). **No se han visto**
+las pantallas en el navegador.
 
 ### Pendiente de Daniel, en este orden
 
 1. ~~Aplicar `0037_pagos_wompi.sql` en Studio~~ **HECHO** (2026-09-21): `scripts/verificar-0037.ts` dio 15 de
    15 OK (columnas, índices únicos parciales y checks).
-2. **Traer la rama al checkout principal y correr `npm test`**: las pruebas con base (`cobros`, `planCuenta`,
-   `repositorioPagosSupabase`, `iniciarPagoPlanSupabase`, `pagosAdminDb`) todavía NO se han ejecutado nunca, y
-   ahí se ve si el adaptador real se comporta como el falso. **Si alguna falla, avisá antes de desplegar.**
+2. ~~Correr las pruebas con base de datos~~ **HECHO** (2026-09-21): las 5 de la feature, 92 de 92 en verde, y 30
+   mutaciones a la capa de base (28 muertas por la prueba correcta, 1 cubierta en otro archivo, 1 hueco
+   cerrado). Falta solo `npm test` COMPLETO en el checkout principal cuando la rama esté ahí, por si algo
+   ajeno a la feature se movió.
 3. `WOMPI_CLIENT_ID` y `WOMPI_CLIENT_SECRET`: ya están en el `.env.local` del checkout principal; **faltan en
    Vercel**. **Regenerar el API Secret** antes de producción (se vio en una captura y en el chat).
 4. Correr `scripts/probar-wompi.ts` y pasar lo que imprime: responde si las credenciales del negocio alcanzan
