@@ -22,16 +22,25 @@ al panel de FM.
 2. **Un cobro por mes, pagado con un botón.** No se usa la suscripción recurrente de Wompi.
 3. **La app del dueño tiene que poder instalarse en el celular y mandarle notificaciones**, con "pago
    pendiente" y "pago próximo" como primeros avisos. Es la **Fase 2** de esta spec.
+4. **Subir de plan con el período ya pagado y en curso se prorratea.** Se cobra solo la diferencia por
+   los días que faltan. **Al renovar**, sea que suba, baje o siga igual, se cobra el precio completo del
+   plan elegido. El detalle está en "Cuánto se cobra".
 
 ## Supuestos míos, a confirmar al revisar
 
-- Subir de plan cobra **el precio completo del plan nuevo, por un período que arranca el día del pago**.
-  No hay prorrateo: es lo más simple y lo que el catálogo (`PLANES`) permite hoy.
 - Solo se acepta **tarjeta de crédito o débito**. Puntos Agrícola, cuotas, Bitcoin, QuickPay y Nequi
   quedan apagados; se prenden con una constante cuando se decida.
-- **Bajar de plan no cambia**: sigue siendo una solicitud que FM resuelve (`solicitarCambioPlan`).
+- **La ventana de renovación es de 7 días**: el dueño puede renovar (y cambiar de plan al hacerlo) desde
+  7 días antes de que termine su período. Sin ventana, "renovar con otro plan" serviría para saltarse el
+  prorrateo (pagar de más un mes por adelantado y tener el plan nuevo casi todo el mes en curso). La
+  misma cifra será la del aviso de "pago próximo" de la Fase 2.
+- **Bajar de plan:** al renovar se puede pagando el plan más chico, con la comprobación de cupo que ya
+  hace `resolverSolicitud`. A mitad de período **sigue siendo una solicitud que FM resuelve**
+  (`solicitarCambioPlan`), y no hay devolución ni crédito por los días no usados.
 - **Los pilotos (cuentas sin plan) que quieran un plan pasan por el pago.** Es consecuencia de la
   decisión 1. FM puede seguir asignando un plan a mano desde la ficha de la cuenta, que no se toca.
+- Una cuenta con **precio negociado** por FM se prorratea contra su precio real (`licencia_monto_mensual`),
+  no contra el del catálogo.
 
 ## Lo que dice la documentación de Wompi
 
@@ -94,11 +103,65 @@ Como el plan solo cambia al confirmarse el pago, un webhook lento no puede dejar
   marcarlo pagado a mano con el camino de hoy (`accionRegistrarCobro`).
 - Todo evento cuya conciliación no sea `aplicado` aparece destacado en `/admin/pagos`.
 
+## Cuánto se cobra
+
+**Definiciones.** "Hoy" es la fecha en `America/El_Salvador`. El **período en curso** es un cobro
+`tipo = 'periodo'`, `estado = 'pagado'` con `periodo_desde <= hoy <= periodo_hasta`. El **precio
+actual** es `licencia_monto_mensual` de la cuenta. La **ventana de renovación** son los últimos 7 días
+del período en curso, y también todo el tiempo después de que venció, o si la cuenta nunca pagó.
+
+| Situación | Qué puede hacer el dueño | Cuánto paga | Qué pasa con el período |
+|---|---|---|---|
+| Período en curso, **fuera** de la ventana | Subir de plan | La **diferencia prorrateada** | No cambia: termina el mismo día. La próxima renovación cobra el plan nuevo completo |
+| Período en curso, **dentro** de la ventana | Subir con prorrateo, **o** renovar con cualquier plan (mismo, más caro o más chico) | Prorrateo, o el **precio completo** del plan elegido | Renovar abre el período siguiente, que arranca el día después de que termine el actual |
+| Sin período en curso (venció, cuenta nueva, piloto sin cobros) | Elegir cualquier plan | El **precio completo** | Un período nuevo que arranca hoy |
+| Bajar a mitad de período | Solicitud a FM, sin cambios | — | — |
+
+**Fórmula del prorrateo.** Los días se cuentan completos y **hoy cuenta**: si el período es del 1 al 30
+de septiembre y hoy es el 15, faltan 16 de 30.
+
+```
+ajuste = redondear_centavos( (precio_nuevo − precio_actual) × dias_restantes ÷ dias_del_periodo )
+```
+
+| Cambio (hoy 15 de septiembre, período 1–30) | Cuenta | Cobra |
+|---|---|---|
+| Starter → Growth | 20 × 16 ÷ 30 | **$10.67** |
+| Growth → Pro | 40 × 16 ÷ 30 | **$21.33** |
+| Starter → Pro | 60 × 16 ÷ 30 | **$32.00** |
+| Starter → Growth el último día | 20 × 1 ÷ 30 | $0.67 |
+
+**Reglas de borde:**
+- El redondeo es al centavo, hacia arriba en la mitad. Un ajuste menor que $0.01 no se cobra: se le
+  indica que renueve.
+- Solo se prorratea **subir**: el plan destino tiene que ser más caro en el catálogo **y**
+  `precio_nuevo − precio_actual > 0`. Si FM le negoció un precio igual o mayor al del destino, no hay
+  diferencia que cobrar y la pantalla lo manda a escribir a FM.
+- `dias_del_periodo` son los días reales de ese período (28 a 31), no un 30 fijo.
+- Un período dura un mes calendario menos un día. Si el mes siguiente no tiene ese día, se usa su
+  último día: uno que arranca el 31 de enero termina el 27 de febrero (28 en año bisiesto), y uno que
+  arranca el 15 de septiembre termina el 14 de octubre.
+- **Renovar con un plan más chico exige que la cuenta quepa**: si `cupoDeCuenta.usadas` supera el límite
+  sugerido del destino, se bloquea **antes de cobrar**, con el mensaje de `resolverSolicitud` ("usa N
+  unidades y el plan permite M"). Se vuelve a comprobar al aplicar, porque el dueño pudo agregar un
+  negocio entre medio.
+- El cobro de un ajuste guarda en `nota` la cuenta hecha ("Starter → Growth, 16 de 30 días") para que el
+  comprobante y el admin la muestren.
+- El enlace de Wompi de un ajuste **vence, como máximo, el último día del período**: así no se puede
+  pagar un ajuste cuando ya no corresponde.
+- Un dueño solo tiene **un intento de pago abierto** a la vez. Al iniciar otro, el pendiente anterior se
+  reusa si es del mismo tipo, del mismo plan y del mismo día; si no, se anula y se crea uno nuevo. Los
+  ajustes pendientes cuyo período ya terminó no se muestran y se anulan al iniciar el siguiente pago.
+
 ## Modelo de datos (migración 0037, se aplica a mano ANTES del deploy)
 
 ```sql
 -- Qué plan se aplica cuando este cobro se confirma, y el enlace de Wompi que se le generó.
 alter table cobros
+  -- 'periodo' = un mes completo (lo único que existía hasta hoy, por eso es el default y las filas
+  -- viejas quedan bien). 'ajuste' = la diferencia prorrateada de subir de plan a mitad de período:
+  -- NO abre un período nuevo, así que no cuenta para "próximo pago" ni para "período en curso".
+  add column tipo text not null default 'periodo' check (tipo in ('periodo', 'ajuste')),
   add column plan_destino text,              -- null = solo renovar el plan actual
   add column wompi_id_enlace integer,
   add column wompi_url_enlace text,
@@ -117,7 +180,7 @@ create table pagos_wompi (
   fecha_transaccion timestamptz,
   conciliacion text not null default 'pendiente' check (conciliacion in (
     'pendiente', 'aplicado', 'prueba', 'sin_cobro', 'cobro_anulado',
-    'monto_distinto', 'ya_pagado', 'error')),
+    'monto_distinto', 'ya_pagado', 'plan_no_aplicable', 'error')),
   detalle text,
   payload jsonb not null,                    -- el cuerpo crudo: trae nombre y correo del pagador
   created_at timestamptz not null default now()
@@ -141,6 +204,7 @@ antes del deploy no rompe nada de lo que corre hoy.
 | Monto distinto al del cobro | `monto_distinto` | no aplica; FM decide |
 | Cobro ya pagado con **otra** transacción | `ya_pagado` | no aplica; posible doble pago, FM devuelve |
 | Todo bien | `aplicado` | ver "Aplicar el pago" |
+| Se cobró, pero el plan ya no cabe (el dueño agregó un negocio entre el cobro y el pago) | `plan_no_aplicable` | el cobro queda pagado y la licencia activa, pero el plan no cambia; responde `200` y FM lo resuelve hablando con el dueño o devolviendo |
 | Falla interna al aplicar | `error` | responde `500`, Wompi reintenta, y el reintento vuelve a aplicar |
 
 El monto y el plan salen **siempre de nuestra base**, nunca del webhook ni del navegador.
@@ -149,13 +213,17 @@ El monto y el plan salen **siempre de nuestra base**, nunca del webhook ni del n
 
 1. `update cobros set estado='pagado', pagado_en=<hoy>, metodo='Wompi' where id=$1 and estado='pendiente'
    returning …`. Una sola sentencia hace de candado: si no devuelve fila, otro camino ya lo aplicó.
-2. Si el cobro tiene `plan_destino`: aplica el plan con la regla que hoy vive en `subirPlanPorElDueno`
-   (el límite nunca baja, y el "sin tope" de las cuentas viejas sobrevive). Esa lógica se **extrae** a
-   `aplicarPlanDestino`, y `subirPlanPorElDueno` deja de ser un camino del dueño.
+2. Si el cobro tiene `plan_destino`, aplica el plan con `aplicarPlanDestino`, que junta las dos reglas
+   que hoy viven separadas: **subir** (`subirPlanPorElDueno`: el límite nunca baja, y el "sin tope" de
+   las cuentas viejas sobrevive) y **bajar** (`resolverSolicitud`: comprueba el cupo y fija el límite
+   sugerido del plan). `subirPlanPorElDueno` deja de ser un camino del dueño. Si al bajar el cupo ya no
+   alcanza, devuelve "no aplicable" y la conciliación queda en `plan_no_aplicable`.
 3. Licencia: `licencia_estado = 'activo'`, `licencia_activa_desde` si estaba vacía, y
-   `licencia_monto_mensual` con el precio del plan vigente.
+   `licencia_monto_mensual` con el precio del plan vigente. En un cobro `tipo = 'ajuste'` **no se abre
+   ningún período**: el que estaba en curso sigue igual y solo cambia el plan y el precio.
 4. Subscribe a Meta (`notificarPagoAMeta`, con `after()`) **solo si el paso 1 reclamó la fila**: un
-   reintento del webhook no lo cuenta dos veces.
+   reintento del webhook no lo cuenta dos veces. Igual que hoy con los cobros registrados a mano, todo
+   cobro pagado avisa, ajustes incluidos y con su monto real.
 
 Los pasos 2 y 3 son idempotentes. Si fallan después del 1, el evento queda en `error` y el reintento
 los repite sin volver a tocar el cobro ni a Meta.
@@ -169,7 +237,11 @@ los repite sin volver a tocar el cobro ni a Meta.
 - `lib/wompi/webhook.ts`: parser tolerante del cuerpo (mayúsculas o minúsculas) que devuelve un objeto
   tipado o un motivo de rechazo.
 - `lib/comercios/pagosWompi.ts`: registra el evento y decide la conciliación.
-- `lib/comercios/cobros.ts`: `crearCobroPendiente`, `reclamarCobroPagado`.
+- `lib/comercios/prorrateo.ts`: **puro**, sin base de datos. `calcularAjuste`, el período siguiente
+  (`periodoSiguiente`), el estado del período (`estadoDelPeriodo`: en curso, en ventana o vencido) y la
+  constante `DIAS_VENTANA_RENOVACION = 7`. Es donde vive toda la aritmética de fechas y dinero.
+- `lib/comercios/cobros.ts`: `crearCobroPendiente`, `reclamarCobroPagado`, y la lógica de reuso o
+  anulación del intento pendiente.
 - `app/api/wompi/webhook/route.ts`: ruta pública (`/api/*` ya queda fuera del matcher del proxy).
 - `app/comercio/(protegido)/plan/`: `accionIniciarPagoPlan`, botones de pago, y `pago/resultado/page.tsx`.
 - `app/admin/(protegido)/pagos/page.tsx` y un enlace "Pagos" en la navegación del admin.
@@ -177,11 +249,16 @@ los repite sin volver a tocar el cobro ni a Meta.
 ## Pantallas
 
 **Dueño, `/comercio/plan`:**
-- Los botones de subir plan pasan de "cambiar ya" a **"Pasar a Growth · $49/mes · Pagar"**. Tocar crea el
+- Los botones de subir plan pasan de "cambiar ya" a pagar. **Con el período en curso** dicen lo que
+  cuestan hoy: **"Pasar a Growth · pagás $10.67 hoy (16 días que faltan)"**, y debajo, en chico, "Desde
+  el 1 de octubre, $49/mes". **Sin período en curso** dicen **"Elegir Growth · $49"**. Tocar crea el
   cobro y lleva a Wompi. El texto que hoy dice "El cambio es inmediato… no te pedimos tarjeta acá" se corrige.
 - Una cuenta inactiva ve "Activá tu cuenta" con el botón del primer mes.
-- **Próximo pago**: la fecha siguiente al último período pagado, y **Pagar mensualidad** para adelantarla.
-- En la lista de cobros, cada pendiente con monto mayor que cero lleva **Pagar**.
+- **Próximo pago**: la fecha siguiente al último período pagado. Dentro de la ventana de 7 días aparece
+  **Renovar** con un selector de plan (mismo, más caro o más chico) y el precio completo a la vista.
+  Antes de la ventana no hay botón de renovar.
+- En la lista de cobros, cada pendiente con monto mayor que cero lleva **Pagar**, y los ajustes se
+  distinguen ("Ajuste por subir de plan").
 - Página de vuelta: "Pago confirmado", "Estamos confirmando tu pago" o "No pudimos confirmarlo".
 
 **Admin, `/admin/pagos`:** fecha, cuenta (con enlace a su ficha), monto, insignia **Real** o **Prueba**,
@@ -192,8 +269,11 @@ conciliación (pastilla) y el cuerpo crudo desplegable. Filtro "Solo lo que nece
 - Firma obligatoria y comparación en tiempo constante. Sin `WOMPI_CLIENT_SECRET`, la ruta responde `500` y no procesa.
 - Credenciales solo en el servidor (`import 'server-only'`, sin `NEXT_PUBLIC_`). Nunca se guarda la
   contraseña de la cuenta Wompi, y la app no llama a ningún endpoint que la pida.
-- Un enlace equivale a un cobro y a un pago: `cantidadMaximaPagosExitosos: 1`, vigencia de 48 h,
-  `esMontoEditable: false`. Si vence, el siguiente toque de Pagar crea otro.
+- Un enlace equivale a un cobro y a un pago: `cantidadMaximaPagosExitosos: 1`, `esMontoEditable: false`,
+  y vigencia de 48 h (en un ajuste, como máximo hasta el último día del período; `fechaInicio` es
+  obligatoria en el Swagger cuando se manda `vigencia`). Si vence, el siguiente toque de Pagar crea otro.
+- Los importes salen de `prorrateo.ts` y de `PLANES` en el servidor. La acción del dueño recibe **solo
+  el plan elegido**, nunca un monto.
 - El cuerpo crudo guarda nombre y correo del pagador: lo lee solo el admin y no se le muestra al dueño.
 - Un pago de prueba no activa nada. La variable `WOMPI_ACEPTAR_PRUEBAS` se **ignora** si
   `VERCEL_ENV === 'production'`, para que un error de configuración no permita activar cuentas gratis.
@@ -208,7 +288,9 @@ opcionales `WOMPI_API_URL` y `WOMPI_ID_URL`. Solo los **nombres** van en `.env.l
 ## Pruebas
 
 Puras (corren sin `.env.local`): firma y hash del redirect, parser del webhook, cliente con `fetch`
-falso, y la tabla de conciliación. Con base de datos (necesitan `.env.local`): el candado de
+falso, la tabla de conciliación, y **todo el prorrateo** (`prorrateo.ts` no toca la base: el importe, los
+días, los fines de mes y las ventanas se prueban con fechas fijas, incluidos febrero bisiesto y el
+último día del período). Con base de datos (necesitan `.env.local`): el candado de
 `reclamarCobroPagado` con dos llamadas concurrentes, y `confirmarPagoCobro` de punta a punta. Cada
 rama crítica lleva su mutación.
 
@@ -221,6 +303,15 @@ rama crítica lleva su mutación.
 | Monto | comparar contra el monto del webhook en vez del del cobro | un monto alterado se aplica |
 | Idempotencia | quitar `and estado='pendiente'` del `update` | dos llamadas aplican dos veces y Meta se notifica dos veces |
 | Producción | quitar la guarda de `VERCEL_ENV` | `WOMPI_ACEPTAR_PRUEBAS` activa una cuenta en producción |
+| Días restantes | no contar hoy (`dias_restantes − 1`) | Starter → Growth el 15 de septiembre da $10.00 en vez de $10.67 |
+| Días del período | usar 30 fijo | un período de 31 días (o de 28) da otro importe |
+| Redondeo | truncar en vez de redondear | 20 × 16 ÷ 30 da $10.66 en vez de $10.67 |
+| Solo subir | quitar `precio_nuevo − precio_actual > 0` | un precio negociado mayor que el del destino genera un ajuste negativo |
+| Ventana de renovación | ampliarla a 30 días | el día 10 del período se puede renovar con otro plan y saltarse el prorrateo |
+| Precio actual | usar el precio del catálogo en vez de `licencia_monto_mensual` | una cuenta con precio negociado paga de más |
+| Ajuste no abre período | dejar que el ajuste cuente como período | el "próximo pago" salta al día del ajuste |
+| Cupo al bajar | quitar la comprobación de `cupoDeCuenta` | una cuenta con 3 unidades baja a Starter (tope 1) y queda inválida |
+| Fin de mes | sumar 30 días en vez de un mes calendario | un período del 31 de enero no termina el 27 de febrero |
 
 ## A verificar en la primera prueba real (modo prueba)
 
@@ -237,7 +328,7 @@ probar contra `www.cardly-sv.site` con las credenciales de prueba, después de a
 
 | Tarea | Qué | Se verifica |
 |---|---|---|
-| 1 | `lib/wompi/{config,firma,webhook}.ts` y sus pruebas | pruebas puras y mutaciones |
+| 1 | `lib/wompi/{config,firma,webhook}.ts` y `lib/comercios/prorrateo.ts`, con sus pruebas | pruebas puras y mutaciones |
 | 2 | `lib/wompi/cliente.ts` y sus pruebas | `fetch` falso |
 | 3 | Migración `0037` y tipos | Daniel la aplica; verificación de solo lectura |
 | 4 | `cobros.ts` y `pagosWompi.ts` (candado y conciliación), extracción de `aplicarPlanDestino` | pruebas con base de datos (Daniel las corre) |
