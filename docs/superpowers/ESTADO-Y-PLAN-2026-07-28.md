@@ -1107,8 +1107,10 @@ PREVALECE sobre la tabla de migración). Plan: `plans/2026-09-20-rediseno-neumor
 1. **Las pantallas de `/comercio/*` y `/admin/*` no renderizan sin `.env.local`.** El proxy de
    Next lanza ahí (`lib/supabase/proxy.ts:13`; el matcher está en `proxy.ts`). Por eso la
    verificación visual del panel se hizo sobre el tablero, que es estático, y su marcado se copió
-   de los TSX en vez de inventarse. La portada `/` sí renderiza, y el foco se probó ahí con el
-   teclado real. El recorrido de las pantallas reales del panel queda pendiente (abajo).
+   de los TSX en vez de inventarse. Lo que está fuera de esas rutas sí renderiza, y se recorrió en
+   los tres temas: la portada `/` (el foco, con el teclado real), `/mi-tarjeta` (panel en relieve,
+   campos hundidos, botón sólido; en alto contraste plano con bordes) y `/registro-comercio` (el
+   plan elegido se marca con el acento en los tres). El recorrido del panel queda pendiente (abajo).
 2. **El relieve comunica FORMA, nunca ESTADO.** Lo activo se marca con el acento. Verificado con un
    filtro de sol: el relieve se lava y el chip activo sigue clarísimo. **Y todo estado tiene una
    señal que no es sombra**, porque en alto contraste el relieve vale `none`: un hover que solo
@@ -1132,6 +1134,12 @@ PREVALECE sobre la tabla de migración). Plan: `plans/2026-09-20-rediseno-neumor
    elemento a la regla global, la prueba te pide sumarlo en la portada.
 9. **Un `.X:hover` le gana a un `.X-activa`** (0,2,0 contra 0,1,0) y le borra la señal de activo.
    Pasó dos veces; se escribe `.X:not(.X-activa):hover`, y lo vigila una prueba.
+
+**Verificación al cierre:** pruebas de diseño 51/51, `eslint` y `tsc --noEmit` limpios, y
+`npx next build` pasa con `/` y `/mi-tarjeta` todavía estáticas (la regla nueva de la portada
+llega intacta al CSS de producción). En este worktree el build necesita
+`NODE_OPTIONS=--max-old-space-size=6144`: con el heap por defecto se queda sin memoria en el paso de
+TypeScript, porque Next toma como raíz el checkout principal (hay dos lockfiles).
 
 ### Revisión final del conjunto
 
@@ -1165,8 +1173,9 @@ decían cosas falsas; y el plan, que había quedado distinto del CSS publicado e
    claro y oscuro; en alto contraste, que "fila con foco" y "fila activa" se parecen; el aro del
    activo de "Escanear".
 3. **Recorrer las pantallas reales** en los tres temas, a ancho de teléfono: sobre todo
-   `/comercio/panel`, `/comercio/escanear`, `/comercio/clientes`, `/mi-tarjeta`, `/registro/<slug>`
-   y `/admin/comercios`. Y `/` **con el teclado** (Tab): el foco tiene que ser el anillo del
+   `/comercio/panel`, `/comercio/escanear`, `/comercio/clientes`, `/registro/<slug>` y
+   `/admin/comercios` (`/mi-tarjeta` y `/registro-comercio` ya se recorrieron sin `.env.local`; con
+   él, vale mirar `/mi-tarjeta` con un teléfono que tenga tarjetas, que es el portal con cuentas). Y `/` **con el teclado** (Tab): el foco tiene que ser el anillo del
    navegador, visible sobre todas las bandas. De la portada solo cambió esa regla; de su formulario
    de demo siguen al tema la alerta, la tilde de éxito y el anillo de los campos.
 4. **Teléfono real a pleno sol**, con el escáner y la cámara.
