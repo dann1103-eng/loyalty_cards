@@ -463,7 +463,7 @@ export default function Escaner({
                   onChange={(e) => setMotivoForzado(e.target.value)}
                 />
               </div>
-              <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 12 }}>
                 <button
                   className="btn-acento"
                   style={{ flex: 1 }}
@@ -532,7 +532,7 @@ export default function Escaner({
                 onChange={(e) => setMotivoQuitar(e.target.value)}
               />
             </div>
-            <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 12 }}>
               <button
                 className="btn-acento"
                 style={{ flex: 1 }}

@@ -102,7 +102,7 @@ export default async function PaginaSucursales({
                   {s.activa ? 'Activa' : 'Inactiva'}
                 </span>
               </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                 <div style={{ flex: '1 1 220px' }}>
                   <FormularioSucursal sucursal={{ id: s.id, nombre: s.nombre }} />
                 </div>

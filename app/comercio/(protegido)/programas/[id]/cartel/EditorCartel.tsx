@@ -635,7 +635,7 @@ export default function EditorCartel({
             </div>
           ))}
 
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <button
               type="button"
               className="btn-borde"
@@ -715,7 +715,7 @@ export default function EditorCartel({
 
       <section className="panel">
         <p className="titulo-seccion" style={{ marginBottom: 14 }}>Descargar para imprimir</p>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           {/* <a> y no <Link>: esto no navega a una pantalla, descarga un archivo del servidor. */}
           <a
             className="btn-borde"

@@ -33,7 +33,7 @@ export default function BotonesResolucion({ solicitudId }: { solicitudId: string
           placeholder="Opcional al aprobar; al rechazar, decile por qué."
         />
       </div>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <form action={ejecutarA}>
           <input type="hidden" name="comentario" value={comentario} />
           <button className="btn-primary" type="submit" disabled={ocupado}>

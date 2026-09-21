@@ -1,9 +1,8 @@
 /* ============================================================
    Cardly SV — sistema visual v3 "neumórfico" (2026-09-20)
    Antes: v2 "Stitch dark". El porqué de cada decisión vive en
-   docs/superpowers/specs/2026-09-20-rediseno-neumorfico-design.md.
-   (DESIGN.md se actualiza al cierre del rediseño: hasta entonces
-   describe el sistema viejo y no hay que creerle.)
+   docs/superpowers/specs/2026-09-20-rediseno-neumorfico-design.md,
+   y el resumen de las reglas, en DESIGN.md.
    - Lo que se levanta es DEL MISMO COLOR que la página: la forma
      sale del relieve (luz arriba-izquierda, sombra abajo-derecha),
      no de un borde ni de otro color.
@@ -107,6 +106,9 @@
   --shadow-2: 0 18px 44px -20px rgba(24, 24, 73, 0.32);
   --shadow-3: 0 26px 60px -18px rgba(24, 24, 73, 0.36);
   --shadow-card: var(--shadow-2); /* alias de compatibilidad */
+  /* Ninguna regla de este archivo usa --ring desde el rediseño (el foco de la app es un outline). Se
+     queda porque la PORTADA sí: es el anillo de los campos del formulario de demo
+     (app/_inicio/inicio.module.css). No lo borres por "no tener consumidores". */
   --ring: 0 0 0 4px rgba(81, 75, 168, 0.22);
   --sombra-acento: 0 8px 20px -8px rgba(61, 56, 128, 0.45);
   --sombra-menta: 0 10px 22px -10px rgba(11, 102, 69, 0.45);
@@ -499,7 +501,8 @@ a {
 }
 
 /* ---------- botones ---------- */
-/* Primario estilo C1: píldora "bone white" con texto oscuro (invertida en tema claro). */
+/* Primario estilo C1: píldora sólida que contrasta con la página — Deep con texto claro en el tema
+   claro, hueso con texto oscuro en el oscuro, blanco con texto negro en alto contraste. */
 .btn-primary {
   width: 100%;
   font-family: var(--font-display);
@@ -668,10 +671,9 @@ a {
 }
 
 /* Barra de progreso o de gráfico: la pista hundida, el relleno de acento. El ancho del relleno lo
-   pone el JSX: es un dato, no un estilo. */
-/* Con borde de 1px como toda superficie con relieve: en alto contraste el hundido vale none y la
-   pista (#000) sobre el panel (#000) desaparecía entera — un día con cero operaciones no mostraba
-   nada, y se perdía la escala del 100%. */
+   pone el JSX: es un dato, no un estilo. Con borde de 1px como toda superficie con relieve: en alto
+   contraste el hundido vale none y la pista (#000) sobre el panel (#000) desaparecía entera — un
+   día con cero operaciones no mostraba nada, y se perdía la escala del 100%. */
 .pista {
   height: 10px;
   border-radius: var(--radius-pill);
@@ -960,7 +962,6 @@ a {
   .reveal { opacity: 1; animation: none; }
   .sello { animation: none; }
   .qr-tile { animation: none; }
-  .metric-carta { transition: none; }
 }
 
 /* ---------- shell de paneles (comercio + admin) ---------- */
@@ -1462,8 +1463,8 @@ details.admin-fila:has(> summary:active) {
 }
 
 /* ---------- bloque de encuadre de la foto de la franja (editor de marca) ----------
-   Un <fieldset> sin la caja que le pone el navegador: la sección ya vive dentro del panel de
-   vidrio del formulario, y un borde más ahí adentro se lee como un error de maquetado. El
+   Un <fieldset> sin la caja que le pone el navegador: la sección ya vive dentro del panel del
+   formulario, y un borde más ahí adentro se lee como un error de maquetado. El
    fieldset (y no un div) porque los dos radios del modo necesitan una agrupación real con
    nombre accesible. */
 .encuadre-franja {
@@ -1597,11 +1598,17 @@ details.admin-fila:has(> summary:active) {
   color: var(--sobre-acento);
   box-shadow: var(--sombra-acento);
 }
-/* Un solo valor en el box-shadow, no una lista con var(--sombra-acento) adentro: en alto contraste
-   esa variable vale `none` y `0 0 0 3px x, none` es una declaración inválida — se caería la sombra
-   entera y el estado activo desaparecería justo en el tema que más lo necesita. */
+/* Activo = un aro de acento separado del círculo por una franja de la barra, con outline y no con
+   box-shadow. Antes era `box-shadow: 0 0 0 3px var(--acento-suave)`: un tinte al 12% que medía
+   1.18:1 contra la barra en claro y 1.61:1 en alto contraste — el estado existía en el CSS y no en
+   la pantalla. Un outline no reemplaza la sombra de --sombra-acento (que sigue levantando el
+   círculo), no se compone con nada que valga none y sobrevive a forced-colors.
+   Sin regla :focus-visible propia, a diferencia de las otras clases de estado con outline: el
+   ícono no recibe foco. El foco cae en el <a>, cuyo outline global rodea TODO el destino (círculo
+   y etiqueta), así que los dos aros no se confunden. */
 .nav-destacado.activo .icono {
-  box-shadow: 0 0 0 3px var(--acento-suave);
+  outline: 2px solid var(--acento);
+  outline-offset: 3px;
 }
 @media (min-width: 760px) {
   .nav-inferior { display: none; }
@@ -1654,7 +1661,11 @@ details.admin-fila:has(> summary:active) {
   box-shadow: var(--relieve-1);
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
-.menu-destacado:hover {
+/* El :not() no es decorativo: .menu-destacado:hover (0,2,0) le gana a .menu-destacado-activo
+   (0,1,0), y al pasar el mouse por "Reportes" estando en Reportes le cambiaba el borde de acento —
+   su única señal de activo — por --linea-fuerte. Mismo caso que .sheet-fila; lo vigila
+   lib/diseno/temas.test.ts ("el hover no pisa un estado"). */
+.menu-destacado:not(.menu-destacado-activo):hover {
   border-color: var(--linea-fuerte);
   box-shadow: var(--relieve-2);
 }
@@ -1712,9 +1723,18 @@ details.admin-fila:has(> summary:active) {
 }
 /* Elevada y tocable, como .menu-boton al lado: sube y marca el borde con el acento (en alto
    contraste el relieve vale none y el borde es la señal). */
-.contexto-pastilla:hover {
+.contexto-pastilla:hover:not(:disabled) {
   border-color: var(--acento);
   box-shadow: var(--relieve-2);
+}
+/* SelectorContexto la deshabilita mientras cambia de comercio o sucursal. Deshabilitada no puede
+   verse levantada ni reaccionar al mouse (mismo argumento que .btn-primary y .btn-acento), y con
+   color: var(--texto) fijo el gris nativo de :disabled no aplica. `progress` y no `not-allowed`:
+   no está prohibida, está esperando. */
+.contexto-pastilla:disabled {
+  opacity: 0.55;
+  cursor: progress;
+  box-shadow: none;
 }
 .contexto-etiqueta {
   overflow: hidden;
@@ -1876,7 +1896,7 @@ details.admin-fila:has(> summary:active) {
   padding: 14px 16px;
   background: var(--superficie-2);
   border: 1px solid var(--borde-relieve);
-  border-radius: var(--radius-field);
+  border-radius: var(--radius-control);
   cursor: pointer;
   color: var(--texto);
   font-family: var(--font-body);

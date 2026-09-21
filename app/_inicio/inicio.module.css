@@ -94,6 +94,21 @@
   border-color: var(--realce);
 }
 
+/* El foco de esta página es el del NAVEGADOR, no el de la app. Desde el rediseño neumórfico
+   (2026-09-20), globals.css pinta el foco de todo lo enfocable con `outline: 2px solid
+   var(--acento)`, y acá no sirve: --acento sigue al TEMA y estas bandas no. Medido: el violeta del
+   tema claro sobre la noche da 2.31:1, y el del oscuro sobre la banda del cierre, 1.00:1 — el foco
+   del botón "Agendá tu demo" desaparecía. `revert` devuelve el anillo propio del navegador, el que
+   esta página tuvo siempre, que se ve sobre cualquier fondo.
+   Va ANTES de toda otra regla de foco de este archivo, a propósito: empata en especificidad (0,2,0)
+   con .botonHero:focus-visible y compañía, y en un empate gana la que aparece después, así que los
+   elementos con anillo de marca propio lo conservan. La lista de elementos es la misma que la de
+   globals.css. Las dos cosas las verifica lib/diseno/temas.test.ts. */
+.pagina :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: revert;
+  outline-offset: revert;
+}
+
 .envoltura {
   width: 100%;
   /* 1200 y no 1080: el abanico pedía ancho y la cabecera, el hero y las secciones tienen que

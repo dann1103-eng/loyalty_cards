@@ -183,7 +183,7 @@ export default async function PaginaClientes({
                   <img src={t.qrDataUrl} alt={`QR de la tarjeta de ${t.nombreCliente ?? 'cliente'}`} />
                 </div>
                 <p className="qr-codigo">{t.qr_token}</p>
-                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 10, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 10, flexWrap: 'wrap' }}>
                   <Link className="btn-borde" href={`/comercio/escanear?token=${encodeURIComponent(t.qr_token)}`}>
                     <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">add_circle</span>
                     {etiquetaAtajoEscaner(tipoDeTarjeta(t.programa_id))}

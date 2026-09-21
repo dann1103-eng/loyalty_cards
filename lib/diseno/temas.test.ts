@@ -409,6 +409,65 @@ describe('foco', () => {
       });
     expect(fallas).toEqual([]);
   });
+
+  it('la portada revierte la regla global al anillo del navegador, antes de sus propios anillos', () => {
+    // La regla global pinta el foco con --acento, que sigue al tema; las bandas de la portada son
+    // colores fijos. Sin la reversión: 2.31:1 sobre la noche en claro, 1.00:1 sobre el cierre en
+    // oscuro. Tiene que alcanzar a TODO lo que alcanza la global (misma lista de elementos), e ir
+    // antes de las reglas de foco propias de la portada: empatan en especificidad (0,2,0) y en un
+    // empate gana la última, así que después les borraría su anillo de marca.
+    const portada = readFileSync(fileURLToPath(new URL('../../app/_inicio/inicio.module.css', import.meta.url)), 'utf8');
+    const global = reglas(css).find(
+      (r) => !r.dentroDeArroba && r.selectores.some((s) => s.startsWith(':where(') && s.endsWith(':focus-visible')),
+    );
+    const selectorGlobal = global?.selectores.find((s) => s.startsWith(':where('));
+    const esperado = `.pagina ${selectorGlobal}`;
+
+    const todasPortada = reglas(portada);
+    const indice = todasPortada.findIndex((r) => r.selectores.includes(esperado));
+    expect(indice, `la portada no revierte la regla global de foco: falta "${esperado}"`).toBeGreaterThanOrEqual(0);
+    const reversion = todasPortada[indice];
+    expect(reversion.declaraciones.get('outline'), 'la reversión del foco de la portada no revierte outline').toBe('revert');
+    expect(reversion.declaraciones.get('outline-offset'), 'la reversión del foco de la portada no revierte outline-offset').toBe('revert');
+
+    const anterior = todasPortada
+      .slice(0, indice)
+      .find((r) => r.selectores.some((s) => s.includes(':focus-visible')));
+    expect(
+      anterior?.selectores.join(', '),
+      'la reversión del foco de la portada va después de una regla de foco propia, y le borraría su anillo',
+    ).toBeUndefined();
+  });
+});
+
+describe('el hover no pisa un estado', () => {
+  it('una regla :hover no redeclara lo que marca la clase de estado, salvo que la excluya', () => {
+    // `.X:hover` tiene especificidad (0,2,0) y le gana a `.X-activa` (0,1,0) en lo que declaren los
+    // dos: al pasar el mouse por la fila activa se borraba la única señal de que lo era. Pasó dos
+    // veces (.sheet-fila y .menu-destacado). La salida es excluirla: `.X:not(.X-activa):hover`. Con
+    // `.X.activo` el empate lo decide el orden del archivo, que es igual de frágil: también se exige.
+    const todas = reglas(css).filter((r) => !r.dentroDeArroba);
+    const fallas: string[] = [];
+    for (const estado of todas) {
+      for (const selectorEstado of estado.selectores) {
+        const partes = /^(\.[\w-]+?)(-activ[ao]|\.activ[ao])$/.exec(selectorEstado);
+        if (!partes) continue;
+        const [, base, sufijo] = partes;
+        const exclusion = sufijo.startsWith('.') ? `:not(${sufijo})` : `:not(${selectorEstado})`;
+        for (const r of todas) {
+          for (const selector of r.selectores) {
+            if (!selector.startsWith(`${base}:`) || !selector.includes(':hover') || selector.includes(exclusion)) continue;
+            for (const propiedad of r.declaraciones.keys()) {
+              if (estado.declaraciones.has(propiedad)) {
+                fallas.push(`${selector} pisa ${propiedad} de ${selectorEstado} al pasar el mouse`);
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(fallas).toEqual([]);
+  });
 });
 
 describe('estados que se marcan con outline', () => {
@@ -417,9 +476,10 @@ describe('estados que se marcan con outline', () => {
     // clase de estado como .sheet-fila-activa, que declara su propio outline después y le gana. Sin
     // una regla :focus-visible propia, la fila activa enfocada se ve igual que sin foco. Se probó
     // borrando la de .portal-cuenta-activa: las demás pruebas seguían verdes.
-    // Excepción explícita: .opcion-plan-activa es un <label>, y el foco cae en su <input> radio,
-    // que dibuja su propio outline.
-    const SIN_FOCO_PROPIO = new Set(['.opcion-plan-activa']);
+    // Excepciones explícitas, las dos porque el que recibe el foco es OTRO elemento, con su propio
+    // outline: .opcion-plan-activa es un <label> y el foco cae en su <input> radio; el ícono de
+    // .nav-destacado es un <span> y el foco cae en el <a>, cuyo aro rodea todo el destino.
+    const SIN_FOCO_PROPIO = new Set(['.opcion-plan-activa', '.nav-destacado.activo .icono']);
     const todas = reglas(css).filter((r) => !r.dentroDeArroba);
     const fallas: string[] = [];
     for (const r of todas) {

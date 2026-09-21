@@ -187,7 +187,7 @@ export default function ModalAgregarLocal({
                 <label htmlFor="nombre-sucursal">Nombre de la sucursal</label>
                 <input id="nombre-sucursal" name="nombre" placeholder="Sucursal Centro" required />
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 12 }}>
                 <button className="btn-borde" type="button" onClick={() => setPaso('elegir')}>
                   Volver
                 </button>
@@ -224,7 +224,7 @@ export default function ModalAgregarLocal({
                   </label>
                 ))}
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 12 }}>
                 <button className="btn-borde" type="button" onClick={() => setPaso('elegir')}>
                   Volver
                 </button>

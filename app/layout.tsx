@@ -120,8 +120,8 @@ export default function RootLayout({
     >
       <head>
         {/* ANTI-DESTELLO DE TEMA. Corre SÍNCRONO mientras el navegador parsea el <head>, o sea
-            antes del primer pintado y mucho antes de que React hidrate. Con useEffect el usuario
-            vería el panel oscuro y después el salto a claro en cada carga; useLayoutEffect tampoco
+            antes del primer pintado y mucho antes de que React hidrate. Con useEffect quien eligió el
+            oscuro vería el panel claro (el default) y después el salto en cada carga; useLayoutEffect tampoco
             alcanza (corre después de hidratar, y en una conexión lenta el navegador ya pintó el
             HTML del servidor). Patrón documentado en
             node_modules/next/dist/docs/01-app/02-guides/preventing-flash-before-hydration.md.
