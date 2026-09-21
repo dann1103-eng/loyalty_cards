@@ -12,7 +12,9 @@ import {
   asignarComercioACuenta,
 } from '@/lib/comercios/cuentas';
 import type { DatosCuenta } from '@/lib/comercios/cuentas';
-import { registrarCobro } from '@/lib/comercios/cobros';
+import { obtenerCobroParaPagoDeLaCuenta, registrarCobro } from '@/lib/comercios/cobros';
+import { marcarCobroPagadoAMano } from '@/lib/comercios/resolverPagos';
+import { dependenciasResolver } from '@/lib/comercios/resolverPagosSupabase';
 import { notificarPagoAMeta } from '@/lib/marketing/conversionesMeta';
 
 export type EstadoFormulario = { error: string } | undefined;
@@ -139,4 +141,35 @@ export async function accionRegistrarCobro(
 
   revalidatePath(`/admin/cuentas/${cuentaId}`);
   return { ok: true };
+}
+
+export type EstadoMarcado = { error: string } | { ok: string } | undefined;
+
+// FM marca pagado un cobro de la app que cobró por fuera de Wompi (o cuyo webhook no llegó). Pasa por la
+// misma puerta que el webhook (`confirmarPagoCobro`): aplica el plan, activa la licencia y avisa a Meta
+// una vez. El cobro se lee ACOTADO a esta cuenta: conocer el id de un cobro ajeno no basta.
+export async function accionMarcarCobroPagado(
+  cuentaId: string,
+  cobroId: string,
+  _estadoPrevio: EstadoMarcado,
+  _formData: FormData,
+): Promise<EstadoMarcado> {
+  await verifyFmAdmin();
+
+  const supabase = createServiceClient();
+  let cobro;
+  try {
+    cobro = await obtenerCobroParaPagoDeLaCuenta(supabase, cuentaId, cobroId);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'No se pudo leer el cobro.' };
+  }
+  if (!cobro) return { error: 'No encontramos ese cobro en esta cuenta. Recargá la página.' };
+
+  const r = await marcarCobroPagadoAMano(dependenciasResolver(supabase), cobro);
+  if (!r.ok) return { error: r.error };
+
+  // Cambió el plan de la cuenta (lo lee todo /comercio) y el contador de pagos de la nav de /admin.
+  revalidatePath('/admin', 'layout');
+  revalidatePath('/comercio', 'layout');
+  return { ok: r.mensaje };
 }

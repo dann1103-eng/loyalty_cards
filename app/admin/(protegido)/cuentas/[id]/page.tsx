@@ -6,9 +6,20 @@ import { cupoDeCuenta } from '@/lib/comercios/cuentas';
 import FormularioCuenta from '../FormularioCuenta';
 import FormularioVincular from '../FormularioVincular';
 import BotonEliminarCuenta from '../BotonEliminarCuenta';
-import { accionActualizarCuenta, accionEliminarCuenta, accionVincularComercio, accionRegistrarCobro } from '../actions';
-import { listarCobros } from '@/lib/comercios/cobros';
+import {
+  accionActualizarCuenta,
+  accionEliminarCuenta,
+  accionVincularComercio,
+  accionRegistrarCobro,
+  accionMarcarCobroPagado,
+} from '../actions';
+import { listarCobros, listarPeriodosPagados, METODO_WOMPI } from '@/lib/comercios/cobros';
+import { describirPeriodo } from '@/lib/comercios/pagosAdmin';
+import { etiquetaDePlan } from '@/lib/comercios/planCuenta';
+import { estadoDelPeriodo } from '@/lib/comercios/prorrateo';
+import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import FormularioCobro from './FormularioCobro';
+import MarcarPagado from './MarcarPagado';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,6 +91,9 @@ export default async function PaginaEditarCuenta({
   // `null` ante error, no `[]`: en una pantalla de cobros, una lista vacía significa "no le hemos
   // cobrado nada" — decirlo por un fallo de consulta llevaría a cobrar dos veces o a no cobrar.
   const cobros = await listarCobros(supabase, id);
+  // Hasta cuándo tiene pagado en la app. `null` (error de lectura) no dice nada: mejor sin línea que una falsa.
+  const periodos = await listarPeriodosPagados(supabase, id);
+  const lineaPeriodo = periodos === null ? null : describirPeriodo(estadoDelPeriodo(periodos, hoyEnZona(null)));
 
   return (
     <main className="admin-main">
@@ -147,6 +161,8 @@ export default async function PaginaEditarCuenta({
           NO tiene validez fiscal.
         </p>
 
+        {lineaPeriodo && <p className="admin-fila-slug" style={{ marginTop: -2 }}>{lineaPeriodo}</p>}
+
         {cobros === null ? (
           <p className="admin-error" role="alert">No se pudieron cargar los cobros. Recargá la página.</p>
         ) : cobros.length === 0 ? (
@@ -161,6 +177,19 @@ export default async function PaginaEditarCuenta({
                     #{c.numero} · {c.periodoDesde} — {c.periodoHasta}
                     {c.pagadoEn && ` · pagado ${c.pagadoEn}`}
                   </div>
+                  {/* Lo que dice el cobro de la app: si es un ajuste por subir de plan, a qué plan, y cómo entró. */}
+                  {(c.tipo === 'ajuste' || c.planDestino || c.metodo) && (
+                    <div className="admin-fila-slug">
+                      {c.tipo === 'ajuste' ? 'Ajuste por subir de plan' : 'Período completo'}
+                      {c.planDestino && ` → ${etiquetaDePlan(c.planDestino)}`}
+                      {c.metodo && ` · ${c.metodo}`}
+                    </div>
+                  )}
+                  {/* Un cobro de la app que sigue pendiente: si el cliente pagó por fuera de Wompi (o el aviso
+                      no llegó), FM lo marca pagado desde acá. */}
+                  {c.estado === 'pendiente' && c.metodo === METODO_WOMPI && (
+                    <MarcarPagado accion={accionMarcarCobroPagado.bind(null, id, c.id)} />
+                  )}
                 </div>
                 <span className={`pastilla ${c.estado === 'pagado' ? 'pastilla-activo' : 'pastilla-inactivo'}`}>
                   {c.estado === 'pagado' ? 'Pagado' : c.estado === 'anulado' ? 'Anulado' : 'Pendiente'}

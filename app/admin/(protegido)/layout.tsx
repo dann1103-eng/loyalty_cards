@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { verifyFmAdmin } from '@/lib/fm/verifyFmAdmin';
+import { contarPagosAtencion } from '@/lib/comercios/pagosAdmin';
+import { createServiceClient } from '@/lib/supabase/server';
 import SelectorTema from '@/app/_ui/SelectorTema';
 import { cerrarSesion } from '../actions';
 
@@ -7,6 +9,10 @@ export default async function LayoutProtegido({ children }: { children: React.Re
   // Primera barrera. NO es la única: cada página y cada Server Action repiten el chequeo,
   // porque los layouts no se re-renderizan en navegación del lado del cliente.
   await verifyFmAdmin();
+
+  // Cuántos pagos esperan a FM. `null` si no se pudo contar (o si la migración 0037 todavía no está
+  // aplicada): en ese caso la nav no muestra número, que es mejor que un cero falso y que romper el panel.
+  const pagosPorRevisar = await contarPagosAtencion(createServiceClient());
 
   return (
     <div className="admin-shell" style={{ paddingBottom: 0 }}>
@@ -43,6 +49,11 @@ export default async function LayoutProtegido({ children }: { children: React.Re
                 solicitudes de los dueños quedan esperando sin que nadie las vea. */}
             <Link className="admin-salir" style={{ textDecoration: 'none' }} href="/admin/solicitudes">
               Solicitudes
+            </Link>
+            {/* Pagos que entraron por Wompi. El número son los que esperan una decisión de FM: sin él,
+                un pago que no se pudo aplicar solo quedaría sin que nadie lo vea. */}
+            <Link className="admin-salir" style={{ textDecoration: 'none' }} href="/admin/pagos">
+              {pagosPorRevisar ? `Pagos (${pagosPorRevisar})` : 'Pagos'}
             </Link>
           </nav>
           {/* El tema se guarda en el <html>, o sea que es GLOBAL: quien elija claro o alto
