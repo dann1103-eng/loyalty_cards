@@ -3,7 +3,8 @@
 **Fecha:** 2026-09-21 · **Rama:** `claude/pasarela-wompi` · **Estado:** v2, después de la revisión
 independiente del 2026-09-21. **Implementado en la rama** (tareas 1 a 11; ver
 `docs/superpowers/plans/2026-09-21-pasarela-wompi.md`), **sin desplegar**: falta que Daniel aplique la migración
-`0037`, corra las pruebas con base de datos y responda el punto 0.
+`0037` (aplicada por Daniel el 2026-09-21) y corra las pruebas con base de datos. El punto 0 quedó
+**resuelto el 2026-09-21**: el App ID y el API Secret del negocio alcanzan para crear enlaces de pago (en modo prueba).
 
 ## Por qué
 

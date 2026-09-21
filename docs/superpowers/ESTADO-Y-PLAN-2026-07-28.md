@@ -1260,7 +1260,9 @@ vieron las pantallas en el navegador: este worktree no tiene `.env.local`.
 3. `WOMPI_CLIENT_ID` y `WOMPI_CLIENT_SECRET` en `.env.local` y en Vercel. **Regenerar el API Secret**: se
    vio en una captura.
 4. Correr `scripts/probar-wompi.ts` y pasar lo que imprime: responde si las credenciales del negocio alcanzan
-   para crear enlaces (el "punto 0"). Si no, el diseño cambia.
+   para crear enlaces (el "punto 0"). **RESUELTO el 2026-09-21**: sí alcanzan, en modo prueba (negocio
+   `Cardly SV`, no productivo); se creó un enlace de prueba de $1. Las credenciales quedaron en el
+   `.env.local` del checkout principal; falta ponerlas en Vercel.
 5. Con tu permiso, desplegar (migración primero) y **después** poner la URL del webhook en el panel de
    Wompi: `https://www.cardly-sv.site/api/wompi/webhook`.
 6. Mirar `/comercio/plan`, `/comercio/plan/pago/resultado`, `/admin/pagos` y la ficha de una cuenta a ancho

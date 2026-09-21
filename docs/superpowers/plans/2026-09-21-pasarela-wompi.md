@@ -30,7 +30,7 @@ producción). El dinero se calcula en centavos enteros.
 | 2 | Configuración, firma sobre bytes y parser del webhook | ✅ mutaciones corridas | `f393b4e` | `lib/wompi/{config,firma,webhook}.ts` |
 | 3 | Cliente de la API (token en memoria, reintento ante 401) | ✅ mutaciones corridas | `9f29d26` | `lib/wompi/cliente.ts` |
 | 4 | Migración `0037`, tipos y script de verificación | ⏳ **falta que Daniel la aplique** | `7260101` | `supabase/migrations/0037_pagos_wompi.sql`, `lib/supabase/types.ts`, `scripts/verificar-0037.ts` |
-| 5 | Script de conexión (punto 0) | ⏳ **falta que Daniel lo corra** | `74cf235` | `scripts/probar-wompi.ts` |
+| 5 | Script de conexión (punto 0) | ✅ corrido el 2026-09-21: las credenciales del negocio crean enlaces | `74cf235` | `scripts/probar-wompi.ts` |
 | 6 | `planCuenta` (`aplicarPlanDestino`, `activarLicencia`), `cobros`; se borra `accionSubirPlan` | ✅ lógica; ⏳ pruebas con base sin correr | `e6a42eb` | `lib/comercios/{planCuenta,cobros}.ts` |
 | 7 | `confirmarPagoCobro` y su repositorio | ✅ mutaciones corridas; ⏳ adaptador contra la base sin correr | `9ba3ddc`, `e6a42eb` | `lib/comercios/{confirmarPago,repositorioPagosSupabase}.ts`, `test/fixtures/repositorioPagosFalso.ts` |
 | 8 | Ruta del webhook | ✅ mutaciones corridas | `9ba3ddc`, `e6a42eb` | `lib/wompi/procesarWebhook.ts`, `app/api/wompi/webhook/route.ts` |
@@ -89,7 +89,7 @@ Las pruebas de fechas dependen de la zona horaria del proceso: corré las puras 
    desplegar.**
 3. **Poner `WOMPI_CLIENT_ID` y `WOMPI_CLIENT_SECRET` en `.env.local` y en Vercel** (nunca por el chat).
    **Regenerá el API Secret antes de producción**: apareció en una captura de pantalla.
-4. **Punto 0:**
+4. **Punto 0 (YA RESUELTO el 2026-09-21, no repetir salvo que cambien las credenciales):**
 
    ```bash
    npx tsx --conditions=react-server scripts/probar-wompi.ts
