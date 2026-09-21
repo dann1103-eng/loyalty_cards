@@ -354,10 +354,11 @@ necesita atención". La ficha de la cuenta muestra si el período venció.
   contraseña de la cuenta Wompi, y la app no llama a ningún endpoint que la pida.
 - **Un enlace equivale a un intento y a un pago**: `cantidadMaximaPagosExitosos: 1`,
   `esMontoEditable: false`, `esCantidadEditable: false`, `cantidadPorDefecto: 1`, las seis formas de pago
-  explícitas (solo tarjeta en `true`), y vigencia de **2 horas** (en un ajuste, como máximo hasta el
-  último día del período; `fechaInicio` es obligatoria en el Swagger cuando se manda `vigencia`). Una
-  vigencia corta acota las dos fugas que no se pueden cerrar del lado de Wompi (no se pueden desactivar
-  enlaces): pagar un enlace de un intento ya anulado, y pagar un ajuste cuando ya no corresponde.
+  explícitas (solo tarjeta en `true`), y vigencia de **2 horas** (`fechaInicio` es obligatoria en el
+  Swagger cuando se manda `vigencia`). Una vigencia corta acota las dos fugas que no se pueden cerrar del
+  lado de Wompi (no se pueden desactivar enlaces): pagar un enlace de un intento ya anulado, y pagar
+  cuando el precio ya no corresponde. Un ajuste solo se ofrece con más de 7 días de período por delante,
+  así que 2 horas nunca cruzan su fin.
 - Los importes salen de `opcionesPago.ts` en el servidor. La acción del dueño recibe **solo el plan y la
   acción elegidos**, nunca un monto.
 - La página de vuelta exige que el cobro sea de la cuenta de la sesión (mismo patrón que `obtenerCobro`).
