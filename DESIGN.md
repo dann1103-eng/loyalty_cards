@@ -76,6 +76,10 @@ de la tarjeta de billetera) y los radios `--radius` 20px, `--radius-field` 12px,
 rompe el truco), `--hover-suave` y `--superficie-4` (quedaron sin consumidores). No los restaures
 si releés un plan viejo.
 
+**`--ring` se queda aunque la app ya no lo use:** el foco de la app es un `outline`, pero la
+portada dibuja con `--ring` el anillo de los campos del formulario de demo. No es un token sin
+consumidores.
+
 ### El contrato que hay que respetar
 Tres pruebas leen `app/globals.css` con **un solo parser** (`lib/diseno/tokensCss.ts`), que quita
 los comentarios y **lanza** ante lo que no sabe leer (anidamiento de CSS, paréntesis sueltos, un
@@ -100,7 +104,10 @@ los comentarios y **lanza** ante lo que no sabe leer (anidamiento de CSS, parén
    - **relieve**: alto contraste es plano; claro y oscuro tienen un piso (la luz y la sombra tienen
      que verse contra el fondo);
    - **foco**: existe la regla global con `outline`, ningún `:focus` pinta un anillo con
-     `box-shadow`, y cada estado que se marca con `outline` tiene su propia regla `:focus-visible`;
+     `box-shadow`, cada estado que se marca con `outline` tiene su propia regla `:focus-visible`, y
+     la portada revierte la regla global (misma lista de elementos, antes de sus propios anillos);
+   - **el hover no pisa un estado**: una regla `.X:hover` no redeclara lo que declara `.X-activa` o
+     `.X.activo`, salvo que la excluya con `:not()`;
    - la copia del CSS del tablero de revisión (`public/tablero-neumorfico/propuesta.css`), mientras
      exista, es idéntica a `globals.css`.
 3. **`lib/diseno/contraste.test.ts`** y **`tokensCss.test.ts`** — la matemática y el parser.
@@ -168,19 +175,37 @@ tema claro (el tipo claro se lee más liviano y necesita aire).
    `none`, y sobrevive a `forced-colors`. La regla global es
    `:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible`, con
    especificidad (0,1,0): EMPATA con una clase de estado que declare su propio `outline`, así que
-   cada una (`.sheet-fila-activa`, `.portal-cuenta-activa`) necesita su regla `:focus-visible`.
+   cada una (`.sheet-fila-activa`, `.portal-cuenta-activa`) necesita su regla `:focus-visible`. Las
+   dos excepciones son estados en un elemento que no recibe el foco: `.opcion-plan-activa` (el foco
+   cae en su radio) y el ícono de "Escanear" activo (el foco cae en el `<a>`).
+   **La portada no usa este foco:** `--acento` sigue al tema y sus bandas no (el violeta daba
+   1.00:1 sobre la banda del cierre en oscuro). `inicio.module.css` lo revierte al anillo del
+   navegador con `outline: revert`, antes de sus propias reglas de foco.
 4. **Toda superficie con relieve del color de la página lleva borde de 1px** (`--borde-relieve`),
    aunque casi no se vea. La caja mide igual en los tres temas, y en `forced-colors` el borde es el
    único límite que queda. Donde no había borde, se descontó 1px del padding para que la caja no
    crezca. **Exentos:** los botones rellenos (`.btn-primary`, `.btn-acento`), que ya se separan por
    el relleno. **`.btn-borde` usa `--linea-fuerte` y no `--borde-relieve`:** en un botón el borde es
    la afordancia; con `--borde-relieve`, en alto contraste bajaba de 13.77:1 a 6.27:1.
+   `.menu-destacado` conserva el `--linea` que ya tenía antes del rediseño.
 5. **Todo estado tiene una señal que no es sombra.** En alto contraste el relieve vale `none`, así
-   que un hover que solo "sube" ahí no se ve. Los hovers de los botones elevados suben **y** marcan
-   el borde con el acento; las filas tocables se desplazan 2px.
+   que un hover que solo "sube" ahí no se ve. Cómo quedó cada uno:
+   - `.btn-borde`, `.admin-salir`, `.menu-boton` y `.contexto-pastilla`: el hover sube **y** marca
+     el borde con el acento. `.menu-destacado` lo pasa a `--linea-fuerte`.
+   - Las filas tocables (`.admin-fila` como `<a>`, `<button>` o `<details>`) se desplazan 2px, y al
+     tocarlas marcan el borde con el acento.
+   - `.btn-primary` y `.btn-acento` cambian opacidad o brillo: una señal débil en alto contraste,
+     aceptada porque en el teléfono no hay hover.
+   - Sin hover, a propósito: `.portal-cuenta`, `.opcion-plan`, `.filtro-chip` y
+     `::file-selector-button`.
+   - **Un hover nunca pisa el estado activo.** `.X:hover` (0,2,0) le gana a `.X-activa` (0,1,0):
+     se escribe `.X:not(.X-activa):hover`. Pasó con `.sheet-fila` y con `.menu-destacado`.
+   - El activo de "Escanear" es un aro de `outline` separado del círculo, no un anillo de
+     `box-shadow` (el que tenía, con `--acento-suave`, medía 1.18:1 contra la barra).
 
 ### Qué es elevado, qué es hundido y qué es plano
-- **Elevado:** `.panel`, `.btn-*`, `.admin-fila` (las tocables: `<a>`, `<button>` y `<details>`),
+- **Elevado:** `.panel`, `.btn-*`, `.admin-fila` (todas, también las `<div>` de solo lectura; las
+  tocables —`<a>`, `<button>`, `<details>`— además reaccionan al hover y al toque),
   `.metric-carta`, `.menu-boton`, `.menu-destacado`, `.admin-salir`, `.contexto-pastilla`,
   `.portal-cuenta`, `.portal-recompensa`, `.escaner-marco`, `.opcion-plan`, `::file-selector-button`.
   `.escaner-marco` no puede ir hundido: una sombra `inset` se pinta debajo del contenido y el
@@ -196,8 +221,10 @@ tema claro (el tipo claro se lee más liviano y necesita aire).
 
 ### Forma y espaciado
 - **Radios:** `--radius` 20px (paneles, filas, métricas), `--radius-control` 16px (campos,
-  `.btn-acento`, alertas, cuentas del portal), `--radius-pill` 999px. `--radius-field` (12px) sigue
-  existiendo porque la portada lo usa; los paneles migraron a `--radius-control`.
+  `.btn-acento`, alertas, cuentas y recompensas del portal), `--radius-pill` 999px.
+  `--radius-field` (12px) sigue existiendo porque la portada lo usa; en la app los controles
+  migraron a `--radius-control`, y en 12px quedan solo `.wallet-btn` (excepción de Apple) y
+  `.portal-instalar` (plano).
 - **Espaciado:** `--sp-1…7` = 4 / 8 / 12 / 16 / 24 / 32 / 48. Variar el ritmo; el mismo padding en
   todos lados es monotonía.
 - **Separación entre superficies con relieve:** 12 a 14px. La extensión de `--relieve-1` es 4 + 10 =

@@ -1176,6 +1176,12 @@ describe('composición de sombras', () => {
 });
 ```
 
+> **Si releés este bloque después de la Tarea 4:** es la prueba AL TERMINAR esa tarea, no la final.
+> Las Tareas 7 a 9 y las revisiones le cambiaron pares y le sumaron pruebas (foco, estados con
+> outline, el tablero, el foco de la portada, "el hover no pisa un estado"). **No lo restaures
+> sobre el archivo:** el vigente es `lib/diseno/temas.test.ts`, y lo que cambió está en la sección
+> "Cambios al implementar" de la spec.
+
 - [ ] **Paso 2: correr y ver la falla ESPERADA**
 
 Esperado: rojo, con exactamente estas cinco fallas (dos pruebas de `tema oscuro` y dos de
@@ -1222,6 +1228,9 @@ por:
      6.78:1; en este tema todo texto pide 7:1. Con 12% da 7.31:1. */
   --error-suave: rgba(255, 138, 122, 0.12);
 ```
+
+(En la Tarea 6 los dos arreglos se mudaron a los bloques de tema nuevos, con los comentarios
+reescritos; los valores son los mismos. El texto vigente es el de `app/globals.css`.)
 
 - [ ] **Paso 4: correr y ver verde**
 
@@ -1975,10 +1984,19 @@ git commit -m "Tokens neumorficos en los tres temas; el claro pasa a ser el defa
 
 **Verificación del controlador:** en el tablero, `getComputedStyle(document.documentElement)` de
 cada token en los tres iframes contra lo que da el parser; capturas a 375px. Recorrer `/` en los
-tres temas (el formulario de demo sigue al tema: se anota si se ve distinto, bloquea si queda
+tres temas (del formulario de demo siguen al tema solo la alerta, la tilde de éxito y el anillo de
+los campos: la banda del cierre le fija el resto. Se anota si se ve distinto, bloquea si queda
 ilegible).
 
 ---
+
+> **Tareas 7, 8 y 9 — si las releés después de implementadas:** sus bloques de CSS son idénticos a
+> `app/globals.css` (se sincronizaron tras la revisión final). La prosa describe el cambio de CADA
+> tarea, con las correcciones de sus revisiones; lo que cambió después está en "Cambios al
+> implementar" de la spec, que prevalece. **No restaures nada de acá sobre el CSS publicado sin
+> compararlo primero:** varias correcciones (el borde de `.pista`, el hover de `.subida-imagen` sin
+> sombra, los hovers con borde de acento, el `:not()` de `.menu-destacado`) existen porque la
+> versión anterior tenía un bug en alto contraste.
 
 ### Tarea 7: primitivas
 
@@ -2080,8 +2098,11 @@ Justo después de la regla `a { … }` de la base:
 
 ```css
 /* Foco: outline y no box-shadow. No pelea con el relieve ni con el hundido, no se compone con
-   ningún token que valga none, y sobrevive a forced-colors. Especificidad 0 (:where): la regla de
-   foco de cualquier componente le gana. */
+   ningún token que valga none, y sobrevive a forced-colors. Especificidad (0,1,0), no cero: el
+   :where anula la lista de elementos pero :focus-visible queda afuera y suma. Por eso EMPATA con
+   una clase de estado (.sheet-fila-activa, .portal-cuenta-activa), que declara su propio outline
+   después y le gana: cada una necesita su regla :focus-visible propia, o el foco quedaría
+   indistinguible del estado. Lo verifica lib/diseno/temas.test.ts. */
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--acento);
   outline-offset: 2px;
@@ -2170,10 +2191,23 @@ Filas de la tabla de la spec para `.admin-top`, `.admin-salir`, `.nav-inferior`/
 `.menu-boton`, `.menu-destacado`, `.sheet-panel`, `.sheet-fila`, `.contexto-pastilla`,
 `.filtro-chip` y `.filtro-chips` (gap 12).
 
-**Los hovers que hoy oscurecen pasan a subir:** `.admin-salir:hover` (L885-888) y
-`.menu-boton:hover` (L1478-1481) usan `background: var(--superficie-4)`, y `.menu-destacado:hover`
-(L1499-1502) usa `var(--superficie-3)`. En los tres, el `background` deja de cambiar y el hover pasa
-a `box-shadow: var(--relieve-2)`: oscurecer contradice que la superficie sea del color de la página. Borrar los `backdrop-filter` y `-webkit-backdrop-filter`
+**Los hovers que hoy oscurecen pasan a subir, con una señal que no es sombra:**
+`.admin-salir:hover` (L885-888) y `.menu-boton:hover` (L1478-1481) usan
+`background: var(--superficie-4)`, y `.menu-destacado:hover` (L1499-1502) usa `var(--superficie-3)`.
+En los tres, el `background` deja de cambiar (oscurecer contradice que la superficie sea del color
+de la página) y el hover pasa a `box-shadow: var(--relieve-2)` **más un borde**, porque en alto
+contraste el relieve vale `none` y un hover que solo sube no se ve (corregido en las revisiones):
+- `.admin-salir:hover`, `.menu-boton:hover` y `.contexto-pastilla:hover:not(:disabled)`:
+  `border-color: var(--acento)`. `.contexto-pastilla` suma además una regla `:disabled`
+  (`opacity: 0.55; cursor: progress; box-shadow: none`): `SelectorContexto` la deshabilita mientras
+  cambia de comercio.
+- `.menu-destacado:not(.menu-destacado-activo):hover`: `border-color: var(--linea-fuerte)`. Sin el
+  `:not()`, el hover (0,2,0) le borraba a "Reportes" activo el borde de acento, su única señal.
+- `.sheet-fila:not(.sheet-fila-activa):hover:not(:disabled)`, por la misma razón.
+
+El activo de "Escanear" (`.nav-destacado.activo .icono`) pasa a `outline: 2px solid var(--acento);
+outline-offset: 3px` (su anillo de `--acento-suave` medía 1.18:1 contra la barra; corregido en la
+revisión final). Borrar los `backdrop-filter` y `-webkit-backdrop-filter`
 de `.admin-top` y `.nav-inferior`, y `--vidrio-top` y `--vidrio-nav` de los **tres** bloques de tema.
 El comentario de `.admin-top` (L849-851) se reescribe: el header ya no es translúcido.
 
@@ -2228,12 +2262,14 @@ el tablero; abrir y cerrar con Escape las hojas que carguen en la app.
 - [ ] **Paso 1: CSS de las familias**
 
 Filas de la spec para `.metric-carta` (y `.metric-etiqueta`/`.metric-sub`: `opacity` → `color`),
-`.portal-cuenta` (con `.portal-cuenta-activa:focus-visible { outline-width: 3px; outline-offset: 2px; }`),
+`.portal-cuenta` (radio `var(--radius-control)`, que la fila de la spec omitía — corregido en la
+revisión final —, y `.portal-cuenta-activa:focus-visible { outline-width: 3px; outline-offset: 2px; }`),
 `.portal-recompensa`, `.escaner-marco`, `.subida-imagen`, y los gaps (`.panel-atajos` 14,
 `.portal-cuentas`/`.portal-recompensas` 12, `.metric-pila` 20 en L1010 **y** en el `@media` de
 L1067). En `.subida-imagen`: borrar el literal naranja (L1111) y reescribir su comentario (L1105-1110)
 con la razón nueva (el `box-shadow` del hover reemplazaba al hundido y aplanaba el pozo); el hover
-conserva `box-shadow: var(--hundido-1)`.
+**no declara** `box-shadow` (corregido en la revisión: sin declaración rige el hundido de la base, y
+cualquier valor ahí lo reemplazaría).
 
 - [ ] **Paso 2: clases nuevas**
 
@@ -2242,9 +2278,13 @@ Al final de la sección de formularios:
 ```css
 /* ---------- piezas hundidas sueltas ----------
    El hundido de .field para un control que no vive dentro de un .field (el "Puntos a sumar" del
-   escáner, el link de acceso del dueño). Sin font-family A PROPÓSITO: el del escáner lleva además
-   .dato-mono, y con la misma especificidad la que apareciera después en el archivo le pisaría la
-   tipografía a los puntos. */
+   escáner, el link de acceso del dueño). Los dos llevan además .dato-mono, y la fuente NO va en
+   .campo-suelto: con la misma especificidad, la que apareciera después en el archivo le pisaría la
+   tipografía a los puntos. Va en un :where (especificidad cero) como respaldo: cualquier clase de
+   fuente le gana sin importar el orden, y sin ninguna el input no cae en la fuente del sistema. */
+:where(.campo-suelto) {
+  font-family: var(--font-body);
+}
 .campo-suelto {
   font-size: 1rem;
   color: var(--texto);
@@ -2272,11 +2312,14 @@ Al final de la sección de formularios:
 }
 
 /* Barra de progreso o de gráfico: la pista hundida, el relleno de acento. El ancho del relleno lo
-   pone el JSX: es un dato, no un estilo. */
+   pone el JSX: es un dato, no un estilo. Con borde de 1px como toda superficie con relieve: en alto
+   contraste el hundido vale none y la pista (#000) sobre el panel (#000) desaparecía entera — un
+   día con cero operaciones no mostraba nada, y se perdía la escala del 100%. */
 .pista {
   height: 10px;
   border-radius: var(--radius-pill);
   background: var(--superficie-0);
+  border: 1px solid var(--borde-relieve);
   box-shadow: var(--hundido-1);
   overflow: hidden;
 }
@@ -2317,8 +2360,9 @@ Al final de la sección de formularios:
 campo a la altura del botón).
 
 `FormularioAccesoDueno.tsx` L134-142: `className="dato-mono campo-suelto"` (el input **ya** tenía
-`dato-mono`, en L127, afuera del rango del `style`; la clase se SUMA, no se reemplaza — por eso
-`.campo-suelto` no declara `font-family`) y
+`dato-mono`, en L127, afuera del rango del `style`; la clase se SUMA, no se reemplaza — por eso la
+fuente de `.campo-suelto` va aparte, en un `:where(.campo-suelto)` de especificidad cero que
+`.dato-mono` pisa sin importar el orden) y
 `style={{ width: '100%', fontSize: '0.78rem', padding: '10px 12px' }}`.
 
 `FormularioConfiguracionPrograma.tsx` L219-228: el `<div aria-live="polite">` queda con

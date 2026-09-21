@@ -547,5 +547,42 @@
   </div>
 </section>
 
+<!-- ═══ 16. Estados que corrigió la revisión final ═══
+     Fuentes: app/comercio/(protegido)/NavInferior.tsx con los enlaces del CAJERO
+     (lib/comercio/navegacion.ts: Resumen, Escanear, Clientes) estando en /comercio/escanear, y
+     app/comercio/(protegido)/SelectorContexto.tsx con disabled={pendiente}. La barra lleva
+     tablero-estatico para no taparse con la de la sección 14. -->
+<section class="tablero-seccion">
+  <h2>16. Escanear activo y pastilla deshabilitada</h2>
+  <nav class="nav-inferior tablero-estatico" aria-label="Secciones del panel (cajero, en Escanear)" style="margin-top: 28px;">
+    <div class="nav-fila" style="--columnas: 3;">
+      <a href="#">
+        <span class="icono" aria-hidden="true">dashboard</span>
+        <span class="nav-etiqueta">Resumen</span>
+      </a>
+      <a href="#" class="nav-destacado activo" aria-current="page" data-aro="escanear-activo">
+        <span class="icono icono-lleno" aria-hidden="true">qr_code_scanner</span>
+        <span class="nav-etiqueta">Escanear</span>
+      </a>
+      <a href="#">
+        <span class="icono" aria-hidden="true">group</span>
+        <span class="nav-etiqueta">Clientes</span>
+      </a>
+    </div>
+  </nav>
+  <div class="tablero-fila" style="margin-top: 18px;">
+    <button
+      type="button"
+      class="contexto-pastilla"
+      disabled
+      data-deshabilitada="contexto"
+      aria-label="Contexto activo: Pupusería La Esquina · Centro. Cambiar de comercio o sucursal."
+    >
+      <span class="icono" aria-hidden="true" style="font-size: 16px;">swap_horiz</span>
+      <span class="contexto-etiqueta">Centro</span>
+    </button>
+  </div>
+</section>
+
 </body>
 </html>

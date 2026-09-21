@@ -1090,9 +1090,10 @@ PREVALECE sobre la tabla de migración). Plan: `plans/2026-09-20-rediseno-neumor
 - **Una prueba de contraste WCAG que hoy no existía** (`lib/diseno/`): mide los tres temas leyendo
   el CSS con un parser único, en pares de tokens y en pares por regla (el color y el fondo de la
   regla real, sobre la superficie que de verdad la contiene). También verifica que ningún
-  `box-shadow` meta en una lista un token que vale `none`, que el foco sea `outline`, y que la copia
-  del CSS del tablero de revisión esté sincronizada. 49 pruebas nuevas, todas con mutación
-  verificada.
+  `box-shadow` meta en una lista un token que vale `none`, que el foco sea `outline`, que un hover
+  no le pise el estado a la fila activa, que la portada revierta el foco de la app, y que la copia
+  del CSS del tablero de revisión esté sincronizada. 44 pruebas nuevas, más las 7 de
+  `lib/tema.test.ts` reescritas sobre el parser nuevo: 51, todas con mutación verificada.
 - **Destapó dos fallos que estaban EN PRODUCCIÓN** y los arregló:
   - el botón **"Acreditar" del escáner** (el que más toca el cajero) estaba a **2.31:1** en el tema
     oscuro, el default de hoy; pasó a 6.84:1 (`--acento-fuerte` del oscuro, `#514ba8` → `#a49df0`);
@@ -1103,10 +1104,11 @@ PREVALECE sobre la tabla de migración). Plan: `plans/2026-09-20-rediseno-neumor
 
 ### Lo que NO es obvio y hay que recordar
 
-1. **Ninguna pantalla de la app renderiza sin `.env.local`.** El proxy de Next lanza en toda ruta
-   (`lib/supabase/proxy.ts:13`). Por eso la verificación visual se hizo sobre el tablero, que es
-   estático, y su marcado se copió de los TSX en vez de inventarse. El recorrido de las pantallas
-   reales queda pendiente (abajo).
+1. **Las pantallas de `/comercio/*` y `/admin/*` no renderizan sin `.env.local`.** El proxy de
+   Next lanza ahí (`lib/supabase/proxy.ts:13`; el matcher está en `proxy.ts`). Por eso la
+   verificación visual del panel se hizo sobre el tablero, que es estático, y su marcado se copió
+   de los TSX en vez de inventarse. La portada `/` sí renderiza, y el foco se probó ahí con el
+   teclado real. El recorrido de las pantallas reales del panel queda pendiente (abajo).
 2. **El relieve comunica FORMA, nunca ESTADO.** Lo activo se marca con el acento. Verificado con un
    filtro de sol: el relieve se lava y el chip activo sigue clarísimo. **Y todo estado tiene una
    señal que no es sombra**, porque en alto contraste el relieve vale `none`: un hover que solo
@@ -1123,19 +1125,50 @@ PREVALECE sobre la tabla de migración). Plan: `plans/2026-09-20-rediseno-neumor
    `DESIGN.md`): la prueba de contraste no puede imitar el mapeo de gamut del navegador.
 7. **El cambio de default llega de golpe a quien nunca eligió tema** (casi todos los cajeros): pasan
    del oscuro al claro sin aviso.
+8. **La regla global de foco de la app alcanza también a la portada**, que antes usaba el anillo del
+   navegador. Con el violeta del tema sobre sus bandas de color fijo quedaba en 2.31:1 y hasta
+   1.00:1 (el foco de "Agendá tu demo" desaparecía en oscuro). `inicio.module.css` la revierte con
+   `outline: revert`, y una prueba ata su lista de elementos a la de `globals.css`: si agregás un
+   elemento a la regla global, la prueba te pide sumarlo en la portada.
+9. **Un `.X:hover` le gana a un `.X-activa`** (0,2,0 contra 0,1,0) y le borra la señal de activo.
+   Pasó dos veces; se escribe `.X:not(.X-activa):hover`, y lo vigila una prueba.
+
+### Revisión final del conjunto
+
+Cero problemas críticos. Se verificó cada hallazgo contra el código antes de corregirlo, y todos se
+confirmaron. Corregido: el foco de la portada (arriba); el hover de "Reportes" en el menú, que le
+borraba el borde de acento a la fila activa; `.contexto-pastilla` sin estilo deshabilitado; el activo
+de "Escanear", que era un anillo de 1.18:1 y pasó a un aro de `outline` de 5.81:1 (**es un cambio
+visible en el botón más tocado: miralo**); el radio de las cuentas del portal (12 → 16px, como la
+spec); filas de botones levantados de 8-10px a 12px de separación; comentarios y documentos que
+decían cosas falsas; y el plan, que había quedado distinto del CSS publicado en tres bloques.
+
+**Deuda que ya estaba antes de esta rama** (no se tocó; queda anotada):
+- La **alerta de error del formulario de demo de la portada** mide **2.33:1** en claro y 2.39:1 en
+  oscuro (pide 4.5). Igual antes y después del rediseño: lo único que cambia es cuál tema ve primero
+  un visitante nuevo. Es texto `--error` del tema sobre la banda violeta fija del cierre.
+- El **velo del escáner** (`.escaner-guia`, `box-shadow: 0 0 0 200vmax …`) no se ve nunca: la
+  animación `qr-pulso` anima `box-shadow` y lo pisa durante todo el ciclo.
+- La clase **`.subtitle`** se usa en siete TSX (títulos `<h2>` de formularios del comercio y del
+  admin) y no existe en ningún CSS: esos títulos salen con el estilo del navegador.
+- `--shadow-card` (alias sin consumidores) y las reglas `.sello*`, que ninguna pantalla pinta: la
+  vista previa del editor de marca dibuja sus sellos con estilos inline.
 
 ### Pendiente de Daniel, en este orden
 
 1. **Copiar `.env.local` al worktree** (en tu terminal; el asistente no lo lee ni lo copia) y correr
-   la suite completa: `npm test`. En esta sesión corrieron solo las pruebas de diseño (49/49), con
+   la suite completa: `npm test`. En esta sesión corrieron solo las pruebas de diseño (51/51), con
    una config aparte sin Supabase.
 2. **Revisar el tablero**: `npm run dev` y abrir `http://localhost:3000/tablero-neumorfico/index.html`.
    Probá el interruptor "Antes" y el de "Sol". Lista de decisiones abiertas: el fondo lavanda y el
    azul marino; la intensidad del relieve; las métricas neutras; el borde visible de `.btn-borde` en
-   claro y oscuro; en alto contraste, que "fila con foco" y "fila activa" se parecen.
+   claro y oscuro; en alto contraste, que "fila con foco" y "fila activa" se parecen; el aro del
+   activo de "Escanear".
 3. **Recorrer las pantallas reales** en los tres temas, a ancho de teléfono: sobre todo
    `/comercio/panel`, `/comercio/escanear`, `/comercio/clientes`, `/mi-tarjeta`, `/registro/<slug>`
-   y `/admin/comercios`. Y `/` (la portada no se tocó, pero su formulario de demo sigue al tema).
+   y `/admin/comercios`. Y `/` **con el teclado** (Tab): el foco tiene que ser el anillo del
+   navegador, visible sobre todas las bandas. De la portada solo cambió esa regla; de su formulario
+   de demo siguen al tema la alerta, la tilde de éxito y el anillo de los campos.
 4. **Teléfono real a pleno sol**, con el escáner y la cámara.
 5. **Decidir si el arreglo del botón "Acreditar" se publica solo, antes del rediseño.** Arregla hoy
    un fallo de accesibilidad en el botón más usado. Si se publica solo, con cherry-pick de los

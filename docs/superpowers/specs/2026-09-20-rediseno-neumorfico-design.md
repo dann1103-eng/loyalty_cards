@@ -176,7 +176,9 @@ que es constante.
 | `--menta-suave` / `--error-suave` | `rgba(11, 102, 69, 0.12)` / `rgba(164, 35, 28, 0.1)` | `rgba(139, 214, 180, 0.13)` / `rgba(255, 180, 171, 0.12)` | = / **`rgba(255, 138, 122, 0.12)`** (hallazgo 8) |
 | `--btn-primario-fondo` / `-texto` | `#181849` / `#f5f4fc` | `var(--blanco)` / `var(--superficie-0)` | = |
 
-`--ring` se conserva (lo usan reglas que no son foco), pero el foco deja de usarlo.
+`--ring` se conserva porque la **portada** lo usa (el anillo de los campos del formulario de demo,
+en `inicio.module.css`); en la app ya no lo usa ninguna regla, porque el foco pasa a `outline`. No
+se borra por "no tener consumidores" en `globals.css`.
 
 **Por qué estos valores.**
 
@@ -280,7 +282,7 @@ corrige esa regla en `DESIGN.md`.
 | `.sheet-panel` (1606-1623) | E hacia arriba | `border-top: 1px solid var(--borde-relieve)`; `box-shadow: var(--relieve-3)`. El padding de 18px aloja la sombra de las filas pese al `overflow-y: auto`. |
 | `.sheet-fila` (1624-1650) | P; la activa H | La activa: `background: var(--superficie-0)`, `box-shadow: var(--hundido-1)`, `outline: 2px solid var(--acento)`, `outline-offset: -2px`. Se agrega `.sheet-fila-activa:focus-visible { outline-width: 3px; outline-offset: 2px }`: la regla global de foco empata en especificidad y sin esto el foco sería indistinguible en la fila activa. |
 | `.contexto-pastilla` (1538-1596) | E | `background: var(--superficie-1)`; `border-color: var(--borde-relieve)`; `var(--relieve-1)`. Padding y borde intactos: la cuenta de L1558-1590 sigue valiendo. |
-| `.portal-cuenta` (1692-1713) | E; la activa H | `var(--relieve-1)`, `:active` `var(--hundido-2)`. Activa: `border-color: var(--acento)` + `outline: 1px solid var(--acento)` + `box-shadow: var(--hundido-1)`, en lugar de `var(--ring)`. Se agrega `.portal-cuenta-activa:focus-visible { outline-width: 3px; outline-offset: 2px }`, por la misma razón que en `.sheet-fila-activa`. |
+| `.portal-cuenta` (1692-1713) | E; la activa H | Radio `var(--radius-control)` (hoy `--radius-field`). `var(--relieve-1)`, `:active` `var(--hundido-2)`. Activa: `border-color: var(--acento)` + `outline: 1px solid var(--acento)` + `box-shadow: var(--hundido-1)`, en lugar de `var(--ring)`. Se agrega `.portal-cuenta-activa:focus-visible { outline-width: 3px; outline-offset: 2px }`, por la misma razón que en `.sheet-fila-activa`. |
 | `.portal-recompensa` (1728-1737) | E | `var(--relieve-1)`, sin hover (es estática). Radio `--radius-control`. `.portal-instalar`/`.portal-link` quedan P. |
 | `.escaner-marco` (1787-1793) | E | `var(--relieve-2)`. **No puede ser H:** una sombra `inset` se pinta debajo del contenido y el `<video>` la taparía entera. Si se la quiere hundida, hace falta un `::after` superpuesto. `.escaner-video` como hoy. |
 | `.alerta` / `.nota` (542-568) | P | Solo radio `--radius-control`. Un mensaje no es una superficie. |
@@ -535,6 +537,13 @@ de la Fase 3 en adelante se identifican por bloque y token, porque los números 
 | `color-scheme` (F3+) | dejar `html` en `dark` | `html declara color-scheme dark y el default (claro) es light` |
 | default (F3+) | volver `lib/tema.ts` a `'oscuro'` | `expected 'oscuro' to be 'claro'` |
 | valores nuevos (F3) | copiar el `.62` al `--texto-3` claro nuevo · dejar `--menta: #0d6e4a` en claro · aclarar el `--fondo` oscuro a `#25284d` | `--texto-3 sobre --fondo: 4.42:1 < 4.5` · `--menta sobre --menta-suave∘--fondo: 4.27:1 < 4.5` · `--acento sobre --fondo: 4.47:1 < 4.5` |
+| hover sobre estado (revisión final) | `.menu-destacado:not(.menu-destacado-activo):hover` → `.menu-destacado:hover` | `.menu-destacado:hover pisa border-color de .menu-destacado-activo al pasar el mouse` |
+| hover sobre estado (revisión final) | `.sheet-fila:not(.sheet-fila-activa):hover:not(:disabled)` → `.sheet-fila:hover:not(:disabled)` | `.sheet-fila:hover:not(:disabled) pisa background de .sheet-fila-activa al pasar el mouse` (y el par por regla del hover, que ya no encuentra su selector) |
+| foco de la portada (revisión final) | en `inicio.module.css`, la lista de la reversión → `:where(a, button)` | `la portada no revierte la regla global de foco: falta ".pagina :where(a,button,input,select,textarea,summary,[tabindex]):focus-visible"` |
+| foco de la portada (revisión final) | `outline: revert` → `outline: 2px solid var(--acento)` | `la reversión del foco de la portada no revierte outline: expected '2px solid var(--acento)' to be 'revert'` |
+| foco de la portada (revisión final) | poner `.botonHero:focus-visible { … }` antes de la reversión | `la reversión del foco de la portada va después de una regla de foco propia, y le borraría su anillo: expected '.botonHero:focus-visible' to be undefined` |
+| foco de la portada (revisión final) | sumar `[contenteditable]` a la lista GLOBAL, sin tocar la portada | `… falta ".pagina :where(a,button,input,select,textarea,summary,[tabindex],[contenteditable]):focus-visible"`: las dos listas quedan atadas |
+| excepción del ícono (revisión final) | sacar `.nav-destacado.activo .icono` de `SIN_FOCO_PROPIO` | `.nav-destacado.activo .icono marca su estado con outline y no tiene regla .nav-destacado.activo .icono:focus-visible`: la excepción no es decorativa |
 
 Mutante equivalente que no vale la pena probar: cambiar 0.04045 por 0.03928 no altera ningún valor
 de 8 bits.
@@ -752,6 +761,49 @@ consumidores.
 los `Record<Tema, …>` obligan a llenar las tablas), el de la regla global de foco (que decía
 especificidad cero), y los de `panel/page.tsx` y `admin/reportes/page.tsx` que el CSS nuevo
 desmentía.
+
+**Revisión final del conjunto (después de las diez tareas).** Encontró dos problemas importantes y
+varios menores; se verificaron uno por uno contra el código antes de corregirlos.
+- **El foco de la portada.** La regla global de foco alcanza también a `/`, que antes no tenía
+  ninguna regla de foco del autor y usaba el anillo del navegador. Con `var(--acento)`, que sigue
+  al tema, sobre bandas de color fijo: 2.31:1 sobre la noche en claro, y **1.00:1** sobre la banda
+  del cierre en oscuro (el foco de "Agendá tu demo" desaparecía). Arreglo mínimo en
+  `inicio.module.css`: `.pagina :where(<la misma lista>):focus-visible { outline: revert;
+  outline-offset: revert; }`, antes de toda otra regla de foco de ese archivo (empata en
+  especificidad con los anillos de marca de la portada y tiene que perder contra ellos).
+- **Corrección al Riesgo 3:** el formulario de demo NO sigue al tema. Vive en la banda del cierre, y
+  `.cierre .formulario`, `.cierre .campo …` y `.cierre .botonPrimario` le fijan fondo, borde y
+  colores. Lo único que sigue al tema es la alerta, la tilde de éxito y el anillo de los campos
+  (`--ring`).
+- `.menu-destacado:not(.menu-destacado-activo):hover`: el hover (0,2,0) le cambiaba a "Reportes"
+  activo el borde de acento, su única señal, por `--linea-fuerte`. Mismo caso que `.sheet-fila`.
+- `.contexto-pastilla:disabled` (opacidad, `cursor: progress`, sin relieve) y su hover con
+  `:not(:disabled)`: `SelectorContexto` la deshabilita mientras cambia de comercio.
+- `.nav-destacado.activo .icono`: el activo de "Escanear" era `box-shadow: 0 0 0 3px
+  var(--acento-suave)`, que mide 1.18:1 contra la barra en claro, 1.19 en oscuro y 1.61 en alto
+  contraste. Pasa a `outline: 2px solid var(--acento); outline-offset: 3px` (5.81, 5.13 y
+  15.64:1). Venía de antes de esta rama, pero contradecía la regla "todo estado tiene una señal que
+  no es sombra".
+- `.portal-cuenta` con radio `--radius-control` (16px), como decía la tabla de tokens y como
+  `.portal-recompensa` en la misma pantalla. La fila de la tabla de migración lo había omitido.
+- Filas de botones levantados en TSX a gap 12 (tenían 8 o 10): `ModalAgregarLocal` (dos),
+  `Escaner` (dos), `BotonesResolucion`, `EditorCartel` (dos), `clientes/page`, `sucursales/page`.
+  Las filas de campo + botón no se tocaron.
+- Pruebas nuevas: "la portada revierte la regla global de foco" (existe, revierte los dos valores,
+  va antes de toda otra regla de foco de la portada, y su lista de elementos es la de la global) y
+  "el hover no pisa un estado" (una regla `.X:hover` no redeclara lo que declara `.X-activa` o
+  `.X.activo`, salvo que la excluya con `:not()`). Mutaciones en la tabla de arriba.
+- `.sello.lleno` no se pinta en ninguna pantalla: la vista previa del editor de marca dibuja sus
+  sellos con estilos inline. Lo que la Fase 2 y la lista de revisión dicen de él vale solo para el
+  tablero.
+- **Verificado en el navegador.** La portada real sí renderiza sin `.env.local` (el proxy corre
+  solo en `/admin/*` y `/comercio/*`). Con Tab de teclado, el link "Agendá tu demo" del hero, el
+  correo del cierre, el botón de envío de la demo y un link del pie resuelven
+  `outline-style: auto`, que es el anillo del navegador; `.botonHero` conserva su anillo de marca.
+  En el tablero (sección 16, nueva): el aro de "Escanear" no se recorta ni toca a los vecinos a
+  320px con cinco columnas (56px en una celda de 58), y se ve en los tres temas. Con un hover
+  simulado de igual especificidad, "Reportes" activo conserva su borde de acento y la pastilla
+  deshabilitada no reacciona; los controles sin estado sí cambian.
 
 **Queda para Daniel decidir** (no son errores, son decisiones de diseño):
 - En alto contraste, "fila de hoja con foco" y "fila de hoja activa" se ven parecidas (las dos son
