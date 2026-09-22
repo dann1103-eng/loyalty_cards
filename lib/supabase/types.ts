@@ -24,6 +24,7 @@
 //   - supabase/migrations/0036_apellido_cliente.sql (clientes.apellido, nullable)
 //   - supabase/migrations/0029_reverso_por_programa.sql (reverso por programa en programas_tarjeta)
 //   - supabase/migrations/0037_pagos_wompi.sql (cobros.tipo/plan_destino/wompi_*; tabla pagos_wompi)
+//   - supabase/migrations/0038_cobranza.sql (cuentas_comercio.cobranza/cobranza_desde/cobranza_pospuesta_hasta; las cuentas existentes quedan 'exenta')
 //   - supabase/migrations/0027_branding_por_programa.sql (branding por programa en programas_tarjeta)
 //   - supabase/migrations/0026_notificaciones_push.sql (tablas difusiones y notificaciones_enviadas; tarjetas.aviso_texto/aviso_hasta/aviso_inactividad_enviado_en; comercios.aviso_inactividad_activo/dias/mensaje)
 //   - supabase/migrations/0025_backfill_programas_principales_faltantes.sql (solo datos, no cambia columnas: programa principal para comercios que la 0024 no alcanzó a cubrir)
@@ -700,6 +701,9 @@ export type Database = {
           licencia_estado: string;
           licencia_monto_mensual: number | null;
           licencia_activa_desde: string | null;
+          cobranza: string;
+          cobranza_desde: string;
+          cobranza_pospuesta_hasta: string | null;
           created_at: string;
         };
         Insert: {
@@ -710,6 +714,9 @@ export type Database = {
           licencia_estado?: string;
           licencia_monto_mensual?: number | null;
           licencia_activa_desde?: string | null;
+          cobranza?: string;
+          cobranza_desde?: string;
+          cobranza_pospuesta_hasta?: string | null;
           created_at?: string;
         };
         Update: {
@@ -720,6 +727,9 @@ export type Database = {
           licencia_estado?: string;
           licencia_monto_mensual?: number | null;
           licencia_activa_desde?: string | null;
+          cobranza?: string;
+          cobranza_desde?: string;
+          cobranza_pospuesta_hasta?: string | null;
           created_at?: string;
         };
         Relationships: [];
