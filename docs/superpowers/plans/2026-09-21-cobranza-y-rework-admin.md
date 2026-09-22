@@ -168,15 +168,31 @@ alta una cuenta exenta desde el principio, y toda cuenta nueva queda `normal` si
 tener la ficha completa. **Depende de la migración** (escribe la columna `cobranza`): código + test
 escritos, sin correr, como el resto de lo que toca esas columnas.
 
-**Archivos:**
-- Modificar: `lib/comercios/cuentas.ts` (`DatosCuenta` suma `cobranza: 'normal' | 'exenta'`; `crearCuenta`
-  la escribe en el insert; `validarDatosCuenta` la valida contra la lista de valores)
-- Modificar: `app/admin/(protegido)/cuentas/FormularioCuenta.tsx` (el `<select>` nuevo, mismo patrón que
-  `licencia_estado`) y `app/admin/(protegido)/cuentas/actions.ts` (`accionCrearCuenta` lee el campo nuevo)
+**⚠️ `leerDatos(formData)` y el tipo `DatosCuenta` los COMPARTEN `accionCrearCuenta` Y
+`accionActualizarCuenta`** (`app/admin/(protegido)/cuentas/actions.ts`, una sola función `leerDatos` para
+las dos). Si `cobranza` entra a `DatosCuenta` sin más, editar la pestaña **Datos** de una cuenta YA
+EXISTENTE (spec rework: esa pestaña es solo `FormularioCuenta (nombre, plan, límite, monto, licencia)`,
+SIN cobranza — el modo vive nada más en la pestaña Cobranza, vía `cambiarModoCobranza` de la Tarea 4b, que
+tiene efectos secundarios reales al cambiar de modo) pisaría el modo de cobranza de la cuenta **sin esos
+efectos secundarios** — un bug de negocio, no cosmético. Por eso `cobranza` **NO entra a `DatosCuenta`
+ni a `leerDatos`**: es un parámetro APARTE, exclusivo del alta.
 
-- [ ] `DatosCuenta`, `crearCuenta`, `validarDatosCuenta`, el `<select>`, `accionCrearCuenta` — todo
-  escrito.
-- [ ] Test de `crearCuenta` con `cobranza: 'exenta'` — escrito, sin correr.
+**Archivos:**
+- Modificar: `lib/comercios/cuentas.ts` (`crearCuenta` suma un parámetro propio
+  `cobranza?: 'normal' | 'exenta'` — NO en `DatosCuenta`, NO en `actualizarCuenta` — con
+  `'normal'` como default si se omite; valida contra la lista de valores)
+- Modificar: `app/admin/(protegido)/cuentas/FormularioCuenta.tsx` (el `<select>` nuevo, **renderizado SOLO
+  cuando `!inicial`** — mismo patrón condicional que ya usa el campo `plan`, líneas 31-35: `inicial`
+  presente = está editando una cuenta que ya existe)
+- Modificar: `app/admin/(protegido)/cuentas/actions.ts` (`accionCrearCuenta` lee `formData.get('cobranza')`
+  POR SU CUENTA, aparte de `leerDatos`, y se lo pasa a `crearCuenta` como el parámetro nuevo;
+  `accionActualizarCuenta` no cambia — sigue sin tocar `cobranza` para nada)
+
+- [ ] `crearCuenta` con el parámetro nuevo, el `<select>` condicional a `!inicial`, `accionCrearCuenta`
+  leyendo el campo aparte — todo escrito. Confirmar que `actualizarCuenta` y `leerDatos` quedan
+  IDÉNTICOS a como están hoy (ni un campo de cobranza pasa por ahí).
+- [ ] Test de `crearCuenta` con `cobranza: 'exenta'` (y sin pasarlo, default `'normal'`) — escrito, con el
+  comentario `// SIN CORRER: necesita la migración 0038.` en el encabezado, sin correr.
 - [ ] `npx tsc --noEmit` limpio.
 - [ ] Commit.
 
