@@ -442,8 +442,13 @@ concurrentes del mismo cobro, y `aplicarPlanDestino`. Cada rama crítica lleva s
    doc no dice con qué credenciales se autentica. Es lo primero que se prueba, con un script de solo
    lectura y creación de un enlace de prueba (Tarea 5), **antes** de construir sobre el cliente.
 1. La forma **real** del webhook frente al ejemplo de 2020. El cuerpo crudo queda guardado para esto.
-2. Que `wompi_hash`, con guion bajo, llegue por Vercel. Si no llegara, el camino de vuelta sigue
-   confirmando pagos y se decide ahí. El log de la ruta imprime los nombres de los headers.
+2. Que `wompi_hash`, con guion bajo, llegue por Vercel. **RESUELTO el 2026-09-21, en producción real**:
+   sí llega — el primer webhook de un pago de prueba (Cafetería Piloto, plan Starter) se guardó con
+   `fuente: webhook` y firma válida, sin necesitar el camino de vuelta. El cuerpo real difiere del ejemplo
+   de la doc (de 2020) en dos cosas que el parser ya toleraba: `Monto` viaja como TEXTO (`"29.00"`, no un
+   número), y los datos que la app manda al crear el enlace (`cobro`, `cuenta`) vuelven anidados bajo
+   `Cliente`, junto al nombre y el correo de quien pagó — no sueltos como en el ejemplo de 2020. Fijado
+   como caso de prueba en `lib/wompi/webhook.test.ts` (con datos personales reemplazados por genéricos).
 3. Cuál de las dos variantes del hash del redirect usa Wompi (la doc se contradice). **RESUELTO el 2026-09-21
    con un pago de prueba real**: coincide la de 4 campos (`identificadorEnlaceComercio + idTransaccion +
    idEnlace + monto`, con los valores tal como vienen en la URL, `monto=89.00` incluido). Sigue siendo un

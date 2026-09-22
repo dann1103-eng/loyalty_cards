@@ -6,6 +6,7 @@ import { decodificarCuerpo, estaAprobado, parsearWebhook } from './webhook';
 //   - asumir EsProductiva=false cuando falta      → falla "sin EsProductiva se rechaza"
 //   - tratar una declinada como aprobada          → falla "una declinada no está aprobada"
 //   - no quitar el BOM                            → falla "quita el BOM antes de parsear"
+//   - exigir Monto numérico (rechazar un texto)   → fallan "tolera mayúsculas y minúsculas…" y "el webhook REAL del 2026-09-21…"
 
 // El ejemplo de la doc de Wompi (2020), tal cual.
 const EJEMPLO_DE_LA_DOC = {
@@ -23,6 +24,43 @@ const EJEMPLO_DE_LA_DOC = {
   Aplicativo: { Nombre: 'Sitio Web Bitworks', Url: 'https://www.bitworks.com.sv/', Id: 'd432aef2-3333-4a75-4444-22e20789834a' },
   EnlacePago: { Id: 66, IdentificadorEnlaceComercio: 'OC1234', NombreProducto: 'Camisa Azula' },
   cliente: { Nombre: 'string', Email: 'string' },
+};
+
+// El webhook REAL de un pago de prueba en producción (2026-09-21, primer pago con el webhook llegando a
+// una URL pública). Difiere del ejemplo de la doc en dos cosas que importan: `Monto` viaja como TEXTO
+// ("29.00", no 29), y los datos que la app manda al crear el enlace (`cobro`, `cuenta`) vuelven anidados
+// bajo `Cliente`, junto al nombre y el correo de quien pagó — no sueltos como en el ejemplo de 2020. Los
+// datos personales de este caso real se reemplazaron por unos genéricos.
+const WEBHOOK_REAL_2026_09_21 = {
+  Monto: '29.00',
+  Cliente: {
+    EMail: 'cliente-de-prueba@example.com',
+    cobro: 'c9b42d0c-1781-435a-ae4c-01955ec3d104',
+    Nombre: 'Cliente De Prueba',
+    cuenta: '9776f096-61d5-4d93-b0a9-400ed7cd71b5',
+  },
+  Tarjeta: '0000 0000 0000 1111 ',
+  Cantidad: 1,
+  IdCuenta: 'fc30a74f-a249-4504-976e-db69aecb6239',
+  IdExterno: 'c9b42d0c-1781-435a-ae4c-01955ec3d104',
+  Aplicativo: { Id: '6c0e954b-f846-4fa7-af08-7c7f2cbe2b06', Url: null, Nombre: 'Cardly SV' },
+  EnlacePago: {
+    Id: 4417925,
+    NombreProducto: 'Cardly SV · Plan Starter (2026-09-21 al 2026-10-20)',
+    DescripcionProducto: 'Mensualidad del plan Starter',
+    IdentificadorEnlaceComercio: 'c9b42d0c-1781-435a-ae4c-01955ec3d104',
+  },
+  EsProductiva: false,
+  IdIntentoPago: 'bb9b1cf0-41b5-4e7a-ac43-fc48a234814e',
+  IdTransaccion: '419db111-2cdf-4a6c-a88a-b2ff0c1c4672',
+  CantidadCuotas: null,
+  EsInternacional: true,
+  IdGrupoTarjetas: null,
+  ModuloUtilizado: 'BotonPago',
+  FechaTransaccion: '2026-09-21T21:24:50.0344235-06:00',
+  CodigoAutorizacion: '0683f080-ce4d-495b-a9b4-5c4d47aa7720',
+  FormaPagoUtilizada: 'PagoNormal',
+  ResultadoTransaccion: 'ExitosaAprobada',
 };
 
 describe('parsearWebhook', () => {
@@ -83,6 +121,22 @@ describe('parsearWebhook', () => {
 
   it('sin EsProductiva se rechaza: no se asume si la plata es real', () => {
     expect(parsearWebhook({ ...EJEMPLO_DE_LA_DOC, EsProductiva: undefined })).toEqual({ ok: false, motivo: 'falta EsProductiva' });
+  });
+
+  it('el webhook REAL del 2026-09-21 (Monto como texto, siete decimales en la fecha) se lee entero', () => {
+    expect(parsearWebhook(WEBHOOK_REAL_2026_09_21)).toEqual({
+      ok: true,
+      pago: {
+        idTransaccion: '419db111-2cdf-4a6c-a88a-b2ff0c1c4672',
+        monto: 29,
+        esProductiva: false,
+        resultado: 'ExitosaAprobada',
+        formaPago: 'PagoNormal',
+        fecha: '2026-09-22T03:24:50.034Z',
+        identificadorEnlace: 'c9b42d0c-1781-435a-ae4c-01955ec3d104',
+        idEnlace: 4417925,
+      },
+    });
   });
 });
 

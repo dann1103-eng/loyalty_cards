@@ -110,6 +110,21 @@ Las pruebas de fechas dependen de la zona horaria del proceso: corré las puras 
 7. Mirar las pantallas del dueño (`/comercio/plan`, `/comercio/plan/pago/resultado`) y de FM
    (`/admin/pagos`, la ficha de una cuenta) a ancho de teléfono.
 
+## Primer pago real en producción (2026-09-21)
+
+Cafetería Piloto (piloto sin período pagado) pagó Starter ($29) en `cardly-sv.site`, con el negocio de Wompi
+todavía en modo prueba. Resultado: el **webhook llegó** a la URL pública con firma válida y quedó guardado
+como `fuente: webhook, conciliacion: prueba` (la guarda de producción — `VERCEL_ENV=production` ignora
+`WOMPI_ACEPTAR_PRUEBAS` — hizo lo que tenía que hacer: no aplicó nada). El retorno del dueño, para la MISMA
+transacción, no generó una segunda fila (el arreglo de la revisión final de no registrar eventos `prueba`
+desde el redirect, funcionando). Cierra dos puntos de "A verificar" de la spec: la llegada de `wompi_hash`
+por Vercel, y la forma real del cuerpo (`Monto` como texto, `datosAdicionales` anidado bajo `Cliente`),
+ahora fijada como prueba de regresión.
+
+**Pendiente:** un pago real APROBADO (con el negocio de Wompi en productivo, o `WOMPI_ACEPTAR_PRUEBAS`
+mientras siga en prueba) para ver el camino completo de `aplicado` con webhook real; el rechazo con CVV
+`111`; y un ajuste por subir de plan a mitad de período.
+
 ## A verificar con el primer pago real
 
 Lo que la documentación de Wompi no deja claro, y que el sistema está armado para tolerar mientras se
