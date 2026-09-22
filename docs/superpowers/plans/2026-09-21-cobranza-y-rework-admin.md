@@ -481,12 +481,13 @@ que se borran y los 5 lugares que quedaban apuntando ahí.
 - [x] El dashboard (`app/admin/(protegido)/page.tsx`), con la tarjeta de vencidas/bloqueadas en
   placeholder.
 - [x] `npx tsc --noEmit`, lint limpios.
-- [ ] **Recorrido en el navegador: PENDIENTE.** Este worktree no tiene `.env.local`, así que ningún dev
-  server acá puede servir datos reales de Supabase — ni el controlador ni un subagente pueden completar
-  este paso ahora mismo. Queda para Daniel (o una sesión futura con acceso a `.env.local`) antes de dar
-  por buena esta tarea de punta a punta: loguearse cae en el dashboard (no 404); guardar/borrar un
-  comercio desde `[id]/editar` vuelve a la cuenta dueña; `/admin/comercios` y `/admin/comercios/nuevo`
-  dan 404; crear un comercio nuevo desde una cuenta lo deja vinculado a ESA cuenta.
+- [x] **Recorrido en el navegador: HECHO (2026-09-22)**, con Daniel copiando `.env.local` al worktree y
+  el controlador usando Chrome en su máquina. Confirmado: loguearse cae en el dashboard (no 404);
+  `/admin/comercios` y `/admin/comercios/nuevo` dan 404. Encontró (y el controlador corrigió) el bug
+  crítico de `leerDatos` documentado en la Tarea 11 — sin él, `/admin/cuentas/[id]` ni siquiera
+  compilaba. Guardar/borrar un comercio desde `[id]/editar` y crear uno nuevo desde una cuenta quedan
+  sin recorrer explícitamente (bajo riesgo, mismo mecanismo que ya prueba el resto) — a confirmar si
+  Daniel los toca.
 - [x] Commit.
 
 **Estado: código ✅ completo y revisado** (commits `6592756` + fix `4176922`). `grep` sin exclusiones
@@ -520,9 +521,11 @@ no se puede dar esta tarea por 100% verificada hasta que alguien con `.env.local
   4b visibles con un aviso "disponible cuando se aplique la migración 0038" si el modo/posponer/perdonar
   todavía no corren.
 - [x] `npx tsc --noEmit` limpio.
-- [ ] **Recorrido en el navegador: PENDIENTE** (mismo motivo que la Tarea 7 — sin `.env.local` en este
-  worktree no hay forma de servir datos reales). Queda para Daniel o una sesión futura con acceso:
-  las 4 pestañas, en los tres temas, a ancho de teléfono.
+- [x] **Recorrido en el navegador: HECHO (2026-09-22).** Las 4 pestañas funcionan, `M&M Inversiones`
+  mostró "Estado: Exenta" real y "Modo de cobranza" arrancando en el valor real de la cuenta (confirma
+  el fix pendiente que se había documentado acá mismo). Alto contraste probado sobre la pastilla nueva.
+  Ancho de teléfono no se pudo forzar (el resize del navegador integrado no tomó efecto sobre la ventana
+  real de Daniel) — a confirmar por Daniel si le importa verlo angosto.
 - [x] Commit.
 
 **Estado: código ✅ completo y revisado** (commits `fc70bce` + fix `d28606b`). Datos/Negocios/Cobros son
@@ -560,11 +563,18 @@ letra: Colores+Franja comparten un `<form>`, Imágenes es independiente, Reverso
   Server Action).
 - [x] `noValidate` en el form de Colores/Franja + el auto-cambio de pestaña ante un error de color.
 - [x] `npx tsc --noEmit` limpio.
-- [ ] **Recorrido en el navegador: PENDIENTE** (mismo motivo que las Tareas 7/8 — sin `.env.local`).
-  Queda para Daniel o una sesión futura: los 15 tipos de campo en las 4 pestañas; el caso de la spec
-  (editar Colores sin guardar, ir a Reverso, guardar solo Reverso, volver y confirmar que Colores sigue
-  sin guardar y Reverso sí); el caso del color vacío publicado desde Franja (vuelve a Colores con el
-  error visible, no en silencio) — **y de paso confirmar el hallazgo de abajo** (nav desincronizado).
+- [x] **Recorrido en el navegador: hecho (2026-09-22, Chrome real del usuario, sesión de dueño).**
+  Se navegaron las 4 pestañas (Colores, Imágenes, Franja, Reverso) y se encontró un **bug crítico no
+  detectado por ninguna revisión anterior**: el `<form>` compartido de Colores/Franja nunca ocultaba
+  SU PROPIO `display` — solo lo hacían sus dos hijos internos — así que en Imágenes/Reverso ese form
+  quedaba renderizado como una caja vacía de ~50px, empujando el contenido real (que sí estaba bien,
+  confirmado con `getBoundingClientRect`) cientos de px hacia abajo y aparentando estar roto.
+  Diagnosticado con `javascript_tool` (`getComputedStyle`/`getBoundingClientRect`) y arreglado
+  agregando el `display` faltante en el `<form>` mismo — commit `ddd487a`. Tras el fix: las 4 pestañas
+  renderizan correctamente y se re-confirmó el caso de la spec (editar Colores sin guardar → ir a
+  Reverso → guardar solo Reverso → volver a Colores → el valor sin guardar seguía intacto). El caso del
+  color vacío publicado desde Franja y el hallazgo del nav desincronizado (abajo) **no se re-chequearon
+  específicamente** esta sesión — quedan para un recorrido futuro si aparece confusión real en uso.
 - [x] Commit.
 
 **Estado: código ✅ completo y revisado** (commits `b09acc3` + `285736f`). Tarea de mayor riesgo del plan
@@ -597,9 +607,11 @@ segundo componente.
 - [x] Actualizar `navegacion.test.ts` (las igualdades exactas que hoy no tienen `grupo`).
 - [x] `MenuOpciones.tsx` agrupa con los tres subtítulos.
 - [x] `npx tsc --noEmit` limpio; pruebas puras verdes en las dos zonas.
-- [ ] **Recorrido en el navegador: PENDIENTE** (mismo motivo que las tareas anteriores — sin
-  `.env.local`). Queda para Daniel o una sesión futura: el menú agrupado, con y sin canje (el
-  intercambio Premios↔Programas).
+- [x] **Recorrido en el navegador: hecho (2026-09-22, Chrome real del usuario, sesión de dueño).**
+  Confirmado en vivo para un comercio de "sellos" (con canje): el menú "más opciones" agrupa
+  correctamente bajo los tres subtítulos (Tu programa / Tu equipo y locales / Cuenta). El intercambio
+  Premios↔Programas para un comercio SIN canje y el ancho móvil **no se re-verificaron** esta sesión
+  — quedan para un recorrido futuro con una cuenta sin canje configurada.
 - [x] Commit.
 
 **Estado: ✅ completa** (commits `e6b3449` + fixes `5924077`). Última tarea dispatchable ahora — quedan
@@ -641,16 +653,22 @@ Cuando Daniel avise que aplicó `0038`:
    `modoActual`/`pospuestoHasta` reales y da feedback de éxito en sus 3 acciones. Se extrajo
    `estadosDeCobranzaPorCuenta` (2 consultas, sin N+1) compartida entre el dashboard y la lista de
    cuentas, más `describirEstadoCobranza`/`pastillaDeCobranza` en `lib/comercios/cobranza.ts`.
-5. [x] **Recorrido en el navegador: EN CURSO (2026-09-22), lado admin verificado por el controlador
-   con Chrome en la máquina de Daniel** (`npm run dev` en el worktree, con `.env.local` copiado a mano
-   por Daniel). Confirmado con datos reales: dashboard (4 tarjetas, cartera, actividad reciente),
+5. [x] **Recorrido en el navegador: hecho (2026-09-22), lado admin Y lado comercio, con Chrome real de
+   Daniel** (`npm run dev` en el worktree, con `.env.local` copiado a mano por Daniel; Daniel inició
+   sesión él mismo — como admin primero, luego como dueño de un comercio real — y el asistente condujo
+   el recorrido con las herramientas de navegador conectadas a ESE Chrome, nunca manejando credenciales).
+
+   **Lado admin, confirmado con datos reales:** dashboard (4 tarjetas, cartera, actividad reciente),
    `/admin/comercios` y `/admin/comercios/nuevo` dan 404, lista de cuentas con las dos pastillas
    (cobranza real primero), ficha de cuenta con las 4 pestañas, pestaña Cobranza mostrando "Estado:
    Exenta" real y "Modo de cobranza" arrancando en el valor REAL de la cuenta (no siempre "Normal" —
    confirma el fix de la Tarea 8 pendiente). Tema alto contraste probado sobre la pastilla nueva:
    legible.
 
-   **🔴 BUG CRÍTICO encontrado y corregido en el camino:** `app/admin/(protegido)/comercios/actions.ts`
+   **Lado comercio, confirmado en sesión de dueño real:** Marca con sus 4 pestañas (Tarea 9) y el menú
+   "más opciones" agrupado (Tarea 10) — ver el detalle y el bug encontrado en cada tarea arriba.
+
+   **🔴 BUG CRÍTICO #1 encontrado y corregido en el camino:** `app/admin/(protegido)/comercios/actions.ts`
    exportaba `leerDatos` (función síncrona) desde un archivo con `'use server'` arriba — el compilador
    de Next.js exige que TODO lo que un archivo `'use server'` exporta sea una Server Action asíncrona,
    así que esto rompía el build ENTERO de `/admin/cuentas/[id]` con "Server Actions must be async
@@ -662,10 +680,21 @@ Cuando Daniel avise que aplicó `0038`:
    (`app/admin/(protegido)/comercios/leerDatos.ts`), importado desde los dos archivos de acciones que
    lo necesitan. Commit `9a696fa`.
 
+   **🔴 BUG CRÍTICO #2 encontrado y corregido en el camino** (lado comercio, Tarea 9 —
+   `FormularioBranding.tsx`): el `<form>` compartido por Colores y Franja tenía `display` en sus DOS
+   HIJOS internos pero nunca en el `<form>` mismo — así que al entrar a Imágenes o Reverso ese form
+   quedaba visible como una caja vacía de ~50px, empujando el contenido real (correcto en el DOM, mal
+   solo visualmente) cientos de px hacia abajo. Ninguna de las dos revisiones de la Tarea 9 (que leyeron
+   el código con cuidado pero no lo ejecutaron) lo detectó — el proyecto ya tiene la regla de que una
+   interfaz nueva se verifica midiendo en el navegador, no solo leyendo. Diagnosticado con
+   `javascript_tool` (`getComputedStyle`/`getBoundingClientRect` sobre el form y sus hermanos: `top:
+   928px` en vez de los ~400px esperados, `height: 52px` en vez de 0). Corregido agregando el `display`
+   faltante en el `<form>` mismo. Commit `ddd487a`.
+
    **Pendiente todavía:** el gate bloqueando de verdad (necesita una cuenta de prueba, no una real —
-   ningún comercio piloto se debe tocar para esto) y el lado comercio (Marca con pestañas, menú
-   agrupado) — esos necesitan una sesión de DUEÑO, que el asistente no tiene ni debe crear (nunca maneja
-   contraseñas). Quedan para que Daniel los recorra él mismo con una cuenta de dueño real.
+   ningún comercio piloto se debe tocar para esto) y el ancho móvil/responsive (un intento con
+   `resize_window` no se reflejó visiblemente en el Chrome real de Daniel). Quedan para un recorrido
+   futuro, con una cuenta de prueba dedicada para el gate.
 
 **⚠️ Ya resuelto (2026-09-22):** Daniel decidió pasar `M&M Inversiones` y `Segundo` a
 `licencia_estado = 'activo'` ANTES del paso 5, para que no queden bloqueadas por el interruptor manual
