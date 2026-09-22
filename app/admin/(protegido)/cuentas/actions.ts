@@ -25,7 +25,7 @@ import { pedirPago } from '@/lib/comercios/pedirPago';
 import { cambiarModoCobranza, posponerPago, perdonarCiclo } from '@/lib/comercios/modoCobranza';
 import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import { crearComercio } from '@/lib/comercios/guardarComercio';
-import { leerDatos as leerDatosComercio } from '../comercios/actions';
+import { leerDatos as leerDatosComercio } from '../comercios/leerDatos';
 
 export type EstadoFormulario = { error: string } | undefined;
 

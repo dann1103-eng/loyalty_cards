@@ -4,14 +4,11 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { verifyFmAdmin } from '@/lib/fm/verifyFmAdmin';
 import { createServiceClient } from '@/lib/supabase/server';
-import {
-  actualizarComercio,
-  eliminarComercio,
-  type DatosComercio,
-} from '@/lib/comercios/guardarComercio';
+import { actualizarComercio, eliminarComercio } from '@/lib/comercios/guardarComercio';
 import { generarAccesoDueno } from '@/lib/comercio/accesoDueno';
 import { notificarCambioComercio } from '@/lib/apple/notificarCambioComercio';
 import { syncClaseComercio } from '@/lib/google/syncClase';
+import { leerDatos } from './leerDatos';
 
 export type EstadoFormulario = { error: string } | undefined;
 
@@ -20,27 +17,11 @@ export type EstadoFormulario = { error: string } | undefined;
 // resultado no podría decir de quién es el link que está mostrando.
 export type EstadoAcceso = { link: string; email: string } | { error: string } | undefined;
 
-function textoONull(valor: FormDataEntryValue | null): string | null {
-  const s = String(valor ?? '').trim();
-  return s === '' ? null : s;
-}
-
-// Exportada: `accionCrearComercioDeCuenta` (app/admin/(protegido)/cuentas/actions.ts) la reusa para
-// no duplicar el parseo del mismo formulario (FormularioComercio, compartido por las dos altas).
-export function leerDatos(formData: FormData): DatosComercio {
-  return {
-    nombre: String(formData.get('nombre') ?? '').trim(),
-    slug: String(formData.get('slug') ?? '').trim(),
-    color_fondo: String(formData.get('color_fondo') ?? '').trim(),
-    color_texto: String(formData.get('color_texto') ?? '').trim(),
-    color_label: String(formData.get('color_label') ?? '').trim(),
-    logo_url: textoONull(formData.get('logo_url')),
-    strip_url: textoONull(formData.get('strip_url')),
-    hero_url: textoONull(formData.get('hero_url')),
-    tipo_tarjeta: String(formData.get('tipo_tarjeta') ?? 'puntos'),
-    cuenta_id: String(formData.get('cuenta_id') ?? ''),
-  };
-}
+// `leerDatos` vive en ./leerDatos.ts, NO acá: este archivo lleva 'use server' arriba, y el
+// compilador de Next exige que todo lo que un archivo 'use server' EXPORTA sea una Server Action
+// asíncrona — una función síncrona exportada rompía el build entero ("Server Actions must be async
+// functions."), no solo esta pantalla. `DatosComercio` ya no hace falta importarlo acá directo
+// (solo lo usaba `leerDatos`).
 
 // Las acciones NO validan: toda la validación vive en validar(), dentro de guardarComercio.ts,
 // que es la capa con tests de integración. Aquí solo: autenticar, parsear, delegar.
