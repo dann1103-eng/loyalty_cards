@@ -99,14 +99,23 @@ con un test de React.
 
 **Verificar:** `TZ=UTC` y `TZ=America/El_Salvador`, ambas verdes.
 
-- [ ] Escribir `cobranza.test.ts` con los casos de la tabla de la spec (al_dia, vencida día 1, vencida día
+- [x] Escribir `cobranza.test.ts` con los casos de la tabla de la spec (al_dia, vencida día 1, vencida día
   15, bloqueada día 16, exenta, pospuesta antes/en/después de la fecha, primer pago, período perdonado
   cuenta como pagado) — todos en rojo (el módulo no existe).
-- [ ] Escribir `cobranza.ts` mínimo para que pasen.
-- [ ] Correr las mutaciones de la tabla de arriba, una por una, restaurando cada vez.
-- [ ] `git add lib/comercios/cobranza.ts lib/comercios/cobranza.test.ts && git commit` (mensaje describiendo
+- [x] Escribir `cobranza.ts` mínimo para que pasen.
+- [x] Correr las mutaciones de la tabla de arriba, una por una, restaurando cada vez.
+- [x] `git add lib/comercios/cobranza.ts lib/comercios/cobranza.test.ts && git commit` (mensaje describiendo
   qué se agregó; identidad `Daniel <268727888+dann1103-eng@users.noreply.github.com>`, trailer
   `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`).
+
+**Estado: ✅ completa** (commit `f127d53`). Spec-compliance ✅ y calidad de código ✅ ("Ready to merge:
+Yes") — ambas revisiones corrieron pruebas y mutaciones por su cuenta, no solo leyeron el reporte del
+implementador. Pendientes menores anotados por el revisor de calidad, no bloqueantes, para retomar si
+conviene: (1) el parámetro `hoy` de `periodoAPerdonar` queda sin usar en el cuerpo — la propia spec no lo
+necesita para el cálculo, así que se deja tal cual la firma que pide el plan; (2) faltan 2 combinaciones
+de prueba de bajo riesgo (vencida-tras-posponer, bloqueada-sin-pago-previo) que reusan rutas de código ya
+cubiertas — se pueden agregar en la Tarea 11 junto con el resto de la suite de cobranza contra la
+migración real.
 
 ## Tarea 2 — Migración `0038` (SQL, tipos, script de verificación)
 
