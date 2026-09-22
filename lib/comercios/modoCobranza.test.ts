@@ -4,31 +4,36 @@ import { hoyEnZona } from '../tarjetas/vigencia';
 import type { Database } from '../supabase/types';
 import { cambiarModoCobranza, posponerPago, perdonarCiclo, METODO_PERDONADO_FM } from './modoCobranza';
 
-// SIN CORRER: necesita la migración 0038 (cuentas_comercio.cobranza). Ver
+// Migración 0038 aplicada (cuentas_comercio.cobranza). Ver
 // docs/superpowers/plans/2026-09-21-cobranza-y-rework-admin.md.
 //
-// Igual que las pruebas "SIN CORRER" ya escritas en este mismo proyecto (cuentas.test.ts, describe
-// 'crearCuenta — cobranza (Tarea 3b)'): sin la migración aplicada, `insert`/`update`/`select` contra
-// las columnas `cobranza`/`cobranza_desde`/`cobranza_pospuesta_hasta` fallan con un error de columna
-// inexistente de PostgREST — así que el archivo entero queda sin correr hasta que Daniel la aplique.
-// El razonamiento de mutación está anotado de todas formas, tal como pide la tarea, aunque no se
-// pueda confirmar corriendo la prueba todavía.
+// El archivo corre completo y en verde contra Supabase real (.env.local).
 //
-// MUTATION-TESTING (razonado, NO corrido — cada mutación debería hacer FALLAR el test que se anota):
+// MUTATION-TESTING (cada fila se corrió el 2026-09-22 contra Supabase: romper la línea, ver fallar
+// con ESE test, restaurar — confirmadas, no solo razonadas):
 //   - cambiarModoCobranza a 'normal' no fija cobranza_desde (lo deja en null o en el valor viejo)
 //       → falla "pasar a 'normal' fija cobranza_desde en la fecha de hoy"
 //   - cambiarModoCobranza a 'exenta' no limpia cobranza_pospuesta_hasta (o solo cambia `cobranza`)
 //       → falla "pasar a 'exenta' limpia una posposición existente"
 //   - cambiarModoCobranza deja de validar `modo` contra VALORES_COBRANZA (deja pasar cualquier string)
-//       → falla "rechaza un modo de cobranza inválido" (sin el chequeo de app, el insert llegaría a la
-//         BD y el CHECK real respondería con un 23514 crudo, no con el mensaje en español que este
-//         test espera) — y la fila NO debería haber cambiado, lo que también se verifica ahí
+//       → falla "rechaza un modo de cobranza inválido" — pero NO por un 23514 crudo de la BD como se
+//         había razonado sin correrlo: `cambios` sale de un ternario que SOLO escribe los literales
+//         'normal'/'exenta' según `modo === 'normal'`, así que un `modo` inválido ('premium') nunca
+//         llega a la columna tal cual — cae en la rama `else` y graba 'exenta' (un valor VÁLIDO). El
+//         update pasa igual (`res.ok: true`) y `expect(res.ok).toBe(false)` falla de entrada
+//         ("expected true to be false"), antes de comparar ningún mensaje — y la fila SÍ queda
+//         tocada (pasa a 'exenta'), que es lo que el resto del test verifica. Confirmado corriendo.
 //   - posponerPago no manda `cobranza_pospuesta_hasta` al update (o lo manda `undefined`, que
-//     Supabase/JSON.stringify elimina en silencio del payload)
-//       → falla "guarda una fecha de posposición"
+//     Supabase/JSON.stringify elimina del payload y lo deja en `{}`)
+//       → falla "guarda una fecha de posposición" — pero NO como un no-op silencioso que deja la
+//         columna intacta, como se había razonado sin correrlo: un PATCH con body `{}` hace que
+//         PostgREST no matchee ninguna fila para el `.select('id').single()` (PGRST116, "Cannot
+//         coerce the result to a single JSON object"), así que `res.ok` da `false` con "Esa cuenta ya
+//         no existe." — el test igual falla en `expect(res.ok).toBe(true)`, solo que por ese camino.
 //   - posponerPago convierte `null` en otra cosa antes del update (ej. `hasta ?? undefined`, que
-//     también desaparece del payload y deja la columna intacta en vez de limpiarla)
-//       → falla "quita la posposición cuando hasta es null"
+//     también desaparece del payload y deja el PATCH con body `{}`)
+//       → falla "quita la posposición cuando hasta es null" por el mismo PGRST116 de arriba (no un
+//         no-op que deje la columna intacta, como se había razonado sin correrlo)
 //   - posponerPago deja de validar el formato de `hasta` (deja pasar cualquier string a la columna
 //     `date`, que Postgres rechazaría con un error de tipo crudo, no con el mensaje de este test)
 //       → falla "rechaza una fecha de posposición con formato inválido"
