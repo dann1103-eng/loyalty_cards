@@ -17,9 +17,11 @@ import type { EstadoCobranza } from '../comercios/cobranza';
 //
 // MUTATION-TESTING (cada fila se corrió: romper, ver fallar con ESE test, restaurar):
 //   - invertir la condición (bloquear en 'vencida' en vez de 'bloqueada': `estado.tipo !== 'vencida'`)
-//       → fallan las 4 pruebas "... no bloquea" (exenta/pospuesta/al_dia/vencida no debían redirigir,
-//         y con la mutación 'vencida' sí redirige) y las 2 de "bloqueada" pasan a no redirigir (esa
-//         URL ahora la da 'vencida', no 'bloqueada')
+//       → fallan 3 pruebas: "vencida no bloquea todavía" (con la mutación SÍ redirige) y las 2 de
+//         "bloqueada" (con la mutación NO redirigen — esa URL ahora la da 'vencida', no 'bloqueada').
+//         exenta/pospuesta/al_dia siguen en verde: su `tipo` nunca es 'vencida', así que la condición
+//         mutada les sigue dando `null` sin querer decir nada sobre si el chequeo real es correcto —
+//         por eso hace falta el caso "vencida no bloquea" aparte, no alcanza con los otros 3.
 //   - devolver la misma URL para 'owner' y 'cajero' (p. ej. siempre '/comercio/plan?suspendida=1')
 //       → falla "bloqueada: cajero va a /comercio/suspendida" (recibe la URL del owner)
 
