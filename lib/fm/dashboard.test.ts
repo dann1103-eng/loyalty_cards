@@ -9,14 +9,13 @@ import {
   tamanoDeCartera,
 } from './dashboard';
 
-// Las 4 funciones de dashboard.ts que NO dependen de la migración 0038 (ingresosDelMes,
-// tamanoDeCartera, contarSolicitudesPendientes, actividadReciente), contra Supabase real
-// (.env.local). `fusionarActividad` (la pura que ordena/recorta) se prueba en actividad.test.ts.
-// `contarCuentasEnRiesgo` (SÍ depende de la 0038) queda al final de este archivo, SIN CORRER — mismo
-// patrón que `cuentas.test.ts` (describe "crearCuenta — cobranza (Tarea 3b)"): el archivo entero NO
-// está verde hoy si se corre completo (esa última sección falla con un error de columna inexistente
-// de PostgREST, esperado hasta que Daniel aplique la migración); los otros 4 `describe` sí, y se
-// verificaron corriendo `vitest -t` acotado a ellos.
+// Las 5 funciones de dashboard.ts, contra Supabase real (.env.local). `fusionarActividad` (la pura
+// que ordena/recorta) se prueba en actividad.test.ts.
+//
+// `contarCuentasEnRiesgo` (describe al final de este archivo) dependía de la migración 0038
+// (cuentas_comercio.cobranza/cobranza_desde/cobranza_pospuesta_hasta) y corría SIN CORRER hasta acá
+// — Daniel la aplicó contra la base real (Tarea 11) y este describe corre y está verde igual que los
+// otros 4, verificado el 2026-09-22 con el archivo COMPLETO (ya no hace falta acotar con `vitest -t`).
 //
 // La base es compartida — mismo criterio que pagosAdminDb.test.ts / iniciarPagoPlanSupabase.test.ts:
 // los conteos se comparan contra lo que había ANTES ("antes/después"), nunca contra un total
@@ -347,16 +346,14 @@ describe('actividadReciente', () => {
   });
 });
 
-// SIN CORRER: necesita la migración 0038 (cuentas_comercio.cobranza). Ver
-// docs/superpowers/plans/2026-09-21-cobranza-y-rework-admin.md.
+// Necesitaba la migración 0038 (cuentas_comercio.cobranza) — Daniel la aplicó contra la base real
+// (Tarea 11, 2026-09-22). Este describe (antes SIN CORRER) ya corre igual que los otros 4 de este
+// archivo, verificado con el archivo COMPLETO. La lógica de conteo vive ahora en
+// `estadosDeCobranzaPorCuenta` (dashboard.ts), reusada por `contarCuentasEnRiesgo` — las mutaciones
+// de abajo apuntan a esa lógica compartida, ejercitada acá a través de `contarCuentasEnRiesgo`.
 //
-// Sin la migración aplicada, `select('id, cobranza, cobranza_desde, cobranza_pospuesta_hasta,
-// licencia_estado')` contra `cuentas_comercio` falla con un error de columna inexistente de
-// PostgREST — así que este describe entero queda sin correr hasta que Daniel la aplique (el resto
-// del archivo, arriba, SÍ corre y está verde; se verificó con `vitest -t` acotado a esos 4
-// `describe`). El razonamiento de mutación queda anotado igual, tal como en modoCobranza.test.ts.
-//
-// MUTATION-TESTING (razonado, NO corrido — cada mutación debería hacer FALLAR el test que se anota):
+// MUTATION-TESTING (cada fila se corrió el 2026-09-22 contra Supabase: romper, ver fallar con ESE
+// test, restaurar):
 //   - contarCuentasEnRiesgo no cuenta 'vencida' (solo 'bloqueada')
 //       → falla "cuenta las vencidas y las bloqueadas, no solo las bloqueadas"
 //   - contarCuentasEnRiesgo hace una consulta de cobros POR CUENTA en vez de traer todos los

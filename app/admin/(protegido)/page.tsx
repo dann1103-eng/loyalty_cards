@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { contarPagosAtencion } from '@/lib/comercios/pagosAdmin';
 import {
   actividadReciente,
+  contarCuentasEnRiesgo,
   contarSolicitudesPendientes,
   ingresosDelMes,
   tamanoDeCartera,
@@ -82,16 +83,16 @@ export default async function PaginaDashboardFm() {
   const supabase = createServiceClient();
   const hoy = hoyEnZona(null);
 
-  // 5 de las 6 métricas de la spec, en un solo Promise.all. `contarCuentasEnRiesgo` (la 6ta, ya
-  // escrita en lib/fm/dashboard.ts en la Tarea 6) NO se llama todavía: depende de columnas de la
-  // migración 0038 que esta rama no aplicó, y llamarla hoy fallaría. Su tarjeta usa un placeholder
-  // más abajo — eso no bloquea que las otras 5 se calculen con datos reales.
-  const [ingresos, cartera, solicitudesPendientes, actividad, pagosAtencion] = await Promise.all([
+  // Las 6 métricas de la spec, en un solo Promise.all. `contarCuentasEnRiesgo` (lib/fm/dashboard.ts,
+  // Tarea 6) ya se calcula con datos reales: la migración 0038 (cuentas_comercio.cobranza) quedó
+  // aplicada contra la base real en la Tarea 11.
+  const [ingresos, cartera, solicitudesPendientes, actividad, pagosAtencion, cuentasEnRiesgo] = await Promise.all([
     ingresosDelMes(supabase, hoy),
     tamanoDeCartera(supabase),
     contarSolicitudesPendientes(supabase),
     actividadReciente(supabase, LIMITE_ACTIVIDAD),
     contarPagosAtencion(supabase),
+    contarCuentasEnRiesgo(supabase, hoy),
   ]);
 
   return (
@@ -133,16 +134,16 @@ export default async function PaginaDashboardFm() {
           </div>
         </div>
 
-        {/* Cuentas vencidas o bloqueadas → /admin/cuentas. Placeholder "—" a propósito: ver el
-            comentario de arriba del Promise.all (contarCuentasEnRiesgo depende de la 0038). */}
+        {/* Cuentas vencidas o bloqueadas → /admin/cuentas: cuenta las que estadoEfectivo() da
+            'vencida' O 'bloqueada' (contarCuentasEnRiesgo, lib/fm/dashboard.ts). */}
         <Link href="/admin/cuentas" className="metric-carta naranja">
           <div className="metric-etiqueta">
             <span>Cuentas vencidas o bloqueadas</span>
             <span className="icono" aria-hidden="true">report</span>
           </div>
           <div>
-            <div className="metric-valor">—</div>
-            <div className="metric-sub">disponible con la migración 0038</div>
+            <div className="metric-valor">{formatoConteo(cuentasEnRiesgo)}</div>
+            <div className="metric-sub">necesitan seguimiento</div>
           </div>
         </Link>
 

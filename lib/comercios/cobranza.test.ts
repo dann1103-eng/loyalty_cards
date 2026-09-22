@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { DIAS_GRACIA_COBRANZA, estadoDeCobranza, estadoEfectivo, periodoAPerdonar } from './cobranza';
+import {
+  DIAS_GRACIA_COBRANZA,
+  describirEstadoCobranza,
+  estadoDeCobranza,
+  estadoEfectivo,
+  pastillaDeCobranza,
+  periodoAPerdonar,
+} from './cobranza';
 
 // Pruebas PURAS: sin base de datos, sin reloj. Se corren con TZ=UTC y con TZ=America/El_Salvador
 // (misma convención que prorrateo.test.ts: la aritmética de fechas usa Date.UTC).
@@ -225,6 +232,85 @@ describe('estadoEfectivo', () => {
     expect(estadoEfectivo({ ...entrada, licenciaEstado: 'activo' })).toEqual(
       estadoDeCobranza(entrada),
     );
+  });
+});
+
+describe('describirEstadoCobranza', () => {
+  // MUTATION-TESTING (cada fila se corrió: romper, ver fallar con ESE test, restaurar):
+  //   - 'vencida' sin pluralizar (siempre "días", incluso con 1)
+  //       → falla "vencida: singular con 1 día, plural con más de uno" (la mitad `1 día` del `toBe`)
+  //   - 'al_dia'/'pospuesta' devuelven la fecha CRUDA (AAAA-MM-DD) en vez de `formatearFecha`
+  //       → fallan "al_dia: 'Al día hasta' + la fecha larga" y "pospuesta: 'Pospuesta hasta' + la
+  //         fecha larga" (ambas comparan contra el formato largo, no "2026-10-05")
+  //   - 'exenta'/'bloqueada' devuelven la etiqueta de OTRO estado (p. ej. 'bloqueada' → 'Exenta')
+  //       → fallan "exenta: 'Exenta'" / "bloqueada: 'Bloqueada'"
+  it('exenta: "Exenta"', () => {
+    expect(describirEstadoCobranza({ tipo: 'exenta' })).toBe('Exenta');
+  });
+
+  it('bloqueada: "Bloqueada"', () => {
+    expect(describirEstadoCobranza({ tipo: 'bloqueada', diasVencida: 40 })).toBe('Bloqueada');
+  });
+
+  it('al_dia: "Al día hasta" + la fecha larga', () => {
+    expect(describirEstadoCobranza({ tipo: 'al_dia', hasta: '2026-10-05', diasRestantes: 10 })).toBe(
+      `Al día hasta ${new Intl.DateTimeFormat('es-SV', { dateStyle: 'long' }).format(new Date('2026-10-05T12:00:00Z'))}`,
+    );
+  });
+
+  it('pospuesta: "Pospuesta hasta" + la fecha larga', () => {
+    expect(describirEstadoCobranza({ tipo: 'pospuesta', hasta: '2026-11-20' })).toBe(
+      `Pospuesta hasta ${new Intl.DateTimeFormat('es-SV', { dateStyle: 'long' }).format(new Date('2026-11-20T12:00:00Z'))}`,
+    );
+  });
+
+  it('vencida: singular con 1 día, plural con más de uno', () => {
+    expect(
+      describirEstadoCobranza({ tipo: 'vencida', diasVencida: 1, diasParaBloqueo: 14, esPrimerPago: false }),
+    ).toBe('Vencida hace 1 día');
+    expect(
+      describirEstadoCobranza({ tipo: 'vencida', diasVencida: 12, diasParaBloqueo: 3, esPrimerPago: false }),
+    ).toBe('Vencida hace 12 días');
+  });
+});
+
+describe('pastillaDeCobranza', () => {
+  // MUTATION-TESTING (cada fila se corrió: romper, ver fallar con ESE test, restaurar):
+  //   - 'vencida' devuelve la clase de otro estado (p. ej. 'pastilla-neutral' en vez de
+  //     'pastilla-advertencia') → falla "vencida: pastilla-advertencia / 'Vencida'"
+  //   - 'al_dia' devuelve 'pastilla-neutral' en vez de 'pastilla-activo'
+  //       → falla "al_dia: pastilla-activo / 'Al día'"
+  //   - 'bloqueada' devuelve 'pastilla-advertencia' en vez de 'pastilla-inactivo'
+  //       → falla "bloqueada: pastilla-inactivo / 'Bloqueada'"
+  it('exenta: pastilla-neutral / "Exenta"', () => {
+    expect(pastillaDeCobranza({ tipo: 'exenta' })).toEqual({ clase: 'pastilla-neutral', texto: 'Exenta' });
+  });
+
+  it('pospuesta: pastilla-neutral / "Pospuesta"', () => {
+    expect(pastillaDeCobranza({ tipo: 'pospuesta', hasta: '2026-11-20' })).toEqual({
+      clase: 'pastilla-neutral',
+      texto: 'Pospuesta',
+    });
+  });
+
+  it('al_dia: pastilla-activo / "Al día"', () => {
+    expect(pastillaDeCobranza({ tipo: 'al_dia', hasta: '2026-10-05', diasRestantes: 10 })).toEqual({
+      clase: 'pastilla-activo',
+      texto: 'Al día',
+    });
+  });
+
+  it('vencida: pastilla-advertencia / "Vencida"', () => {
+    expect(
+      pastillaDeCobranza({ tipo: 'vencida', diasVencida: 12, diasParaBloqueo: 3, esPrimerPago: false }),
+    ).toEqual({ clase: 'pastilla-advertencia', texto: 'Vencida' });
+  });
+
+  it('bloqueada: pastilla-inactivo / "Bloqueada"', () => {
+    expect(pastillaDeCobranza({ tipo: 'bloqueada', diasVencida: 40 })).toEqual({
+      clase: 'pastilla-inactivo',
+      texto: 'Bloqueada',
+    });
   });
 });
 

@@ -1,5 +1,5 @@
 import { diasInclusive, hastaDelPeriodo, type PeriodoPagado } from './prorrateo';
-import { sumarDias } from '../tarjetas/vigencia';
+import { formatearFecha, sumarDias } from '../tarjetas/vigencia';
 
 // Cobranza por cuenta (spec 2026-09-21-cobranza-design.md, "Estado de cobranza" y "Perdonar el
 // ciclo"). PURO: no toca la base, no lee el reloj. Todo lo que necesita "hoy" lo recibe por
@@ -79,6 +79,54 @@ export function estadoEfectivo(
 ): EstadoCobranza {
   if (entrada.licenciaEstado === 'inactivo') return { tipo: 'bloqueada', diasVencida: 0 };
   return estadoDeCobranza(entrada);
+}
+
+// Texto largo del estado (spec cobranza, "Pantallas → FM": "Al día hasta …", "Vencida hace N días",
+// "Bloqueada", "Exenta", "Pospuesta hasta …"). PURA: recibe el `EstadoCobranza` YA CALCULADO, no
+// fechas ni acceso a datos. `formatearFecha` (mismo formateador largo que ya usa el banner del
+// dueño, app/comercio/(protegido)/layout.tsx) para las fechas, y el mismo truco de pluralización
+// ("1 día" / "2 días") que ese banner. Vive acá y no en la pantalla porque la reusan DOS lugares:
+// la ficha de cuenta (texto principal de "Estado") y la lista de cuentas (tooltip de la pastilla) —
+// ver `pastillaDeCobranza` abajo.
+export function describirEstadoCobranza(estado: EstadoCobranza): string {
+  const dias = (n: number) => `${n} día${n === 1 ? '' : 's'}`;
+  switch (estado.tipo) {
+    case 'exenta':
+      return 'Exenta';
+    case 'pospuesta':
+      return `Pospuesta hasta ${formatearFecha(estado.hasta)}`;
+    case 'al_dia':
+      return `Al día hasta ${formatearFecha(estado.hasta)}`;
+    case 'vencida':
+      return `Vencida hace ${dias(estado.diasVencida)}`;
+    case 'bloqueada':
+      return 'Bloqueada';
+  }
+}
+
+// Clase CSS + etiqueta CORTA para la pastilla de la lista de cuentas (rework del admin, "Lista de
+// cuentas"): las 4 clases (.pastilla-activo/.pastilla-inactivo/.pastilla-advertencia/
+// .pastilla-neutral) ya viven en app/globals.css desde la Tarea 8. El texto largo de
+// `describirEstadoCobranza` va como `title` (tooltip) de esa misma pastilla, no acá — un texto de
+// "Vencida hace 12 días" no entra en una pastilla de lista sin romper el layout de la fila.
+export interface PastillaCobranza {
+  clase: 'pastilla-neutral' | 'pastilla-activo' | 'pastilla-advertencia' | 'pastilla-inactivo';
+  texto: string;
+}
+
+export function pastillaDeCobranza(estado: EstadoCobranza): PastillaCobranza {
+  switch (estado.tipo) {
+    case 'exenta':
+      return { clase: 'pastilla-neutral', texto: 'Exenta' };
+    case 'pospuesta':
+      return { clase: 'pastilla-neutral', texto: 'Pospuesta' };
+    case 'al_dia':
+      return { clase: 'pastilla-activo', texto: 'Al día' };
+    case 'vencida':
+      return { clase: 'pastilla-advertencia', texto: 'Vencida' };
+    case 'bloqueada':
+      return { clase: 'pastilla-inactivo', texto: 'Bloqueada' };
+  }
 }
 
 export interface EntradaPeriodoAPerdonar {

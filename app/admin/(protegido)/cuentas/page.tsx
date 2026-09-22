@@ -1,6 +1,9 @@
 import Link from 'next/link';
 import { verifyFmAdmin } from '@/lib/fm/verifyFmAdmin';
 import { createServiceClient } from '@/lib/supabase/server';
+import { estadosDeCobranzaPorCuenta } from '@/lib/fm/dashboard';
+import { describirEstadoCobranza, pastillaDeCobranza } from '@/lib/comercios/cobranza';
+import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +23,13 @@ export default async function PaginaCuentas() {
     // "la BD no responde" tienen que verse distinto.
     console.error('[fm] falló la consulta de cuentas:', error);
   }
+
+  // Estado de cobranza de TODAS las cuentas (insignia de la lista, spec rework-admin, "Lista de
+  // cuentas"). `estadosDeCobranzaPorCuenta` (lib/fm/dashboard.ts) es la misma función que alimenta
+  // "Cuentas vencidas o bloqueadas" del dashboard — DOS consultas propias (cuentas + cobros), no una
+  // por fila. `null` ante un error de esas dos consultas: cada fila cae al placeholder neutro de
+  // abajo en vez de romper la lista entera.
+  const estadosCobranza = await estadosDeCobranzaPorCuenta(supabase, hoyEnZona(null));
 
   // Conteo de negocios por cuenta (una sola consulta liviana; se agrupa acá, como comercios/page).
   const { data: comercios, error: errorComercios } = await supabase.from('comercios').select('id, cuenta_id');
@@ -66,6 +76,8 @@ export default async function PaginaCuentas() {
           {cuentas.map((c) => {
             const usados = negociosPorCuenta.get(c.id) ?? 0;
             const llena = c.limite_negocios !== null && usados >= c.limite_negocios;
+            const estadoCobranza = estadosCobranza?.get(c.id) ?? null;
+            const pastilla = estadoCobranza ? pastillaDeCobranza(estadoCobranza) : null;
             return (
               <Link key={c.id} className="admin-fila" href={`/admin/cuentas/${c.id}`}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -83,19 +95,23 @@ export default async function PaginaCuentas() {
                 <div style={{ display: 'flex', gap: 8 }}>
                   {/* Insignia de cobranza (spec 2026-09-21-rework-admin-comercio-design.md, "Lista
                       de cuentas"): va PRIMERO (a la izquierda de la de cupo) porque es la que FM
-                      necesita ver primero para decidir si entrar a esa cuenta es urgente. Hoy es un
-                      placeholder neutro sin calcular nada: el estado real (Al día/Vencida/
-                      Bloqueada/Exenta/Pospuesta) sale de estadoEfectivo(), que necesita las
-                      columnas de la migración 0038 (cuentas_comercio.cobranza / cobranza_desde /
-                      cobranza_pospuesta_hasta) — todavía no aplicada contra la base real. Agregar
-                      esas columnas al .select() de esta página antes de tiempo rompería la
-                      consulta completa de la lista, no solo esta pastilla. Cuando la Tarea 11
-                      aplique la migración, esto se reemplaza por la pastilla real (colores en
-                      .pastilla-activo/.pastilla-inactivo/.pastilla-advertencia/.pastilla-neutral,
-                      ya definidos en app/globals.css). */}
-                  <span className="pastilla pastilla-neutral" title="Disponible cuando se aplique la migración 0038">
-                    —
-                  </span>
+                      necesita ver primero para decidir si entrar a esa cuenta es urgente. Etiqueta
+                      corta (pastillaDeCobranza) con el texto largo (describirEstadoCobranza, "Al día
+                      hasta…"/"Vencida hace N días"/…) como `title` — no entra en la pastilla sin
+                      romper el layout de la fila. Si `estadosCobranza` no trajo esta cuenta (la
+                      consulta compartida falló), placeholder neutro: no rompe la fila. */}
+                  {pastilla ? (
+                    <span
+                      className={`pastilla ${pastilla.clase}`}
+                      title={describirEstadoCobranza(estadoCobranza!)}
+                    >
+                      {pastilla.texto}
+                    </span>
+                  ) : (
+                    <span className="pastilla pastilla-neutral" title="No se pudo calcular el estado de cobranza.">
+                      —
+                    </span>
+                  )}
                   <span className={`pastilla ${llena ? 'pastilla-inactivo' : 'pastilla-activo'}`}>
                     {llena ? 'Llena' : 'Con cupo'}
                   </span>

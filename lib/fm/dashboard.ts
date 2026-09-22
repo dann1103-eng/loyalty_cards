@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
-import { estadoEfectivo } from '../comercios/cobranza';
+import { estadoEfectivo, type EstadoCobranza } from '../comercios/cobranza';
 import type { PeriodoPagado } from '../comercios/prorrateo';
 import { fusionarActividad, type EventoActividad } from './actividad';
 
@@ -144,21 +144,27 @@ export async function actividadReciente(
   return fusionarActividad(eventos, limite);
 }
 
-// SIN CORRER: necesita la migración 0038 (cuentas_comercio.cobranza). Ver
-// docs/superpowers/plans/2026-09-21-cobranza-y-rework-admin.md.
+// El estado de cobranza EFECTIVO de CADA cuenta, en un mapa `cuenta_id → EstadoCobranza` (migración
+// 0038 aplicada, Tarea 11). DOS consultas (no una por cuenta): una trae TODAS las cuentas con sus
+// columnas de cobranza + `licencia_estado`, la otra trae TODOS los cobros `pagado`/`periodo` de una
+// vez y arma un mapa `cuenta_id → periodosPagados[]` en memoria, antes de llamar a `estadoEfectivo`
+// por cuenta. `null` ante cualquier error de las dos consultas.
 //
-// "Cuentas vencidas o bloqueadas": cuenta las que `estadoEfectivo` da `vencida` O `bloqueada` (las
-// dos cuentan, no solo las ya bloqueadas). DOS consultas (no una por cuenta): una trae las cuentas
-// con sus columnas de cobranza + `licencia_estado`, la otra trae TODOS los cobros `pagado`/`periodo`
-// y arma un mapa `cuenta_id → periodosPagados[]` en memoria. `null` ante cualquier error de las dos.
-export async function contarCuentasEnRiesgo(supabase: SupabaseClient<Database>, hoy: string): Promise<number | null> {
+// Compartida por `contarCuentasEnRiesgo` (abajo) y la lista de cuentas del admin
+// (app/admin/(protegido)/cuentas/page.tsx): las dos necesitan el estado de TODAS las cuentas a la
+// vez, así que separarla evita que cada pantalla repita las mismas dos consultas y el mismo armado
+// de mapa — antes vivía duplicada dentro de `contarCuentasEnRiesgo` únicamente.
+export async function estadosDeCobranzaPorCuenta(
+  supabase: SupabaseClient<Database>,
+  hoy: string,
+): Promise<Map<string, EstadoCobranza> | null> {
   const [cuentas, cobros] = await Promise.all([
     supabase.from('cuentas_comercio').select('id, cobranza, cobranza_desde, cobranza_pospuesta_hasta, licencia_estado'),
     supabase.from('cobros').select('cuenta_id, periodo_desde, periodo_hasta').eq('tipo', 'periodo').eq('estado', 'pagado'),
   ]);
 
   if (cuentas.error || cobros.error) {
-    console.error('[fm/dashboard] no se pudo contar las cuentas en riesgo:', cuentas.error, cobros.error);
+    console.error('[fm/dashboard] no se pudo leer el estado de cobranza por cuenta:', cuentas.error, cobros.error);
     return null;
   }
 
@@ -169,16 +175,33 @@ export async function contarCuentasEnRiesgo(supabase: SupabaseClient<Database>, 
     periodosPorCuenta.set(c.cuenta_id, lista);
   }
 
-  let enRiesgo = 0;
+  const estados = new Map<string, EstadoCobranza>();
   for (const cuenta of cuentas.data ?? []) {
-    const estado = estadoEfectivo({
-      cobranza: cuenta.cobranza as 'normal' | 'exenta',
-      desde: cuenta.cobranza_desde,
-      pospuestaHasta: cuenta.cobranza_pospuesta_hasta,
-      periodosPagados: periodosPorCuenta.get(cuenta.id) ?? [],
-      hoy,
-      licenciaEstado: cuenta.licencia_estado,
-    });
+    estados.set(
+      cuenta.id,
+      estadoEfectivo({
+        cobranza: cuenta.cobranza as 'normal' | 'exenta',
+        desde: cuenta.cobranza_desde,
+        pospuestaHasta: cuenta.cobranza_pospuesta_hasta,
+        periodosPagados: periodosPorCuenta.get(cuenta.id) ?? [],
+        hoy,
+        licenciaEstado: cuenta.licencia_estado,
+      }),
+    );
+  }
+
+  return estados;
+}
+
+// "Cuentas vencidas o bloqueadas": cuenta las que `estadoEfectivo` da `vencida` O `bloqueada` (las
+// dos cuentan, no solo las ya bloqueadas). `null` ante cualquier error de `estadosDeCobranzaPorCuenta`
+// — mismo criterio de "nunca un cero falso" que el resto de este archivo.
+export async function contarCuentasEnRiesgo(supabase: SupabaseClient<Database>, hoy: string): Promise<number | null> {
+  const estados = await estadosDeCobranzaPorCuenta(supabase, hoy);
+  if (estados === null) return null;
+
+  let enRiesgo = 0;
+  for (const estado of estados.values()) {
     if (estado.tipo === 'vencida' || estado.tipo === 'bloqueada') enRiesgo++;
   }
 

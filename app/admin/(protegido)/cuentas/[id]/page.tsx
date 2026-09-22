@@ -24,6 +24,7 @@ import { listarCobros, listarPeriodosPagados, METODO_WOMPI } from '@/lib/comerci
 import { describirPeriodo } from '@/lib/comercios/pagosAdmin';
 import { etiquetaDePlan } from '@/lib/comercios/planCuenta';
 import { estadoDelPeriodo } from '@/lib/comercios/prorrateo';
+import { describirEstadoCobranza, estadoEfectivo } from '@/lib/comercios/cobranza';
 import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import FormularioCobro from './FormularioCobro';
 import MarcarPagado from './MarcarPagado';
@@ -45,15 +46,6 @@ const PESTANAS = [
 type PestanaId = (typeof PESTANAS)[number]['id'];
 const IDS_PESTANA: readonly string[] = PESTANAS.map((p) => p.id);
 
-// La migración 0038 (cuentas_comercio.cobranza / cobranza_desde / cobranza_pospuesta_hasta, spec
-// 2026-09-21-cobranza-design.md) todavía NO está aplicada contra la base real: sin esas columnas,
-// estadoEfectivo() no se puede calcular acá sin que la consulta de la cuenta falle. Por eso este
-// flag queda en `false` a propósito, y por eso el default de la pestaña activa (abajo) siempre cae
-// en 'datos' hoy. Cuando la Tarea 11 aplique la migración, este flag (o el `esUrgente` que lo usa)
-// se reemplaza por una lectura real: estadoEfectivo({ ...cuenta, periodosPagados, hoy }).tipo ===
-// 'vencida' | 'bloqueada' — es un cambio de una línea, no un rediseño.
-const MIGRACION_0038_APLICADA = false;
-
 export default async function PaginaEditarCuenta({
   params,
   searchParams,
@@ -68,7 +60,9 @@ export default async function PaginaEditarCuenta({
   const supabase = createServiceClient();
   const { data: cuenta, error } = await supabase
     .from('cuentas_comercio')
-    .select('id, nombre, limite_negocios, plan, licencia_estado, licencia_monto_mensual, licencia_activa_desde')
+    .select(
+      'id, nombre, limite_negocios, plan, licencia_estado, licencia_monto_mensual, licencia_activa_desde, cobranza, cobranza_desde, cobranza_pospuesta_hasta',
+    )
     .eq('id', id)
     .maybeSingle();
 
@@ -132,11 +126,12 @@ export default async function PaginaEditarCuenta({
   const cobros = await listarCobros(supabase, id);
   // Hasta cuándo tiene pagado en la app. `null` (error de lectura) no dice nada: mejor sin línea que una falsa.
   const periodos = await listarPeriodosPagados(supabase, id);
+  const hoy = hoyEnZona(null);
   const lineaPeriodo =
     periodos === null
       ? null
       : describirPeriodo(
-          estadoDelPeriodo(periodos, hoyEnZona(null)),
+          estadoDelPeriodo(periodos, hoy),
           periodos.reduce<string | null>((max, p) => (max === null || p.hasta > max ? p.hasta : max), null),
         );
   // Cobros pendientes: los únicos que "Anular un cobro pendiente" (pestaña Cobranza) puede tocar —
@@ -144,10 +139,22 @@ export default async function PaginaEditarCuenta({
   // ofrecer el botón sobre un cobro que ya no se puede anular.
   const cobrosPendientes = (cobros ?? []).filter((c) => c.estado === 'pendiente');
 
-  // La pestaña activa por defecto es 'cobranza' si la cuenta está vencida o bloqueada (es lo
-  // urgente); si no, 'datos'. Hoy MIGRACION_0038_APLICADA es siempre false (ver el comentario del
-  // flag, arriba), así que `esUrgente` nunca es cierto y el default siempre cae en 'datos'.
-  const esUrgente = MIGRACION_0038_APLICADA;
+  // Estado de cobranza REAL de esta cuenta (migración 0038 aplicada, Tarea 11): mismo cálculo que
+  // alimenta la insignia de /admin/cuentas y la tarjeta "Cuentas vencidas o bloqueadas" del
+  // dashboard, pero para UNA cuenta — con los `periodos` que esta página ya cargó arriba, no una
+  // consulta aparte.
+  const estadoCobranza = estadoEfectivo({
+    cobranza: cuenta.cobranza as 'normal' | 'exenta',
+    desde: cuenta.cobranza_desde,
+    pospuestaHasta: cuenta.cobranza_pospuesta_hasta,
+    periodosPagados: periodos ?? [],
+    hoy,
+    licenciaEstado: cuenta.licencia_estado,
+  });
+
+  // La pestaña activa por defecto es 'cobranza' si la cuenta está vencida o bloqueada (es lo urgente
+  // para FM); si no, 'datos'.
+  const esUrgente = estadoCobranza.tipo === 'vencida' || estadoCobranza.tipo === 'bloqueada';
   const tabPorDefecto: PestanaId = esUrgente ? 'cobranza' : 'datos';
   const tabActiva: PestanaId = IDS_PESTANA.includes(tabParam ?? '') ? (tabParam as PestanaId) : tabPorDefecto;
 
@@ -247,7 +254,7 @@ export default async function PaginaEditarCuenta({
                 accion={crearComercioDeCuenta}
                 textoBoton="Crear comercio"
                 cuentas={[{ id, nombre: cuenta.nombre }]}
-                hoyIso={hoyEnZona(null)}
+                hoyIso={hoy}
               />
             </div>
           </details>
@@ -310,17 +317,14 @@ export default async function PaginaEditarCuenta({
 
       {tabActiva === 'cobranza' && (
         <div className="reveal d2">
-          {/* Estado derivado (spec cobranza, "Pantallas": "Al día hasta…", "Vencida hace N días",
-              "Bloqueada", "Exenta", "Pospuesta hasta…"). Necesita estadoEfectivo(), que a su vez
-              necesita las columnas de la migración 0038 — todavía sin aplicar (ver el comentario de
-              MIGRACION_0038_APLICADA, arriba). Mismo criterio que la tarjeta "Cuentas vencidas o
-              bloqueadas" del dashboard (Tarea 7): placeholder explícito, no se omite la sección. */}
+          {/* Estado derivado (spec cobranza, "Pantallas → FM"): `describirEstadoCobranza`
+              (lib/comercios/cobranza.ts) traduce el `EstadoCobranza` ya calculado arriba
+              (estadoEfectivo) a "Al día hasta…"/"Vencida hace N días"/"Bloqueada"/"Exenta"/
+              "Pospuesta hasta…" — la misma función que alimenta el `title` de la pastilla en
+              /admin/cuentas. */}
           <section className="panel" style={{ marginTop: 0 }}>
             <p className="titulo-seccion" style={{ marginTop: 0, marginBottom: 4 }}>Estado</p>
-            <div className="metric-valor" style={{ fontSize: '1.4rem' }}>—</div>
-            <p className="admin-fila-slug" style={{ marginTop: 4 }}>
-              Disponible cuando se aplique la migración 0038.
-            </p>
+            <div className="metric-valor" style={{ fontSize: '1.4rem' }}>{describirEstadoCobranza(estadoCobranza)}</div>
           </section>
 
           {/* Lo que sí funciona hoy (Tarea 4a): pedirPago y accionAnularCobro no tocan ninguna
@@ -355,13 +359,15 @@ export default async function PaginaEditarCuenta({
             )}
           </section>
 
-          {/* Lo que depende de la migración (Tarea 4b): ya cableado a sus Server Actions reales,
-              pero deshabilitado — MIGRACION_0038_APLICADA es false hoy. */}
+          {/* Las 3 acciones de FM que dependen de la migración 0038 (Tarea 4b), ya habilitadas.
+              `modoActual`/`pospuestoHasta` arrancan sus controles reflejando el estado REAL de la
+              cuenta, no siempre "normal"/vacío. */}
           <ControlesCobranzaFutura
             accionModo={cambiarModoDeCuenta}
             accionPosponer={posponerPagoDeCuenta}
             accionPerdonar={perdonarCicloDeCuenta}
-            disponible={MIGRACION_0038_APLICADA}
+            modoActual={cuenta.cobranza as 'normal' | 'exenta'}
+            pospuestoHasta={cuenta.cobranza_pospuesta_hasta}
           />
         </div>
       )}
