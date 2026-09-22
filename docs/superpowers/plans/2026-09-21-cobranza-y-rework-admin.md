@@ -556,15 +556,33 @@ letra: Colores+Franja comparten un `<form>`, Imágenes es independiente, Reverso
 - Modificar: `app/comercio/(protegido)/branding/page.tsx`, `FormularioBranding.tsx`,
   `FormularioReverso.tsx` (pestañas `?seccion=colores|imagenes|franja|reverso`)
 
-- [ ] Pestañas puramente visuales sobre los TRES mecanismos de guardado existentes (no se toca ningún
+- [x] Pestañas puramente visuales sobre los TRES mecanismos de guardado existentes (no se toca ningún
   Server Action).
-- [ ] `noValidate` en el form de Colores/Franja + el auto-cambio de pestaña ante un error de color.
-- [ ] `npx tsc --noEmit` limpio.
-- [ ] Recorrido en el navegador: los 15 tipos de campo en las 4 pestañas; el caso de la spec (editar
-  Colores sin guardar, ir a Reverso, guardar solo Reverso, volver y confirmar que Colores sigue sin
-  guardar y Reverso sí); el caso del color vacío publicado desde Franja (vuelve a Colores con el error
-  visible, no en silencio).
-- [ ] Commit.
+- [x] `noValidate` en el form de Colores/Franja + el auto-cambio de pestaña ante un error de color.
+- [x] `npx tsc --noEmit` limpio.
+- [ ] **Recorrido en el navegador: PENDIENTE** (mismo motivo que las Tareas 7/8 — sin `.env.local`).
+  Queda para Daniel o una sesión futura: los 15 tipos de campo en las 4 pestañas; el caso de la spec
+  (editar Colores sin guardar, ir a Reverso, guardar solo Reverso, volver y confirmar que Colores sigue
+  sin guardar y Reverso sí); el caso del color vacío publicado desde Franja (vuelve a Colores con el
+  error visible, no en silencio) — **y de paso confirmar el hallazgo de abajo** (nav desincronizado).
+- [x] Commit.
+
+**Estado: código ✅ completo y revisado** (commits `b09acc3` + `285736f`). Tarea de mayor riesgo del plan
+(tres mecanismos de guardado distintos en una sola pantalla) — ambas revisiones verificaron con lectura
+muy cuidadosa (no ejecución) que ningún input de Colores/Franja se desmonta al cambiar de pestaña (solo
+`display:none`), que el `<form>` es uno solo, y simularon mentalmente los dos escenarios críticos de
+pérdida de datos de la spec sin encontrar ninguno. `FormularioReverso.tsx` terminó sin tocarse (envuelto
+desde `page.tsx` en vez de modificado) — decisión de menor riesgo, avalada por ambas revisiones contra el
+texto exacto de la spec. `tsc`/`eslint` limpios. "Ready to merge: Yes" en ambas.
+
+**⚠️ Hallazgo no bloqueante, a confirmar en el recorrido pendiente:** tras el auto-cambio a la pestaña
+Colores por un error, el `<nav>` de arriba (que lee la URL/`seccionActiva` del servidor) puede quedar
+desincronizado del contenido mostrado (`seccionMostrada`, estado de cliente) — sigue resaltando la
+pestaña donde ocurrió el error. No es pérdida de datos (los valores siguen intactos, el error se ve
+junto al campo correcto). Ambas revisiones coincidieron en diferir el arreglo hasta ver el recorrido
+real: si se confunde en la práctica, la opción recomendada es unificar nav+contenido en el mismo límite
+de cliente (mover el `<nav>` a `FormularioBranding.tsx`), no duplicar la lógica de sincronización en un
+segundo componente.
 
 ## Tarea 10 — Menú "más opciones" agrupado
 
