@@ -327,10 +327,20 @@ resto del proyecto) pero **no lo corras** — el `describe`/`it` va a fallar con
 inexistente hasta que la migración esté aplicada. Dejá una nota en el encabezado del test:
 `// SIN CORRER: necesita la migración 0038 (cuentas_comercio.cobranza). Ver docs/superpowers/plans/2026-09-21-cobranza-y-rework-admin.md.`
 
-- [ ] Escribir `modoCobranza.ts` y su test (sin correrlo).
-- [ ] `npx tsc --noEmit` limpio (esto SÍ hay que verificarlo, aunque el test no corra: un error de tipos
+- [x] Escribir `modoCobranza.ts` y su test (sin correrlo).
+- [x] `npx tsc --noEmit` limpio (esto SÍ hay que verificarlo, aunque el test no corra: un error de tipos
   se detecta sin tocar la base).
-- [ ] Commit, dejando claro en el mensaje que la parte de base no se corrió.
+- [x] Commit, dejando claro en el mensaje que la parte de base no se corrió.
+
+**Estado: ✅ completa** (commits `2dfb824` + fix `e206dc0`). Verificación por inspección de código y
+razonamiento manual (el test no se puede correr): la spec-reviewer recalculó a mano la aritmética de
+`perdonarCiclo` contra `periodoAPerdonar`/`hastaDelPeriodo`/`sumarDias` y coincidió exacto en los dos
+casos. La revisión de calidad encontró 1 Important real (`cambiarModoCobranza`/`posponerPago` reportaban
+éxito con un `cuentaId` inexistente, por faltarles `.select('id').single()` — mismo patrón que
+`actualizarCuenta` en `cuentas.ts` ya resuelve), corregido y re-verificado por ambas revisiones de forma
+independiente. `tsc`/`eslint` limpios. **Sigue BLOQUEADA para verificación real contra Supabase hasta que
+Daniel aplique la migración 0038 (Tarea 11)** — recién ahí corren `modoCobranza.test.ts` y se confirma en
+la práctica el razonamiento anotado.
 
 ## Tarea 5 — El gate de bloqueo (`verifyComercioAcceso`)
 
