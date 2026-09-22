@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ENLACES_BARRA, enlacesBarraPorRol, enlacesMenuPorRol } from './navegacion';
+import { ENLACES_BARRA, ENLACES_MENU, enlacesBarraPorRol, enlacesMenuPorRol } from './navegacion';
 import { TIPOS } from '../tarjetas/tipos';
 
 // MUTATION-TESTING: este módulo es el control de acceso VISUAL de la nav (la barrera real son los
@@ -9,7 +9,9 @@ import { TIPOS } from '../tarjetas/tipos';
 // (3) reordenar ENLACES_BARRA y sacar Escanear del centro, que es la única razón por la que la
 // barra tiene 5 y no 4 o 6 destinos. Por (2) y (3) los hrefs esperados se escriben LITERALES y EN
 // ORDEN abajo: compararlos contra la constante sería una tautología que pasa en verde con la
-// constante rota.
+// constante rota; (4) ENLACE_PREMIOS sin `grupo: 'programa'` al intercambiar con Programas — lo
+// atrapa 'ENLACE_PREMIOS trae grupo "programa" cuando sube al menú por el intercambio', que lee el
+// campo en el enlace que devuelve `enlacesMenuPorRol('owner', 'membresia')`, no en la constante.
 
 // "Escanear al centro" NO es `hrefs[Math.floor(largo / 2)]`. Con CUATRO destinos ese índice sigue
 // dando Escanear (el 2 de [0,1,2,3]) aunque tenga dos vecinos a la izquierda y uno solo a la
@@ -123,7 +125,12 @@ describe('Premios y Programas intercambian superficie según el tipo', () => {
       '/comercio/clientes',
     ]);
     // El destino que sube trae SU ícono y SU etiqueta, no los de Premios.
-    expect(enlaces[3]).toEqual({ href: '/comercio/programas', icono: 'style', etiqueta: 'Programas' });
+    expect(enlaces[3]).toEqual({
+      href: '/comercio/programas',
+      icono: 'style',
+      etiqueta: 'Programas',
+      grupo: 'programa',
+    });
     esperarEscanearAlCentro(enlaces.map((e) => e.href));
   });
 
@@ -138,7 +145,12 @@ describe('Premios y Programas intercambian superficie según el tipo', () => {
       '/comercio/cajeros',
       '/comercio/plan',
     ]);
-    expect(enlaces[2]).toEqual({ href: '/comercio/recompensas', icono: 'redeem', etiqueta: 'Premios' });
+    expect(enlaces[2]).toEqual({
+      href: '/comercio/recompensas',
+      icono: 'redeem',
+      etiqueta: 'Premios',
+      grupo: 'programa',
+    });
     // Reportes sigue encabezando el menú: el intercambio no puede reordenar lo demás.
     expect(enlaces[0].href).toBe('/comercio/reportes');
   });
@@ -184,5 +196,32 @@ describe('Premios y Programas intercambian superficie según el tipo', () => {
       ]);
       expect(enlacesMenuPorRol('cajero', t.valor), t.valor).toEqual([]);
     }
+  });
+});
+
+// Spec 2026-09-21 "Menú 'más opciones', agrupado": MenuOpciones.tsx deja de meter todo `resto` bajo
+// un único rótulo "Configuración" y agrupa por `grupo` (Tu programa / Tu equipo y locales / Cuenta).
+// Estas pruebas viven en el módulo puro porque son las que pueden mutarse de verdad: MenuOpciones.tsx
+// no tiene pruebas de componente (no hay `.test.tsx` en este repo, ver CLAUDE.md).
+describe('grupo (menú "más opciones" agrupado)', () => {
+  it('cada entrada de ENLACES_MENU salvo Reportes trae un grupo', () => {
+    for (const e of ENLACES_MENU) {
+      if (e.href === '/comercio/reportes') {
+        // Reportes es el destacado aparte, arriba de las secciones agrupadas: NO debe tener grupo.
+        expect(e.grupo, `${e.href} no debería tener grupo (es el destacado)`).toBeUndefined();
+        continue;
+      }
+      expect(e.grupo, `${e.href} sin grupo`).toBeDefined();
+    }
+  });
+
+  // ENLACE_PREMIOS no está exportado (es módulo-privado): se llega a él por el mismo camino que ya
+  // usa el test de la línea ~130, `enlacesMenuPorRol('owner', 'membresia')`, que lo sube al menú en
+  // el lugar de Programas.
+  it('ENLACE_PREMIOS trae grupo "programa" cuando sube al menú por el intercambio', () => {
+    const enlaces = enlacesMenuPorRol('owner', 'membresia');
+    const premios = enlaces.find((e) => e.href === '/comercio/recompensas');
+    expect(premios, 'Premios no subió al menú con contador "ninguno"').toBeDefined();
+    expect(premios?.grupo).toBe('programa');
   });
 });

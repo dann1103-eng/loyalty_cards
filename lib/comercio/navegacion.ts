@@ -11,6 +11,7 @@ export interface EnlaceNav {
   href: string;
   icono: string;
   etiqueta: string;
+  grupo?: 'programa' | 'equipo' | 'cuenta';
 }
 
 // Escanear es la acción que un cajero repite decenas de veces por día: va al CENTRO y destacada.
@@ -21,8 +22,22 @@ export const HREF_ESCANEAR = '/comercio/escanear';
 // Los dos destinos que INTERCAMBIAN superficie según el tipo (ver `intercambiarSiNoHayCanje`).
 // Están fuera de los arreglos porque cada uno tiene que poder aparecer en el otro con SU ícono y SU
 // etiqueta, no con los del que reemplaza.
-const ENLACE_PREMIOS: EnlaceNav = { href: '/comercio/recompensas', icono: 'redeem', etiqueta: 'Premios' };
-const ENLACE_PROGRAMAS: EnlaceNav = { href: '/comercio/programas', icono: 'style', etiqueta: 'Programas' };
+// `grupo: 'programa'` en ENLACE_PREMIOS es a propósito aunque hoy solo viva en la barra (que no se
+// agrupa): cuando `intercambiarSiNoHayCanje` lo sube al MENÚ en lugar de Programas, necesita traer
+// su propio `grupo` para agruparse bajo "Tu programa" junto a Reglas y Notificaciones — si no lo
+// trajera, quedaría huérfano, sin sección, en vez de agrupado (ver navegacion.test.ts).
+const ENLACE_PREMIOS: EnlaceNav = {
+  href: '/comercio/recompensas',
+  icono: 'redeem',
+  etiqueta: 'Premios',
+  grupo: 'programa',
+};
+const ENLACE_PROGRAMAS: EnlaceNav = {
+  href: '/comercio/programas',
+  icono: 'style',
+  etiqueta: 'Programas',
+  grupo: 'programa',
+};
 
 export const ENLACES_BARRA: readonly EnlaceNav[] = [
   { href: '/comercio/panel', icono: 'dashboard', etiqueta: 'Resumen' },
@@ -37,20 +52,22 @@ export const ENLACES_BARRA: readonly EnlaceNav[] = [
 // justo el problema que este rediseño vino a resolver. No la bajes por "orden alfabético" ni por
 // "agrupar los ajustes juntos".
 export const ENLACES_MENU: readonly EnlaceNav[] = [
+  // Reportes se queda SIN `grupo` a propósito: es el "destacado" aparte, arriba de las secciones
+  // agrupadas (ver MenuOpciones.tsx). No entra en ninguna de las tres secciones de abajo.
   { href: '/comercio/reportes', icono: 'insights', etiqueta: 'Reportes' },
-  { href: '/comercio/reglas', icono: 'rule', etiqueta: 'Reglas' },
+  { href: '/comercio/reglas', icono: 'rule', etiqueta: 'Reglas', grupo: 'programa' },
   // Justo después de Reglas (migración 0024): absorbió la configuración por tipo que antes vivía
   // ahí (cashback%, visitas del paquete, …), así que es la sección hermana más cercana.
   ENLACE_PROGRAMAS,
   // Notificaciones (migración 0026): la perilla del aviso AUTOMÁTICO de inactividad vive en
   // Reglas, así que esta pantalla —la campaña MANUAL y su historial— es la sección hermana más
   // cercana de ese bloque Reglas/Programas.
-  { href: '/comercio/notificaciones', icono: 'campaign', etiqueta: 'Notificaciones' },
-  { href: '/comercio/sucursales', icono: 'store', etiqueta: 'Sucursales' },
-  { href: '/comercio/cajeros', icono: 'badge', etiqueta: 'Cajeros' },
+  { href: '/comercio/notificaciones', icono: 'campaign', etiqueta: 'Notificaciones', grupo: 'programa' },
+  { href: '/comercio/sucursales', icono: 'store', etiqueta: 'Sucursales', grupo: 'equipo' },
+  { href: '/comercio/cajeros', icono: 'badge', etiqueta: 'Cajeros', grupo: 'equipo' },
   // Mi plan va al MENÚ, no a la barra: la barra lleva exactamente 5 destinos y el centro sale de la
   // posición 3 de 5 (ver arriba). El menú no tiene esa restricción — es una lista vertical.
-  { href: '/comercio/plan', icono: 'workspace_premium', etiqueta: 'Mi plan' },
+  { href: '/comercio/plan', icono: 'workspace_premium', etiqueta: 'Mi plan', grupo: 'cuenta' },
 ];
 
 // Qué secciones ve el CAJERO (plan 2026-07-25 §4.8): Resumen, Escanear y Clientes. Las demás lo

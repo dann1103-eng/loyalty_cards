@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { Fragment, useEffect, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { enlacesMenuPorRol } from '@/lib/comercio/navegacion';
+import { enlacesMenuPorRol, type EnlaceNav } from '@/lib/comercio/navegacion';
 import ListaTemas from '@/app/_ui/ListaTemas';
 import { cerrarSesionComercio } from '../actions';
 
@@ -14,6 +14,17 @@ import { cerrarSesionComercio } from '../actions';
 // SelectorContexto — si algún día se extrae a un hook compartido, que sea con los dos a la vez.
 const suscribirNada = () => () => {};
 const useEstaEnCliente = () => useSyncExternalStore(suscribirNada, () => true, () => false);
+
+// Orden fijo y rótulos de las tres secciones del menú agrupado (spec 2026-09-21, "Menú 'más
+// opciones', agrupado", línea 320): Tu programa (Reglas/Programas/Notificaciones) → Tu equipo y
+// locales (Sucursales/Cajeros) → Cuenta (Mi plan). El orden vive ACÁ, no en navegacion.ts: ese
+// módulo es la política de qué ve cada rol, no cómo se presenta visualmente.
+const ORDEN_GRUPOS: Array<NonNullable<EnlaceNav['grupo']>> = ['programa', 'equipo', 'cuenta'];
+const ROTULO_GRUPO: Record<NonNullable<EnlaceNav['grupo']>, string> = {
+  programa: 'Tu programa',
+  equipo: 'Tu equipo y locales',
+  cuenta: 'Cuenta',
+};
 
 // Menú de "más opciones" del header: las secciones que no entran en la barra inferior de 5 destinos
 // + el selector de tema + cerrar sesión.
@@ -104,23 +115,30 @@ export default function MenuOpciones({ rol, tipoTarjeta }: { rol: string; tipoTa
               </Link>
             )}
 
-            {resto.length > 0 && (
-              <>
-                <p className="titulo-seccion menu-rotulo">Configuración</p>
-                {resto.map((e) => (
-                  <Link
-                    key={e.href}
-                    href={e.href}
-                    className={`sheet-fila${esActiva(e.href) ? ' sheet-fila-activa' : ''}`}
-                    aria-current={esActiva(e.href) ? 'page' : undefined}
-                    onClick={() => setAbierto(false)}
-                  >
-                    <span className="icono" aria-hidden="true">{e.icono}</span>
-                    <span>{e.etiqueta}</span>
-                  </Link>
-                ))}
-              </>
-            )}
+            {ORDEN_GRUPOS.map((grupo) => {
+              const enlacesDelGrupo = resto.filter((e) => e.grupo === grupo);
+              // Un grupo sin enlaces no imprime su encabezado: no debería pasar con el reparto de
+              // hoy (los tres grupos siempre tienen al menos un enlace), pero nada en el tipo lo
+              // garantiza — ver navegacion.test.ts.
+              if (enlacesDelGrupo.length === 0) return null;
+              return (
+                <Fragment key={grupo}>
+                  <p className="titulo-seccion menu-rotulo">{ROTULO_GRUPO[grupo]}</p>
+                  {enlacesDelGrupo.map((e) => (
+                    <Link
+                      key={e.href}
+                      href={e.href}
+                      className={`sheet-fila${esActiva(e.href) ? ' sheet-fila-activa' : ''}`}
+                      aria-current={esActiva(e.href) ? 'page' : undefined}
+                      onClick={() => setAbierto(false)}
+                    >
+                      <span className="icono" aria-hidden="true">{e.icono}</span>
+                      <span>{e.etiqueta}</span>
+                    </Link>
+                  ))}
+                </Fragment>
+              );
+            })}
 
             {/* El selector de tema lo ve TODO rol, incluido el cajero (que no ve ninguna sección
                 acá): alto contraste existe justamente para el que atiende con el sol de frente. */}
