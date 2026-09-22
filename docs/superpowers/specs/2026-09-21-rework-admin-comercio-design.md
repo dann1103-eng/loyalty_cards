@@ -56,6 +56,14 @@ viene) y Daniel se pierde probando. Dos quejas concretas:
 
 ## Diseño: admin de FM
 
+### Lista de cuentas (`app/admin/(protegido)/cuentas/page.tsx`)
+
+Cada fila lleva una **insignia de estado** (`pastilla`, mismo componente visual que ya usan `/admin/pagos`
+y los cobros): `Al día`, `Vencida`, `Bloqueada`, `Exenta` o `Pospuesta`, calculada con el mismo
+`estadoEfectivo` que el gate y el dashboard (ver "Unificación con `licencia_estado`" más abajo). Es lo que
+la spec de cobranza da por asumido ("la lista de cuentas lleva una insignia de estado por cuenta… el
+rework del admin reorganiza todo esto") y que sin esta sección quedaba sin dueño.
+
 ### Nav (`app/admin/(protegido)/layout.tsx`)
 
 Se saca el link "Comercios". El logo/marca (`<span className="admin-marca">…`) pasa a ser un
@@ -70,8 +78,10 @@ Server Component. Llama a `verifyFmAdmin()` primero (mismo patrón que toda pág
 vencidas/bloqueadas, solicitudes — cada una linkea a su pantalla), una fila chica con la cartera, y una
 lista de actividad reciente abajo.
 
-**Módulo nuevo `lib/fm/dashboard.ts`** (capa de datos, sin JSX — mismo criterio que `lib/reportes/reportes.ts`
-de "`null` ante un error, nunca un cero falso"):
+**Módulo nuevo `lib/fm/dashboard.ts`** (capa de datos, sin JSX — mismo criterio que `reporteCajeros` en
+`lib/reportes/reportes.ts`: "`null` ante un error, nunca un cero falso". Es la EXCEPCIÓN deliberada de ese
+archivo, no su regla general — el resto de `reportes.ts` es fail-soft con `[]`; acá se sigue la excepción
+a propósito, porque un dashboard con un cero falso es tan engañoso como un reporte de auditoría vacío):
 
 - `ingresosDelMes(supabase, hoy)`: `number | null`. `hoy` es `AAAA-MM-DD` (zona El Salvador,
   `hoyEnZona(null)`); el primer día del mes se calcula de `hoy`, no del reloj del servidor. Consulta
@@ -83,9 +93,12 @@ de "`null` ante un error, nunca un cero falso"):
 - `contarSolicitudesPendientes(supabase)`: `number | null`. Mismo criterio que
   `contarPagosAtencion` (`lib/comercios/pagosAdmin.ts`): `count` con `estado = 'pendiente'`.
 - `contarCuentasEnRiesgo(supabase, hoy)`: `number | null`. Lee `cuentas_comercio` (columnas de cobranza +
-  `id`) y `cobros` (`tipo = 'periodo'`, `estado = 'pagado'`) en DOS consultas (no una por cuenta), arma
-  el mapa cuenta→períodos pagados, y para cada una llama `estadoDeCobranza` (de la spec de cobranza);
-  cuenta las que dan `vencida` o `bloqueada`.
+  `licencia_estado` + `id`) y `cobros` (`tipo = 'periodo'`, `estado = 'pagado'`) en DOS consultas (no una
+  por cuenta), arma el mapa cuenta→períodos pagados, y para cada una llama `estadoEfectivo` (que envuelve
+  a `estadoDeCobranza`, ver "Unificación con `licencia_estado`" en la ficha de cuenta más abajo); cuenta
+  las que dan `vencida` o `bloqueada` (el nombre de la tarjeta en el dashboard es "Cuentas vencidas o
+  bloqueadas": las dos cuentan, no solo las ya bloqueadas). La tarjeta linkea a `/admin/cuentas` (con la
+  insignia de cada fila ya visible ahí — ver esa sección).
 - `actividadReciente(supabase, limite)`: junta `pagos_wompi` (`conciliacion = 'aplicado'`, con el nombre
   de cuenta), `cuentas_comercio` (por `created_at`) y `solicitudes_plan` (por `created_at`), 5 de cada
   una, y llama a la función PURA `fusionarActividad` (abajo) para ordenar y recortar. `null` si CUALQUIERA
@@ -121,6 +134,35 @@ Contenido de cada una es el que YA existe, solo reagrupado — no cambia ninguna
 La pestaña activa por defecto es **Cobranza** si la cuenta está `vencida` o `bloqueada` (es lo urgente),
 si no **Datos**.
 
+### Unificación con `licencia_estado` (la que la spec de cobranza deja pendiente para acá)
+
+Hoy `licencia_estado` (activo/inactivo, pestaña Datos) es **puramente cosmético**: no bloquea nada, pese a
+que su propio texto en pantalla dice "Pausar afecta TODOS los comercios de esta cuenta a la vez"
+(`FormularioCuenta`). La cobranza agrega un bloqueo que SÍ es real, pero derivado de fechas — no le da a
+FM un botón de "cortalo YA, sin esperar los 15 días" para un caso excepcional (un cliente problemático,
+por ejemplo). La unificación es esa: **`licencia_estado = 'inactivo'` pasa a ser el interruptor manual de
+corte inmediato**, evaluado ANTES que las fechas:
+
+1. `licencia_estado = 'inactivo'` → `bloqueada`, sin importar fechas ni `cobranza` (ni una cuenta exenta
+   se salva de un corte manual explícito — es la vía de escape para el caso excepcional).
+2. Si no, se evalúa `estadoDeCobranza` tal como la otra spec lo define (exenta → pospuesta → al_dia →
+   vencida → bloqueada por fecha).
+
+No hace falta ninguna columna nueva (`licencia_estado` ya existe desde antes de esta rama) ni tocar la
+migración `0038` de la spec de cobranza: el combinado se resuelve en el gate y en el dashboard, en una
+función chica que envuelve a `estadoDeCobranza` (p. ej. `estadoEfectivo(cuenta) = cuenta.licencia_estado
+=== 'inactivo' ? { tipo: 'bloqueada', ... } : estadoDeCobranza(...)`). El texto de la pestaña Datos se
+corrige para que ya no mienta: pasa a decir algo como "Corta el acceso al panel y al escáner de
+inmediato, sin esperar los 15 días de gracia" — mismo campo, mismo formulario, mismo botón; cambia el
+texto y, por primera vez, cambia también lo que de verdad hace.
+
+**⚠️ Esto SÍ tiene efecto inmediato el día del deploy, a diferencia del resto de la cobranza.** Hoy, en la
+base real, `M&M Inversiones` y `Segundo` YA tienen `licencia_estado = 'inactivo'` (eran cosméticos hasta
+ahora). En cuanto este cambio se publique, esas dos cuentas quedan bloqueadas de verdad — sin que nadie
+haya tocado nada ese día. Es lo contrario de "Despliegue" en la spec de cobranza ("nada cambia hasta que
+pases cuentas a normal"). Antes de este deploy, Daniel tiene que decidir por esas dos cuentas puntuales:
+dejarlas bloquear (si de verdad están dadas de baja) o pasarlas a `activo` primero.
+
 ## Diseño: panel del comercio
 
 ### Marca, con pestañas (`app/comercio/(protegido)/branding/page.tsx` + `FormularioBranding.tsx`)
@@ -128,12 +170,24 @@ si no **Datos**.
 Se reparte el formulario de 908 líneas en cuatro pestañas (`?seccion=colores|imagenes|franja|reverso`),
 una visible a la vez, layout C: sin acordeón, cada pestaña es toda la pantalla.
 
-- **Colores:** la paleta (fondo, texto, label).
+- **Colores:** la paleta (fondo, texto, label) **+ "Meta de sellos" y "Nombre del pase"** — hoy viven en
+  el mismo bloque que la paleta y no son ni color, ni imagen, ni reverso; se quedan en Colores (primera
+  pestaña) para no abrir una quinta categoría por dos campos.
 - **Imágenes:** logo, strip, hero — "Recursos visuales".
 - **Franja:** la foto de fondo de la franja y su encuadre (el `<fieldset>` que hoy vive al final de
   `FormularioBranding.tsx`).
 - **Reverso:** `FormularioReverso` completo (términos, redes sociales, sitio web) — hoy es un componente
   aparte más abajo en la misma página; pasa a ser la cuarta pestaña.
+
+**Sigue siendo UN solo `<form>` con UNA sola Server Action** (`accionGuardarBranding` /
+`accionGuardarBrandingDePrograma`), exactamente como hoy — las pestañas son **puramente visuales**, no
+cuatro formularios. Las cuatro secciones se quedan SIEMPRE montadas en el DOM (mismo estado de React que
+hoy, un solo `useState` con todos los campos); cambiar de pestaña solo alterna qué sección se ve
+(`style={{ display: pestañaActiva === 'colores' ? 'block' : 'none' }}` o equivalente), nunca desmonta ni
+condiciona qué inputs existen. Es la misma regla que ya protege el encuadre de la franja (comentario de
+`mandaEncuadre`, línea 238-242: "si viajaran solo cuando se ven… le borraría al dueño el encuadre que ya
+había ajustado") — extendida a las cuatro pestañas: **ninguna pestaña que no estés mirando puede perder
+sus valores al guardar**, porque todas viajan siempre en el mismo submit.
 
 El selector de "¿qué tarjeta estás diseñando?" (cuando hay más de un programa) se queda ARRIBA de las
 pestañas, fuera de ellas: no es parte del contenido de ninguna, es lo que decide de qué comercio/programa
@@ -171,8 +225,11 @@ gate de FM.
 - Las funciones de `lib/fm/dashboard.ts`: contra la base (las corre Daniel o se corren con el cwd en el
   checkout principal, como el resto de la pasarela). Casos: cero de cada cosa, una falla de consulta
   devuelve `null` y no tumba las demás.
-- `contarCuentasEnRiesgo`: depende de `estadoDeCobranza` (spec de cobranza) — sus mutaciones viven en la
-  tabla de esa spec; acá solo se prueba que agrega bien sobre varias cuentas.
+- `estadoEfectivo`: pura, con mutación (una cuenta `licencia_estado = 'inactivo'` da `bloqueada` aunque
+  esté `exenta` o al día; una cuenta `activo` delega sin cambios en `estadoDeCobranza`).
+- `contarCuentasEnRiesgo`: depende de `estadoDeCobranza` (spec de cobranza) para el caso por fechas — sus
+  mutaciones viven en la tabla de esa spec; acá se prueba que agrega bien sobre varias cuentas Y que
+  respeta `estadoEfectivo` (una cuenta pausada a mano cuenta aunque su fecha diga "al día").
 - Recorrido en el navegador: dashboard con datos reales, las cuatro pestañas de Marca, las cuatro pestañas
   de una ficha de cuenta, el menú agrupado del comercio — en los tres temas, a ancho de teléfono.
 
@@ -187,7 +244,7 @@ Tarea 0):
 | 3 | (spec de cobranza) capa de datos y acciones de FM | los de esa spec |
 | 3.5 | `fusionarActividad` (puro) y `lib/fm/dashboard.ts` (con base) | pruebas + mutaciones |
 | 4 | Nav sin "Comercios", logo→dashboard, `app/admin/(protegido)/page.tsx` | navegador |
-| 5 | Ficha de cuenta con pestañas (Datos·Negocios·Cobros·Cobranza) | navegador |
+| 5 | `estadoEfectivo` (une `licencia_estado` + `estadoDeCobranza`); ficha de cuenta con pestañas (Datos·Negocios·Cobros·Cobranza) e insignia en la lista de cuentas | pruebas + mutaciones, navegador |
 | 6 | (spec de cobranza) `accionPagarCobro`, gate de bloqueo, pantallas del dueño/cajero | los de esa spec |
 | 7 | Marca con pestañas (Colores·Imágenes·Franja·Reverso) | navegador, los 15 tipos de campo |
 | 8 | Menú "más opciones" agrupado | navegador |
@@ -195,7 +252,9 @@ Tarea 0):
 
 **Despliegue:** igual que siempre — migración `0038` primero (la aplica Daniel a mano), deploy después.
 Como la migración deja todas las cuentas existentes exentas (spec de cobranza), nada de esto cambia el
-comportamiento para un cliente real hasta que Daniel pase cuentas a "normal" una por una.
+comportamiento para un cliente real hasta que Daniel pase cuentas a "normal" una por una — **con la
+excepción de `M&M Inversiones` y `Segundo`** (ver "Unificación con `licencia_estado`" arriba): esas dos se
+bloquean el mismo día, porque ya están marcadas `licencia_estado = 'inactivo'` desde antes.
 
 ## Preguntas abiertas para Daniel (cada una con mi valor por defecto)
 
@@ -206,3 +265,6 @@ comportamiento para un cliente real hasta que Daniel pase cuentas a "normal" una
 3. **`?tab=` / `?seccion=` en la URL** para que cada pestaña sea un link compartible: ¿te sirve, o preferís
    que sea solo estado de React (más simple, pero perdés el botón atrás y no podés mandar un link directo
    a "la pestaña de Cobros de esta cuenta")? Por defecto: en la URL.
+4. **`M&M Inversiones` y `Segundo` se bloquean el día del deploy** (arriba, en "Unificación con
+   `licencia_estado`") porque ya están `inactivo`. ¿Las dejo bloquear, o las paso a `activo` antes de
+   publicar para que no corten de golpe? Sin tu respuesta, NO hago el deploy de esta parte.
