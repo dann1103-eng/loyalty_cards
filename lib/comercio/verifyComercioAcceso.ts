@@ -22,7 +22,14 @@ import { hoyEnZona } from '../tarjetas/vigencia';
 // se trata como "no bloquear". Mismo criterio que el resto de la cobranza ante un dato que no se
 // pudo leer (cargarCuentaParaPagos, listarPeriodosPagados: `null` + log, nunca tumbar la pantalla) —
 // bloquear el panel ENTERO por un error de lectura transitorio sería un incidente peor que el que
-// esta cobranza intenta evitar.
+// esta cobranza intenta evitar. OJO: a diferencia de esos dos (que fallan hacia MÁS restrictivo —
+// no ofrecer pagar, cupo en cero), acá la falla es hacia MENOS restrictivo, y `licencia_estado` viaja
+// en la MISMA fila/consulta que las columnas de cobranza: una lectura que falla deja pasar temporal-
+// mente también a una cuenta que FM cortó a mano (`licencia_estado = 'inactivo'`, el interruptor
+// manual de `estadoEfectivo`), no solo a una vencida por no pago. Riesgo aceptado a propósito —ver el
+// párrafo de arriba—, pero es la asimetría real: un corte manual explícito puede quedar sin efecto
+// por unos segundos/minutos si Supabase falla justo en ese momento, no solo el conteo de días de
+// gracia de una cuenta morosa.
 //
 // cache() por comercioId: el layout (vía verifyComercioAccesoSinBloqueo) y el gate que bloquea (vía
 // verifyComercioAcceso) la piden en el MISMO render — sin memoizar, dos consultas idénticas.
