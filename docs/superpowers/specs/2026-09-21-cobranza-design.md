@@ -40,14 +40,18 @@ cliente (Barbiere Di Paolo), posponer un pago o perdonar un ciclo. Hoy `licencia
 
 ```sql
 -- 0038: cobranza por cuenta (spec 2026-09-21-cobranza-design.md).
+begin;
+
 alter table cuentas_comercio
   add column cobranza text not null default 'normal'
     check (cobranza in ('normal', 'exenta')),
-  add column cobranza_desde date not null default current_date,
+  add column cobranza_desde date not null default (now() at time zone 'America/El_Salvador')::date,
   add column cobranza_pospuesta_hasta date;
 
 -- Las cuentas que YA existen no empiezan a cobrarse solas: quedan exentas hasta que FM las pase a 'normal'.
 update cuentas_comercio set cobranza = 'exenta';
+
+commit;
 ```
 
 - `cobranza`: `'normal'` (se cobra y se puede bloquear) o `'exenta'` (nunca se bloquea). **Cuentas nuevas: `normal`**

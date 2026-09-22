@@ -50,12 +50,19 @@ async function main() {
     if (cuenta.cobranza_desde === hoyElSalvador()) ok('cobranza_desde de una cuenta nueva es hoy.');
     else fallo('cobranza_desde de una cuenta nueva no es hoy', `esperado ${hoyElSalvador()}, obtuvo ${cuenta.cobranza_desde}`);
 
-    // 3. Un valor de cobranza inválido es rechazado por el CHECK.
+    // 3. Un valor de cobranza inválido es rechazado por el CHECK. Pedimos el id de vuelta para poder
+    // borrarla si el CHECK no la rechaza — si no, esta prueba (la que existe justo para detectar que el
+    // CHECK falla) dejaría la fila inválida viva para siempre en la tabla real.
     const invalida = await supabase
       .from('cuentas_comercio')
-      .insert({ nombre: `Verificacion 0038 invalida ${Date.now()}`, cobranza: 'inventado' });
+      .insert({ nombre: `Verificacion 0038 invalida ${Date.now()}`, cobranza: 'inventado' })
+      .select('id')
+      .single();
     if (invalida.error?.code === '23514') ok("rechaza un valor de cobranza que no es 'normal' ni 'exenta' (23514).");
-    else fallo('permitió un valor de cobranza inválido', invalida.error?.message ?? 'sin error');
+    else {
+      fallo('permitió un valor de cobranza inválido', invalida.error?.message ?? 'sin error');
+      if (invalida.data?.id) await supabase.from('cuentas_comercio').delete().eq('id', invalida.data.id);
+    }
   } finally {
     await supabase.from('cuentas_comercio').delete().eq('id', cuenta.id);
   }
