@@ -294,7 +294,8 @@ describe('crearCuenta', () => {
   });
 });
 
-// SIN CORRER: necesita la migración 0038.
+// Migración 0038 aplicada: las 3 mutaciones documentadas abajo se corrieron contra Supabase real el
+// 2026-09-22 (romper la línea, ver fallar con ESE mensaje, restaurar) — confirmadas, no solo razonadas.
 describe('crearCuenta — cobranza (Tarea 3b)', () => {
   it('crea una cuenta exenta cuando se pasa cobranza: "exenta"', async () => {
     // MUTATION: si crearCuenta deja de mandar `cobranza` al insert (o lo ignora y siempre manda
