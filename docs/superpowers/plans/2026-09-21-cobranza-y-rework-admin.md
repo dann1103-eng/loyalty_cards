@@ -290,11 +290,25 @@ referencia antes de publicar la rama completa.
 - `accionPagarCobro`: reusa un enlace vigente; crea uno nuevo si venció o no había; rechaza un cobro que
   no es `'Pedido por FM'`, uno ya pagado, uno de otra cuenta (cada rechazo con su mutación).
 
-- [ ] Tests primero (rojo) para `pedirPago`, `accionAnularCobro`, `accionPagarCobro`.
-- [ ] Implementación de las tres.
-- [ ] Mutaciones de la lista de arriba, restaurando cada una.
-- [ ] `npx tsc --noEmit`, `npm run lint` (o el comando de lint del proyecto) limpios.
-- [ ] Commit.
+- [x] Tests primero (rojo) para `pedirPago`, `accionAnularCobro`, `accionPagarCobro`.
+- [x] Implementación de las tres.
+- [x] Mutaciones de la lista de arriba, restaurando cada una.
+- [x] `npx tsc --noEmit`, `npm run lint` (o el comando de lint del proyecto) limpios.
+- [x] Commit.
+
+**Estado: ✅ completa** (commit `7961a57`, sobre la corrección de plan `12d98bd` — `pedirPago` usa
+`tipo: 'periodo'` siempre, nunca `'ajuste'`, porque el CHECK real de la 0037 exige `plan_destino` no nulo
+para `'ajuste'`; confirmado con el mensaje real de Postgres al mutar). `accionPedirPago`/`accionAnularCobro`
+sumadas a `cuentas/actions.ts` (no se creó `accionesCobranza.ts` — decisión razonable dado el tamaño
+resultante, 232 líneas). `accionPagarCobro`: lógica pura (`pagarCobroPedido`) separada de la Server Action,
+sumada a `plan/actions.ts`; `obtenerCobroPedidoParaPagar`/`CobroPedidoParaPagar` nuevos en `cobros.ts`,
+deliberadamente aparte de `CobroParaPago` para no tocar fakes de otras suites. 83 pruebas verdes contra
+Supabase real (16 nuevas + 67 de regresión), 4-6 mutaciones re-verificadas de forma independiente por
+ambas revisiones con mensajes exactos, `tsc`/`eslint` limpios. Sin hallazgos bloqueantes — "Ready to
+merge: Yes". Pendientes señalados para el futuro, no bloqueantes: falta un round-trip real de "mismo
+enlace, dos llamadas seguidas" en las pruebas; `accionPagarCobro` (la Server Action) sin prueba directa
+(mismo hueco preexistente que `accionIniciarPago`); `cobros.ts` pasó las 480 líneas y podría separase la
+pasarela Wompi a su propio archivo en una tarea futura.
 
 ### 4b — Lo que SÍ necesita la migración (se escribe y se prueba en lo puro; DB sin correr)
 
