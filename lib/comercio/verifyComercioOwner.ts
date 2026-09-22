@@ -1,7 +1,12 @@
 import 'server-only';
 
 import { redirect } from 'next/navigation';
-import { verifyComercioAcceso } from './verifyComercioAcceso';
+import { verifyComercioAcceso, verifyComercioAccesoSinBloqueo } from './verifyComercioAcceso';
+
+// verifyComercioAcceso() y verifyComercioAccesoSinBloqueo() devuelven EXACTAMENTE la misma forma
+// (la segunda es la fuente; la primera solo le agrega el redirect() de bloqueo antes de devolverla
+// tal cual) — de ahí que soloOwner() de abajo sirva para las dos.
+type AccesoComercio = Awaited<ReturnType<typeof verifyComercioAccesoSinBloqueo>>;
 
 // Gate del panel del DUEÑO. Wrapper delgado sobre verifyComercioAcceso() que además exige que el
 // comercio activo sea uno donde la cuenta es owner. Se llama desde el layout, CADA página y CADA
@@ -15,8 +20,22 @@ import { verifyComercioAcceso } from './verifyComercioAcceso';
 // campo del formulario (un comercio_id del cliente dejaría a un dueño sobrescribir datos de OTRO
 // comercio). `comercios` lista todos los comercios donde es owner (para el selector multi-comercio).
 export async function verifyComercioOwner() {
-  const acceso = await verifyComercioAcceso();
+  return soloOwner(await verifyComercioAcceso());
+}
 
+// Misma exigencia de rol owner que verifyComercioOwner(), pero SIN el bloqueo por cobranza: llama a
+// verifyComercioAccesoSinBloqueo() en vez de verifyComercioAcceso(). Para las 3 páginas "excepción"
+// (spec cobranza, "Cómo se bloquea") que un dueño BLOQUEADO todavía necesita ver — /comercio/plan
+// (con `?suspendida=1`), el resultado de un pago que acaba de hacer y su comprobante. Si usaran
+// verifyComercioOwner(), el bloqueo las echaría a ELLAS TAMBIÉN (verifyComercioAcceso hereda el
+// redirect), dejando al dueño sin forma de pagar para desbloquearse.
+export async function verifyComercioOwnerSinBloqueo() {
+  return soloOwner(await verifyComercioAccesoSinBloqueo());
+}
+
+// El chequeo de rol es idéntico para las dos variantes de arriba: solo cambia si el acceso de base
+// viene con o sin el redirect() de bloqueo ya aplicado.
+function soloOwner(acceso: AccesoComercio) {
   if (acceso.rol !== 'owner') {
     // El comercio activo NO es de owner. Si la cuenta es cajero en algún lado, su lugar es el
     // escáner; si no, no tiene permiso de panel.

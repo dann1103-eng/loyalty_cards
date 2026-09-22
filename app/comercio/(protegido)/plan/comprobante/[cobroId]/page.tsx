@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
+import { verifyComercioOwnerSinBloqueo } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { obtenerCobro } from '@/lib/comercios/cobros';
 import { cuentaDelComercio } from '../../actions';
@@ -18,7 +18,10 @@ export default async function PaginaComprobante({
 }: {
   params: Promise<{ cobroId: string }>;
 }) {
-  const { comercioId, nombre } = await verifyComercioOwner();
+  // SIN bloqueo (spec cobranza "Cómo se bloquea"): un dueño con la cuenta `bloqueada` tiene que
+  // poder seguir viendo el comprobante de un pago ya hecho — con verifyComercioOwner() (que SÍ
+  // bloquea) quedaría sin acceso a su propio historial de pagos justo cuando más lo necesita.
+  const { comercioId, nombre } = await verifyComercioOwnerSinBloqueo();
   const { cobroId } = await params;
 
   const cuentaId = await cuentaDelComercio(comercioId);

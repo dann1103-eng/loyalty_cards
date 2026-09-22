@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
+import { verifyComercioOwnerSinBloqueo } from '@/lib/comercio/verifyComercioOwner';
 import { confirmarRetornoDelDueno } from '@/lib/comercios/confirmarRetornoSupabase';
 import type { ResultadoRetorno } from '@/lib/comercios/confirmarPorRedirect';
 import { cuentaDelComercio } from '../../actions';
@@ -45,7 +45,10 @@ const MENSAJES: Record<Exclude<ResultadoRetorno['estado'], 'confirmando'>, { tit
 };
 
 export default async function PaginaResultadoPago({ searchParams }: { searchParams: Promise<Parametros> }) {
-  const { comercioId } = await verifyComercioOwner();
+  // SIN bloqueo (spec cobranza "Cómo se bloquea"): esta es la vuelta de Wompi después de un pago
+  // que puede ser justo el que reactiva una cuenta `bloqueada` — con verifyComercioOwner() (que SÍ
+  // bloquea) un dueño que acaba de pagar para desbloquearse rebotaría antes de ver la confirmación.
+  const { comercioId } = await verifyComercioOwnerSinBloqueo();
   const cuentaId = await cuentaDelComercio(comercioId);
   const params = await searchParams;
 

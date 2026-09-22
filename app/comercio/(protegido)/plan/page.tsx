@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
+import { verifyComercioOwnerSinBloqueo } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { resumenPlan, etiquetaDePlan } from '@/lib/comercios/planCuenta';
 import { listarCobros } from '@/lib/comercios/cobros';
@@ -22,9 +22,19 @@ export const dynamic = 'force-dynamic';
 // El cupo que se muestra es el MISMO que aplica el bloqueo al crear un comercio o una sucursal
 // (comercios + sucursales no principales, ver cupoDeCuenta). Mostrar un número distinto haría que
 // el dueño viera cupo libre que el sistema después le niega.
+//
+// Gate SIN bloqueo (verifyComercioOwnerSinBloqueo, no verifyComercioOwner): esta es justo la
+// pantalla a la que el gate que SÍ bloquea manda a un dueño con la cuenta `bloqueada`
+// (?suspendida=1, spec cobranza "Cómo se bloquea") — si usara la variante que bloquea, un dueño
+// bloqueado rebotaría en loop al entrar acá a pagar.
 
-export default async function PaginaPlan() {
-  const { comercioId, nombre } = await verifyComercioOwner();
+export default async function PaginaPlan({
+  searchParams,
+}: {
+  searchParams: Promise<{ suspendida?: string }>;
+}) {
+  const { comercioId, nombre } = await verifyComercioOwnerSinBloqueo();
+  const { suspendida } = await searchParams;
 
   const cuentaId = await cuentaDelComercio(comercioId);
   if (!cuentaId) {
@@ -80,6 +90,15 @@ export default async function PaginaPlan() {
         <h1 className="title" style={{ margin: 0 }}>Mi plan</h1>
         <Link className="admin-fila-slug" href="/comercio/panel">← Volver</Link>
       </div>
+
+      {/* Spec cobranza, "Pantallas → Dueño": adonde llega un dueño con la cuenta `bloqueada` (el
+          gate que bloquea lo manda acá con ?suspendida=1). Un párrafo destacado alcanza — las
+          opciones de pago de abajo ya son el "con las opciones de pago" que pide la spec. */}
+      {suspendida === '1' && (
+        <p className="alerta reveal d1" role="alert">
+          <strong>Tu cuenta está suspendida.</strong> Elegí una opción de pago abajo para reactivarla.
+        </p>
+      )}
 
       <section className="panel reveal d2" style={{ marginTop: 0 }}>
         <p className="admin-fila-slug" style={{ marginTop: 0 }}>{nombre}</p>
