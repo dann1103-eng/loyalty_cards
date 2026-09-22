@@ -64,6 +64,12 @@ y los cobros): `Al día`, `Vencida`, `Bloqueada`, `Exenta` o `Pospuesta`, calcul
 la spec de cobranza da por asumido ("la lista de cuentas lleva una insignia de estado por cuenta… el
 rework del admin reorganiza todo esto") y que sin esta sección quedaba sin dueño.
 
+**Convive con la pastilla de cupo que ya existe** (`Llena`/`Con cupo`, al borde derecho de cada fila): NO
+la reemplaza. Van **las dos, una al lado de la otra** (mismo contenedor flex, con un `gap`), la de
+cobranza PRIMERO (más a la izquierda): es la que cambia de color con más significado (bloqueada en rojo,
+vencida en ámbar, al día en verde, exenta/pospuesta en gris) y la que FM necesita ver primero para decidir
+si entrar a esa cuenta es urgente.
+
 ### Nav (`app/admin/(protegido)/layout.tsx`)
 
 Se saca el link "Comercios". El logo/marca (`<span className="admin-marca">…`) pasa a ser un
@@ -74,9 +80,11 @@ Salir. Mismo criterio de "defensa en profundidad" que ya tiene el layout: el gat
 ### El dashboard (`app/admin/(protegido)/page.tsx`, nuevo)
 
 Server Component. Llama a `verifyFmAdmin()` primero (mismo patrón que toda página de `/admin`). Junta las
-6 métricas con `Promise.all` y las dibuja con el layout A: una fila de 4 `metric-carta` (pagos, ingresos,
-vencidas/bloqueadas, solicitudes — cada una linkea a su pantalla), una fila chica con la cartera, y una
-lista de actividad reciente abajo.
+6 métricas con `Promise.all` y las dibuja con el layout A: una fila de 4 `metric-carta` arriba, una fila
+chica con la cartera, y una lista de actividad reciente abajo. De las 4 tarjetas de arriba, tres linkean a
+una pantalla propia (Pagos → `/admin/pagos`, Vencidas/bloqueadas → `/admin/cuentas`, Solicitudes →
+`/admin/solicitudes`); **"Ingresos del mes" NO linkea a ningún lado** — no existe una pantalla de
+"ingresos" en el admin y esta spec no agrega una, así que esa tarjeta es solo el número, sin link.
 
 **Módulo nuevo `lib/fm/dashboard.ts`** (capa de datos, sin JSX — mismo criterio que `reporteCajeros` en
 `lib/reportes/reportes.ts`: "`null` ante un error, nunca un cero falso". Es la EXCEPCIÓN deliberada de ese
@@ -179,15 +187,38 @@ una visible a la vez, layout C: sin acordeón, cada pestaña es toda la pantalla
 - **Reverso:** `FormularioReverso` completo (términos, redes sociales, sitio web) — hoy es un componente
   aparte más abajo en la misma página; pasa a ser la cuarta pestaña.
 
-**Sigue siendo UN solo `<form>` con UNA sola Server Action** (`accionGuardarBranding` /
-`accionGuardarBrandingDePrograma`), exactamente como hoy — las pestañas son **puramente visuales**, no
-cuatro formularios. Las cuatro secciones se quedan SIEMPRE montadas en el DOM (mismo estado de React que
-hoy, un solo `useState` con todos los campos); cambiar de pestaña solo alterna qué sección se ve
-(`style={{ display: pestañaActiva === 'colores' ? 'block' : 'none' }}` o equivalente), nunca desmonta ni
-condiciona qué inputs existen. Es la misma regla que ya protege el encuadre de la franja (comentario de
-`mandaEncuadre`, línea 238-242: "si viajaran solo cuando se ven… le borraría al dueño el encuadre que ya
-había ajustado") — extendida a las cuatro pestañas: **ninguna pestaña que no estés mirando puede perder
-sus valores al guardar**, porque todas viajan siempre en el mismo submit.
+**Colores, Imágenes y Franja son la MISMA situación de hoy: un solo `<form>`, una sola Server Action**
+(`accionGuardarBranding` / `accionGuardarBrandingDePrograma`). Esas tres pestañas son **puramente
+visuales** sobre ese único formulario — nunca se desmontan ni se dividen en tres. Las tres secciones se
+quedan SIEMPRE montadas en el DOM (mismo estado de React que hoy, un solo `useState` con todos los
+campos); cambiar de pestaña entre ellas solo alterna qué sección se ve (`style={{ display: pestañaActiva
+=== 'colores' ? 'block' : 'none' }}` o equivalente), nunca desmonta ni condiciona qué inputs existen. Es
+la misma regla que ya protege el encuadre de la franja (comentario de `mandaEncuadre`, línea 238-242: "si
+viajaran solo cuando se ven… le borraría al dueño el encuadre que ya había ajustado") — extendida a las
+tres: **ninguna de las tres pestañas que no estés mirando puede perder sus valores al guardar**, porque
+las tres viajan siempre en el mismo submit.
+
+**Reverso es y se queda una situación DISTINTA — no se fusiona con las otras tres.** Hoy `FormularioReverso`
+ya es un `<form>` propio con su propia Server Action (`accionGuardarReverso` /
+`accionGuardarReversoDePrograma`, que llaman a `guardarReverso`/`guardarReversoPrograma` — funciones
+distintas de `guardarBranding`), su propio botón "Guardar reverso" y su propio mensaje de éxito/error;
+NUNCA fue atómico con Colores/Imágenes/Franja (guardar uno hoy no guarda el otro, y eso no es un bug de
+esta spec, es como funciona desde antes). La pestaña "Reverso" solo cambia DÓNDE se ve ese formulario
+independiente — sigue siendo su propio `<form>`, con su propio botón "Guardar reverso", separado del de
+las otras tres pestañas (fusionarlos sería HTML inválido: un `<form>` dentro de otro — ver el comentario
+de la línea 870-871 de `FormularioBranding.tsx` sobre exactamente ese problema con OTRO botón). El costo
+es el de siempre: si el dueño edita Reverso y cambia de pestaña sin tocar "Guardar reverso", pierde ese
+cambio — ni mejor ni peor que hoy, donde ya pasa lo mismo si navega a otra pantalla sin guardar.
+
+**Los tres colores obligatorios (`required={!programaId}`) necesitan dejar de depender de la validación
+nativa del navegador.** Hoy, con las tres pestañas siempre montadas, un campo `required` que queda oculto
+por `display:none` no es enfocable, y el navegador bloquea el envío EN SILENCIO (sin mostrar ningún aviso,
+en cualquier pestaña que no sea Colores). El formulario pasa a llevar `noValidate`, y la validación queda
+enteramente del lado del servidor (`guardarBranding.ts` ya rechaza un color vacío o mal formado con un
+error legible: "El color de fondo debe tener el formato rgb(r, g, b)…" — la defensa real, coherente con
+que la base tampoco valida esto). Cuando la Server Action devuelve un error, el formulario cambia
+automáticamente a la pestaña **Colores** (es la única con campos obligatorios) para que el aviso aparezca
+junto al campo que lo causó, en vez de quedar huérfano en una pestaña que no tiene ese campo a la vista.
 
 El selector de "¿qué tarjeta estás diseñando?" (cuando hay más de un programa) se queda ARRIBA de las
 pestañas, fuera de ellas: no es parte del contenido de ninguna, es lo que decide de qué comercio/programa
@@ -231,7 +262,13 @@ gate de FM.
   mutaciones viven en la tabla de esa spec; acá se prueba que agrega bien sobre varias cuentas Y que
   respeta `estadoEfectivo` (una cuenta pausada a mano cuenta aunque su fecha diga "al día").
 - Recorrido en el navegador: dashboard con datos reales, las cuatro pestañas de Marca, las cuatro pestañas
-  de una ficha de cuenta, el menú agrupado del comercio — en los tres temas, a ancho de teléfono.
+  de una ficha de cuenta, el menú agrupado del comercio — en los tres temas, a ancho de teléfono. Incluye
+  el caso que prueba que la separación de Reverso sigue siendo segura: editar Colores (sin guardar),
+  cambiar a la pestaña Reverso, editar y guardar SOLO Reverso, volver a Colores y confirmar que el cambio
+  de Colores sigue sin guardarse (es lo esperado: son formularios independientes) y que Reverso sí quedó
+  guardado. Y el caso del `required` movido a validación de servidor: vaciar el color de fondo, guardar
+  desde la pestaña Imágenes, confirmar que NO se envía en silencio — vuelve a la pestaña Colores con el
+  error visible.
 
 ## Orden de entrega
 
