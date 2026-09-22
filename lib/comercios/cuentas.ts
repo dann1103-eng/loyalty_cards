@@ -32,6 +32,14 @@ export type Plan = (typeof PLANES)[number]['valor'];
 export const ESTADOS_LICENCIA = ['activo', 'inactivo'] as const;
 export type EstadoLicencia = (typeof ESTADOS_LICENCIA)[number];
 
+// Fuente única de verdad: la BD tiene check (cobranza in ('normal', 'exenta')) en la migración 0038
+// (supabase/migrations/0038_cobranza.sql). Exclusivo del ALTA de una cuenta (crearCuenta) — NO entra
+// a DatosCuenta ni a actualizarCuenta: cambiar el modo de una cuenta YA EXISTENTE vive en
+// cambiarModoCobranza (tarea futura), que tiene efectos secundarios reales al cambiar de modo. Ver
+// Tarea 3b del plan de cobranza.
+export const VALORES_COBRANZA = ['normal', 'exenta'] as const;
+export type ValorCobranza = (typeof VALORES_COBRANZA)[number];
+
 export interface DatosCuenta {
   nombre: string;
   // null = sin límite (Pro). La capa app (validarDatosCuenta) es la única defensa del rango — la
@@ -162,14 +170,27 @@ export async function verificarLimiteCuenta(
   return { ok: true };
 }
 
+// `cobranza` es un parámetro APARTE de `datos` (no vive en DatosCuenta): ver el comentario de
+// VALORES_COBRANZA arriba sobre por qué no puede colarse por actualizarCuenta. Tipado como `string`
+// suelto (no el literal ValorCobranza) por el mismo motivo que `plan`/`licenciaEstado` en
+// DatosCuenta: accionCrearCuenta lee `formData.get('cobranza')` crudo y lo pasa tal cual, sin cast
+// ni validación en la capa acción — la validación real (contra VALORES_COBRANZA) vive acá. Default
+// 'normal' si se omite — toda cuenta nueva nace cobrable salvo que FM elija 'exenta' a propósito
+// en el alta.
 export async function crearCuenta(
   supabase: SupabaseClient<Database>,
   datos: DatosCuenta,
+  cobranza?: string,
 ): Promise<ResultadoCuenta> {
   const nombre = datos.nombre.trim();
   const limpios: DatosCuenta = { ...datos, nombre };
   const problema = validarDatosCuenta(limpios);
   if (problema) return { ok: false, error: problema };
+
+  const cobranzaFinal = cobranza ?? 'normal';
+  if (!(VALORES_COBRANZA as readonly string[]).includes(cobranzaFinal)) {
+    return { ok: false, error: 'El modo de cobranza debe ser "normal" o "exenta".' };
+  }
 
   const { data, error } = await supabase
     .from('cuentas_comercio')
@@ -180,6 +201,7 @@ export async function crearCuenta(
       licencia_estado: limpios.licenciaEstado,
       licencia_monto_mensual: limpios.licenciaMontoMensual,
       licencia_activa_desde: limpios.licenciaActivaDesde,
+      cobranza: cobranzaFinal,
     })
     .select('id')
     .single();

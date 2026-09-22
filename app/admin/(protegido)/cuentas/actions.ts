@@ -46,7 +46,13 @@ export async function accionCrearCuenta(
   // verifyFmAdmin() usa redirect(), que funciona LANZANDO. Nunca lo envuelvas en try/catch.
   await verifyFmAdmin();
 
-  const res = await crearCuenta(createServiceClient(), leerDatos(formData));
+  // `cobranza` es EXCLUSIVO del alta: se lee acá, aparte de leerDatos (que comparte
+  // accionActualizarCuenta) — ver el comentario de crearCuenta en lib/comercios/cuentas.ts. Si el
+  // campo no viene en el FormData, undefined deja que el default 'normal' de crearCuenta actúe.
+  const cobranzaRaw = formData.get('cobranza');
+  const cobranza = cobranzaRaw === null ? undefined : String(cobranzaRaw);
+
+  const res = await crearCuenta(createServiceClient(), leerDatos(formData), cobranza);
   if (!res.ok) return { error: res.error };
 
   revalidatePath('/admin/cuentas');

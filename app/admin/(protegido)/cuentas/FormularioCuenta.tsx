@@ -2,7 +2,7 @@
 
 import { useState, useActionState } from 'react';
 import type { EstadoFormulario } from './actions';
-import { PLANES, ESTADOS_LICENCIA } from '@/lib/comercios/cuentas';
+import { PLANES, ESTADOS_LICENCIA, VALORES_COBRANZA } from '@/lib/comercios/cuentas';
 
 export default function FormularioCuenta({
   accion,
@@ -43,6 +43,9 @@ export default function FormularioCuenta({
   );
   const [licenciaEstado, setLicenciaEstado] = useState(inicial?.licencia_estado ?? 'activo');
   const [activaDesde, setActivaDesde] = useState(inicial?.licencia_activa_desde ?? '');
+  // Solo importa en el alta (!inicial): editar una cuenta existente no renderiza este campo, así
+  // que el estado nunca se lee en ese caso — no hace falta condicionar el useState en sí.
+  const [cobranza, setCobranza] = useState<string>('normal');
 
   // Elegir un plan PRECARGA monto y límite sugeridos — siguen siendo editables después (tratos
   // negociados), esto es solo una ayuda para no tipear de memoria los 3 valores del catálogo.
@@ -132,6 +135,27 @@ export default function FormularioCuenta({
           onChange={(e) => setActivaDesde(e.target.value)}
         />
       </div>
+
+      {!inicial && (
+        <div className="field">
+          <label htmlFor="cobranza">Cobranza</label>
+          <select
+            id="cobranza"
+            name="cobranza"
+            value={cobranza}
+            onChange={(e) => setCobranza(e.target.value)}
+          >
+            {VALORES_COBRANZA.map((c) => (
+              <option key={c} value={c}>
+                {c === 'normal' ? 'Normal (se cobra)' : 'Exenta (nunca se bloquea)'}
+              </option>
+            ))}
+          </select>
+          <p className="field-aviso">
+            El modo de cobranza de una cuenta existente se cambia desde la pestaña Cobranza, no acá.
+          </p>
+        </div>
+      )}
 
       <button className="btn-primary" type="submit" disabled={pendiente}>
         {pendiente ? 'Guardando…' : textoBoton}

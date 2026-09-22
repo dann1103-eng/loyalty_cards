@@ -294,6 +294,42 @@ describe('crearCuenta', () => {
   });
 });
 
+// SIN CORRER: necesita la migración 0038.
+describe('crearCuenta — cobranza (Tarea 3b)', () => {
+  it('crea una cuenta exenta cuando se pasa cobranza: "exenta"', async () => {
+    // MUTATION: si crearCuenta deja de mandar `cobranza` al insert (o lo ignora y siempre manda
+    // 'normal'), la fila queda con 'normal' y este expect falla — la BD no tiene otra forma de
+    // saber qué pidió FM, porque el default de la columna (migración 0038) también es 'normal'.
+    const res = await crearCuenta(supabase, { nombre: 'Grupo Exento', limiteNegocios: 1, ...CUENTA_BASE }, 'exenta');
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      cuentasDePrueba.push(res.id);
+      const { data } = await supabase.from('cuentas_comercio').select('cobranza').eq('id', res.id).single();
+      expect(data!.cobranza).toBe('exenta');
+    }
+  });
+
+  it('crea una cuenta normal por defecto cuando no se pasa cobranza', async () => {
+    // MUTATION: si el default cambia de 'normal' a otro valor (o si `cobranza ?? 'normal'` se
+    // reemplaza por algo que no dispara con undefined), este expect falla.
+    const res = await crearCuenta(supabase, { nombre: 'Grupo Normal', limiteNegocios: 1, ...CUENTA_BASE });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      cuentasDePrueba.push(res.id);
+      const { data } = await supabase.from('cuentas_comercio').select('cobranza').eq('id', res.id).single();
+      expect(data!.cobranza).toBe('normal');
+    }
+  });
+
+  it('rechaza un valor de cobranza que no está en la lista', async () => {
+    // MUTATION: quitar el chequeo contra VALORES_COBRANZA deja pasar cualquier string a una
+    // columna con CHECK en la BD — el insert fallaría con un 23514 genérico en vez de este mensaje.
+    const res = await crearCuenta(supabase, { nombre: 'Grupo Inválido', limiteNegocios: 1, ...CUENTA_BASE }, 'premium');
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/cobranza/i);
+  });
+});
+
 describe('actualizarCuenta', () => {
   it('actualiza el nombre, límite y datos de licencia de una cuenta existente', async () => {
     const cuentaId = await crearCuentaFixture(1);
