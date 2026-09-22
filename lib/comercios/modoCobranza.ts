@@ -53,8 +53,21 @@ export async function cambiarModoCobranza(
       ? { cobranza: 'normal', cobranza_desde: hoyEnZona('America/El_Salvador') }
       : { cobranza: 'exenta', cobranza_pospuesta_hasta: null };
 
-  const { error } = await supabase.from('cuentas_comercio').update(cambios).eq('id', cuentaId);
+  // .select('id').single() a propósito: sin esto, un update cuyo .eq() no matchea NINGUNA fila
+  // (cuentaId inexistente, borrada en una carrera con eliminarCuenta, un typo) devuelve éxito igual
+  // — PostgREST no distingue "actualicé 0 filas" de "actualicé 1 fila" salvo que se le pida de
+  // vuelta la fila. Mismo patrón que actualizarCuenta (cuentas.ts): PGRST116 = "no matcheó ninguna
+  // fila" (el .single() sobre un resultado vacío).
+  const { error } = await supabase
+    .from('cuentas_comercio')
+    .update(cambios)
+    .eq('id', cuentaId)
+    .select('id')
+    .single();
   if (error) {
+    if (error.code === 'PGRST116') {
+      return { ok: false, error: 'Esa cuenta ya no existe.' };
+    }
     console.error('[cobranza] no se pudo cambiar el modo de cobranza:', error);
     return { ok: false, error: 'No se pudo cambiar el modo de cobranza.' };
   }
@@ -74,11 +87,18 @@ export async function posponerPago(
     return { ok: false, error: 'La fecha de posposición debe tener el formato AAAA-MM-DD.' };
   }
 
+  // Mismo motivo que en cambiarModoCobranza: sin .select('id').single(), un cuentaId inexistente
+  // devolvería éxito sin haber tocado ninguna fila.
   const { error } = await supabase
     .from('cuentas_comercio')
     .update({ cobranza_pospuesta_hasta: hasta })
-    .eq('id', cuentaId);
+    .eq('id', cuentaId)
+    .select('id')
+    .single();
   if (error) {
+    if (error.code === 'PGRST116') {
+      return { ok: false, error: 'Esa cuenta ya no existe.' };
+    }
     console.error('[cobranza] no se pudo posponer el pago:', error);
     return { ok: false, error: 'No se pudo posponer el pago.' };
   }

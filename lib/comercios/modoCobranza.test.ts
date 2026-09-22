@@ -53,6 +53,14 @@ import { cambiarModoCobranza, posponerPago, perdonarCiclo, METODO_PERDONADO_FM }
 //     archivo lo detectaría — queda anotado acá para que quien revise sepa que hay que verificarlo
 //     leyendo el código, no una prueba, porque perdonarCiclo no recibe ni el cliente de Meta ni un
 //     mock: no lo importa, así que agregarlo sería un import nuevo visible a simple vista)
+//   - cambiarModoCobranza/posponerPago le sacan el `.select('id').single()` al `.update().eq()`
+//     (revisión de calidad sobre el commit 2dfb824, verificada por el controlador línea por línea
+//     antes de pedir el fix): sin eso, PostgREST no distingue "actualicé 0 filas" de "actualicé 1" —
+//     un `cuentaId` que no corresponde a ninguna fila (typo, o borrada en una carrera con
+//     `eliminarCuenta`) devuelve éxito igual, sin haber tocado nada
+//       → fallan "rechaza un cuentaId que no existe, en vez de reportar éxito" en AMBOS describe
+//         (cambiarModoCobranza y posponerPago) — mismo patrón que `actualizarCuenta` en
+//         cuentas.ts/cuentas.test.ts:348 ("falla si la cuenta ya no existe, en vez de reportar éxito")
 
 const supabase = createServiceClient();
 const cuentasDePrueba: string[] = [];
@@ -156,6 +164,17 @@ describe('cambiarModoCobranza', () => {
     const { data } = await supabase.from('cuentas_comercio').select('cobranza').eq('id', cuentaId).single();
     expect(data!.cobranza).toBe('normal');
   });
+
+  it('rechaza un cuentaId que no existe, en vez de reportar éxito', async () => {
+    // Mismo caso que actualizarCuenta (cuentas.ts) / cuentas.test.ts:348: un UUID con formato válido
+    // pero que no es de ninguna fila real. Sin el .select('id').single() del update, esto devolvía
+    // { ok: true } sin haber tocado nada — el hueco que encontró la revisión de calidad del commit
+    // 2dfb824.
+    const res = await cambiarModoCobranza(supabase, '00000000-0000-0000-0000-000000000000', 'normal');
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toBe('Esa cuenta ya no existe.');
+  });
 });
 
 describe('posponerPago', () => {
@@ -194,6 +213,14 @@ describe('posponerPago', () => {
 
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toBe('La fecha de posposición debe tener el formato AAAA-MM-DD.');
+  });
+
+  it('rechaza un cuentaId que no existe, en vez de reportar éxito', async () => {
+    // Mismo caso y mismo motivo que el test análogo de cambiarModoCobranza, arriba.
+    const res = await posponerPago(supabase, '00000000-0000-0000-0000-000000000000', '2026-12-31');
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toBe('Esa cuenta ya no existe.');
   });
 });
 
