@@ -18,6 +18,20 @@ const COLOR_FONDO_POR_DEFECTO = 'rgb(19, 19, 21)';
 const COLOR_TEXTO_POR_DEFECTO = 'rgb(245, 245, 240)';
 const COLOR_LABEL_POR_DEFECTO = 'rgb(255, 157, 66)';
 
+// Las 4 pestañas de Marca (spec 2026-09-21-rework-admin-comercio-design.md, "Marca, con
+// pestañas"). El contenido de cada una es el que YA existía en esta pantalla, solo reagrupado —
+// ninguna Server Action cambió. Mismo patrón que las pestañas de la ficha de cuenta
+// (app/admin/(protegido)/cuentas/[id]/page.tsx): querystring, no estado de cliente, para que cada
+// pestaña sea un link compartible y el botón atrás del navegador funcione.
+const SECCIONES_BRANDING = [
+  { id: 'colores', etiqueta: 'Colores' },
+  { id: 'imagenes', etiqueta: 'Imágenes' },
+  { id: 'franja', etiqueta: 'Franja' },
+  { id: 'reverso', etiqueta: 'Reverso' },
+] as const;
+type SeccionBranding = (typeof SECCIONES_BRANDING)[number]['id'];
+const IDS_SECCION_BRANDING: readonly string[] = SECCIONES_BRANDING.map((s) => s.id);
+
 // `?nuevo=1` lo pone accionCrearComercioPropio al aterrizar acá tras el alta self-serve: sin ese
 // aviso, el dueño llega al editor de marca de un comercio que acaba de crear sin saber POR QUÉ está
 // en esta pantalla (el header ya cambió de comercio bajo sus pies).
@@ -28,10 +42,15 @@ const COLOR_LABEL_POR_DEFECTO = 'rgb(255, 157, 66)';
 export default async function PaginaBranding({
   searchParams,
 }: {
-  searchParams: Promise<{ nuevo?: string; programa?: string }>;
+  searchParams: Promise<{ nuevo?: string; programa?: string; seccion?: string }>;
 }) {
   const { comercioId } = await verifyComercioOwner();
-  const { nuevo, programa: programaParam } = await searchParams;
+  const { nuevo, programa: programaParam, seccion: seccionParam } = await searchParams;
+  // Sin `?seccion=` (o con un valor que no es ninguna de las 4), cae en Colores — la primera
+  // pestaña y la única con campos obligatorios.
+  const seccionActiva: SeccionBranding = IDS_SECCION_BRANDING.includes(seccionParam ?? '')
+    ? (seccionParam as SeccionBranding)
+    : 'colores';
 
   const supabase = createServiceClient();
   const [{ data: c }, programas] = await Promise.all([
@@ -225,6 +244,25 @@ export default async function PaginaBranding({
         </p>
       )}
 
+      {/* Navegación entre pestañas por querystring (?seccion=…), igual que la ficha de cuenta:
+          Server Component leyendo searchParams, nada de estado de cliente acá arriba. El
+          selector de tarjeta (si está) queda ARRIBA de esto y fuera de las pestañas — decide DE
+          QUÉ comercio/programa son las cuatro, no es parte de ninguna. El href de cada pestaña
+          conserva `programa` y `nuevo`: sin eso, pasar de Colores a Imágenes en la tarjeta
+          seleccionada volvería en silencio al diseño del negocio. */}
+      <nav className="filtro-chips reveal d1" style={{ marginBottom: 20 }} aria-label="Secciones de Marca">
+        {SECCIONES_BRANDING.map((s) => (
+          <Link
+            key={s.id}
+            href={`?seccion=${s.id}${seleccionado ? `&programa=${seleccionado.id}` : ''}${nuevo === '1' ? '&nuevo=1' : ''}`}
+            className={`filtro-chip${seccionActiva === s.id ? ' activo' : ''}`}
+            aria-current={seccionActiva === s.id ? 'page' : undefined}
+          >
+            {s.etiqueta}
+          </Link>
+        ))}
+      </nav>
+
       <FormularioBranding
         nombreComercio={c.nombre}
         tipoTarjeta={tipoTarjeta}
@@ -296,6 +334,7 @@ export default async function PaginaBranding({
             cruzaLaLinea={cruzaLaLinea}
           />
         ))}
+        seccionActiva={seccionActiva}
       />
 
       {/* El reverso va al final del editor de marca y no en una pantalla aparte: es conceptualmente
@@ -304,28 +343,35 @@ export default async function PaginaBranding({
           controlados: un value={null} le pide a React cambiar de no-controlado a controlado. */}
       {/* `tipoTarjeta` y no un booleano `esSellos`: el borrador de términos cambia para los OCHO
           tipos, no solo entre sellos y "todo lo demás" — ver lib/comercio/borradorTerminos.ts. */}
-      <FormularioReverso
-        nombreComercio={c.nombre}
-        tipoTarjeta={tipoTarjeta}
-        programaId={seleccionado?.id ?? null}
-        nombreTarjeta={nombreTarjeta}
-        inicial={
-          seleccionado
-            ? {
-                terminos_uso: reversoPrograma?.terminosUso ?? '',
-                red_instagram: reversoPrograma?.redInstagram ?? '',
-                red_facebook: reversoPrograma?.redFacebook ?? '',
-                red_whatsapp: reversoPrograma?.redWhatsapp ?? '',
-                sitio_web: reversoPrograma?.sitioWeb ?? '',
-                // null = heredar. NO se colapsa a false: apagaría la sección en esta tarjeta.
-                mostrar_como_funciona: reversoPrograma?.mostrarComoFunciona ?? null,
-              }
-            : reversoComercio
-        }
-        heredado={seleccionado ? reversoComercio : null}
-        usaReversoPropio={reversoPrograma?.reversoPropio ?? false}
-        tieneReversoGuardado={tieneReversoGuardado}
-      />
+      {/* Reverso es una TERCERA situación de guardado, independiente de Colores/Franja e Imágenes
+          (spec): su propio <form>, su propia Server Action, su propio botón "Guardar reverso".
+          La pestaña Reverso solo decide DÓNDE se ve — este div envolvente nunca deja de montar
+          FormularioReverso, solo alterna display:none, así que un cambio sin guardar en Reverso
+          sobrevive un viaje de ida y vuelta a otra pestaña (igual que Colores/Franja). */}
+      <div style={{ display: seccionActiva === 'reverso' ? undefined : 'none' }}>
+        <FormularioReverso
+          nombreComercio={c.nombre}
+          tipoTarjeta={tipoTarjeta}
+          programaId={seleccionado?.id ?? null}
+          nombreTarjeta={nombreTarjeta}
+          inicial={
+            seleccionado
+              ? {
+                  terminos_uso: reversoPrograma?.terminosUso ?? '',
+                  red_instagram: reversoPrograma?.redInstagram ?? '',
+                  red_facebook: reversoPrograma?.redFacebook ?? '',
+                  red_whatsapp: reversoPrograma?.redWhatsapp ?? '',
+                  sitio_web: reversoPrograma?.sitioWeb ?? '',
+                  // null = heredar. NO se colapsa a false: apagaría la sección en esta tarjeta.
+                  mostrar_como_funciona: reversoPrograma?.mostrarComoFunciona ?? null,
+                }
+              : reversoComercio
+          }
+          heredado={seleccionado ? reversoComercio : null}
+          usaReversoPropio={reversoPrograma?.reversoPropio ?? false}
+          tieneReversoGuardado={tieneReversoGuardado}
+        />
+      </div>
     </main>
   );
 }

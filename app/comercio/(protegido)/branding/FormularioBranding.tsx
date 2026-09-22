@@ -110,6 +110,13 @@ type Props = {
   };
   /* Los formularios de subida (Server Actions aparte) se inyectan en la columna del editor. */
   subidas: ReactNode;
+  /* Pestaña activa de la URL (spec "Marca, con pestañas", `?seccion=`), calculada en el Server
+     Component. Decide qué sección de ESTE componente se VE (display:none la que no corresponde);
+     nunca cuál existe en el DOM — Colores y Franja comparten un único <form> y viajan siempre
+     juntas en el mismo submit, estén o no a la vista. 'reverso' no tiene sección propia acá (la
+     tiene FormularioReverso, aparte): con esa pestaña activa, Colores/Imágenes/Franja quedan las
+     tres ocultas y no se muestra el botón "Publicar cambios". */
+  seccionActiva: 'colores' | 'imagenes' | 'franja' | 'reverso';
 };
 
 const CAMPOS_COLOR = [
@@ -132,6 +139,7 @@ export default function FormularioBranding({
   tieneDisenoGuardado,
   urls,
   subidas,
+  seccionActiva,
 }: Props) {
   const esSellos = tipoOPuntos(tipoTarjeta).valor === 'sellos';
 
@@ -166,10 +174,38 @@ export default function FormularioBranding({
   // `value` CAMBIA entre renders, y acá no cambia (sigue siendo el mismo valor elegido). La
   // solución: forzar un remount del <select> justo tras cada guardado exitoso, vía `key`.
   const [claveSelect, setClaveSelect] = useState(0);
+
+  // Qué sección se VE. Arranca en la pestaña de la URL, pero es estado de cliente (no la prop a
+  // secas) porque el auto-cambio a Colores ante un error (abajo) tiene que poder pisarla sin
+  // esperar una navegación: la Server Action no redirige, así que `?seccion=` no cambia solo.
+  const [seccionMostrada, setSeccionMostrada] = useState(seccionActiva);
+  // Si el dueño navega de verdad a otra pestaña (clic en el nav de arriba, cambia `?seccion=` en
+  // la URL), la prop nueva tiene que ganarle a cualquier auto-cambio anterior — si no, tras un
+  // error el usuario quedaría pegado en Colores para siempre, sin poder salir con el nav de arriba.
+  // Patrón oficial de React para "ajustar estado cuando cambia una prop" (react.dev/learn/
+  // you-might-not-need-an-effect#adjusting-state-when-a-prop-changes): comparar contra un espejo
+  // de la prop anterior y hacer el setState DURANTE el render, sin useEffect — un efecto acá
+  // dispararía el lint `react-hooks/set-state-in-effect` (setState incondicional en un efecto) y,
+  // de paso, pintaría un frame con la pestaña vieja antes de corregirse.
+  const [seccionActivaAnterior, setSeccionActivaAnterior] = useState(seccionActiva);
+  if (seccionActiva !== seccionActivaAnterior) {
+    setSeccionActivaAnterior(seccionActiva);
+    setSeccionMostrada(seccionActiva);
+  }
+
   const pendienteAnteriorRef = useRef(false);
   useEffect(() => {
     if (pendienteAnteriorRef.current && !pendiente && estado && 'ok' in estado) {
       setClaveSelect((n) => n + 1);
+    }
+    // Auto-cambio a Colores ante un error (spec "Marca, con pestañas"): con `noValidate`, un color
+    // vacío o mal formado ya no lo frena el navegador — lo frena guardarBranding.ts, y el aviso
+    // tiene que aparecer junto al campo que lo causó, no huérfano en Imágenes o Franja. Colores es
+    // la única pestaña con campos obligatorios. Condición plana (no anidada dentro del `if` de
+    // arriba) a propósito: el lint de efectos solo reconoce como seguro un setState guardado
+    // DIRECTAMENTE por la ref en la MISMA condición, no transitivamente a través de un `if` anidado.
+    if (pendienteAnteriorRef.current && !pendiente && estado && 'error' in estado) {
+      setSeccionMostrada('colores');
     }
     pendienteAnteriorRef.current = pendiente;
   }, [pendiente, estado]);
@@ -602,12 +638,27 @@ export default function FormularioBranding({
           </p>
         )}
 
-        <section className="panel reveal d2" style={{ marginTop: 0 }}>
+        {/* Imágenes: "Recursos visuales" YA vive fuera del <form> de Colores/Franja (spec) — cada
+            SubidaImagen es su propio formulario, se auto-guarda solo al elegir archivo. La
+            pestaña Imágenes solo decide si esta <section> se VE; ocultarla con display:none no
+            desmonta ningún SubidaImagen ni afecta una subida ya en curso. */}
+        <section
+          className="panel reveal d2"
+          style={{ marginTop: 0, display: seccionMostrada === 'imagenes' ? 'block' : 'none' }}
+        >
           <p className="titulo-seccion" style={{ marginBottom: 14 }}>Recursos visuales</p>
           {subidas}
         </section>
 
-        <form className="panel reveal d3" action={ejecutar}>
+        {/* Colores + Franja: UN <form>, UNA Server Action, UN botón "Publicar cambios" — nunca se
+            desmonta ninguna de las dos secciones de acá adentro al cambiar de pestaña, solo se
+            alterna cuál se VE (display:none), para que ambas viajen siempre en el mismo submit.
+            `noValidate`: con las tres pestañas siempre montadas, un `required` oculto por
+            display:none no es enfocable y el navegador bloquearía el envío EN SILENCIO en
+            cualquier pestaña que no sea Colores. La validación real queda del lado del servidor
+            (guardarBranding.ts), que sí da un mensaje legible. */}
+        <form className="panel reveal d3" action={ejecutar} noValidate>
+          <div style={{ display: seccionMostrada === 'colores' ? 'block' : 'none' }}>
           <p className="titulo-seccion" style={{ marginBottom: 14 }}>Paleta de colores</p>
 
           {CAMPOS_COLOR.map(([campo, etiqueta]) => (
@@ -699,15 +750,22 @@ export default function FormularioBranding({
                 : 'No aparece si subís una franja personalizada: la imagen ya lleva su texto.'}
             </p>
           </div>
+          </div>
+          {/* ↑ cierra el div de Colores (display:none fuera de esa pestaña, nunca desmontado). */}
 
-          {/* Todo lo que decide CÓMO SE VE la foto de fondo, junto: encuadre, posición, zoom y
+          {/* Franja: mismo <form> que Colores, misma regla de display:none — nunca desmontado.
+              Todo lo que decide CÓMO SE VE la foto de fondo, junto: encuadre, posición, zoom y
               difuminado. El difuminado vivía suelto y quedaba a dos secciones del control que lo
               afecta.
               La `key` con claveSelect remonta el bloque entero tras cada guardado exitoso, por el
               mismo bug de React 19 explicado más arriba: el reset nativo del <form> devuelve al DOM
               los valores servidos con la página, y ni el <select> ni los radios ni los deslizadores
               se reescriben si su prop no cambió. */}
-          <fieldset key={`encuadre-${claveSelect}`} className="encuadre-franja">
+          <fieldset
+            key={`encuadre-${claveSelect}`}
+            className="encuadre-franja"
+            style={{ display: seccionMostrada === 'franja' ? 'block' : 'none' }}
+          >
             <legend className="titulo-seccion">Foto de fondo de la franja</legend>
 
             {/* Los cuatro campos viajan SIEMPRE que corresponda, ocultos si no se editan: si viajaran
@@ -847,19 +905,27 @@ export default function FormularioBranding({
             </div>
           </fieldset>
 
-          <button className="btn-acento" type="submit" disabled={pendiente} style={{ marginTop: 6 }}>
-            <span className="icono" style={{ fontSize: 20 }} aria-hidden="true">check_circle</span>
-            {pendiente ? 'Publicando…' : 'Publicar cambios'}
-          </button>
-          {estado && 'error' in estado && (
-            <p className="alerta" role="alert">{estado.error}</p>
-          )}
-          {estado && 'ok' in estado && (
-            <p className="nota" style={{ textAlign: 'left' }}>
-              {programaId
-                ? `Listo. Las tarjetas de ${nombreTarjeta} ya se están actualizando.`
-                : 'Branding guardado. Los passes nuevos ya salen con estos colores.'}
-            </p>
+          {/* El submit de ESTE <form> — no tiene sentido sobre Imágenes o Reverso, que se guardan
+              solos. A diferencia de las secciones de arriba, el botón y su resultado no llevan
+              ningún valor que preservar: unmount/remount acá es inofensivo (spec, "El botón
+              'Publicar cambios' se muestra SOLO cuando la pestaña activa es Colores o Franja"). */}
+          {(seccionMostrada === 'colores' || seccionMostrada === 'franja') && (
+            <>
+              <button className="btn-acento" type="submit" disabled={pendiente} style={{ marginTop: 6 }}>
+                <span className="icono" style={{ fontSize: 20 }} aria-hidden="true">check_circle</span>
+                {pendiente ? 'Publicando…' : 'Publicar cambios'}
+              </button>
+              {estado && 'error' in estado && (
+                <p className="alerta" role="alert">{estado.error}</p>
+              )}
+              {estado && 'ok' in estado && (
+                <p className="nota" style={{ textAlign: 'left' }}>
+                  {programaId
+                    ? `Listo. Las tarjetas de ${nombreTarjeta} ya se están actualizando.`
+                    : 'Branding guardado. Los passes nuevos ya salen con estos colores.'}
+                </p>
+              )}
+            </>
           )}
         </form>
       </div>
