@@ -216,8 +216,10 @@ describe('grupo (menú "más opciones" agrupado)', () => {
   });
 
   // ENLACE_PREMIOS no está exportado (es módulo-privado): se llega a él por el mismo camino que ya
-  // usa el test de la línea ~130, `enlacesMenuPorRol('owner', 'membresia')`, que lo sube al menú en
-  // el lugar de Programas.
+  // usa "con contador 'ninguno' el menú lleva Premios EN EL LUGAR de Programas" (arriba, en este
+  // mismo describe) — `enlacesMenuPorRol('owner', 'membresia')`, que lo sube al menú en el lugar de
+  // Programas. Por nombre y no por número de línea: un comentario con línea se desactualiza con el
+  // próximo cambio al archivo, uno con el nombre del test no.
   it('ENLACE_PREMIOS trae grupo "programa" cuando sube al menú por el intercambio', () => {
     const enlaces = enlacesMenuPorRol('owner', 'membresia');
     const premios = enlaces.find((e) => e.href === '/comercio/recompensas');

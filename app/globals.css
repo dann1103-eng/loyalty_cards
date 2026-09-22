@@ -1721,7 +1721,7 @@ details.admin-fila:has(> summary:active) {
 .menu-destacado .icono-chevron {
   color: var(--texto-3);
 }
-/* Rótulos de grupo dentro del sheet ("Configuración", "Apariencia"). */
+/* Rótulos de grupo dentro del sheet ("Tu programa", "Tu equipo y locales", "Cuenta", "Apariencia"). */
 .menu-rotulo {
   margin: 16px 0 6px;
 }

@@ -19,12 +19,18 @@ const useEstaEnCliente = () => useSyncExternalStore(suscribirNada, () => true, (
 // opciones', agrupado", línea 320): Tu programa (Reglas/Programas/Notificaciones) → Tu equipo y
 // locales (Sucursales/Cajeros) → Cuenta (Mi plan). El orden vive ACÁ, no en navegacion.ts: ese
 // módulo es la política de qué ve cada rol, no cómo se presenta visualmente.
-const ORDEN_GRUPOS: Array<NonNullable<EnlaceNav['grupo']>> = ['programa', 'equipo', 'cuenta'];
+//
+// ORDEN_GRUPOS se DERIVA de las claves de ROTULO_GRUPO (no es una lista aparte): un cuarto valor
+// que se sume al union `grupo` de EnlaceNav obliga a TypeScript a agregarlo acá (Record exhaustivo)
+// y, con eso, entra solo al orden de recorrido — un grupo nuevo con rótulo pero sin orden ya no se
+// puede olvidar por separado, que era exactamente el hueco (silencioso: el enlace desaparecía del
+// menú sin ningún error de tipos ni de prueba) que tenía la versión con dos listas.
 const ROTULO_GRUPO: Record<NonNullable<EnlaceNav['grupo']>, string> = {
   programa: 'Tu programa',
   equipo: 'Tu equipo y locales',
   cuenta: 'Cuenta',
 };
+const ORDEN_GRUPOS = Object.keys(ROTULO_GRUPO) as Array<keyof typeof ROTULO_GRUPO>;
 
 // Menú de "más opciones" del header: las secciones que no entran en la barra inferior de 5 destinos
 // + el selector de tema + cerrar sesión.
