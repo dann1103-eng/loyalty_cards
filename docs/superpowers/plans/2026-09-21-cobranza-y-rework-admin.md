@@ -593,12 +593,24 @@ segundo componente.
   `navegacion.test.ts` para el nuevo campo `grupo`, incluido en `ENLACE_PREMIOS`)
 - Modificar: `app/comercio/(protegido)/MenuOpciones.tsx`
 
-- [ ] Agregar `grupo` a `ENLACES_MENU` y a `ENLACE_PREMIOS`.
-- [ ] Actualizar `navegacion.test.ts` (las igualdades exactas que hoy no tienen `grupo`).
-- [ ] `MenuOpciones.tsx` agrupa con los tres subtítulos.
-- [ ] `npx tsc --noEmit` limpio; pruebas puras verdes en las dos zonas.
-- [ ] Recorrido en el navegador del menú agrupado, con y sin canje (el intercambio Premios↔Programas).
-- [ ] Commit.
+- [x] Agregar `grupo` a `ENLACES_MENU` y a `ENLACE_PREMIOS`.
+- [x] Actualizar `navegacion.test.ts` (las igualdades exactas que hoy no tienen `grupo`).
+- [x] `MenuOpciones.tsx` agrupa con los tres subtítulos.
+- [x] `npx tsc --noEmit` limpio; pruebas puras verdes en las dos zonas.
+- [ ] **Recorrido en el navegador: PENDIENTE** (mismo motivo que las tareas anteriores — sin
+  `.env.local`). Queda para Daniel o una sesión futura: el menú agrupado, con y sin canje (el
+  intercambio Premios↔Programas).
+- [x] Commit.
+
+**Estado: ✅ completa** (commits `e6b3449` + fixes `5924077`). Última tarea dispatchable ahora — quedan
+solo la Tarea 11 (requiere que Daniel aplique la migración) y la Tarea 12 (posterior a la 11). Módulo
+puro (`navegacion.ts`), 16/16 pruebas corridas de verdad por controlador y ambas revisiones, 3 mutaciones
+reproducidas de forma independiente con mensajes exactos. Un hallazgo real de robustez a futuro
+(`ORDEN_GRUPOS` era una lista separada de `ROTULO_GRUPO` — un grupo nuevo con rótulo pero sin orden
+desaparecería del menú en silencio, sin error de tipos ni de prueba) corregido derivando
+`ORDEN_GRUPOS` de las claves de `ROTULO_GRUPO`, más dos comentarios desactualizados (una referencia de
+línea que ya no correspondía, un comentario de CSS que todavía decía "Configuración"). `tsc`/`eslint`
+limpios. "Ready to merge: Yes" en spec-compliance y calidad.
 
 ## Tarea 11 — Cuando Daniel aplique la migración `0038`
 
