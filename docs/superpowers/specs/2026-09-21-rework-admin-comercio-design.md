@@ -107,7 +107,21 @@ cubrió arriba — la búsqueda anterior por `href="..."` se perdió los `redire
    (caso raro, pero posible).
 
 `accionCrearComercio` (la de `comercios/nuevo`) sí se borra entera junto con su página — nada más la
-usa.
+usa. Los dos `revalidatePath('/admin/comercios')` que acompañan a esos dos redirects (líneas 78 y 92 de
+`comercios/actions.ts`) se actualizan junto con el redirect, al mismo destino — mismo patrón que ya usa
+`accionVincularComercio` en `cuentas/actions.ts` (revalida el detalle de la cuenta y su lista antes de
+redirigir).
+
+**Dos lugares más, en el propio `[id]/editar/page.tsx` (la página que esta spec dice que "se queda
+intacta"):** sus dos links "← Volver" (`app/admin/(protegido)/comercios/[id]/editar/page.tsx`, uno en la
+rama de error de la consulta y otro en el encabezado normal) apuntan a `href="/admin/comercios"` — sin
+tocarlos, quedan apuntando a la lista borrada. Se corrigen así:
+- El de la rama de ÉXITO (la consulta sí trajo el comercio): `comercio.cuenta_id` ya está cargado ahí
+  (se usa unas líneas más abajo para precargar el formulario) → `href={comercio.cuenta_id ?
+  \`/admin/cuentas/${comercio.cuenta_id}\` : '/admin/cuentas'}`.
+- El de la rama de ERROR (la consulta de Supabase falló): en ese punto no se sabe a qué cuenta pertenece
+  —la consulta que lo diría es justo la que falló— así que va a `/admin/cuentas` sin más (el destino
+  genérico, no un 404 ni un dato inventado).
 
 **Alta de un comercio nuevo, desde la ficha de cuenta (pestaña Negocios):** se agrega un formulario
 "Nuevo comercio" ahí, además del "Vincular" que ya existe (que solo ata un comercio YA CREADO — no sirve
@@ -334,8 +348,10 @@ gate de FM.
   ancho de teléfono. `/admin/comercios` y `/admin/comercios/nuevo` deben dar 404 después del borrado;
   `/admin/comercios/<id>/editar` y `/admin/comercios/<id>/clientes` tienen que seguir funcionando igual
   que hoy, alcanzados solo desde la ficha de cuenta. Incluye loguearse como FM y confirmar que cae en el
-  dashboard (no en un 404), y guardar/borrar un comercio desde `[id]/editar` confirmando que vuelve a la
-  cuenta dueña (no a la lista borrada). Incluye
+  dashboard (no en un 404), guardar/borrar un comercio desde `[id]/editar` confirmando que vuelve a la
+  cuenta dueña (no a la lista borrada), y que los dos "← Volver" de esa misma página ya no apuntan ahí.
+  (Suelto, no bloquea nada: `scripts/seed-demo-comercios.ts` tiene un `console.log` final que menciona
+  `/admin/comercios` — se actualiza de paso si se toca ese script, no amerita una tarea propia.) Incluye
   el caso que prueba que la separación de Reverso sigue siendo segura: editar Colores (sin guardar),
   cambiar a la pestaña Reverso, editar y guardar SOLO Reverso, volver a Colores y confirmar que el cambio
   de Colores sigue sin guardarse (es lo esperado: son formularios independientes) y que Reverso sí quedó
@@ -355,7 +371,7 @@ Tarea 0):
 | 0–2 | (spec de cobranza) spike, migración `0038`, `estadoDeCobranza` puro | los de esa spec |
 | 3 | (spec de cobranza) capa de datos y acciones de FM | los de esa spec |
 | 3.5 | `fusionarActividad` (puro) y `lib/fm/dashboard.ts` (con base) | pruebas + mutaciones |
-| 4 | Nav sin "Comercios", logo→dashboard, `app/admin/(protegido)/page.tsx`, borrar `comercios/page.tsx` + `comercios/nuevo/` + `accionCrearComercio`, los tres redirects que apuntaban ahí (login, `accionActualizarComercio`, `accionEliminarComercio`), alta de comercio desde la ficha de cuenta (`accionCrearComercioDeCuenta`) | navegador |
+| 4 | Nav sin "Comercios", logo→dashboard, `app/admin/(protegido)/page.tsx`, borrar `comercios/page.tsx` + `comercios/nuevo/` + `accionCrearComercio`, los cinco lugares que apuntaban a `/admin/comercios` (login, `accionActualizarComercio`, `accionEliminarComercio`, y los dos "← Volver" de `[id]/editar/page.tsx`), alta de comercio desde la ficha de cuenta (`accionCrearComercioDeCuenta`) | navegador |
 | 5 | `estadoEfectivo` (une `licencia_estado` + `estadoDeCobranza`); ficha de cuenta con pestañas (Datos·Negocios·Cobros·Cobranza) e insignia en la lista de cuentas | pruebas + mutaciones, navegador |
 | 6 | (spec de cobranza) `accionPagarCobro`, gate de bloqueo, pantallas del dueño/cajero | los de esa spec |
 | 7 | Marca con pestañas (Colores·Imágenes·Franja·Reverso) | navegador, los 15 tipos de campo |
