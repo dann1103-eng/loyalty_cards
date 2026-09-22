@@ -396,14 +396,29 @@ vs. un cajero? (Esto SÍ se puede probar puro, inyectando el estado en vez de ca
 separar "calcular el estado" de "decidir a dónde redirige" en dos funciones, la segunda pura y
 testeable sin DB.)
 
-- [ ] Separar la función en: `decidirRedireccion(estado: EstadoCobranza, rol: 'owner' | 'cajero'):
+- [x] Separar la función en: `decidirRedireccion(estado: EstadoCobranza, rol: 'owner' | 'cajero'):
   string | null` (pura, testeable ahora) + el wrapper que arma `estado` desde la base (sin correr su
   test hasta la migración).
-- [ ] Test puro de `decidirRedireccion` con mutación.
-- [ ] El resto de la Tarea 5 (wiring real, pantallas) se escribe pero no se verifica en el navegador
+- [x] Test puro de `decidirRedireccion` con mutación.
+- [x] El resto de la Tarea 5 (wiring real, pantallas) se escribe pero no se verifica en el navegador
   todavía — necesita datos reales de cobranza.
-- [ ] `npx tsc --noEmit` limpio.
-- [ ] Commit.
+- [x] `npx tsc --noEmit` limpio.
+- [x] Commit.
+
+**Estado: ✅ completa** (commits `75783fd` + extensión `f332a71` + 2 fixes de comentarios `8c6990e`/
+`ce46851`). El implementador encontró y el controlador aprobó una extensión de alcance real: `plan/actions.ts`
+(`accionSolicitarPlan`/`accionIniciarPago`/`accionPagarCobro`) también necesitaba `verifyComercioOwnerSinBloqueo()`
+— sin eso, un dueño bloqueado no podía autodesbloquearse pagando. Spec-compliance verificó exhaustivamente
+que ningún camino deja a una cuenta `bloqueada` acceder al panel normal (8 llamadores directos + 47
+indirectos revisados uno por uno). Calidad encontró un hallazgo Important documentado, no de
+comportamiento: el criterio fail-open de `estadoCobranzaDelComercio` (si no se puede leer la cuenta, no
+bloquea) también deja pasar temporalmente un corte manual por `licencia_estado='inactivo'`, no solo una
+cuenta vencida — riesgo aceptado a propósito, ahora documentado explícitamente en el código. Dos
+correcciones de comentarios de mutation-testing (describían mal el conteo de pruebas rotas) aplicadas y
+re-verificadas. `decidirRedireccion` con 6/6 pruebas verdes, 2 mutaciones re-confirmadas por ambas
+revisiones. **El wiring real sigue BLOQUEADO para verificación contra Supabase hasta la migración 0038
+(Tarea 11) — y esa tarea NO se corre sin que Daniel decida antes qué hacer con `M&M Inversiones` y
+`Segundo`.**
 
 ## Tarea 6 — Dashboard: `fusionarActividad` y `lib/fm/dashboard.ts` (puro + Supabase, corre ahora salvo una tarjeta)
 
