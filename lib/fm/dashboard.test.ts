@@ -380,9 +380,14 @@ describe('contarCuentasEnRiesgo', () => {
     const hoy = '2026-09-22';
     const antes = (await contarCuentasEnRiesgo(supabase, hoy))!;
 
-    await crearCuenta({ cobranza: 'normal', cobranza_desde: '2026-01-01' }); // vencida
-    // Sin ningún cobro 'periodo'/'pagado': vencida desde `cobranza_desde`, muy por encima de los 15
-    // días de gracia (DIAS_GRACIA_COBRANZA) → 'bloqueada'.
+    // Sin ningún cobro 'periodo'/'pagado': vencida desde `cobranza_desde`. `'2026-09-10'` son 12 días
+    // antes de `hoy` (diasInclusive('2026-09-10','2026-09-22') - 1 = 12), DENTRO de los 15 días de
+    // gracia (DIAS_GRACIA_COBRANZA) → 'vencida', no 'bloqueada'. Tiene que caer en esta rama para que
+    // la mutación "no contar 'vencida', solo 'bloqueada'" haga fallar este test — con las dos cuentas
+    // del fixture en 'bloqueada' (como estaba antes), esa mutación pasaba en verde sin que nadie lo
+    // notara.
+    await crearCuenta({ cobranza: 'normal', cobranza_desde: '2026-09-10' }); // vencida
+    // Muy por encima de los 15 días de gracia → 'bloqueada'.
     await crearCuenta({ cobranza: 'normal', cobranza_desde: '2020-01-01' }); // bloqueada
     const alDia = await crearCuenta({ cobranza: 'normal', cobranza_desde: hoy });
     await crearCobro(alDia, {
