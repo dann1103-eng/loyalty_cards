@@ -380,6 +380,17 @@ DIRECTOS reales de `verifyComercioAcceso()` (fuera de `verifyComercioOwner.ts`) 
 - Test: `lib/comercio/verifyComercioAcceso.test.ts` (si no existe, crearlo) — **sin correr** la parte que
   necesita `cuentas_comercio.cobranza` real.
 
+**⚠️ Hallazgo del implementador durante la Tarea 5, agregado al alcance (no una tarea aparte):**
+`app/comercio/(protegido)/plan/actions.ts` (`accionIniciarPago`, `accionPagarCobro`,
+`accionSolicitarPlan`) siguen llamando a `verifyComercioOwner()` (la que bloquea). Sin corregirlo, un
+dueño bloqueado que aterriza en `/comercio/plan?suspendida=1` ve el botón "Pagar" pero al tocarlo el gate
+lo vuelve a bloquear y lo devuelve a la misma página sin crear el enlace de Wompi — el flujo de
+autodesbloqueo queda roto en silencio (falla hacia más restrictivo, no es un hueco de seguridad, pero
+rompe el propósito central de esta tarea). Se agrega a los archivos de esta tarea:
+- Modificar: `app/comercio/(protegido)/plan/actions.ts` (las tres acciones pasan a
+  `verifyComercioOwnerSinBloqueo()` — viven todas en la página exceptuada, ninguna otorga acceso al
+  resto del panel).
+
 **Pruebas (parte pura, corre ahora):** dado un `estadoEfectivo` ya calculado, ¿a dónde redirige un owner
 vs. un cajero? (Esto SÍ se puede probar puro, inyectando el estado en vez de calculándolo desde la base —
 separar "calcular el estado" de "decidir a dónde redirige" en dos funciones, la segunda pura y
