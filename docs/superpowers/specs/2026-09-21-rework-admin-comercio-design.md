@@ -81,6 +81,27 @@ Se saca el link "Comercios". El logo/marca (`<span className="admin-marca">…`)
 Salir. Mismo criterio de "defensa en profundidad" que ya tiene el layout: el gate real vive en
 `verifyFmAdmin()` de cada página.
 
+**Sacar el link no alcanza: las rutas siguen vivas por URL directa, y una de ellas es justo lo que la
+Decisión 2 dice que deja de existir.** Hoy `app/admin/(protegido)/comercios/` tiene cuatro páginas:
+`page.tsx` (la lista global), `nuevo/page.tsx` (alta suelta — con un `<select>` de TODAS las cuentas,
+exactamente lo que "Nuevo comercio deja de poder crearse suelto" dice que no debe poder pasar más),
+`[id]/editar/page.tsx` y `[id]/clientes/page.tsx`. Solo el nav linkeaba a `/admin/comercios` (verificado:
+ningún otro archivo del admin lo hace) — `[id]/editar` y `[id]/clientes` ya se alcanzan hoy desde la
+ficha de cuenta (el link de cada fila de "Negocios de esta cuenta") y **se quedan intactos, sin tocar**,
+ahora como el único camino para llegar ahí. Pero `page.tsx` y `nuevo/page.tsx` **se BORRAN** (no se dejan
+huérfanas: mientras existan, siguen siendo accesibles tecleando la URL, y la Decisión 2 seguiría sin
+cumplirse de verdad). Con ellas se borra `accionCrearComercio` (`app/admin/(protegido)/comercios/
+actions.ts`) — nada más la usa.
+
+**Alta de un comercio nuevo, desde la ficha de cuenta (pestaña Negocios):** se agrega un formulario
+"Nuevo comercio" ahí, además del "Vincular" que ya existe (que solo ata un comercio YA CREADO — no sirve
+para esto). Reusa `FormularioComercio` (el mismo de `[id]/editar`) con `cuentas={[{ id: cuentaId, nombre:
+cuenta.nombre }]}` — un array de UNA sola cuenta, la de la página en la que está parado: el `<select>`
+quéda con una sola opción, ya elegida, sin dar vuelta a elegir otra cuenta por error. Una Server Action
+nueva, `accionCrearComercioDeCuenta` (`cuentas/actions.ts`, patrón `.bind(null, cuentaId)` como el resto
+de las acciones de esa ficha), delega en el mismo `crearComercio` de `lib/comercios/guardarComercio.ts`
+(sin cambios ahí) y redirige a `/admin/cuentas/${cuentaId}` en vez de a `/admin/comercios`.
+
 ### El dashboard (`app/admin/(protegido)/page.tsx`, nuevo)
 
 Server Component. Llama a `verifyFmAdmin()` primero (mismo patrón que toda página de `/admin`). Junta las
@@ -191,16 +212,33 @@ una visible a la vez, layout C: sin acordeón, cada pestaña es toda la pantalla
 - **Reverso:** `FormularioReverso` completo (términos, redes sociales, sitio web) — hoy es un componente
   aparte más abajo en la misma página; pasa a ser la cuarta pestaña.
 
-**Colores, Imágenes y Franja son la MISMA situación de hoy: un solo `<form>`, una sola Server Action**
-(`accionGuardarBranding` / `accionGuardarBrandingDePrograma`). Esas tres pestañas son **puramente
-visuales** sobre ese único formulario — nunca se desmontan ni se dividen en tres. Las tres secciones se
-quedan SIEMPRE montadas en el DOM (mismo estado de React que hoy, un solo `useState` con todos los
-campos); cambiar de pestaña entre ellas solo alterna qué sección se ve (`style={{ display: pestañaActiva
-=== 'colores' ? 'block' : 'none' }}` o equivalente), nunca desmonta ni condiciona qué inputs existen. Es
-la misma regla que ya protege el encuadre de la franja (comentario de `mandaEncuadre`, línea 238-242: "si
-viajaran solo cuando se ven… le borraría al dueño el encuadre que ya había ajustado") — extendida a las
-tres: **ninguna de las tres pestañas que no estés mirando puede perder sus valores al guardar**, porque
-las tres viajan siempre en el mismo submit.
+**No las cuatro pestañas comparten un solo mecanismo de guardado — hay TRES, y cada pestaña usa el que le
+corresponde. Esto no es nuevo: es exactamente cómo se guarda hoy, la spec solo lo reparte visualmente.**
+
+- **Colores y Franja comparten un solo `<form>`, una sola Server Action**
+  (`accionGuardarBranding` / `accionGuardarBrandingDePrograma`) y un solo botón "Publicar cambios" (línea
+  850-852 de `FormularioBranding.tsx`). Esas DOS pestañas (no tres — "Recursos visuales"/Imágenes vive
+  FUERA de este `<form>`, ver abajo) son **puramente visuales** sobre ese único formulario: nunca se
+  desmontan. Las dos secciones se quedan SIEMPRE montadas en el DOM (mismo estado de React que hoy, un
+  solo `useState` con todos los campos, incluidos `sello_meta` y `nombre_pase` que viven en el bloque de
+  Colores); cambiar entre Colores y Franja solo alterna qué sección se ve (`style={{ display:
+  pestañaActiva === 'colores' ? 'block' : 'none' }}` o equivalente), nunca desmonta ni condiciona qué
+  inputs existen. Es la misma regla que ya protege el encuadre de la franja (comentario de
+  `mandaEncuadre`, línea 238-242: "si viajaran solo cuando se ven… le borraría al dueño el encuadre que ya
+  había ajustado") — extendida a las dos: **ni Colores ni Franja pueden perder sus valores al guardar por
+  estar en la otra pestaña**, porque las dos viajan siempre en el mismo submit. **El botón "Publicar
+  cambios" se muestra SOLO cuando la pestaña activa es Colores o Franja** (es el submit de ESE formulario;
+  no tiene sentido mostrarlo sobre Imágenes o Reverso, que se guardan solos).
+- **Imágenes (logo, strip, hero) YA es, y se queda, una serie de formularios independientes que se
+  auto-guardan solos.** Hoy "Recursos visuales" vive en su propia `<section>` (línea 605-608 de
+  `FormularioBranding.tsx`), FUERA del `<form>` de Colores/Franja: cada imagen es un `SubidaImagen.tsx`
+  con su propio `<form>` (`accionSubirImagen`/`accionSubirImagenDePrograma`) que se envía SOLO al elegir
+  el archivo (`input.form?.requestSubmit()`) y otro `<form>` propio para "Quitar". No hay ningún botón
+  "Publicar cambios" que agregar acá ni que mover: cada imagen ya se guarda en el momento, sin esperar a
+  nada de las otras pestañas. La pestaña Imágenes solo decide si esa `<section>` se ve o no
+  (`display:none` cuando no es la activa) — ocultarla no afecta a un upload que ya se auto-envió.
+- **Reverso es y se queda una tercera situación, también independiente** (ver el párrafo de abajo): su
+  propio `<form>`, su propia Server Action, su propio botón "Guardar reverso", visible solo en su pestaña.
 
 **Reverso es y se queda una situación DISTINTA — no se fusiona con las otras tres.** Hoy `FormularioReverso`
 ya es un `<form>` propio con su propia Server Action (`accionGuardarReverso` /
@@ -266,13 +304,19 @@ gate de FM.
   mutaciones viven en la tabla de esa spec; acá se prueba que agrega bien sobre varias cuentas Y que
   respeta `estadoEfectivo` (una cuenta pausada a mano cuenta aunque su fecha diga "al día").
 - Recorrido en el navegador: dashboard con datos reales, las cuatro pestañas de Marca, las cuatro pestañas
-  de una ficha de cuenta, el menú agrupado del comercio — en los tres temas, a ancho de teléfono. Incluye
+  de una ficha de cuenta, el menú agrupado del comercio, y crear un comercio nuevo desde la pestaña
+  Negocios de una cuenta (confirmando que queda vinculado a ESA cuenta y no a otra) — en los tres temas, a
+  ancho de teléfono. `/admin/comercios` y `/admin/comercios/nuevo` deben dar 404 después del borrado;
+  `/admin/comercios/<id>/editar` y `/admin/comercios/<id>/clientes` tienen que seguir funcionando igual
+  que hoy, alcanzados solo desde la ficha de cuenta. Incluye
   el caso que prueba que la separación de Reverso sigue siendo segura: editar Colores (sin guardar),
   cambiar a la pestaña Reverso, editar y guardar SOLO Reverso, volver a Colores y confirmar que el cambio
   de Colores sigue sin guardarse (es lo esperado: son formularios independientes) y que Reverso sí quedó
-  guardado. Y el caso del `required` movido a validación de servidor: vaciar el color de fondo, guardar
-  desde la pestaña Imágenes, confirmar que NO se envía en silencio — vuelve a la pestaña Colores con el
-  error visible.
+  guardado. Y el caso del `required` movido a validación de servidor: vaciar el color de fondo, cambiar a la
+  pestaña Franja (que comparte el mismo formulario y el mismo botón) y publicar desde ahí, confirmar que
+  NO se envía en silencio — vuelve a la pestaña Colores con el error visible. Y que el botón "Publicar
+  cambios" NO aparece estando en Imágenes ni en Reverso (cada una tiene su propio guardado, sin botón
+  compartido).
 
 ## Orden de entrega
 
@@ -284,7 +328,7 @@ Tarea 0):
 | 0–2 | (spec de cobranza) spike, migración `0038`, `estadoDeCobranza` puro | los de esa spec |
 | 3 | (spec de cobranza) capa de datos y acciones de FM | los de esa spec |
 | 3.5 | `fusionarActividad` (puro) y `lib/fm/dashboard.ts` (con base) | pruebas + mutaciones |
-| 4 | Nav sin "Comercios", logo→dashboard, `app/admin/(protegido)/page.tsx` | navegador |
+| 4 | Nav sin "Comercios", logo→dashboard, `app/admin/(protegido)/page.tsx`, borrar `comercios/page.tsx` + `comercios/nuevo/` + `accionCrearComercio`, alta de comercio desde la ficha de cuenta (`accionCrearComercioDeCuenta`) | navegador |
 | 5 | `estadoEfectivo` (une `licencia_estado` + `estadoDeCobranza`); ficha de cuenta con pestañas (Datos·Negocios·Cobros·Cobranza) e insignia en la lista de cuentas | pruebas + mutaciones, navegador |
 | 6 | (spec de cobranza) `accionPagarCobro`, gate de bloqueo, pantallas del dueño/cajero | los de esa spec |
 | 7 | Marca con pestañas (Colores·Imágenes·Franja·Reverso) | navegador, los 15 tipos de campo |
