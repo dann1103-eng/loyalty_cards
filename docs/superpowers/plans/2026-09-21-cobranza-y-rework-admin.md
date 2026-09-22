@@ -622,20 +622,35 @@ antes de esta rama, y verificar el gate de punta a punta las bloquea de verdad. 
 rama a `master` sin su respuesta.
 
 Cuando Daniel avise que aplicó `0038`:
-1. Correr `scripts/verificar-0038.ts` (solo lectura).
-2. Correr TODAS las pruebas contra Supabase que quedaron sin correr (Tareas 4b, 5, 6, 8): deberían pasar
-   a la primera si el código está bien: si alguna falla, es información real sobre el adaptador, no un
-   fallo de la prueba.
-3. Completar las mutaciones de esas pruebas (las que dependían de datos reales).
-4. Sacar los placeholders/avisos de "disponible cuando se aplique la migración" del dashboard y de la
-   pestaña Cobranza. **Incluye** (hallazgo de la Tarea 8, no resuelto ahí a propósito):
-   `ControlesCobranzaFutura.tsx` necesita recibir el estado actual de la cuenta
-   (`modo`/`cobranza_pospuesta_hasta`, mismo patrón `inicial` que `FormularioCuenta`) en vez de arrancar
-   siempre en "normal"/vacío, y agregar el feedback de éxito a sus 3 acciones (mismo patrón que
-   `FormularioPedirPago`/`BotonAnularCobro`/`MarcarPagado`) — sin esto, "Perdonar" se puede reenviar sin
-   saber que ya funcionó.
-5. Recorrido completo en el navegador de todo lo que dependía de la migración: el gate bloqueando de
-   verdad, el modo exenta/normal, posponer, perdonar, la tarjeta de vencidas/bloqueadas del dashboard.
+1. [x] Correr `scripts/verificar-0038.ts` (solo lectura). **Hecho 2026-09-22**: las tres columnas
+   existen, una cuenta nueva nace `normal` con `cobranza_desde` de hoy, el CHECK rechaza un valor
+   inválido, las 11 cuentas reales que ya existían quedaron `exenta`.
+2. [x] Correr TODAS las pruebas contra Supabase que quedaron sin correr (Tareas 3b, 4b, 6): **89/89
+   verdes** (`cuentas.test.ts`, `modoCobranza.test.ts`, `dashboard.test.ts`, `cobranza.test.ts`) —
+   confirmado por el controlador, no solo reportado.
+3. [x] Completar las mutaciones de esas pruebas. Confirmadas de verdad, no solo razonadas — con 3
+   hallazgos reales de mecanismo (no de resultado): un `modo` de cobranza inválido no llega a un `23514`
+   crudo de la BD como se había razonado (el propio `cambios` del código lo mapea en silencio a
+   `'exenta'`, un valor VÁLIDO, y el test falla en `expect(res.ok).toBe(false)` antes de comparar
+   ningún mensaje); un `posponerPago` sin la columna no deja un no-op silencioso como se había razonado
+   (un PATCH con body vacío da `PGRST116` de PostgREST — "no matcheó ninguna fila" — y el test falla por
+   ese camino en cambio). Comentarios corregidos (commits `ec02b2f`, `46f448f`).
+4. [x] Sacar los placeholders/avisos de "disponible cuando se aplique la migración" del dashboard, la
+   lista de cuentas y la pestaña Cobranza (commits `458f5a3` + fix `a2bc741`, ambas revisiones
+   aprobadas). Incluyó el pendiente de la Tarea 8: `ControlesCobranzaFutura.tsx` ahora recibe
+   `modoActual`/`pospuestoHasta` reales y da feedback de éxito en sus 3 acciones. Se extrajo
+   `estadosDeCobranzaPorCuenta` (2 consultas, sin N+1) compartida entre el dashboard y la lista de
+   cuentas, más `describirEstadoCobranza`/`pastillaDeCobranza` en `lib/comercios/cobranza.ts`.
+5. [ ] **Recorrido completo en el navegador: PENDIENTE.** El gate bloqueando de verdad, el modo
+   exenta/normal, posponer, perdonar, la tarjeta de vencidas/bloqueadas del dashboard, y las 4
+   verificaciones visuales que quedaron pendientes de las Tareas 7/8/9/10. Este worktree no tiene
+   `.env.local` — el asistente no puede levantar un dev server con datos reales acá (y no debe copiar
+   `.env.local` él mismo). Queda para Daniel, en su propia máquina.
+
+**⚠️ Ya resuelto (2026-09-22):** Daniel decidió pasar `M&M Inversiones` y `Segundo` a
+`licencia_estado = 'activo'` ANTES del paso 5, para que no queden bloqueadas por el interruptor manual
+que ya tenían desde antes de esta rama. Hecho con un script de solo-lectura + uno de escritura acotado a
+esas dos cuentas por id (confirmados por nombre antes de tocar nada), ambos borrados después de usarlos.
 
 ## Tarea 12 — Revisión final del conjunto
 
