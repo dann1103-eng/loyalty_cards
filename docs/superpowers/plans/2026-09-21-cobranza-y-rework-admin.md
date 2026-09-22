@@ -228,13 +228,24 @@ ni a `leerDatos`**: es un parámetro APARTE, exclusivo del alta.
   POR SU CUENTA, aparte de `leerDatos`, y se lo pasa a `crearCuenta` como el parámetro nuevo;
   `accionActualizarCuenta` no cambia — sigue sin tocar `cobranza` para nada)
 
-- [ ] `crearCuenta` con el parámetro nuevo, el `<select>` condicional a `!inicial`, `accionCrearCuenta`
+- [x] `crearCuenta` con el parámetro nuevo, el `<select>` condicional a `!inicial`, `accionCrearCuenta`
   leyendo el campo aparte — todo escrito. Confirmar que `actualizarCuenta` y `leerDatos` quedan
   IDÉNTICOS a como están hoy (ni un campo de cobranza pasa por ahí).
-- [ ] Test de `crearCuenta` con `cobranza: 'exenta'` (y sin pasarlo, default `'normal'`) — escrito, con el
+- [x] Test de `crearCuenta` con `cobranza: 'exenta'` (y sin pasarlo, default `'normal'`) — escrito, con el
   comentario `// SIN CORRER: necesita la migración 0038.` en el encabezado, sin correr.
-- [ ] `npx tsc --noEmit` limpio.
-- [ ] Commit.
+- [x] `npx tsc --noEmit` limpio.
+- [x] Commit.
+
+**Estado: ✅ completa** (commit `dba3871`). `VALORES_COBRANZA`/`ValorCobranza` sigue el patrón de
+`ESTADOS_LICENCIA`; `crearCuenta` valida y da default `'normal'`; `<select>` condicionado a `!inicial`
+(el campo no existe en el DOM al editar, confirmado contra `nuevo/page.tsx` vs `[id]/page.tsx`);
+`actualizarCuenta`/`DatosCuenta`/`leerDatos` verificados byte-idénticos por ambas revisiones. Único otro
+llamador de `crearCuenta` en el repo (`lib/comercios/altaAutoservicio.ts`) sigue compilando sin cambios
+(parámetro opcional). 3 pruebas nuevas escritas con `// SIN CORRER: necesita la migración 0038.`, sin
+correr. Minor no bloqueante anotado por el revisor de calidad: el texto de ayuda del `<select>` menciona
+la pestaña "Cobranza", que todavía no existe (es la Tarea 8/4b) — no es un defecto de esta tarea (la
+columna ni siquiera existe hasta la migración), pero hay que confirmar que esa pestaña cierre la
+referencia antes de publicar la rama completa.
 
 ## Tarea 4 — Capa de datos y acciones de FM: cobranza (Tarea 3 de la spec de cobranza)
 
