@@ -259,9 +259,16 @@ referencia antes de publicar la rama completa.
 - Crear: `lib/comercios/pedirPago.ts` (+ test contra Supabase)
   - `pedirPago(supabase, cuentaId, datos: { monto: number; plan: string | null; periodoDesde: string;
     periodoHasta: string }): Promise<ResultadoRegistroCobro>` — crea un cobro `pendiente`,
-    `metodo = 'Pedido por FM'`, con `tipo` derivado de si hay `plan` (`'periodo'`) o no
-    (`'ajuste'`, monto libre — ver spec para el caso "sirve para probar con $1"). Reusa `validarCobro`
-    o una variante: el monto puede no coincidir con ningún plan del catálogo a propósito.
+    `metodo = 'Pedido por FM'`. **Corrección post-escritura del plan (verificado contra
+    `supabase/migrations/0037_pagos_wompi.sql`):** el `tipo` va SIEMPRE `'periodo'`, nunca `'ajuste'`
+    — el CHECK real de esa migración es `cobros_ajuste_con_plan: tipo <> 'ajuste' or plan_destino is
+    not null`, así que un cobro `'ajuste'` con `plan_destino: null` (el caso "pedir $1 sin tocar el
+    plan") violaría el CHECK y el insert fallaría. `'periodo'` sí admite `plan_destino: null` sin
+    problema (mismo criterio que ya usa `confirmarPagoCobro`: aplica el plan solo si
+    `cobro.planDestino !== null`, sin mirar `tipo` para esa decisión). El texto original de esta tarea
+    ("tipo derivado de si hay plan") tenía la relación invertida respecto del CHECK real — no se
+    aplica. Reusa `validarCobro` o una variante: el monto puede no coincidir con ningún plan del
+    catálogo a propósito.
   - `anularCobroPendiente` YA EXISTE (`lib/comercios/cobros.ts`) — confirmá que sirve tal cual para
     "anular un cobro pendiente de cualquier tipo" (no solo `metodo = 'Wompi'`); si no, ampliarla.
 - Crear: `lib/comercios/accionesCobranza.ts` (o sumar a `app/admin/(protegido)/cuentas/actions.ts`,
