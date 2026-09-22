@@ -437,11 +437,23 @@ una (criterio `null` ante error, nunca un cero falso).
 **`contarCuentasEnRiesgo`:** SÍ depende de `estadoEfectivo`/columnas de cobranza. Se escribe, su test se
 escribe, **no se corre**.
 
-- [ ] Test de `fusionarActividad` (rojo → verde → mutación).
-- [ ] Tests de las 4 funciones que no dependen de la migración, contra Supabase, con mutación cada una.
-- [ ] `contarCuentasEnRiesgo`: implementación + test escrito, sin correr.
-- [ ] `npx tsc --noEmit` limpio.
-- [ ] Commit.
+- [x] Test de `fusionarActividad` (rojo → verde → mutación).
+- [x] Tests de las 4 funciones que no dependen de la migración, contra Supabase, con mutación cada una.
+- [x] `contarCuentasEnRiesgo`: implementación + test escrito, sin correr.
+- [x] `npx tsc --noEmit` limpio.
+- [x] Commit.
+
+**Estado: ✅ completa** (commits `02257b9` + fix `c6b0b01`). `tamanoDeCartera` usa `count` directo sobre
+`clientes` (no distinct sobre `tarjetas.cliente_id`) — decisión del controlador, verificada contra
+`lib/clientes/registrarCliente.ts` antes de dispatchar y re-confirmada por ambas revisiones. Dos
+limitaciones honestas documentadas por el implementador: la mutación de `estado='pagado'` en
+`ingresosDelMes` no se puede matar (el CHECK de la migración 0017 ya lo garantiza); el fixture de
+`tamanoDeCartera` necesitó deltas distintos (no iguales) para que la mutación cruzada fallara. Fix real
+de spec-compliance: el fixture "vencida" de `contarCuentasEnRiesgo` (test sin correr) en realidad caía en
+"bloqueada" (264 días, no 12) — corregido y verificado con cálculo manual por controlador y ambas
+revisiones. 13/13 pruebas verdes contra Supabase real (los 4 `describe` que corren), mutaciones
+re-verificadas de forma independiente. `tsc`/`eslint` limpios. "Ready to merge: Yes" en ambas rondas.
+`contarCuentasEnRiesgo` sigue **sin correr, bloqueada hasta la migración 0038 (Tarea 11)**.
 
 ## Tarea 7 — Nav del admin, dashboard, borrado de `/admin/comercios`, alta de comercio desde cuenta
 
