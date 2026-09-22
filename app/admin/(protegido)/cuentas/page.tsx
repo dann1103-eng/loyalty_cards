@@ -80,9 +80,26 @@ export default async function PaginaCuentas() {
                     </div>
                   </div>
                 </div>
-                <span className={`pastilla ${llena ? 'pastilla-inactivo' : 'pastilla-activo'}`}>
-                  {llena ? 'Llena' : 'Con cupo'}
-                </span>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {/* Insignia de cobranza (spec 2026-09-21-rework-admin-comercio-design.md, "Lista
+                      de cuentas"): va PRIMERO (a la izquierda de la de cupo) porque es la que FM
+                      necesita ver primero para decidir si entrar a esa cuenta es urgente. Hoy es un
+                      placeholder neutro sin calcular nada: el estado real (Al día/Vencida/
+                      Bloqueada/Exenta/Pospuesta) sale de estadoEfectivo(), que necesita las
+                      columnas de la migración 0038 (cuentas_comercio.cobranza / cobranza_desde /
+                      cobranza_pospuesta_hasta) — todavía no aplicada contra la base real. Agregar
+                      esas columnas al .select() de esta página antes de tiempo rompería la
+                      consulta completa de la lista, no solo esta pastilla. Cuando la Tarea 11
+                      aplique la migración, esto se reemplaza por la pastilla real (colores en
+                      .pastilla-activo/.pastilla-inactivo/.pastilla-advertencia/.pastilla-neutral,
+                      ya definidos en app/globals.css). */}
+                  <span className="pastilla pastilla-neutral" title="Disponible cuando se aplique la migración 0038">
+                    —
+                  </span>
+                  <span className={`pastilla ${llena ? 'pastilla-inactivo' : 'pastilla-activo'}`}>
+                    {llena ? 'Llena' : 'Con cupo'}
+                  </span>
+                </div>
               </Link>
             );
           })}

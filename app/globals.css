@@ -77,6 +77,19 @@
   --error-fondo: rgba(164, 35, 28, 0.08);
   --error-borde: rgba(164, 35, 28, 0.32);
 
+  /* ---------- advertencia (pastilla "vencida" de cobranza, ámbar) ----------
+     Tarea 8 (spec cobranza): tercer color de estado que ni --menta ni --error cubren. #7a4100 y no
+     un ámbar más vívido tipo #92400e (4.67:1, apenas arriba del piso): contra este fondo lavanda
+     claro, dentro de .pastilla-advertencia (que mide sobre su propio tinte + la fila que la
+     contiene, no sobre --fondo solo — mismo criterio que .pastilla-activo/.pastilla-inactivo),
+     #7a4100 da 5.31:1. Verificado en lib/diseno/temas.test.ts. */
+  --advertencia: #7a4100;
+
+  /* ---------- neutral (pastilla "exenta"/"pospuesta", gris) ----------
+     Gris propio y no un alpha de --texto (esa familia ya es --texto-2/--texto-3): así se lee como
+     "sin urgencia", no como texto secundario reciclado. */
+  --neutral: #4a4a57;
+
   /* ---------- tipografía ----------
      OJO: --font-display / --font-body / --font-mono las INYECTA next/font en <html>
      (app/layout.tsx). NO redeclararlas aquí: `--x: var(--x, …)` es una referencia circular
@@ -139,6 +152,8 @@
   --acento-borde: rgba(81, 75, 168, 0.4);
   --menta-suave: rgba(11, 102, 69, 0.12);
   --error-suave: rgba(164, 35, 28, 0.1);
+  --advertencia-suave: rgba(122, 65, 0, 0.14);
+  --neutral-suave: rgba(74, 74, 87, 0.12);
 
   /* ---------- botón primario: Deep sólido ---------- */
   --btn-primario-fondo: #181849;
@@ -185,6 +200,10 @@
   --error-fondo: rgba(147, 0, 10, 0.22);
   --error-borde: rgba(255, 180, 171, 0.35);
 
+  --advertencia: #ffb84d;
+
+  --neutral: #c7c7d1;
+
   --shadow-1: 0 6px 18px -10px rgba(4, 5, 18, 0.6);
   --shadow-2: 0 18px 44px -20px rgba(4, 5, 18, 0.65);
   --shadow-3: 0 26px 60px -18px rgba(4, 5, 18, 0.75);
@@ -209,6 +228,8 @@
   --acento-borde: rgba(143, 134, 224, 0.4);
   --menta-suave: rgba(139, 214, 180, 0.13);
   --error-suave: rgba(255, 180, 171, 0.12);
+  --advertencia-suave: rgba(255, 184, 77, 0.16);
+  --neutral-suave: rgba(199, 199, 209, 0.13);
 
   --btn-primario-fondo: var(--blanco);
   --btn-primario-texto: var(--superficie-0);
@@ -257,6 +278,10 @@
   --error-fondo: rgba(255, 138, 122, 0.18);
   --error-borde: rgba(255, 138, 122, 0.75);
 
+  --advertencia: #ffc233;
+
+  --neutral: #cfcfcf;
+
   /* `none` y no un rgba transparente: una sombra invisible sigue costando pintura por scroll en el
      teléfono barato del mostrador, que es justo donde se usa este tema. */
   --shadow-1: none;
@@ -286,6 +311,10 @@
      en la fila que la contiene (--superficie-2). Medida ahí, con 22% daba 5.97:1 y con 16% daba
      6.78:1; en este tema todo texto pide 7:1. Con 12% da 7.31:1. */
   --error-suave: rgba(255, 138, 122, 0.12);
+  /* Mismo criterio que --error-suave arriba: 0.22 da 7.61:1 dentro de .pastilla-advertencia (sobre
+     --superficie-2, no sobre --fondo). */
+  --advertencia-suave: rgba(255, 194, 51, 0.22);
+  --neutral-suave: rgba(207, 207, 207, 0.22);
 
   --btn-primario-fondo: #ffffff;
   --btn-primario-texto: #000000;
@@ -1110,6 +1139,16 @@ details.admin-fila:has(> summary:active) {
 .pastilla-inactivo {
   color: var(--error);
   background: var(--error-suave);
+}
+/* Cobranza (Tarea 8): "vencida" y "exenta"/"pospuesta" no son ni éxito ni error — necesitan su
+   propio color en vez de forzar uno de los dos existentes. */
+.pastilla-advertencia {
+  color: var(--advertencia);
+  background: var(--advertencia-suave);
+}
+.pastilla-neutral {
+  color: var(--neutral);
+  background: var(--neutral-suave);
 }
 .admin-vacio {
   padding: 44px 20px;

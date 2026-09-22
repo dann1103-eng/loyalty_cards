@@ -68,6 +68,20 @@ const PARES: Par[] = [
     texto: true,
     uso: 'pastilla inactiva, sobre la fila que la contiene',
   },
+  {
+    frente: '--advertencia',
+    fondo: ['--advertencia-suave', '--superficie-2'],
+    minimo: 4.5,
+    texto: true,
+    uso: 'pastilla advertencia (cobranza "vencida"), sobre la fila que la contiene',
+  },
+  {
+    frente: '--neutral',
+    fondo: ['--neutral-suave', '--superficie-2'],
+    minimo: 4.5,
+    texto: true,
+    uso: 'pastilla neutral (cobranza "exenta"/"pospuesta"), sobre la fila que la contiene',
+  },
   { frente: '--texto', fondo: ['--error-fondo', '--superficie-1'], minimo: 7, texto: true, uso: 'alerta, dentro del panel' },
   {
     frente: '--acento',
@@ -141,6 +155,22 @@ const PARES_REGLA: ParRegla[] = [
     minimo: 4.5,
     texto: true,
     uso: 'pastilla inactiva, dentro de una fila',
+  },
+  {
+    color: '.pastilla-advertencia',
+    fondo: '.pastilla-advertencia',
+    contenedor: '--superficie-2',
+    minimo: 4.5,
+    texto: true,
+    uso: 'pastilla advertencia, dentro de una fila',
+  },
+  {
+    color: '.pastilla-neutral',
+    fondo: '.pastilla-neutral',
+    contenedor: '--superficie-2',
+    minimo: 4.5,
+    texto: true,
+    uso: 'pastilla neutral, dentro de una fila',
   },
   { color: '.alerta', fondo: '.alerta', contenedor: '--superficie-1', minimo: 7, texto: true, uso: 'alerta, dentro del panel' },
   // Las filas de una hoja (menú de opciones, selector de contexto, selector de tema). Se miden POR
