@@ -182,8 +182,10 @@ ni a `leerDatos`**: es un parámetro APARTE, exclusivo del alta.
   `cobranza?: 'normal' | 'exenta'` — NO en `DatosCuenta`, NO en `actualizarCuenta` — con
   `'normal'` como default si se omite; valida contra la lista de valores)
 - Modificar: `app/admin/(protegido)/cuentas/FormularioCuenta.tsx` (el `<select>` nuevo, **renderizado SOLO
-  cuando `!inicial`** — mismo patrón condicional que ya usa el campo `plan`, líneas 31-35: `inicial`
-  presente = está editando una cuenta que ya existe)
+  cuando `!inicial`** — ojo, esto es DISTINTO al patrón del campo `plan`, que siempre se renderiza y solo
+  cambia su valor por defecto según `inicial`: acá el campo entero no existe en el DOM al editar, no solo
+  cambia su valor. `inicial` presente = está editando una cuenta que ya existe, confirmado contra
+  `nuevo/page.tsx` — que no pasa `inicial` — y `[id]/page.tsx` — que sí lo pasa)
 - Modificar: `app/admin/(protegido)/cuentas/actions.ts` (`accionCrearCuenta` lee `formData.get('cobranza')`
   POR SU CUENTA, aparte de `leerDatos`, y se lo pasa a `crearCuenta` como el parámetro nuevo;
   `accionActualizarCuenta` no cambia — sigue sin tocar `cobranza` para nada)
