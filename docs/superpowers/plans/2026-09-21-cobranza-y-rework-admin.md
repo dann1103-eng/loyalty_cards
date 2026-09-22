@@ -475,16 +475,32 @@ que se borran y los 5 lugares que quedaban apuntando ahí.
   `<details>` plegado, debajo de `FormularioVincular`) y `app/admin/(protegido)/cuentas/actions.ts`
   (`accionCrearComercioDeCuenta`)
 
-- [ ] Borrar las dos páginas y `accionCrearComercio`.
-- [ ] Arreglar los 5 lugares (login, actualizar, eliminar ×2 con revalidatePath, los dos Volver).
-- [ ] `accionCrearComercioDeCuenta` + el `<details>` en la ficha de cuenta.
-- [ ] El dashboard (`app/admin/(protegido)/page.tsx`), con la tarjeta de vencidas/bloqueadas en
+- [x] Borrar las dos páginas y `accionCrearComercio`.
+- [x] Arreglar los 5 lugares (login, actualizar, eliminar ×2 con revalidatePath, los dos Volver).
+- [x] `accionCrearComercioDeCuenta` + el `<details>` en la ficha de cuenta.
+- [x] El dashboard (`app/admin/(protegido)/page.tsx`), con la tarjeta de vencidas/bloqueadas en
   placeholder.
-- [ ] `npx tsc --noEmit`, lint limpios.
-- [ ] Recorrido en el navegador: loguearse cae en el dashboard (no 404); guardar/borrar un comercio desde
-  `[id]/editar` vuelve a la cuenta dueña; `/admin/comercios` y `/admin/comercios/nuevo` dan 404; crear un
-  comercio nuevo desde una cuenta lo deja vinculado a ESA cuenta.
-- [ ] Commit.
+- [x] `npx tsc --noEmit`, lint limpios.
+- [ ] **Recorrido en el navegador: PENDIENTE.** Este worktree no tiene `.env.local`, así que ningún dev
+  server acá puede servir datos reales de Supabase — ni el controlador ni un subagente pueden completar
+  este paso ahora mismo. Queda para Daniel (o una sesión futura con acceso a `.env.local`) antes de dar
+  por buena esta tarea de punta a punta: loguearse cae en el dashboard (no 404); guardar/borrar un
+  comercio desde `[id]/editar` vuelve a la cuenta dueña; `/admin/comercios` y `/admin/comercios/nuevo`
+  dan 404; crear un comercio nuevo desde una cuenta lo deja vinculado a ESA cuenta.
+- [x] Commit.
+
+**Estado: código ✅ completo y revisado** (commits `6592756` + fix `4176922`). `grep` sin exclusiones
+confirmó (por el controlador y ambas revisiones, de forma independiente) que no queda ningún
+nav/redirect/href activo apuntando a las rutas borradas — solo un `console.log` de un script de seed
+(ya corregido) y un comentario ilustrativo en `lib/supabase/proxy.ts` (fuera de esta tarea, no
+funcional). El punto de seguridad más sensible (`accionCrearComercioDeCuenta` fuerza `cuenta_id`
+server-side, nunca del formulario) fue verificado por code-quality ejecutando la lógica aislada, no solo
+leyéndola. Un hallazgo "Important" del revisor de calidad (guard explícito de `cuenta_id` vacío en
+`accionActualizarComercio`) se evaluó y se decidió NO aplicar: `actualizarComercio` ya pasa por
+`validar()` antes de devolver `res.ok`, así que el escenario que el guard evitaría es estructuralmente
+imposible dado el código actual, y agregarlo violaría el comentario explícito del archivo ("las acciones
+NO validan"). `tsc`/`eslint` limpios. **⚠️ El recorrido en el navegador queda pendiente** (ver arriba) —
+no se puede dar esta tarea por 100% verificada hasta que alguien con `.env.local` la recorra.
 
 ## Tarea 8 — Ficha de cuenta con pestañas + insignia en la lista
 
