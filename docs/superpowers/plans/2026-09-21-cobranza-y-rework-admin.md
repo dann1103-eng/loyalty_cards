@@ -130,14 +130,28 @@ migración real.
   las tres columnas existen, que el `check` de `cobranza` rechaza un valor inválido, que las cuentas
   existentes quedaron `exenta`)
 
-- [ ] Escribir el SQL, byte-idéntico al de la spec.
-- [ ] Actualizar `types.ts`.
-- [ ] Escribir `scripts/verificar-0038.ts`.
-- [ ] `npx tsc --noEmit` limpio.
-- [ ] Commit.
-- [ ] **Avisar a Daniel** (en el resumen final de esta sesión, no bloquea el resto): el SQL está listo
+- [x] Escribir el SQL, byte-idéntico al de la spec.
+- [x] Actualizar `types.ts`.
+- [x] Escribir `scripts/verificar-0038.ts`.
+- [x] `npx tsc --noEmit` limpio.
+- [x] Commit.
+- [x] **Avisar a Daniel** (en el resumen final de esta sesión, no bloquea el resto): el SQL está listo
   para que lo aplique a mano cuando vuelva. Hasta entonces, nada de la Tarea 5 en adelante que dependa de
   estas columnas puede probarse contra Supabase.
+
+**Estado: ✅ completa** (commits `bfdc727` + `ce06e6a`). Primera ronda de calidad encontró 3 Important
+reales (verificados por el controlador antes de pedir la corrección, no solo confiados): faltaba
+`begin;`/`commit;` en el SQL (rompía la convención desde la 0038 — hasta una migración de una sola
+sentencia como la 0036 lo hace), `cobranza_desde` usaba `current_date` del servidor en vez de
+`(now() at time zone 'America/El_Salvador')::date` (violaba la convención documentada en
+`0019_vigencia_cupon_membresia.sql:53`), y `scripts/verificar-0038.ts` dejaba huérfana la fila de prueba
+inválida si el CHECK fallaba en rechazarla. Los tres se corrigieron (commit `ce06e6a`), incluyendo
+actualizar el bloque SQL de la spec para seguir byte-idéntico a la migración. Ambas re-revisiones
+(spec-compliance y calidad) confirmaron los fixes de forma independiente — "Ready to merge: Yes".
+
+**⚠️ Pendiente para Daniel:** el SQL de `supabase/migrations/0038_cobranza.sql` está listo para aplicar a
+mano en Supabase Studio. Hasta que lo haga, nada de la Tarea 5 en adelante que dependa de estas columnas
+puede probarse contra Supabase real.
 
 ## Tarea 3 — `estadoEfectivo` (une `licencia_estado` + `estadoDeCobranza`)
 
