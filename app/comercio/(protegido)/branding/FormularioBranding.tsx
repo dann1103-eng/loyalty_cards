@@ -657,8 +657,23 @@ export default function FormularioBranding({
             `noValidate`: con las tres pestañas siempre montadas, un `required` oculto por
             display:none no es enfocable y el navegador bloquearía el envío EN SILENCIO en
             cualquier pestaña que no sea Colores. La validación real queda del lado del servidor
-            (guardarBranding.ts), que sí da un mensaje legible. */}
-        <form className="panel reveal d3" action={ejecutar} noValidate>
+            (guardarBranding.ts), que sí da un mensaje legible.
+
+            El `<form>` en sí TAMBIÉN necesita su propio display:none en Imágenes/Reverso — no
+            alcanza con ocultar las dos secciones de adentro. Encontrado recorriendo el navegador de
+            verdad (2026-09-22): con las dos secciones internas en `display:none` pero el `<form>`
+            sin ocultar, quedaba una caja `.panel` vacía (solo su padding, ~50px) tapando la pantalla
+            justo donde el dueño esperaría ver Imágenes o Reverso — el contenido real existía en el
+            DOM (confirmado con getBoundingClientRect) pero aparecía cientos de píxeles más abajo,
+            fuera de la vista sin scrollear. Mismo criterio que ya usa la `<section>` de Imágenes
+            (display:none como bloque entero, no solo lo de adentro) — el `<form>` sigue montado
+            igual, un `display:none` en el elemento no le borra los valores a sus campos. */}
+        <form
+          className="panel reveal d3"
+          action={ejecutar}
+          noValidate
+          style={{ display: seccionMostrada === 'colores' || seccionMostrada === 'franja' ? 'block' : 'none' }}
+        >
           <div style={{ display: seccionMostrada === 'colores' ? 'block' : 'none' }}>
           <p className="titulo-seccion" style={{ marginBottom: 14 }}>Paleta de colores</p>
 
