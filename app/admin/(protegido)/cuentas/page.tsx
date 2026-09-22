@@ -77,7 +77,11 @@ export default async function PaginaCuentas() {
             const usados = negociosPorCuenta.get(c.id) ?? 0;
             const llena = c.limite_negocios !== null && usados >= c.limite_negocios;
             const estadoCobranza = estadosCobranza?.get(c.id) ?? null;
-            const pastilla = estadoCobranza ? pastillaDeCobranza(estadoCobranza) : null;
+            // El título largo se calcula JUNTO con la pastilla (no por separado con estadoCobranza!):
+            // así el compilador sabe, sin aserción, que si hay pastilla también hay título.
+            const pastilla = estadoCobranza
+              ? { ...pastillaDeCobranza(estadoCobranza), titulo: describirEstadoCobranza(estadoCobranza) }
+              : null;
             return (
               <Link key={c.id} className="admin-fila" href={`/admin/cuentas/${c.id}`}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -101,10 +105,7 @@ export default async function PaginaCuentas() {
                       romper el layout de la fila. Si `estadosCobranza` no trajo esta cuenta (la
                       consulta compartida falló), placeholder neutro: no rompe la fila. */}
                   {pastilla ? (
-                    <span
-                      className={`pastilla ${pastilla.clase}`}
-                      title={describirEstadoCobranza(estadoCobranza!)}
-                    >
+                    <span className={`pastilla ${pastilla.clase}`} title={pastilla.titulo}>
                       {pastilla.texto}
                     </span>
                   ) : (
