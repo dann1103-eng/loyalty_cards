@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
+import { verifyComercioOwnerSinBloqueo } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { baseUrlDeLaApp, iniciarPagoPlanDelDueno } from '@/lib/comercios/iniciarPagoPlanSupabase';
 import { pagarCobroPedido } from '@/lib/comercios/accionPagarCobro';
@@ -28,7 +28,11 @@ export async function accionSolicitarPlan(
   _estadoPrevio: EstadoSolicitudPlan,
   formData: FormData,
 ): Promise<EstadoSolicitudPlan> {
-  const { comercioId } = await verifyComercioOwner();
+  // SIN bloqueo (spec cobranza "Cómo se bloquea", Tarea 5 — hallazgo agregado al alcance durante la
+  // implementación): esta acción vive solo en /comercio/plan, la página exceptuada. Con
+  // verifyComercioOwner() (que SÍ bloquea) un dueño bloqueado viendo ?suspendida=1 perdería también
+  // la posibilidad de pedir un cambio de plan sin ganar acceso a ningún otro rincón del panel.
+  const { comercioId } = await verifyComercioOwnerSinBloqueo();
 
   const cuentaId = await cuentaDelComercio(comercioId);
   if (!cuentaId) return { error: 'Tu comercio todavía no está asociado a una cuenta.' };
@@ -61,8 +65,14 @@ export async function accionIniciarPago(
   _estadoPrevio: EstadoPagoPlan,
   formData: FormData,
 ): Promise<EstadoPagoPlan> {
-  // OJO: verifyComercioOwner() y redirect() funcionan LANZANDO. Nunca los envuelvas en try/catch.
-  const { comercioId } = await verifyComercioOwner();
+  // OJO: verifyComercioOwnerSinBloqueo() y redirect() funcionan LANZANDO. Nunca los envuelvas en
+  // try/catch. SIN bloqueo a propósito (spec cobranza "Cómo se bloquea", Tarea 5 — hallazgo
+  // agregado al alcance durante la implementación): esta es la acción real detrás del botón de
+  // pago de /comercio/plan (OpcionesDePago.tsx), la página exceptuada a la que el gate manda a un
+  // dueño `bloqueada` con `?suspendida=1`. Si usara verifyComercioOwner() (que SÍ bloquea), ese
+  // mismo dueño volvería a rebotar acá al tocar "Pagar" — sin crear el enlace de Wompi, sin forma
+  // de autodesbloquearse.
+  const { comercioId } = await verifyComercioOwnerSinBloqueo();
 
   const cuentaId = await cuentaDelComercio(comercioId);
   if (!cuentaId) return { error: 'Tu comercio todavía no está asociado a una cuenta.' };
@@ -94,8 +104,12 @@ export async function accionPagarCobro(
   _estadoPrevio: EstadoPagarCobro,
   _formData: FormData,
 ): Promise<EstadoPagarCobro> {
-  // OJO: verifyComercioOwner() y redirect() funcionan LANZANDO. Nunca los envuelvas en try/catch.
-  const { comercioId } = await verifyComercioOwner();
+  // OJO: verifyComercioOwnerSinBloqueo() y redirect() funcionan LANZANDO. Nunca los envuelvas en
+  // try/catch. SIN bloqueo a propósito (spec cobranza "Cómo se bloquea", Tarea 5 — hallazgo
+  // agregado al alcance durante la implementación): un cobro "Pedido por FM" puede ser justo el
+  // pago que reactiva una cuenta `bloqueada`, y esta acción vive solo en /comercio/plan (la página
+  // exceptuada). Con verifyComercioOwner() (que SÍ bloquea) un dueño bloqueado no podría pagarlo.
+  const { comercioId } = await verifyComercioOwnerSinBloqueo();
 
   const cuentaId = await cuentaDelComercio(comercioId);
   if (!cuentaId) return { error: 'Tu comercio todavía no está asociado a una cuenta.' };
