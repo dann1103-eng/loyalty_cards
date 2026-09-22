@@ -22,6 +22,8 @@ import { marcarCobroPagadoAMano } from '@/lib/comercios/resolverPagos';
 import { dependenciasResolver } from '@/lib/comercios/resolverPagosSupabase';
 import { notificarPagoAMeta } from '@/lib/marketing/conversionesMeta';
 import { pedirPago } from '@/lib/comercios/pedirPago';
+import { cambiarModoCobranza, posponerPago, perdonarCiclo } from '@/lib/comercios/modoCobranza';
+import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 
 export type EstadoFormulario = { error: string } | undefined;
 
@@ -226,6 +228,60 @@ export async function accionAnularCobro(
   if (!cobro) return { error: 'No encontramos ese cobro en esta cuenta. Recargá la página.' };
 
   await anularCobroPendiente(supabase, cobroId);
+
+  revalidatePath(`/admin/cuentas/${cuentaId}`);
+  return { ok: true };
+}
+
+// Cambia el modo de cobranza de una cuenta YA EXISTENTE (spec cobranza, "Acciones de FM" #1). El
+// dueño no tiene ninguna acción que escriba `cobranza`/`cobranza_desde`/`cobranza_pospuesta_hasta` —
+// esto es EXCLUSIVO de FM. `modo` viaja crudo desde el formulario, sin validar acá: la validación
+// real (contra VALORES_COBRANZA) vive en cambiarModoCobranza (mismo patrón que accionCrearCuenta con
+// `cobranza`, más arriba en este archivo).
+export async function accionCambiarModoCobranza(
+  cuentaId: string,
+  _estadoPrevio: EstadoCobro,
+  formData: FormData,
+): Promise<EstadoCobro> {
+  await verifyFmAdmin();
+
+  const modo = String(formData.get('modo') ?? '').trim();
+  const res = await cambiarModoCobranza(createServiceClient(), cuentaId, modo);
+  if (!res.ok) return { error: res.error };
+
+  revalidatePath(`/admin/cuentas/${cuentaId}`);
+  return { ok: true };
+}
+
+// Pospone (o quita, con `hasta: ''`) el pago de una cuenta (spec cobranza, "Acciones de FM" #2).
+export async function accionPosponerPago(
+  cuentaId: string,
+  _estadoPrevio: EstadoCobro,
+  formData: FormData,
+): Promise<EstadoCobro> {
+  await verifyFmAdmin();
+
+  const hastaRaw = String(formData.get('hasta') ?? '').trim();
+  const res = await posponerPago(createServiceClient(), cuentaId, hastaRaw === '' ? null : hastaRaw);
+  if (!res.ok) return { error: res.error };
+
+  revalidatePath(`/admin/cuentas/${cuentaId}`);
+  return { ok: true };
+}
+
+// Perdona el ciclo que venció (spec cobranza, "Acciones de FM" #3). `hoy` se calcula ACÁ, del lado
+// del servidor: la acción no debería confiar en una fecha que mande el cliente (el mismo criterio
+// que ya usa el resto de la cobranza, que nunca lee el reloj del navegador).
+export async function accionPerdonarCiclo(
+  cuentaId: string,
+  _estadoPrevio: EstadoCobro,
+  _formData: FormData,
+): Promise<EstadoCobro> {
+  await verifyFmAdmin();
+
+  const hoy = hoyEnZona('America/El_Salvador');
+  const res = await perdonarCiclo(createServiceClient(), cuentaId, hoy);
+  if (!res.ok) return { error: res.error };
 
   revalidatePath(`/admin/cuentas/${cuentaId}`);
   return { ok: true };
