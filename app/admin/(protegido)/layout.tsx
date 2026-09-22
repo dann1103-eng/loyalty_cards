@@ -17,12 +17,14 @@ export default async function LayoutProtegido({ children }: { children: React.Re
   return (
     <div className="admin-shell" style={{ paddingBottom: 0 }}>
       <header className="admin-top">
-        <span className="admin-marca">
-          <span className="icono-circulo" aria-hidden="true" style={{ background: 'var(--acento-fuerte)', color: 'var(--sobre-acento)', width: 34, height: 34, minWidth: 34 }}>
-            <span className="icono icono-lleno" style={{ fontSize: 18 }}>shield_person</span>
+        <Link href="/admin">
+          <span className="admin-marca">
+            <span className="icono-circulo" aria-hidden="true" style={{ background: 'var(--acento-fuerte)', color: 'var(--sobre-acento)', width: 34, height: 34, minWidth: 34 }}>
+              <span className="icono icono-lleno" style={{ fontSize: 18 }}>shield_person</span>
+            </span>
+            Cardly SV · Interno
           </span>
-          Cardly SV · Interno
-        </span>
+        </Link>
         {/* flexWrap acá y en la <nav>, y NO en la clase .admin-top: esa clase la comparte el header
             de /comercio, donde los tres elementos SÍ entran y hoy resuelven encogiéndose (la cuenta
             de anchos está en el comentario de .contexto-pastilla). Permitirles envolver allá
@@ -36,9 +38,6 @@ export default async function LayoutProtegido({ children }: { children: React.Re
           {/* Nav interna del panel FM. Reusa el estilo pastilla de .admin-salir para no depender de
               CSS nuevo. */}
           <nav style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 12 }}>
-            <Link className="admin-salir" style={{ textDecoration: 'none' }} href="/admin/comercios">
-              Comercios
-            </Link>
             <Link className="admin-salir" style={{ textDecoration: 'none' }} href="/admin/cuentas">
               Cuentas
             </Link>

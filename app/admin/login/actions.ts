@@ -28,5 +28,5 @@ export async function iniciarSesion(
 
   revalidatePath('/admin', 'layout');
   // redirect() lanza NEXT_REDIRECT: va FUERA de cualquier try/catch, o se traga en silencio.
-  redirect('/admin/comercios');
+  redirect('/admin');
 }

@@ -37,7 +37,9 @@ export default async function PaginaEditarComercio({
           <h1 className="title" style={{ fontSize: '2rem', margin: 0 }}>
             Comercio
           </h1>
-          <Link className="admin-fila-slug" href="/admin/comercios">
+          {/* En este punto no se sabe a qué cuenta pertenece: la consulta que lo diría es
+              justo la que falló. Va al destino genérico, no a un dato inventado. */}
+          <Link className="admin-fila-slug" href="/admin/cuentas">
             ← Volver
           </Link>
         </div>
@@ -96,7 +98,8 @@ export default async function PaginaEditarComercio({
         <h1 className="title" style={{ margin: 0 }}>
           {comercio.nombre}
         </h1>
-        <Link className="admin-fila-slug" href="/admin/comercios">
+        {/* Vuelve a la cuenta dueña de este comercio, no a la lista global (que ya no existe). */}
+        <Link className="admin-fila-slug" href={comercio.cuenta_id ? `/admin/cuentas/${comercio.cuenta_id}` : '/admin/cuentas'}>
           ← Volver
         </Link>
       </div>

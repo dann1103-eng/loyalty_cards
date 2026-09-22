@@ -5,7 +5,6 @@ import { revalidatePath } from 'next/cache';
 import { verifyFmAdmin } from '@/lib/fm/verifyFmAdmin';
 import { createServiceClient } from '@/lib/supabase/server';
 import {
-  crearComercio,
   actualizarComercio,
   eliminarComercio,
   type DatosComercio,
@@ -26,7 +25,9 @@ function textoONull(valor: FormDataEntryValue | null): string | null {
   return s === '' ? null : s;
 }
 
-function leerDatos(formData: FormData): DatosComercio {
+// Exportada: `accionCrearComercioDeCuenta` (app/admin/(protegido)/cuentas/actions.ts) la reusa para
+// no duplicar el parseo del mismo formulario (FormularioComercio, compartido por las dos altas).
+export function leerDatos(formData: FormData): DatosComercio {
   return {
     nombre: String(formData.get('nombre') ?? '').trim(),
     slug: String(formData.get('slug') ?? '').trim(),
@@ -43,22 +44,6 @@ function leerDatos(formData: FormData): DatosComercio {
 
 // Las acciones NO validan: toda la validación vive en validar(), dentro de guardarComercio.ts,
 // que es la capa con tests de integración. Aquí solo: autenticar, parsear, delegar.
-export async function accionCrearComercio(
-  _estadoPrevio: EstadoFormulario,
-  formData: FormData,
-): Promise<EstadoFormulario> {
-  // Cada Server Action verifica por su cuenta: son POST a la ruta donde se usan, no rutas
-  // propias, y los docs de Next dicen explícitamente que no hay que confiar solo en el Proxy.
-  // OJO: verifyFmAdmin() usa redirect(), que funciona LANZANDO. Nunca lo envuelvas en try/catch.
-  await verifyFmAdmin();
-
-  const res = await crearComercio(createServiceClient(), leerDatos(formData));
-  if (!res.ok) return { error: res.error };
-
-  revalidatePath('/admin/comercios');
-  redirect('/admin/comercios');
-}
-
 export async function accionActualizarComercio(
   id: string,
   _estadoPrevio: EstadoFormulario,
@@ -66,8 +51,9 @@ export async function accionActualizarComercio(
 ): Promise<EstadoFormulario> {
   await verifyFmAdmin();
 
+  const datos = leerDatos(formData);
   const supabase = createServiceClient();
-  const res = await actualizarComercio(supabase, id, leerDatos(formData));
+  const res = await actualizarComercio(supabase, id, datos);
   if (!res.ok) return { error: res.error };
 
   // Los passes ya emitidos renderizan tipo_tarjeta y colores: sin este push, un cambio de FM
@@ -75,8 +61,12 @@ export async function accionActualizarComercio(
   await notificarCambioComercio(supabase, id);
   await syncClaseComercio(supabase, id);
 
-  revalidatePath('/admin/comercios');
-  redirect('/admin/comercios');
+  // Vuelve a la CUENTA dueña de este comercio, no a una lista global (que ya no existe —
+  // Decisión 2, spec 2026-09-21-rework-admin-comercio-design.md). El formulario YA manda
+  // `cuenta_id` (campo propio de FormularioComercio), así que sale de `datos`, no de una
+  // consulta nueva.
+  revalidatePath(`/admin/cuentas/${datos.cuenta_id}`);
+  redirect(`/admin/cuentas/${datos.cuenta_id}`);
 }
 
 export async function accionEliminarComercio(
@@ -86,11 +76,17 @@ export async function accionEliminarComercio(
 ): Promise<EstadoFormulario> {
   await verifyFmAdmin();
 
-  const res = await eliminarComercio(createServiceClient(), id);
+  const supabase = createServiceClient();
+  // Se lee la cuenta ANTES de borrar: una vez borrado el comercio ya no hay de dónde sacarla.
+  // Un comercio sin cuenta asignada (caso raro, pero posible) cae al destino genérico.
+  const { data: comercio } = await supabase.from('comercios').select('cuenta_id').eq('id', id).maybeSingle();
+  const destino = comercio?.cuenta_id ? `/admin/cuentas/${comercio.cuenta_id}` : '/admin/cuentas';
+
+  const res = await eliminarComercio(supabase, id);
   if (!res.ok) return { error: res.error };
 
-  revalidatePath('/admin/comercios');
-  redirect('/admin/comercios');
+  revalidatePath(destino);
+  redirect(destino);
 }
 
 // Da de alta (o rehabilita) el acceso del DUEÑO de un comercio: crea su cuenta de Auth si no

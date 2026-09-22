@@ -24,6 +24,8 @@ import { notificarPagoAMeta } from '@/lib/marketing/conversionesMeta';
 import { pedirPago } from '@/lib/comercios/pedirPago';
 import { cambiarModoCobranza, posponerPago, perdonarCiclo } from '@/lib/comercios/modoCobranza';
 import { hoyEnZona } from '@/lib/tarjetas/vigencia';
+import { crearComercio } from '@/lib/comercios/guardarComercio';
+import { leerDatos as leerDatosComercio } from '../comercios/actions';
 
 export type EstadoFormulario = { error: string } | undefined;
 
@@ -113,6 +115,27 @@ export async function accionVincularComercio(
 
   revalidatePath(`/admin/cuentas/${cuentaId}`);
   revalidatePath('/admin/cuentas');
+  redirect(`/admin/cuentas/${cuentaId}`);
+}
+
+// Alta de un comercio NUEVO, ya vinculado a esta cuenta (a diferencia de accionVincularComercio,
+// que solo reasigna uno YA CREADO). Reusa `leerDatos` de comercios/actions.ts — el mismo parseo de
+// FormularioComercio — para no duplicarlo, pero IGNORA lo que traiga el formulario para `cuenta_id`:
+// aunque el <select> de esta pantalla llega con una sola cuenta ya elegida, la Server Action no debe
+// confiar en el valor del cliente para eso (mismo criterio que `cuentaDelComercio`, "nunca del
+// formulario"). Fuerza `cuentaId`, el argumento del propio bind(), en su lugar.
+export async function accionCrearComercioDeCuenta(
+  cuentaId: string,
+  _estadoPrevio: EstadoFormulario,
+  formData: FormData,
+): Promise<EstadoFormulario> {
+  await verifyFmAdmin();
+
+  const datos = { ...leerDatosComercio(formData), cuenta_id: cuentaId };
+  const res = await crearComercio(createServiceClient(), datos);
+  if (!res.ok) return { error: res.error };
+
+  revalidatePath(`/admin/cuentas/${cuentaId}`);
   redirect(`/admin/cuentas/${cuentaId}`);
 }
 

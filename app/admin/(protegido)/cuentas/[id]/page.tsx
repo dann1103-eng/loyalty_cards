@@ -6,12 +6,14 @@ import { cupoDeCuenta } from '@/lib/comercios/cuentas';
 import FormularioCuenta from '../FormularioCuenta';
 import FormularioVincular from '../FormularioVincular';
 import BotonEliminarCuenta from '../BotonEliminarCuenta';
+import FormularioComercio from '../../comercios/FormularioComercio';
 import {
   accionActualizarCuenta,
   accionEliminarCuenta,
   accionVincularComercio,
   accionRegistrarCobro,
   accionMarcarCobroPagado,
+  accionCrearComercioDeCuenta,
 } from '../actions';
 import { listarCobros, listarPeriodosPagados, METODO_WOMPI } from '@/lib/comercios/cobros';
 import { describirPeriodo } from '@/lib/comercios/pagosAdmin';
@@ -87,6 +89,7 @@ export default async function PaginaEditarCuenta({
   const accion = accionActualizarCuenta.bind(null, id);
   const eliminar = accionEliminarCuenta.bind(null, id);
   const vincular = accionVincularComercio.bind(null, id);
+  const crearComercioDeCuenta = accionCrearComercioDeCuenta.bind(null, id);
   const registrarCobroDeCuenta = accionRegistrarCobro.bind(null, id);
   // `null` ante error, no `[]`: en una pantalla de cobros, una lista vacía significa "no le hemos
   // cobrado nada" — decirlo por un fallo de consulta llevaría a cobrar dos veces o a no cobrar.
@@ -158,6 +161,22 @@ export default async function PaginaEditarCuenta({
             vincular más.
           </p>
         )}
+
+        {/* Alta de un comercio nuevo, de verdad nuevo (Vincular arriba solo reasigna uno YA
+            CREADO). Plegado por defecto: es la acción menos frecuente de las dos y la más pesada
+            visualmente (9 campos + vista previa de tarjeta) — no debe ser lo primero que se ve al
+            abrir la pestaña. */}
+        <details style={{ marginTop: 14 }}>
+          <summary className="admin-fila-slug" style={{ cursor: 'pointer' }}>+ Crear un comercio nuevo</summary>
+          <div style={{ marginTop: 14 }}>
+            <FormularioComercio
+              accion={crearComercioDeCuenta}
+              textoBoton="Crear comercio"
+              cuentas={[{ id, nombre: cuenta.nombre }]}
+              hoyIso={hoyEnZona(null)}
+            />
+          </div>
+        </details>
       </section>
 
       <section className="panel reveal d4" style={{ marginTop: 22 }}>
