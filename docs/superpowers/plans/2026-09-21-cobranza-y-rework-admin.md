@@ -83,7 +83,7 @@ con un test de React.
 
 **Qué hace:**
 - `export const DIAS_GRACIA_COBRANZA = 15;`
-- `estadoDeCobranza(entrada: { cobranza: 'normal' | 'exenta'; desde: string; pospuestaHasta: string | null; periodosPagados: PeriodoPagado[]; hoy: string }): EstadoCobranza` — el tipo union con 5 variantes de la tabla de la spec (`exenta`, `pospuesta` con fecha, `al_dia` con `hasta`/`diasRestantes`, `vencida` con `diasVencida`/`diasParaBloqueo`/`esPrimerPago`, `bloqueada` con `diasVencida`). Reusa `estadoDelPeriodo`/`PeriodoPagado` de `lib/comercios/prorrateo.ts` para no duplicar el cálculo de `cubiertoHasta`.
+- `estadoDeCobranza(entrada: { cobranza: 'normal' | 'exenta'; desde: string; pospuestaHasta: string | null; periodosPagados: PeriodoPagado[]; hoy: string }): EstadoCobranza` — el tipo union con 5 variantes de la tabla de la spec (`exenta`, `pospuesta` con fecha, `al_dia` con `hasta`/`diasRestantes`, `vencida` con `diasVencida`/`diasParaBloqueo`/`esPrimerPago`, `bloqueada` con `diasVencida`). Reusa el TIPO `PeriodoPagado` de `lib/comercios/prorrateo.ts`, pero **NO** la función `estadoDelPeriodo` para sacar `cubiertoHasta`: esa función filtra `pagados.hasta >= hoy` ANTES de calcular nada, así que en el caso central de esta spec (`hoy` ya pasó el `hasta` de todos los períodos — exactamente `vencida`/`bloqueada`) devuelve `{ tipo: 'sin_periodo' }` **sin** `cubiertoHasta`. `cubiertoHasta` se calcula acá, independiente, con un `reduce` propio sobre TODOS los `periodosPagados` sin filtrar por fecha (`periodosPagados.reduce((max, p) => (p.hasta > max ? p.hasta : max), '')`, o `null` si el arreglo está vacío) — es la misma cuenta que hace `estadoDelPeriodo` internamente (línea `cubiertoHasta = pagados.reduce(...)`), solo que sin el filtro previo que la vacía justo cuando más importa.
 - `periodoAPerdonar(entrada: { periodosPagados: PeriodoPagado[]; cobranzaDesde: string; hoy: string }): { desde: string; hasta: string }` — el ciclo que venció: arranca el día siguiente al último período pagado (o `cobranzaDesde` si nunca pagó), termina con `hastaDelPeriodo` (de `prorrateo.ts`).
 
 **Tabla de mutación (cada fila se corre, se rompe, se confirma el mensaje exacto, se restaura):**
@@ -92,6 +92,7 @@ con un test de React.
 - el día 15 exacto bloquea (debería ser `vencida`) → falla "15 días exactos: vencida, no bloqueada"
 - el día 16 no bloquea (debería ser `bloqueada`) → falla "16 días: bloqueada"
 - vencimiento tomado de `desde` en vez de `cubiertoHasta` cuando SÍ hay períodos pagados → falla "una cuenta que ya pagó antes cuenta desde el último período, no desde `cobranza_desde`"
+- calcular `cubiertoHasta` pasando por `estadoDelPeriodo` (que lo vacía justo en `vencida`/`bloqueada`) → falla el caso de arriba también: es la mutación que un implementador cometería siguiendo el texto viejo de esta tarea
 - primer pago no usa `cobranzaDesde` → falla "una cuenta que nunca pagó cuenta desde `cobranza_desde`"
 - un período de $0 (perdonado) no cuenta como pagado → falla "un ciclo perdonado cubre igual que uno pagado"
 - `periodoAPerdonar` arranca del período equivocado → falla su caso de "arranca el día siguiente al último pagado"
@@ -144,8 +145,39 @@ si `licenciaEstado === 'inactivo'` devuelve `{ tipo: 'bloqueada', diasVencida: 0
 **Mutación:** una cuenta `inactivo` da `bloqueada` aunque sea `exenta` o esté al día → falla el caso
 dedicado; una cuenta `activo` delega sin cambios → falla si se rompe la delegación.
 
+**⚠️ AVISO QUE NO SE PUEDE SALTAR (spec rework, "Unificación con `licencia_estado`"): `M&M Inversiones`
+y `Segundo` YA tienen `licencia_estado = 'inactivo'` en la base REAL, hoy.** En cuanto `estadoEfectivo`
+esté cableado al gate (Tarea 5) y la Tarea 11 lo verifique de punta a punta, esas DOS cuentas de clientes
+reales quedan bloqueadas — sin que nadie las haya tocado ese día. La spec termina esa sección diciendo
+literalmente: **"Sin tu respuesta, NO hago el deploy de esta parte."** Esto no es un detalle de esta
+tarea: es una condición para TODO lo que sigue. `estadoEfectivo` se puede escribir y probar (es pura), pero
+**nadie corre la Tarea 11 (verificar el gate de punta a punta con datos reales) ni se publica nada de esta
+rama a `master` sin que Daniel haya dicho explícitamente qué hacer con esas dos cuentas** — dejarlas
+bloquear, o pasarlas a `activo` antes. Repetido en la Tarea 11 para que no se pierda.
+
 - [ ] Test primero (rojo), después la función.
 - [ ] Mutación, restaurar.
+- [ ] Commit.
+
+## Tarea 3b — El selector de cobranza en "Nueva cuenta"
+
+**Spec:** cobranza, "Modelo de datos": *"Cuentas nuevas: `normal` por defecto. El formulario de «Nueva
+cuenta» de FM lleva el selector, para crear una exenta desde el principio."* Ninguna otra tarea de este
+plan toca el ALTA de una cuenta (4b es sobre cuentas YA EXISTENTES) — sin esta tarea, FM no puede dar de
+alta una cuenta exenta desde el principio, y toda cuenta nueva queda `normal` sin forma de cambiarlo hasta
+tener la ficha completa. **Depende de la migración** (escribe la columna `cobranza`): código + test
+escritos, sin correr, como el resto de lo que toca esas columnas.
+
+**Archivos:**
+- Modificar: `lib/comercios/cuentas.ts` (`DatosCuenta` suma `cobranza: 'normal' | 'exenta'`; `crearCuenta`
+  la escribe en el insert; `validarDatosCuenta` la valida contra la lista de valores)
+- Modificar: `app/admin/(protegido)/cuentas/FormularioCuenta.tsx` (el `<select>` nuevo, mismo patrón que
+  `licencia_estado`) y `app/admin/(protegido)/cuentas/actions.ts` (`accionCrearCuenta` lee el campo nuevo)
+
+- [ ] `DatosCuenta`, `crearCuenta`, `validarDatosCuenta`, el `<select>`, `accionCrearCuenta` — todo
+  escrito.
+- [ ] Test de `crearCuenta` con `cobranza: 'exenta'` — escrito, sin correr.
+- [ ] `npx tsc --noEmit` limpio.
 - [ ] Commit.
 
 ## Tarea 4 — Capa de datos y acciones de FM: cobranza (Tarea 3 de la spec de cobranza)
@@ -357,6 +389,12 @@ letra: Colores+Franja comparten un `<form>`, Imágenes es independiente, Reverso
 ## Tarea 11 — Cuando Daniel aplique la migración `0038`
 
 **No es una tarea para el asistente ahora — es la que desbloquea todo lo que quedó "escrito, sin correr".**
+
+**⚠️ Antes del paso 5 (el recorrido del gate), preguntarle a Daniel qué hacer con `M&M Inversiones` y
+`Segundo`** (ver el aviso de la Tarea 3): esas dos cuentas tienen `licencia_estado = 'inactivo'` desde
+antes de esta rama, y verificar el gate de punta a punta las bloquea de verdad. No se publica nada de esta
+rama a `master` sin su respuesta.
+
 Cuando Daniel avise que aplicó `0038`:
 1. Correr `scripts/verificar-0038.ts` (solo lectura).
 2. Correr TODAS las pruebas contra Supabase que quedaron sin correr (Tareas 4b, 5, 6, 8): deberían pasar
@@ -383,7 +421,8 @@ corrido de punta a punta) — hacerla antes dejaría sin revisar justo la mitad 
 |---|---|---|
 | 1 — `estadoDeCobranza`/`periodoAPerdonar` | Sí, entera (pura) | — |
 | 2 — Migración + tipos + script | El SQL/tipos/script sí; que Daniel la APLIQUE, no | Aplicarla |
-| 3 — `estadoEfectivo` | Sí, entera (pura) | — |
+| 3 — `estadoEfectivo` | La función sí (pura); el gate/deploy que la usa, NO sin la respuesta de Daniel sobre M&M/Segundo | Verificarla en el gate real (Tarea 11) |
+| 3b — selector de cobranza en "Nueva cuenta" | Código sí; prueba de base sin correr | Correr y verificar |
 | 4a — pedir pago, anular, `accionPagarCobro` | Sí, entera, con base real | — |
 | 4b — modo/posponer/perdonar | Código sí; pruebas de base sin correr | Correr y verificar |
 | 5 — el gate | La parte pura (`decidirRedireccion`) sí; el resto, código sin correr | Correr y verificar en el navegador |
