@@ -64,11 +64,15 @@ y los cobros): `Al día`, `Vencida`, `Bloqueada`, `Exenta` o `Pospuesta`, calcul
 la spec de cobranza da por asumido ("la lista de cuentas lleva una insignia de estado por cuenta… el
 rework del admin reorganiza todo esto") y que sin esta sección quedaba sin dueño.
 
-**Convive con la pastilla de cupo que ya existe** (`Llena`/`Con cupo`, al borde derecho de cada fila): NO
-la reemplaza. Van **las dos, una al lado de la otra** (mismo contenedor flex, con un `gap`), la de
+**Convive con la pastilla de cupo que ya existe** (`Llena`/`Con cupo`, al borde derecho de cada fila,
+segundo hijo de un `.admin-fila` con `justify-content: space-between`): NO la reemplaza. Van **las dos**,
+envueltas en un `<div style={{ display: 'flex', gap: 8 }}>` que pasa a ser ese segundo hijo — la de
 cobranza PRIMERO (más a la izquierda): es la que cambia de color con más significado (bloqueada en rojo,
 vencida en ámbar, al día en verde, exenta/pospuesta en gris) y la que FM necesita ver primero para decidir
-si entrar a esa cuenta es urgente.
+si entrar a esa cuenta es urgente. **A verificar en el navegador al implementar** (nombres de cuenta
+reales son cortos, pero a 320-360px dos pastillas + el nombre + el ícono pueden apretar): si no entran
+cómodas una al lado de la otra, se apilan verticalmente con el mismo `gap` en vez de en fila — es un
+`flex-direction: column` condicional, no cambia qué información se muestra.
 
 ### Nav (`app/admin/(protegido)/layout.tsx`)
 
