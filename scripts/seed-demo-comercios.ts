@@ -263,7 +263,7 @@ async function main() {
     console.log(`✓ ${d.nombre} — ${d.tipo}${d.meta ? ` (meta ${d.meta})` : ''}, ${d.recompensas.length} recompensas, ${d.clientes.length} clientes demo. /registro/${d.slug}`);
   }
 
-  console.log('Listo. Los comercios demo aparecen en /admin/comercios y cada uno tiene su QR de registro.');
+  console.log('Listo. Los comercios demo aparecen en /admin/cuentas (dentro de su cuenta) y cada uno tiene su QR de registro.');
 }
 
 main().catch((err) => {
