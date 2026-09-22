@@ -103,6 +103,12 @@ export function validarCobroManual(datos: DatosCobro): string | null {
 // registra FM a mano, que la app NUNCA anula ni toca (ver la sección de la pasarela, más abajo).
 export const METODO_WOMPI = 'Wompi';
 
+// El cobro que FM crea para pedirle un pago al cliente en cualquier momento, no solo al vencer el ciclo
+// (spec 2026-09-21-cobranza-design.md, "Acciones de FM" #4 — ver lib/comercios/pedirPago.ts). NO ocupa el
+// índice único `cobros_un_intento_pendiente` (ese filtra por `metodo = 'Wompi'`), así que convive sin
+// chocar con un intento propio del dueño.
+export const METODO_PEDIDO_FM = 'Pedido por FM';
+
 // Un intento de pago de la app con su enlace TODAVÍA VIGENTE se puede seguir desde el mismo cobro. Uno ya
 // pagado o anulado, uno que registró FM a mano (`metodo` distinto de 'Wompi'), uno sin enlace, o uno con el
 // enlace vencido, no: se vuelve a empezar desde las opciones de /comercio/plan. La hora entra por
@@ -403,6 +409,48 @@ export async function obtenerCobroParaPagoDeLaCuenta(
     .maybeSingle();
   if (error) throw new Error(`No se pudo leer el cobro: ${error.message}`);
   return data ? paraPago(data) : null;
+}
+
+export interface CobroPedidoParaPagar {
+  id: string;
+  cuentaId: string;
+  estado: string;
+  monto: number;
+  metodo: string | null;
+  wompiUrlEnlace: string | null;
+  wompiEnlaceVence: string | null;
+}
+
+const COLUMNAS_PARA_PAGAR_PEDIDO = 'id, cuenta_id, estado, monto, metodo, wompi_url_enlace, wompi_enlace_vence';
+
+// El cobro que el DUEÑO va a pagar desde /comercio/plan cuando FM se lo pidió (accionPagarCobro,
+// lib/comercios/accionPagarCobro.ts). Acotado a SU cuenta, igual que obtenerCobroParaPagoDeLaCuenta —
+// pero con los campos para validar el `metodo` y para reusar un enlace de Wompi vigente, que
+// CobroParaPago (confirmarPago.ts) no lleva. Consulta APARTE a propósito: CobroParaPago lo comparten
+// varios repos falsos de las pruebas de confirmarPagoCobro/resolverPagos, y sumarle wompi_url_enlace /
+// wompi_enlace_vence (que esa lógica no usa) habría obligado a tocar cada uno de esos fakes.
+export async function obtenerCobroPedidoParaPagar(
+  supabase: SupabaseClient<Database>,
+  cuentaId: string,
+  cobroId: string,
+): Promise<CobroPedidoParaPagar | null> {
+  const { data, error } = await supabase
+    .from('cobros')
+    .select(COLUMNAS_PARA_PAGAR_PEDIDO)
+    .eq('id', cobroId)
+    .eq('cuenta_id', cuentaId)
+    .maybeSingle();
+  if (error) throw new Error(`No se pudo leer el cobro: ${error.message}`);
+  if (!data) return null;
+  return {
+    id: data.id,
+    cuentaId: data.cuenta_id,
+    estado: data.estado,
+    monto: Number(data.monto),
+    metodo: data.metodo,
+    wompiUrlEnlace: data.wompi_url_enlace,
+    wompiEnlaceVence: data.wompi_enlace_vence,
+  };
 }
 
 // EL CANDADO. Pasa el cobro a pagado solo si su estado está entre los permitidos, en UNA sentencia: dos

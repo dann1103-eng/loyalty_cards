@@ -12,10 +12,16 @@ import {
   asignarComercioACuenta,
 } from '@/lib/comercios/cuentas';
 import type { DatosCuenta } from '@/lib/comercios/cuentas';
-import { obtenerCobroParaPagoDeLaCuenta, registrarCobro } from '@/lib/comercios/cobros';
+import {
+  anularCobroPendiente,
+  obtenerCobro,
+  obtenerCobroParaPagoDeLaCuenta,
+  registrarCobro,
+} from '@/lib/comercios/cobros';
 import { marcarCobroPagadoAMano } from '@/lib/comercios/resolverPagos';
 import { dependenciasResolver } from '@/lib/comercios/resolverPagosSupabase';
 import { notificarPagoAMeta } from '@/lib/marketing/conversionesMeta';
+import { pedirPago } from '@/lib/comercios/pedirPago';
 
 export type EstadoFormulario = { error: string } | undefined;
 
@@ -178,4 +184,49 @@ export async function accionMarcarCobroPagado(
   revalidatePath('/admin', 'layout');
   revalidatePath('/comercio', 'layout');
   return { ok: r.mensaje };
+}
+
+// FM le pide un pago al cliente cuando quiera (spec cobranza, "Acciones de FM" #4): el monto y el plan
+// los elige FM a mano, así que el monto puede NO coincidir con ningún plan del catálogo (sirve para
+// probar con $1). El dueño lo paga después con accionPagarCobro (plan/actions.ts) cuando toca «Pagar».
+export async function accionPedirPago(
+  cuentaId: string,
+  _estadoPrevio: EstadoCobro,
+  formData: FormData,
+): Promise<EstadoCobro> {
+  await verifyFmAdmin();
+
+  const planRaw = String(formData.get('plan') ?? '').trim();
+  const res = await pedirPago(createServiceClient(), cuentaId, {
+    monto: Number(String(formData.get('monto') ?? '').trim()),
+    plan: planRaw === '' ? null : planRaw,
+    periodoDesde: String(formData.get('periodo_desde') ?? ''),
+    periodoHasta: String(formData.get('periodo_hasta') ?? ''),
+  });
+  if (!res.ok) return { error: res.error };
+
+  revalidatePath(`/admin/cuentas/${cuentaId}`);
+  return { ok: true };
+}
+
+// Anular un cobro pendiente, de cualquier tipo (spec cobranza, "Acciones de FM" #5). Se lee primero
+// ACOTADO a la cuenta (obtenerCobro) para confirmar que existe y es de esta cuenta ANTES de anularlo: un
+// id ajeno no debe poder tocar el cobro de otro cliente. `anularCobroPendiente` ya solo anula si el
+// estado sigue 'pendiente' (no hace falta repetir ese chequeo acá).
+export async function accionAnularCobro(
+  cuentaId: string,
+  cobroId: string,
+  _estadoPrevio: EstadoCobro,
+  _formData: FormData,
+): Promise<EstadoCobro> {
+  await verifyFmAdmin();
+
+  const supabase = createServiceClient();
+  const cobro = await obtenerCobro(supabase, cuentaId, cobroId);
+  if (!cobro) return { error: 'No encontramos ese cobro en esta cuenta. Recargá la página.' };
+
+  await anularCobroPendiente(supabase, cobroId);
+
+  revalidatePath(`/admin/cuentas/${cuentaId}`);
+  return { ok: true };
 }

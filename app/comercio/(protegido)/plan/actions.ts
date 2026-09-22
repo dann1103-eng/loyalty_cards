@@ -4,7 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
-import { iniciarPagoPlanDelDueno } from '@/lib/comercios/iniciarPagoPlanSupabase';
+import { baseUrlDeLaApp, iniciarPagoPlanDelDueno } from '@/lib/comercios/iniciarPagoPlanSupabase';
+import { pagarCobroPedido } from '@/lib/comercios/accionPagarCobro';
+import { clienteWompi } from '@/lib/wompi/cliente';
 import type { AccionPago } from '@/lib/comercios/opcionesPago';
 import { solicitarCambioPlan } from '@/lib/comercios/planCuenta';
 
@@ -79,5 +81,39 @@ export async function accionIniciarPago(
   if (!resultado.ok) return { error: resultado.error };
 
   // Fuera del try: redirect() lanza NEXT_REDIRECT (en una acción de servidor responde 303 a la URL de Wompi).
+  redirect(resultado.url);
+}
+
+// El dueño paga un cobro que FM le pidió (spec cobranza, "Pedir un pago al cliente: cómo lo paga el
+// dueño"). Solo recibe el id del cobro: `pagarCobroPedido` lo acota a la cuenta que sale del gate (nunca
+// del formulario), y rechaza cualquiera que no sea `Pedido por FM`, ya pagado, o de otra cuenta.
+export type EstadoPagarCobro = { error: string } | undefined;
+
+export async function accionPagarCobro(
+  cobroId: string,
+  _estadoPrevio: EstadoPagarCobro,
+  _formData: FormData,
+): Promise<EstadoPagarCobro> {
+  // OJO: verifyComercioOwner() y redirect() funcionan LANZANDO. Nunca los envuelvas en try/catch.
+  const { comercioId } = await verifyComercioOwner();
+
+  const cuentaId = await cuentaDelComercio(comercioId);
+  if (!cuentaId) return { error: 'Tu comercio todavía no está asociado a una cuenta.' };
+
+  let resultado;
+  try {
+    resultado = await pagarCobroPedido(createServiceClient(), cuentaId, cobroId, {
+      wompi: clienteWompi(),
+      ahora: () => new Date(),
+      baseUrl: baseUrlDeLaApp(),
+    });
+  } catch (error) {
+    // Falta configuración (variables de Wompi, URL base) o se cayó algo inesperado: el dueño no necesita el detalle.
+    console.error('[pagos] no se pudo procesar el pago del cobro pedido por FM:', error);
+    return { error: 'No pudimos iniciar el pago. Probá de nuevo en un rato.' };
+  }
+  if (!resultado.ok) return { error: resultado.error };
+
+  // Fuera del try: redirect() lanza NEXT_REDIRECT.
   redirect(resultado.url);
 }
