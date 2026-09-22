@@ -85,13 +85,29 @@ Salir. Mismo criterio de "defensa en profundidad" que ya tiene el layout: el gat
 Decisión 2 dice que deja de existir.** Hoy `app/admin/(protegido)/comercios/` tiene cuatro páginas:
 `page.tsx` (la lista global), `nuevo/page.tsx` (alta suelta — con un `<select>` de TODAS las cuentas,
 exactamente lo que "Nuevo comercio deja de poder crearse suelto" dice que no debe poder pasar más),
-`[id]/editar/page.tsx` y `[id]/clientes/page.tsx`. Solo el nav linkeaba a `/admin/comercios` (verificado:
-ningún otro archivo del admin lo hace) — `[id]/editar` y `[id]/clientes` ya se alcanzan hoy desde la
-ficha de cuenta (el link de cada fila de "Negocios de esta cuenta") y **se quedan intactos, sin tocar**,
-ahora como el único camino para llegar ahí. Pero `page.tsx` y `nuevo/page.tsx` **se BORRAN** (no se dejan
-huérfanas: mientras existan, siguen siendo accesibles tecleando la URL, y la Decisión 2 seguiría sin
-cumplirse de verdad). Con ellas se borra `accionCrearComercio` (`app/admin/(protegido)/comercios/
-actions.ts`) — nada más la usa.
+`[id]/editar/page.tsx` y `[id]/clientes/page.tsx`. `[id]/editar` y `[id]/clientes` ya se alcanzan hoy
+desde la ficha de cuenta (el link de cada fila de "Negocios de esta cuenta") y **se quedan, con las
+consultas y acciones que ya tienen**, ahora como el único camino para llegar ahí. Pero `page.tsx` y
+`nuevo/page.tsx` **se BORRAN** (no se dejan huérfanas: mientras existan, siguen siendo accesibles
+tecleando la URL, y la Decisión 2 seguiría sin cumplirse de verdad).
+
+**Borrar `page.tsx` deja tres lugares apuntando a una URL que ya no existe** (ninguno es el nav, que ya se
+cubrió arriba — la búsqueda anterior por `href="..."` se perdió los `redirect(...)`, que no llevan
+`href`):
+1. `app/admin/login/actions.ts` (`iniciarSesion`): al loguearse, redirige a `/admin/comercios`. Pasa a
+   redirigir a **`/admin`** (el dashboard nuevo) — es, de hecho, el arreglo correcto de una vez: FM entra
+   directo a la pantalla que le importa, en vez de a la lista que se está borrando.
+2. `accionActualizarComercio` (`app/admin/(protegido)/comercios/actions.ts`): al guardar cambios de un
+   comercio, redirige a `/admin/comercios`. El formulario YA manda `cuenta_id` (es un campo del propio
+   `FormularioComercio`), así que la acción lo lee de `formData` y redirige a
+   **`/admin/cuentas/${cuentaId}`** — vuelve a la cuenta dueña de ese comercio, no a una lista.
+3. `accionEliminarComercio`: al borrar un comercio, redirige a `/admin/comercios`. Antes de borrarlo, lee
+   a qué cuenta pertenecía (`comercios.cuenta_id` del propio registro) y redirige ahí
+   (**`/admin/cuentas/${cuentaId}`**), o a **`/admin/cuentas`** si el comercio no tenía cuenta asignada
+   (caso raro, pero posible).
+
+`accionCrearComercio` (la de `comercios/nuevo`) sí se borra entera junto con su página — nada más la
+usa.
 
 **Alta de un comercio nuevo, desde la ficha de cuenta (pestaña Negocios):** se agrega un formulario
 "Nuevo comercio" ahí, además del "Vincular" que ya existe (que solo ata un comercio YA CREADO — no sirve
@@ -101,6 +117,12 @@ quéda con una sola opción, ya elegida, sin dar vuelta a elegir otra cuenta por
 nueva, `accionCrearComercioDeCuenta` (`cuentas/actions.ts`, patrón `.bind(null, cuentaId)` como el resto
 de las acciones de esa ficha), delega en el mismo `crearComercio` de `lib/comercios/guardarComercio.ts`
 (sin cambios ahí) y redirige a `/admin/cuentas/${cuentaId}` en vez de a `/admin/comercios`.
+
+**Orden visual en la pestaña Negocios:** `FormularioVincular` (existente, un `<select>` + un botón) va
+PRIMERO — es la acción más común (reasignar un comercio suelto) y no crece la pantalla. "Nuevo comercio"
+(el `FormularioComercio` completo: 9 campos + vista previa de tarjeta) va DESPUÉS, dentro de un `<details>`
+plegado por defecto ("+ Crear un comercio nuevo"): es la acción menos frecuente y la más pesada visualmente
+de las dos, así que no debe ser lo primero que se vea al abrir la pestaña.
 
 ### El dashboard (`app/admin/(protegido)/page.tsx`, nuevo)
 
@@ -283,7 +305,10 @@ export interface EnlaceNav {
 `grupo` con un `<p className="titulo-seccion">` por cada uno (mismo estilo que ya usa "Configuración"),
 en el orden: **Tu programa** (Reglas, Programas, Notificaciones) → **Tu equipo y locales** (Sucursales,
 Cajeros) → **Cuenta** (Mi plan). El intercambio Premios↔Programas (`intercambiarSiNoHayCanje`) sigue
-funcionando igual: agrega el campo `grupo` en el reemplazo, no lo pierde.
+funcionando igual: agrega el campo `grupo` en el reemplazo, no lo pierde. **`ENLACE_PREMIOS` también
+necesita `grupo: 'programa'`** (hoy solo vive en la barra, sin ese campo): sin él, un comercio sin canje
+—que intercambia Programas por Premios DENTRO del menú— dejaría a Premios como el único enlace sin
+sección, huérfano debajo de "Cuenta" en vez de agruparse bajo "Tu programa" con Reglas y Notificaciones.
 
 ## Seguridad
 
@@ -308,7 +333,9 @@ gate de FM.
   Negocios de una cuenta (confirmando que queda vinculado a ESA cuenta y no a otra) — en los tres temas, a
   ancho de teléfono. `/admin/comercios` y `/admin/comercios/nuevo` deben dar 404 después del borrado;
   `/admin/comercios/<id>/editar` y `/admin/comercios/<id>/clientes` tienen que seguir funcionando igual
-  que hoy, alcanzados solo desde la ficha de cuenta. Incluye
+  que hoy, alcanzados solo desde la ficha de cuenta. Incluye loguearse como FM y confirmar que cae en el
+  dashboard (no en un 404), y guardar/borrar un comercio desde `[id]/editar` confirmando que vuelve a la
+  cuenta dueña (no a la lista borrada). Incluye
   el caso que prueba que la separación de Reverso sigue siendo segura: editar Colores (sin guardar),
   cambiar a la pestaña Reverso, editar y guardar SOLO Reverso, volver a Colores y confirmar que el cambio
   de Colores sigue sin guardarse (es lo esperado: son formularios independientes) y que Reverso sí quedó
@@ -328,7 +355,7 @@ Tarea 0):
 | 0–2 | (spec de cobranza) spike, migración `0038`, `estadoDeCobranza` puro | los de esa spec |
 | 3 | (spec de cobranza) capa de datos y acciones de FM | los de esa spec |
 | 3.5 | `fusionarActividad` (puro) y `lib/fm/dashboard.ts` (con base) | pruebas + mutaciones |
-| 4 | Nav sin "Comercios", logo→dashboard, `app/admin/(protegido)/page.tsx`, borrar `comercios/page.tsx` + `comercios/nuevo/` + `accionCrearComercio`, alta de comercio desde la ficha de cuenta (`accionCrearComercioDeCuenta`) | navegador |
+| 4 | Nav sin "Comercios", logo→dashboard, `app/admin/(protegido)/page.tsx`, borrar `comercios/page.tsx` + `comercios/nuevo/` + `accionCrearComercio`, los tres redirects que apuntaban ahí (login, `accionActualizarComercio`, `accionEliminarComercio`), alta de comercio desde la ficha de cuenta (`accionCrearComercioDeCuenta`) | navegador |
 | 5 | `estadoEfectivo` (une `licencia_estado` + `estadoDeCobranza`); ficha de cuenta con pestañas (Datos·Negocios·Cobros·Cobranza) e insignia en la lista de cuentas | pruebas + mutaciones, navegador |
 | 6 | (spec de cobranza) `accionPagarCobro`, gate de bloqueo, pantallas del dueño/cajero | los de esa spec |
 | 7 | Marca con pestañas (Colores·Imágenes·Franja·Reverso) | navegador, los 15 tipos de campo |
