@@ -27,6 +27,7 @@ import { hexDesdeRgb, rgbDesdeTexto } from '@/lib/comercio/colorHex';
 import { frentePase, PIE_CODIGO, type Franja } from '@/lib/tarjetas/frentePase';
 import { tipoOPuntos } from '@/lib/tarjetas/tipos';
 import { LARGO_MAXIMO_NOMBRE_PASE } from '@/lib/comercio/nombrePase';
+import type { SeccionBranding } from './page';
 import {
   ENCUADRE_POR_DEFECTO,
   MARCO_FRANJA,
@@ -116,7 +117,7 @@ type Props = {
      juntas en el mismo submit, estén o no a la vista. 'reverso' no tiene sección propia acá (la
      tiene FormularioReverso, aparte): con esa pestaña activa, Colores/Imágenes/Franja quedan las
      tres ocultas y no se muestra el botón "Publicar cambios". */
-  seccionActiva: 'colores' | 'imagenes' | 'franja' | 'reverso';
+  seccionActiva: SeccionBranding;
 };
 
 const CAMPOS_COLOR = [

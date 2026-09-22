@@ -29,7 +29,9 @@ const SECCIONES_BRANDING = [
   { id: 'franja', etiqueta: 'Franja' },
   { id: 'reverso', etiqueta: 'Reverso' },
 ] as const;
-type SeccionBranding = (typeof SECCIONES_BRANDING)[number]['id'];
+// Exportado para que FormularioBranding.tsx lo importe en vez de repetir el literal: una quinta
+// pestaña que solo se agregara acá quedaría desincronizada en tiempo de compilación sin avisar.
+export type SeccionBranding = (typeof SECCIONES_BRANDING)[number]['id'];
 const IDS_SECCION_BRANDING: readonly string[] = SECCIONES_BRANDING.map((s) => s.id);
 
 // `?nuevo=1` lo pone accionCrearComercioPropio al aterrizar acá tras el alta self-serve: sin ese
