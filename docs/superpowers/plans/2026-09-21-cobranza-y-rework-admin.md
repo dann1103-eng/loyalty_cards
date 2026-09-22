@@ -515,13 +515,36 @@ no se puede dar esta tarea por 100% verificada hasta que alguien con `.env.local
 - Modificar: `app/admin/(protegido)/cuentas/page.tsx` (las dos pastillas — cobranza usa `estadoEfectivo`
   con placeholder hasta la migración, cupo sigue como está)
 
-- [ ] Pestañas con las tres que no dependen de la migración, funcionando de punta a punta.
-- [ ] La pestaña Cobranza con los controles de "pedir pago" y "anular" (Tarea 4a) funcionando ya; los de
+- [x] Pestañas con las tres que no dependen de la migración, funcionando de punta a punta.
+- [x] La pestaña Cobranza con los controles de "pedir pago" y "anular" (Tarea 4a) funcionando ya; los de
   4b visibles con un aviso "disponible cuando se aplique la migración 0038" si el modo/posponer/perdonar
   todavía no corren.
-- [ ] `npx tsc --noEmit` limpio.
-- [ ] Recorrido en el navegador de las 4 pestañas, en los tres temas, a ancho de teléfono.
-- [ ] Commit.
+- [x] `npx tsc --noEmit` limpio.
+- [ ] **Recorrido en el navegador: PENDIENTE** (mismo motivo que la Tarea 7 — sin `.env.local` en este
+  worktree no hay forma de servir datos reales). Queda para Daniel o una sesión futura con acceso:
+  las 4 pestañas, en los tres temas, a ancho de teléfono.
+- [x] Commit.
+
+**Estado: código ✅ completo y revisado** (commits `fc70bce` + fix `d28606b`). Datos/Negocios/Cobros son
+el mismo JSX de antes, solo reagrupado (verificado línea por línea contra el archivo previo, ninguna
+consulta/prop cambió). Default de pestaña: como `estadoEfectivo` no se puede calcular sin la migración,
+cae siempre en 'datos' vía una constante `MIGRACION_0038_APLICADA = false` (cambio de una línea para
+después). Se agregaron 2 tonos de pastilla nuevos (`--advertencia` ámbar, `--neutral` gris) a los 3
+temas, con entradas de contraste en `lib/diseno/temas.test.ts` — 21/21 verde, mutación de contraste
+reproducida de forma independiente por controlador y ambas revisiones. Un bug real y activo (no solo
+latente) encontrado por calidad: `FormularioPedirPago.tsx` solo controlaba `monto`, así que un error de
+validación (fechas invertidas) borraba el período y el plan tecleados — corregido, mismo patrón que
+`FormularioComercio.tsx`, re-verificado por ambas revisiones.
+
+**⚠️ Pendiente explícito, diferido a la Tarea 11 (no a hacer ahora):** `ControlesCobranzaFutura.tsx` no
+recibe el estado actual de la cuenta (`modo`/`cobranza_pospuesta_hasta`) ni muestra confirmación de éxito
+en sus 3 acciones — hoy es inofensivo porque todo está `disabled`, pero cuando la Tarea 11 active
+`MIGRACION_0038_APLICADA`, hace falta pasarle el estado real como props (mismo patrón `inicial` que
+`FormularioCuenta`) y agregar el feedback de éxito a las 3 acciones (mismo patrón que sus hermanos
+`FormularioPedirPago`/`BotonAnularCobro`/`MarcarPagado`) — si no, un admin vería "Normal" y fechas vacías
+en una cuenta que ya está exenta/pospuesta, y podría reenviar "Perdonar" sin saber que ya funcionó. No se
+resolvió ahora porque implicaría pedir columnas de `cuentas_comercio` que todavía no existen, rompiendo
+la consulta completa de la página.
 
 ## Tarea 9 — Marca del comercio, con pestañas
 
@@ -575,7 +598,12 @@ Cuando Daniel avise que aplicó `0038`:
    fallo de la prueba.
 3. Completar las mutaciones de esas pruebas (las que dependían de datos reales).
 4. Sacar los placeholders/avisos de "disponible cuando se aplique la migración" del dashboard y de la
-   pestaña Cobranza.
+   pestaña Cobranza. **Incluye** (hallazgo de la Tarea 8, no resuelto ahí a propósito):
+   `ControlesCobranzaFutura.tsx` necesita recibir el estado actual de la cuenta
+   (`modo`/`cobranza_pospuesta_hasta`, mismo patrón `inicial` que `FormularioCuenta`) en vez de arrancar
+   siempre en "normal"/vacío, y agregar el feedback de éxito a sus 3 acciones (mismo patrón que
+   `FormularioPedirPago`/`BotonAnularCobro`/`MarcarPagado`) — sin esto, "Perdonar" se puede reenviar sin
+   saber que ya funcionó.
 5. Recorrido completo en el navegador de todo lo que dependía de la migración: el gate bloqueando de
    verdad, el modo exenta/normal, posponer, perdonar, la tarjeta de vencidas/bloqueadas del dashboard.
 
