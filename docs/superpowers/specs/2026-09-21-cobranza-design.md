@@ -103,9 +103,10 @@ medio.
   `metodo = 'Wompi'`, así que un cobro `Pedido por FM` convive con él, y `anularIntentosPendientes` no lo toca.
 - La confirmación es la de siempre (`confirmarPagoCobro`): busca el cobro por el identificador del enlace, compara
   el monto, aplica el plan si hay y marca pagado. El Subscribe a Meta sale igual que con cualquier cobro de período.
-- **A verificar antes de construir (spike, punto 0 de esta spec):** si Wompi acepta **dos enlaces con el mismo
-  `identificadorEnlaceComercio`** (el del cobro). Si no lo acepta, un enlace vencido se resuelve anulando el cobro
-  pedido y creando otro igual.
+- **Spike resuelto (2026-09-21, negocio de Wompi en modo prueba):** SÍ acepta dos enlaces con el mismo
+  `identificadorEnlaceComercio` — se creó `spike-dup-…` dos veces seguidas y las dos veces Wompi devolvió un
+  `idEnlace` distinto sin quejarse. `accionPagarCobro` puede simplemente crear un enlace nuevo cada vez que hace
+  falta (el anterior venció, o no había ninguno), sin anular ni editar nada antes.
 
 ## Cómo se bloquea (el gate)
 
@@ -168,7 +169,7 @@ pida él mismo posponer (hoy lo hace escribiéndote); historial de auditoría de
 
 | Tarea | Qué | Se verifica |
 |---|---|---|
-| 0 | **Spike:** enlace duplicado con el mismo identificador | script contra el negocio de Wompi en prueba |
+| 0 | ~~**Spike:** enlace duplicado con el mismo identificador~~ **HECHO** (2026-09-21): Wompi lo acepta | script contra el negocio de Wompi en prueba |
 | 1 | Migración `0038` y tipos | Daniel aplica; verificación de solo lectura |
 | 2 | `estadoDeCobranza` y `periodoAPerdonar` (puras) | pruebas + mutaciones, en las dos zonas |
 | 3 | Capa de datos y acciones de FM (modo, posponer, perdonar, pedir pago, anular) | pruebas con base + mutaciones |
