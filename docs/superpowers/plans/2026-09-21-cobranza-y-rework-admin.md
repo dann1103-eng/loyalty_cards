@@ -348,14 +348,35 @@ la práctica el razonamiento anotado.
 con datos reales de `cuentas_comercio`) — se escribe y se prueba en lo que se pueda sin DB, el resto sin
 correr, igual que la Tarea 4b.
 
+**⚠️ Corrección post-escritura del plan, verificada contra el código real:** el texto original decía que
+las 3 páginas "excepción" (`plan/page.tsx`, `plan/pago/resultado/page.tsx`,
+`plan/comprobante/[cobroId]/page.tsx`) siguen usando la variante SIN bloqueo de `verifyComercioAcceso`
+directo — pero **ninguna de las tres llama a `verifyComercioAcceso()` directamente**: las tres llaman a
+`verifyComercioOwner()` (`lib/comercio/verifyComercioOwner.ts`), que es un wrapper que llama a
+`verifyComercioAcceso()` por dentro. Si `verifyComercioAcceso()` pasa a bloquear, `verifyComercioOwner()`
+bloquea automáticamente para sus **30 llamadores** (confirmado con `grep`) — incluidas esas 3 páginas, que
+necesitan lo contrario. Por eso `verifyComercioOwner.ts` también necesita una variante sin bloqueo, y son
+esas 3 páginas las que cambian de función, no de comportamiento de `verifyComercioAcceso`. Los llamadores
+DIRECTOS reales de `verifyComercioAcceso()` (fuera de `verifyComercioOwner.ts`) son: `layout.tsx`,
+`panel/page.tsx`, `clientes/page.tsx`, `clientes/agregar/page.tsx`, `clientes/agregar/actions.ts`,
+`escanear/page.tsx`, `escanear/actions.ts`, `AvisoComercioActivo.tsx` — todos correctos para bloquear
+(páginas/acciones normales del panel y el escáner), salvo `layout.tsx`, que usa la variante sin bloqueo.
+
 **Archivos:**
-- Modificar: `lib/comercio/verifyComercioAcceso.ts` (agrega la variante que bloquea; la que no bloquea
-  puede ser la función actual, o al revés — decidir el nombre que rompa menos código existente)
-- Modificar: `app/comercio/(protegido)/layout.tsx` (usa la variante SIN bloqueo + banner)
-- Crear: `app/comercio/suspendida/page.tsx` (pantalla del cajero)
-- Modificar: `app/comercio/(protegido)/plan/page.tsx`, `pago/resultado/page.tsx`,
-  `plan/comprobante/[cobroId]/page.tsx` (siguen usando la variante SIN bloqueo — son las únicas
-  excepciones)
+- Modificar: `lib/comercio/verifyComercioAcceso.ts` (`verifyComercioAcceso()` GANA el bloqueo — mantiene
+  su nombre porque ya lo llaman las páginas/acciones que SÍ deben bloquear, sin tocarlas; agrega
+  `verifyComercioAccesoSinBloqueo()` nueva, con la lógica de hoy tal cual — sesión, membresía, sucursal —
+  más el estado de cobranza calculado y devuelto para el banner, pero SIN el `redirect()` de bloqueo)
+- Modificar: `lib/comercio/verifyComercioOwner.ts` (agrega `verifyComercioOwnerSinBloqueo()`, mismo
+  wrapper que `verifyComercioOwner()` pero llamando a `verifyComercioAccesoSinBloqueo()` — para que las 3
+  páginas de abajo puedan seguir exigiendo rol owner sin heredar el bloqueo)
+- Modificar: `app/comercio/(protegido)/layout.tsx` (pasa a usar `verifyComercioAccesoSinBloqueo()` +
+  banner según el estado)
+- Crear: `app/comercio/suspendida/page.tsx` (pantalla del cajero; usa `verifyComercioAccesoSinBloqueo()`
+  — si usara la variante que bloquea, un cajero bloqueado que "aterriza" ahí rebotaría en loop)
+- Modificar: `app/comercio/(protegido)/plan/page.tsx`, `plan/pago/resultado/page.tsx`,
+  `plan/comprobante/[cobroId]/page.tsx` (pasan de `verifyComercioOwner()` a
+  `verifyComercioOwnerSinBloqueo()` — son las únicas excepciones)
 - Test: `lib/comercio/verifyComercioAcceso.test.ts` (si no existe, crearlo) — **sin correr** la parte que
   necesita `cuentas_comercio.cobranza` real.
 
