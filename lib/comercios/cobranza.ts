@@ -69,6 +69,18 @@ export function estadoDeCobranza(entrada: EntradaEstadoCobranza): EstadoCobranza
   return { tipo: 'bloqueada', diasVencida };
 }
 
+// Unificación con `licencia_estado` (spec 2026-09-21-rework-admin-comercio-design.md, "Unificación
+// con licencia_estado", línea 206+). `licencia_estado = 'inactivo'` es el interruptor manual de
+// corte inmediato: se evalúa ANTES que `estadoDeCobranza` y sin mirar nada de lo que esa función
+// mira (fechas, `cobranza`) — ni una cuenta exenta se salva de un corte manual explícito. Si la
+// licencia está activa, delega sin cambios.
+export function estadoEfectivo(
+  entrada: EntradaEstadoCobranza & { licenciaEstado: string },
+): EstadoCobranza {
+  if (entrada.licenciaEstado === 'inactivo') return { tipo: 'bloqueada', diasVencida: 0 };
+  return estadoDeCobranza(entrada);
+}
+
 export interface EntradaPeriodoAPerdonar {
   periodosPagados: PeriodoPagado[];
   cobranzaDesde: string;

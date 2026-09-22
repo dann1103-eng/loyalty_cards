@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DIAS_GRACIA_COBRANZA, estadoDeCobranza, periodoAPerdonar } from './cobranza';
+import { DIAS_GRACIA_COBRANZA, estadoDeCobranza, estadoEfectivo, periodoAPerdonar } from './cobranza';
 
 // Pruebas PURAS: sin base de datos, sin reloj. Se corren con TZ=UTC y con TZ=America/El_Salvador
 // (misma convención que prorrateo.test.ts: la aritmética de fechas usa Date.UTC).
@@ -159,6 +159,72 @@ describe('estadoDeCobranza', () => {
     expect(
       estadoDeCobranza({ ...entradaBase, periodosPagados: [futuro], hoy: '2026-09-15' }),
     ).toEqual({ tipo: 'al_dia', hasta: '2026-10-31', diasRestantes: 47 });
+  });
+});
+
+describe('estadoEfectivo', () => {
+  // Spec 2026-09-21-rework-admin-comercio-design.md, "Unificación con licencia_estado" (línea 206+):
+  // licencia_estado === 'inactivo' es el corte manual inmediato — se evalúa ANTES que cualquier otra
+  // cosa (ni fechas, ni exenta salvan a la cuenta). Si no, delega sin cambios en estadoDeCobranza.
+  //
+  // MUTATION-TESTING (cada fila se corrió: romper, ver fallar con ESE test, restaurar):
+  //   - quitar el chequeo de licenciaEstado primero (delegar siempre en estadoDeCobranza)
+  //       → falla "inactivo bloquea aunque la cuenta sea exenta"
+  //   - que devuelva 'bloqueada' incondicionalmente (ignorando licenciaEstado === 'activo')
+  //       → falla "activo delega en estadoDeCobranza: vencida por fecha da el mismo resultado"
+
+  it('inactivo bloquea aunque la cuenta sea exenta', () => {
+    expect(
+      estadoEfectivo({
+        ...entradaBase,
+        cobranza: 'exenta',
+        licenciaEstado: 'inactivo',
+        hoy: '2026-09-21',
+      }),
+    ).toEqual({ tipo: 'bloqueada', diasVencida: 0 });
+  });
+
+  it('inactivo bloquea aunque la cuenta esté al día por fecha (no usa el diasVencida real)', () => {
+    const pagado = { desde: '2026-08-01', hasta: '2026-08-30' };
+    expect(
+      estadoEfectivo({
+        ...entradaBase,
+        periodosPagados: [pagado],
+        licenciaEstado: 'inactivo',
+        hoy: '2026-08-15',
+      }),
+    ).toEqual({ tipo: 'bloqueada', diasVencida: 0 });
+  });
+
+  it('inactivo bloquea con diasVencida: 0 aunque ya estuviera vencida/bloqueada por fecha', () => {
+    const pagado = { desde: '2026-08-01', hasta: '2026-08-30' };
+    expect(
+      estadoEfectivo({
+        ...entradaBase,
+        periodosPagados: [pagado],
+        licenciaEstado: 'inactivo',
+        hoy: '2026-09-15', // 16 días vencida por fecha (ver "16 días: bloqueada" arriba)
+      }),
+    ).toEqual({ tipo: 'bloqueada', diasVencida: 0 });
+  });
+
+  it('activo delega en estadoDeCobranza: exenta da exenta', () => {
+    expect(
+      estadoEfectivo({
+        ...entradaBase,
+        cobranza: 'exenta',
+        licenciaEstado: 'activo',
+        hoy: '2026-09-21',
+      }),
+    ).toEqual({ tipo: 'exenta' });
+  });
+
+  it('activo delega en estadoDeCobranza: vencida por fecha da el mismo resultado', () => {
+    const pagado = { desde: '2026-08-01', hasta: '2026-08-30' };
+    const entrada = { ...entradaBase, periodosPagados: [pagado], hoy: '2026-09-15' };
+    expect(estadoEfectivo({ ...entrada, licenciaEstado: 'activo' })).toEqual(
+      estadoDeCobranza(entrada),
+    );
   });
 });
 
