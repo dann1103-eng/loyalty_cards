@@ -178,9 +178,24 @@ tarea: es una condición para TODO lo que sigue. `estadoEfectivo` se puede escri
 rama a `master` sin que Daniel haya dicho explícitamente qué hacer con esas dos cuentas** — dejarlas
 bloquear, o pasarlas a `activo` antes. Repetido en la Tarea 11 para que no se pierda.
 
-- [ ] Test primero (rojo), después la función.
-- [ ] Mutación, restaurar.
-- [ ] Commit.
+- [x] Test primero (rojo), después la función.
+- [x] Mutación, restaurar.
+- [x] Commit.
+
+**Estado: ✅ completa** (commit `c0b37dd`). Usa el tipo real `EntradaEstadoCobranza` (el plan decía
+`EntradaCobranza`, que no existe — corrección de nombre, no de comportamiento). Ambas revisiones
+confirmaron el código directamente: 21/21 pruebas verdes en los dos TZ, 2 mutaciones re-corridas de forma
+independiente con los mensajes exactos, `tsc`/`eslint` limpios, las 16 pruebas de la Tarea 1 intactas. Hubo
+un incidente de proceso durante la implementación (un `git checkout --` restauró el archivo al último
+commit, borrando temporalmente la implementación aún no commiteada) que el propio implementador notó y
+reconstruyó; ambas revisiones verificaron con cuidado que el commit final no tiene rastro de eso. Sin
+hallazgos bloqueantes — "Ready to merge: Yes".
+
+**⚠️ Recordatorio que sigue vigente (repetido en cada tarea de cobranza hasta la 11):** `M&M Inversiones`
+y `Segundo` ya tienen `licencia_estado = 'inactivo'` en la base real. Esta tarea no las afecta (es pura),
+pero en cuanto `estadoEfectivo` se cablee al gate (Tarea 5) y la Tarea 11 lo verifique de punta a punta,
+esas dos cuentas quedan bloqueadas sin que nadie las haya tocado — nadie corre la Tarea 11 ni publica esta
+rama a `master` sin que Daniel decida qué hacer con ellas primero.
 
 ## Tarea 3b — El selector de cobranza en "Nueva cuenta"
 
