@@ -641,11 +641,31 @@ Cuando Daniel avise que aplicó `0038`:
    `modoActual`/`pospuestoHasta` reales y da feedback de éxito en sus 3 acciones. Se extrajo
    `estadosDeCobranzaPorCuenta` (2 consultas, sin N+1) compartida entre el dashboard y la lista de
    cuentas, más `describirEstadoCobranza`/`pastillaDeCobranza` en `lib/comercios/cobranza.ts`.
-5. [ ] **Recorrido completo en el navegador: PENDIENTE.** El gate bloqueando de verdad, el modo
-   exenta/normal, posponer, perdonar, la tarjeta de vencidas/bloqueadas del dashboard, y las 4
-   verificaciones visuales que quedaron pendientes de las Tareas 7/8/9/10. Este worktree no tiene
-   `.env.local` — el asistente no puede levantar un dev server con datos reales acá (y no debe copiar
-   `.env.local` él mismo). Queda para Daniel, en su propia máquina.
+5. [x] **Recorrido en el navegador: EN CURSO (2026-09-22), lado admin verificado por el controlador
+   con Chrome en la máquina de Daniel** (`npm run dev` en el worktree, con `.env.local` copiado a mano
+   por Daniel). Confirmado con datos reales: dashboard (4 tarjetas, cartera, actividad reciente),
+   `/admin/comercios` y `/admin/comercios/nuevo` dan 404, lista de cuentas con las dos pastillas
+   (cobranza real primero), ficha de cuenta con las 4 pestañas, pestaña Cobranza mostrando "Estado:
+   Exenta" real y "Modo de cobranza" arrancando en el valor REAL de la cuenta (no siempre "Normal" —
+   confirma el fix de la Tarea 8 pendiente). Tema alto contraste probado sobre la pastilla nueva:
+   legible.
+
+   **🔴 BUG CRÍTICO encontrado y corregido en el camino:** `app/admin/(protegido)/comercios/actions.ts`
+   exportaba `leerDatos` (función síncrona) desde un archivo con `'use server'` arriba — el compilador
+   de Next.js exige que TODO lo que un archivo `'use server'` exporta sea una Server Action asíncrona,
+   así que esto rompía el build ENTERO de `/admin/cuentas/[id]` con "Server Actions must be async
+   functions." Ni `tsc` ni `eslint` lo detectan (es una regla del compilador de Next, no de TypeScript)
+   — **ningún chequeo automático de esta sesión lo hubiera atrapado; solo abrir la pantalla de verdad lo
+   mostró.** Introducido en la Tarea 7 (exportar `leerDatos` para que `accionCrearComercioDeCuenta` lo
+   reusara) y arrastrado sin detectarse por las Tareas 8, 9, 10 y el paso 4 de esta tarea. Corregido:
+   `leerDatos` se mudó a un archivo nuevo sin `'use server'`
+   (`app/admin/(protegido)/comercios/leerDatos.ts`), importado desde los dos archivos de acciones que
+   lo necesitan. Commit `9a696fa`.
+
+   **Pendiente todavía:** el gate bloqueando de verdad (necesita una cuenta de prueba, no una real —
+   ningún comercio piloto se debe tocar para esto) y el lado comercio (Marca con pestañas, menú
+   agrupado) — esos necesitan una sesión de DUEÑO, que el asistente no tiene ni debe crear (nunca maneja
+   contraseñas). Quedan para que Daniel los recorra él mismo con una cuenta de dueño real.
 
 **⚠️ Ya resuelto (2026-09-22):** Daniel decidió pasar `M&M Inversiones` y `Segundo` a
 `licencia_estado = 'activo'` ANTES del paso 5, para que no queden bloqueadas por el interruptor manual
