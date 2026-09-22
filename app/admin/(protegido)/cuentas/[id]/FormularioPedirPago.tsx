@@ -1,8 +1,26 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useState, type ChangeEvent } from 'react';
 import type { EstadoCobro } from '../actions';
 import { PLANES } from '@/lib/comercios/cuentas';
+
+type Valores = {
+  periodoDesde: string;
+  periodoHasta: string;
+  monto: string;
+  plan: string;
+};
+
+function valoresIniciales(montoSugerido: number | null): Valores {
+  return {
+    // Sin default razonable: FM elige el período cada vez que pide un pago.
+    periodoDesde: '',
+    periodoHasta: '',
+    monto: montoSugerido != null ? String(montoSugerido) : '',
+    // '' = "— No cambia el plan —".
+    plan: '',
+  };
+}
 
 // "Pedir un pago al cliente" (spec cobranza, "Acciones de FM" #4): FM elige el monto (precargado con
 // el del plan, editable — sirve para probar con $1), el plan (opcional: si lo hay, se aplica al
@@ -16,9 +34,19 @@ export default function FormularioPedirPago({
   montoSugerido: number | null;
 }) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoCobro, FormData>(accion, undefined);
-  // Campo controlado por el mismo motivo que el resto de los formularios de esta ficha: React 19
-  // resetea los no controlados cuando la action termina, incluso si devolvió un error.
-  const [monto, setMonto] = useState(montoSugerido != null ? String(montoSugerido) : '');
+
+  // Los 4 campos CONTROLADOS, en un solo objeto — mismo patrón que FormularioComercio.tsx (y por la
+  // misma razón, verificada ahí en el navegador): React 19 resetea los campos NO controlados cuando
+  // la action del formulario termina, incluso si devolvió un error. Con `defaultValue`/sin controlar,
+  // FM tecleaba período + monto + plan, se equivocaba invirtiendo las fechas ("El período termina
+  // antes de empezar", validarCobro en cobros.ts), y perdía las tres cosas — de las que solo el
+  // monto sobrevivía si únicamente ese campo estaba controlado.
+  const [valores, setValores] = useState<Valores>(() => valoresIniciales(montoSugerido));
+
+  const cambiar =
+    (campo: keyof Valores) =>
+    (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setValores((v) => ({ ...v, [campo]: e.target.value }));
 
   return (
     <form className="panel" style={{ marginTop: 14 }} action={ejecutar}>
@@ -31,11 +59,25 @@ export default function FormularioPedirPago({
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <div className="field" style={{ flex: '1 1 150px' }}>
           <label htmlFor="pp_periodo_desde">Período desde</label>
-          <input id="pp_periodo_desde" name="periodo_desde" type="date" required />
+          <input
+            id="pp_periodo_desde"
+            name="periodo_desde"
+            type="date"
+            value={valores.periodoDesde}
+            onChange={cambiar('periodoDesde')}
+            required
+          />
         </div>
         <div className="field" style={{ flex: '1 1 150px' }}>
           <label htmlFor="pp_periodo_hasta">Hasta</label>
-          <input id="pp_periodo_hasta" name="periodo_hasta" type="date" required />
+          <input
+            id="pp_periodo_hasta"
+            name="periodo_hasta"
+            type="date"
+            value={valores.periodoHasta}
+            onChange={cambiar('periodoHasta')}
+            required
+          />
         </div>
       </div>
 
@@ -48,14 +90,14 @@ export default function FormularioPedirPago({
             type="number"
             min="0"
             step="0.01"
-            value={monto}
-            onChange={(e) => setMonto(e.target.value)}
+            value={valores.monto}
+            onChange={cambiar('monto')}
             required
           />
         </div>
         <div className="field" style={{ flex: '1 1 180px' }}>
           <label htmlFor="pp_plan">Plan (opcional)</label>
-          <select id="pp_plan" name="plan" defaultValue="">
+          <select id="pp_plan" name="plan" value={valores.plan} onChange={cambiar('plan')}>
             <option value="">— No cambia el plan —</option>
             {PLANES.map((p) => (
               <option key={p.valor} value={p.valor}>
