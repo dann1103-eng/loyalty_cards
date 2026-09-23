@@ -25,6 +25,7 @@
 //   - supabase/migrations/0029_reverso_por_programa.sql (reverso por programa en programas_tarjeta)
 //   - supabase/migrations/0037_pagos_wompi.sql (cobros.tipo/plan_destino/wompi_*; tabla pagos_wompi)
 //   - supabase/migrations/0038_cobranza.sql (cuentas_comercio.cobranza/cobranza_desde/cobranza_pospuesta_hasta; las cuentas existentes quedan 'exenta')
+//   - supabase/migrations/0039_monto_minimo_y_resena.sql (comercios.exigir_monto_compra/monto_minimo_compra_centavos/pedir_resena_google/resena_google_url)
 //   - supabase/migrations/0027_branding_por_programa.sql (branding por programa en programas_tarjeta)
 //   - supabase/migrations/0026_notificaciones_push.sql (tablas difusiones y notificaciones_enviadas; tarjetas.aviso_texto/aviso_hasta/aviso_inactividad_enviado_en; comercios.aviso_inactividad_activo/dias/mensaje)
 //   - supabase/migrations/0025_backfill_programas_principales_faltantes.sql (solo datos, no cambia columnas: programa principal para comercios que la 0024 no alcanzó a cubrir)
@@ -112,6 +113,15 @@ export type Database = {
           aviso_inactividad_activo: boolean;
           aviso_inactividad_dias: number | null;
           aviso_inactividad_mensaje: string | null;
+          // Monto mínimo de compra (migración 0039), mismo criterio que las perillas antifraude:
+          // false/null = sin cambio de comportamiento hasta que el dueño lo configure. La BD exige
+          // exigir_monto_compra -> pedir_monto_compra y monto_minimo_compra_centavos -> exigir_monto_compra.
+          exigir_monto_compra: boolean;
+          monto_minimo_compra_centavos: number | null;
+          // Reseña de Google antes del registro (migración 0039). false/null = paso apagado; la BD
+          // exige pedir_resena_google -> resena_google_url is not null.
+          pedir_resena_google: boolean;
+          resena_google_url: string | null;
         };
         Insert: {
           id?: string;
@@ -153,6 +163,10 @@ export type Database = {
           aviso_inactividad_activo?: boolean;
           aviso_inactividad_dias?: number | null;
           aviso_inactividad_mensaje?: string | null;
+          exigir_monto_compra?: boolean;
+          monto_minimo_compra_centavos?: number | null;
+          pedir_resena_google?: boolean;
+          resena_google_url?: string | null;
         };
         Update: {
           id?: string;
@@ -194,6 +208,10 @@ export type Database = {
           aviso_inactividad_activo?: boolean;
           aviso_inactividad_dias?: number | null;
           aviso_inactividad_mensaje?: string | null;
+          exigir_monto_compra?: boolean;
+          monto_minimo_compra_centavos?: number | null;
+          pedir_resena_google?: boolean;
+          resena_google_url?: string | null;
         };
         // FK de la 0008 (`cuenta_id ... references cuentas_comercio(id)`). Necesaria para el join
         // embebido `cuentas_comercio(...)` desde comercios (panel FM, reportes).
