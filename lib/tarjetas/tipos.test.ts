@@ -294,7 +294,7 @@ describe('aplicaReglaDeMonto', () => {
   // mínimo sería una regla que nadie pidió. Prepago, cupón y membresía no reciben monto en
   // absoluto, así que no hay nada que gatear.
   //
-  // MUTACIÓN verificada: `aplicaReglaDeMonto: true` en cashback hace fallar esta prueba.
+  // MUTACIÓN verificada: `aplicaReglaDeMonto: true` en cashback hace fallar las dos primeras.
   it('exactamente puntos y sellos', () => {
     const aplican = TIPOS.filter((t) => aplicaReglaDeMonto(t.valor)).map((t) => t.valor).sort();
     expect(aplican).toEqual(['puntos', 'sellos']);
@@ -316,5 +316,15 @@ describe('aplicaReglaDeMonto', () => {
   it('un tipo desconocido degrada a puntos, que sí la recibe', () => {
     // Mismo fallback que el resto del módulo: una fila vieja no deja al cajero sin ningún control.
     expect(aplicaReglaDeMonto('lo-que-sea')).toBe(true);
+  });
+
+  it('todo tipo con aplicaReglaDeMonto también tiene usaMontoDeCompra', () => {
+    // La implicación que tiene que valer siempre, mismo patrón que "todo tipo que EXIGE el monto
+    // también lo usa" (describe usaMontoDeCompra, arriba): no tiene sentido gatear con un mínimo un
+    // monto que la operación ni siquiera recibe. Al revés no vale —puntos y sellos ya lo prueban:
+    // usan el monto sin exigirlo, y acá además reciben la regla— por eso son campos separados.
+    for (const tipo of TIPOS) {
+      if (tipo.aplicaReglaDeMonto) expect(tipo.usaMontoDeCompra, tipo.valor).toBe(true);
+    }
   });
 });

@@ -2,11 +2,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { aplicaReglaDeMonto, formatearCentavos } from '../tarjetas/tipos';
 
-// La regla de monto obligatorio / mínimo de compra del comercio (migración 0039, TODAVÍA no
-// aplicada al escribir esto — ver lib/comercio/montoAcreditacion.test.ts). Nace del primer
-// onboarding con clientes reales (2026-09-22): un comercio quiere poder exigir el monto de la
-// compra y fijar un mínimo para sumar sellos/puntos ("solo sello consumos de $10 en adelante"), en
-// vez de sumar con cualquier compra o ninguna.
+// La regla de monto obligatorio / mínimo de compra del comercio (columnas exigir_monto_compra y
+// monto_minimo_compra_centavos de comercios, migración 0039). Nace del primer onboarding con
+// clientes reales (2026-09-22): un comercio quiere poder exigir el monto de la compra y fijar un
+// mínimo para sumar sellos/puntos ("solo sello consumos de $10 en adelante"), en vez de sumar con
+// cualquier compra o ninguna.
 // Spec: docs/superpowers/specs/2026-09-23-onboarding-manifest-monto-resena-design.md, sección 2,
 // "La regla, en una función pura".
 //
@@ -23,7 +23,7 @@ export type ResultadoMontoAcreditacion =
 //    combinación que la BD prohíbe, pero esta función no depende de eso) y no hay un monto positivo,
 //    falta el dato. NO es `bloqueoLimite`: se resuelve TECLEANDO el monto, no autorizando — no hay
 //    nada que el dueño pueda autorizar sobre una compra que nadie describió. $0.00 tampoco cuenta
-//    como compra: por eso `<= 0` y no solo `=== null`.
+//    como compra: por eso `!(montoCentavos > 0)` y no solo `=== null`.
 // 2. Con el monto en mano, si hay un mínimo y no llega (y nadie autorizó), se rechaza CON
 //    `bloqueoLimite: true`: así el escáner y "Agregar cliente" reusan el mismo panel de autorización
 //    del dueño que ya existe para las perillas antifraude (decisión 6 de la spec).
@@ -39,7 +39,12 @@ export function validarMontoAcreditacion({
   montoCentavos: number | null;
   autorizado: boolean;
 }): ResultadoMontoAcreditacion {
-  if ((exigir || minimoCentavos !== null) && (montoCentavos === null || montoCentavos <= 0)) {
+  // `!(montoCentavos > 0)` y no `montoCentavos <= 0`: son distintas para NaN (`NaN <= 0` es false,
+  // así que ese chequeo dejaba pasar un NaN como si fuera positivo). La Tarea 4
+  // (controlesDesdeFormulario, lib/comercio/controlesAcreditacion.ts) usa NaN como marca de "typo"
+  // al parsear un monto tecleado — este chequeo tiene que atraparlo igual que un monto faltante, no
+  // dejarlo colarse como válido.
+  if ((exigir || minimoCentavos !== null) && (montoCentavos === null || !(montoCentavos > 0))) {
     // El mismo texto que ya usa el escáner (app/comercio/(protegido)/escanear/actions.ts) para el
     // monto obligatorio de cashback/gift card/descuento: un solo mensaje para "falta el monto",
     // venga de donde venga la exigencia.
@@ -66,6 +71,11 @@ export function validarMontoAcreditacion({
 // programa desactivado se siguen escaneando y acreditando, y la regla les sigue aplicando. La
 // comparten la página de Reglas y su prueba (Tarea 4): ambas llaman a esta misma función en vez de
 // repetir el filtro.
+//
+// La garantía de que esta función VE los desactivados vive en el LLAMADOR, no acá: tiene que armar
+// `programas` con `listarProgramas(supabase, comercioId, { soloActivos: false })` — el default de
+// `listarProgramas` (lib/comercio/programas.ts) filtra `activo = true` (línea ~203), así que un
+// llamador que use el default le esconde a esta función justo los programas que le importan.
 export function ofreceReglaDeMonto(programas: { tipoTarjeta: string }[]): boolean {
   return programas.some((p) => aplicaReglaDeMonto(p.tipoTarjeta));
 }

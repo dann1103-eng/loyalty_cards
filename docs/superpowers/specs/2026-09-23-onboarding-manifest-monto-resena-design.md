@@ -206,7 +206,9 @@ validarMontoAcreditacion({ exigir, minimoCentavos, montoCentavos, autorizado }):
 ```
 
 En orden:
-1. Si `exigir || minimoCentavos !== null` y `montoCentavos` es `null` o `<= 0` →
+1. Si `exigir || minimoCentavos !== null` y `montoCentavos` NO es un número positivo (`null`, `<= 0`
+   o `NaN`: la condición es `!(montoCentavos > 0)`, que cierra `NaN` —la Tarea 4 usa `NaN` como marca
+   de typo— en vez de dejarlo pasar) →
    `'Escribí el monto de la compra (por ejemplo 19.99).'` (el texto que el escáner ya usa). **No** es
    `bloqueoLimite`: se resuelve tecleando el monto, no autorizando. Un monto de $0.00 no es una compra.
 2. Si `minimoCentavos !== null && montoCentavos < minimoCentavos && !autorizado` →

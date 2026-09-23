@@ -6,16 +6,31 @@ import { validarMontoAcreditacion, ofreceReglaDeMonto, leerReglaDeMonto } from '
 // internamente para decidir qué programas cuentan, y la probamos junto a ella por eso — el campo y
 // su función ya tienen su prueba canónica en lib/tarjetas/tipos.test.ts.
 import { aplicaReglaDeMonto } from '../tarjetas/tipos';
+import type { Programa } from './programas';
 
-// Mutation-testing CONFIRMADO (2026-09-23), cada una restaurada después de corrida:
-// - `<` → `<=` en la comparación del mínimo (montoAcreditacion.ts): falla "1000 → ok: el mínimo es
-//   inclusivo" — el mínimo exacto pasa a rechazarse con el error del mínimo.
-// - Quitar `&& !autorizado` de esa misma condición: falla "999 autorizado → ok: la autorización
-//   saltea SOLO el mínimo" — un autorizado bajo el mínimo vuelve a rechazarse.
-// - Quitar `|| montoCentavos <= 0` del paso 1: falla "monto 0 → el mismo error que null" — $0.00
-//   pasa a aceptarse como si fuera una compra.
-// - Agregar `bloqueoLimite: true` también en el error del paso 1 (monto faltante): falla las 4
-//   pruebas que aseveran ese objeto SIN esa clave (toEqual exacto).
+// Mutation-testing CONFIRMADO (2026-09-23), cada una restaurada después de corrida. Las pruebas de
+// leerReglaDeMonto contra Supabase están en rojo hoy por la falta de la 0039 (ver el describe de
+// más abajo) y por eso aparecen listadas como "cae también" en todas: no discriminan nada todavía,
+// pero se documenta igual para que quede claro que no se rompió nada nuevo en ellas.
+//
+// - `<` → `<=` en la comparación del mínimo (paso 2): falla "1000 → ok: el mínimo es inclusivo" — el
+//   mínimo exacto pasa a rechazarse con el error del mínimo.
+// - Quitar `&& !autorizado` del paso 2: falla "999 autorizado → ok: la autorización saltea SOLO el
+//   mínimo" — un autorizado bajo el mínimo vuelve a rechazarse.
+// - `(exigir || minimoCentavos !== null)` → solo `exigir` (paso 1): falla "exigir false pero mínimo
+//   1000 ... monto null → error de monto faltante igual" — un mínimo sin exigir deja de bastar por
+//   sí solo para exigir el monto.
+// - Quitar `|| !(montoCentavos > 0)` del paso 1 (deja solo `montoCentavos === null`): falla "monto 0
+//   → el mismo error que null", "monto -1 → error de monto faltante" y las DOS pruebas de NaN (una
+//   sin mínimo, una con mínimo 1000) — 4 pruebas.
+// - Volver `!(montoCentavos > 0)` a `montoCentavos <= 0` (la versión vieja, insegura ante NaN): falla
+//   las DOS pruebas de NaN ("monto NaN → ..." y "NaN → error de monto faltante (paso 1) ..."),
+//   porque `NaN <= 0` da `false` y el NaN se cuela como si fuera válido.
+// - `!(montoCentavos > 0)` → `montoCentavos === 0`: falla "monto -1 → error de monto faltante" y las
+//   DOS pruebas de NaN — 3 pruebas (0 solo sigue andando por casualidad, -1 y NaN no).
+// - Agregar `bloqueoLimite: true` también en el error del paso 1 (monto faltante): falla las 7
+//   pruebas que aseveran ese objeto SIN esa clave (toEqual exacto: null, 0, -1, NaN sin mínimo, NaN
+//   con mínimo 1000, el caso "mínimo sin exigir", y "autorizado pero sin monto").
 // - `aplicaReglaDeMonto: true` en `cashback` (lib/tarjetas/tipos.ts): falla "exactamente puntos y
 //   sellos" y "los otros seis no" en tipos.test.ts, y "false para los otros seis" acá.
 // - En `ofreceReglaDeMonto`, `every` en vez de `some`: falla "lista vacía → false" (vacuous truth
@@ -49,6 +64,19 @@ describe('validarMontoAcreditacion', () => {
       expect(validarMontoAcreditacion({ exigir: true, minimoCentavos: null, montoCentavos: 1, autorizado: false }))
         .toEqual({ ok: true });
     });
+
+    it('monto -1 → error de monto faltante: negativo tampoco es una compra', () => {
+      expect(validarMontoAcreditacion({ exigir: true, minimoCentavos: null, montoCentavos: -1, autorizado: false }))
+        .toEqual({ ok: false, error: 'Escribí el monto de la compra (por ejemplo 19.99).' });
+    });
+
+    it('monto NaN → error de monto faltante: NaN no es un número positivo', () => {
+      // NaN es lo que centavosDesdeTexto/aEntero usan como marca de "no parseó" (Tarea 4,
+      // lib/comercio/controlesAcreditacion.ts): si esta función lo dejara pasar como si fuera un
+      // monto válido, un typo del dueño quedaría acreditando sin monto real.
+      expect(validarMontoAcreditacion({ exigir: true, minimoCentavos: null, montoCentavos: NaN, autorizado: false }))
+        .toEqual({ ok: false, error: 'Escribí el monto de la compra (por ejemplo 19.99).' });
+    });
   });
 
   describe('exigir false pero mínimo 1000 (combinación que la BD prohíbe; la función no depende de eso)', () => {
@@ -73,6 +101,14 @@ describe('validarMontoAcreditacion', () => {
       expect(validarMontoAcreditacion({ exigir: true, minimoCentavos: 1000, montoCentavos: 1001, autorizado: false }))
         .toEqual({ ok: true });
     });
+
+    it('NaN → error de monto faltante (paso 1), no el error del mínimo (paso 2)', () => {
+      // Con un mínimo real configurado, `NaN < minimoCentavos` también da false (toda comparación
+      // con NaN es false), así que sin el chequeo `!(montoCentavos > 0)` del paso 1 esto se colaría
+      // como `ok: true` — ni siquiera llegaría al paso 2 a rechazarse por el mínimo.
+      expect(validarMontoAcreditacion({ exigir: true, minimoCentavos: 1000, montoCentavos: NaN, autorizado: false }))
+        .toEqual({ ok: false, error: 'Escribí el monto de la compra (por ejemplo 19.99).' });
+    });
   });
 
   describe('mínimo 1000, autorizado', () => {
@@ -93,7 +129,7 @@ describe('validarMontoAcreditacion', () => {
   });
 });
 
-describe('aplicaReglaDeMonto (reexportada de lib/tarjetas/tipos)', () => {
+describe('aplicaReglaDeMonto (del catálogo, lib/tarjetas/tipos)', () => {
   it('true para puntos y sellos', () => {
     expect(aplicaReglaDeMonto('puntos')).toBe(true);
     expect(aplicaReglaDeMonto('sellos')).toBe(true);
@@ -125,20 +161,37 @@ describe('ofreceReglaDeMonto', () => {
 
   it('un sellos DESACTIVADO también cuenta: no filtra por activo, porque sus tarjetas se siguen acreditando', () => {
     // El shape que recibe de verdad es más ancho que { tipoTarjeta } (viene de listarProgramas), así
-    // que le pasamos un `activo: false` de más para dejar constancia de que la función lo ignora.
-    // Por una variable tipada aparte, y no un literal directo en la llamada: un literal inline con
-    // una propiedad de más rebota contra el chequeo de propiedades excedentes de TypeScript, porque
-    // la firma real es { tipoTarjeta: string }[].
-    const programas: { tipoTarjeta: string; activo: boolean }[] = [{ tipoTarjeta: 'sellos', activo: false }];
+    // que le pasamos un `activo: false` de más para dejar constancia de que la función lo ignora —
+    // tipado con el `Programa` real (lib/comercio/programas.ts) y no un objeto inventado, para que
+    // este `Pick` no se desalinee si el tipo real cambia. Por una variable aparte, y no un literal
+    // directo en la llamada: un literal inline con una propiedad de más rebota contra el chequeo de
+    // propiedades excedentes de TypeScript, porque la firma de ofreceReglaDeMonto es
+    // { tipoTarjeta: string }[].
+    const programas: Pick<Programa, 'tipoTarjeta' | 'activo'>[] = [{ tipoTarjeta: 'sellos', activo: false }];
     expect(ofreceReglaDeMonto(programas)).toBe(true);
   });
 });
 
-// Contra Supabase de verdad. La migración 0039 (exigir_monto_compra, monto_minimo_compra_centavos)
-// TODAVÍA NO está aplicada en esta base (confirmado corriendo scripts/verificar-0039.ts el
-// 2026-09-23: "column comercios.exigir_monto_compra does not exist"). Esta prueba se escribe y se
-// deja en rojo por ESA razón a propósito — el plan (Tarea 9) difiere su verde a cuando Daniel
-// aplique la migración a mano en Supabase Studio.
+// Contra Supabase de verdad. Las columnas de este módulo (exigir_monto_compra,
+// monto_minimo_compra_centavos) llegan con la migración 0039, TODAVÍA NO aplicada en esta base
+// (confirmado corriendo scripts/verificar-0039.ts el 2026-09-23). Hoy, de las tres pruebas de este
+// describe, DOS quedan en rojo por esa razón — las dos que llaman a leerReglaDeMonto sobre un
+// comercio que existe de verdad — y NO con el mismo error, porque cada una dispara una operación
+// distinta de supabase-js:
+// - "un comercio recién creado..." (el control positivo) llama a leerReglaDeMonto directo, que hace
+//   un SELECT: ese SELECT sí llega a Postgres y vuelve con el 42703 real,
+//   "column comercios.exigir_monto_compra does not exist".
+// - "las tres columnas seteadas..." primero hace un UPDATE crudo (para setear la regla antes de
+//   leerla): ese UPDATE lo rechaza PostgREST ANTES de tocar Postgres, comparando contra su caché de
+//   esquema, con PGRST204 "Could not find the 'exigir_monto_compra' column of 'comercios' in the
+//   schema cache" — nunca llega a ejecutar el SELECT de leerReglaDeMonto.
+// La tercera (id inexistente) queda en VERDE hoy, pero por casualidad: el mismo 42703 del SELECT de
+// leerReglaDeMonto también cae en el `if (error || !data) return null` que "no existe la fila" —
+// por eso va DESPUÉS del control positivo, que es la prueba que de verdad demuestra que la lectura
+// funciona (y en cuanto la 0039 esté aplicada, atrapa una mutación tipo `exigir: true` fijo, que el
+// caso "id inexistente" no vería nunca: acá el resultado esperado también sería null). El plan
+// (Tarea 9) difiere el verde de las dos primeras a cuando Daniel aplique la migración a mano en
+// Supabase Studio.
 describe('leerReglaDeMonto (Supabase — pendiente de la migración 0039)', () => {
   const supabase = createServiceClient();
   const entorno = crearEntorno(supabase);
@@ -147,7 +200,13 @@ describe('leerReglaDeMonto (Supabase — pendiente de la migración 0039)', () =
     await entorno.limpiar();
   });
 
-  it('lee exigir_monto_compra y monto_minimo_compra_centavos de un comercio existente', async () => {
+  it('un comercio recién creado (sin configurar nada) → los defaults: exigir false, mínimo null', async () => {
+    const comercioId = await entorno.crearComercio();
+    const resultado = await leerReglaDeMonto(supabase, comercioId);
+    expect(resultado).toEqual({ exigir: false, minimoCentavos: null });
+  });
+
+  it('las tres columnas seteadas juntas → exigir true, mínimo 1000', async () => {
     const comercioId = await entorno.crearComercio();
     // Las TRES columnas juntas: pedir_monto_compra, exigir_monto_compra y
     // monto_minimo_compra_centavos, o los CHECK de la 0039 (comercios_exigir_implica_pedir,
