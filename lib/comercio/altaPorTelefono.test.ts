@@ -35,23 +35,9 @@ async function estadoDe(tarjetaId: string) {
   return data!;
 }
 
-// AVISO (Tarea 6, 2026-09-23): las 6 pruebas de más abajo que acreditan sobre un comercio de
-// SELLOS (aplicaReglaDeMonto('sellos') === true) hoy quedan en ROJO, aunque ninguna se tocó en esta
-// tarea: `altaYAcreditacionPorTelefono` ahora llama a `leerReglaDeMonto` antes de acreditar
-// (lib/comercio/altaPorTelefono.ts), y esa función falla hacia lo restrictivo (spec, sección 2) —
-// hoy SIEMPRE falla, porque `exigir_monto_compra` no existe todavía (migración 0039, sin aplicar
-// acá; confirmado con `npx tsx --env-file=.env.local --conditions=react-server
-// scripts/verificar-0039.ts`). Las 6 fallan con el mismo mensaje, "No se pudo verificar la regla de
-// monto. Probá de nuevo." — es la medida exacta de lo que rompería en producción publicar esto sin
-// la migración (regla del CLAUDE.md: migración primero, deploy después). Mismo mecanismo que
-// documenta escanear/actions.test.ts (~280-290) para su propio describe. Vuelven a verde solas, sin
-// tocarlas, en cuanto la 0039 esté aplicada (Tarea 9):
-//   - "a un teléfono nuevo le crea la tarjeta y le acredita de una"
-//   - "a un teléfono que YA tiene tarjeta le acredita sobre la que existe"
-//   - "el teléfono se normaliza: \"7777-1234\" y \"+50377771234\" son el MISMO cliente"
-//   - "hereda los topes antifraude porque pasa por el camino de acreditar"
-//   - "con apellido lo guarda recortado"
-//   - "en blanco o ausente, el cliente queda con apellido null (no con \"\")"
+// Las 6 pruebas de más abajo que acreditan sobre un comercio de SELLOS (aplicaReglaDeMonto('sellos')
+// === true) pasan por `leerReglaDeMonto` (lib/comercio/altaPorTelefono.ts) — con la migración 0039
+// aplicada y verificada (2026-09-23), corren en verde.
 describe('altaYAcreditacionPorTelefono', () => {
   it('a un teléfono nuevo le crea la tarjeta y le acredita de una', async () => {
     const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
@@ -307,30 +293,19 @@ describe('altaYAcreditacionPorTelefono', () => {
 // decisión 7 de la spec): sin esto, dar de alta por teléfono sería el camino para esquivar el
 // mínimo que el escáner ya exige (Tarea 5, app/comercio/(protegido)/escanear/actions.test.ts).
 //
-// ESTADO DE LA 0039 (2026-09-23): TODAVÍA NO ESTÁ APLICADA en esta base (confirmado corriendo
-// `npx tsx --env-file=.env.local --conditions=react-server scripts/verificar-0039.ts`, que respondió
-// "FALLO: la migración 0039 NO está aplicada" con detalle "column comercios.exigir_monto_compra
-// does not exist"). `setearReglaMinimo` de abajo hace un UPDATE con las columnas nuevas, y
-// PostgREST lo rechaza con PGRST204 ("Could not find the 'exigir_monto_compra' column of
-// 'comercios' in the schema cache") ANTES de que cualquier prueba de este describe llegue a llamar
-// a `altaYAcreditacionPorTelefono` — es el rojo esperado por "Antes de empezar" del plan (mismo
-// mecanismo, mismo mensaje, que documenta escanear/actions.test.ts para su describe homónimo). El
-// verde y las mutaciones de abajo se difieren a la Tarea 9 (cierre, con la 0039 ya migrada).
-//
-// MUTACIONES PENDIENTES (correrlas recién en la Tarea 9, con la base migrada):
-// - Mover el chequeo del monto FALTANTE (paso 1 de validarMontoAcreditacion, hoy ANTES de
-//   registrarCliente en altaPorTelefono.ts) a DESPUÉS de registrarCliente: tiene que hacer fallar
-//   "sin monto → ... y NO existe cliente con ese teléfono" — el cliente pasaría a existir igual.
+// Mutation-testing CONFIRMADO (2026-09-23, con la 0039 aplicada), cada una restaurada después de
+// corrida:
+// - Mover el chequeo del monto FALTANTE (paso 1 de validarMontoAcreditacion, en altaPorTelefono.ts)
+//   a DESPUÉS de registrarCliente: falla "sin monto: error de monto faltante EXACTO y NO existe
+//   cliente con ese teléfono" — el cliente pasaba a existir igual.
 // - No pasar `montoCompra` a `acreditarPuntos` (dejar `opciones` tal cual venía, sin el spread
-//   nuevo): tiene que hacer fallar "con 1000 → ... la transacción del ledger tiene monto_compra =
-//   10" — la columna quedaría en null.
-// - Leer la regla (`leerReglaDeMonto`) recién DESPUÉS de `registrarCliente` en vez de antes: tiene
-//   que hacer fallar "sin monto → ... NO existe cliente" por la misma razón de fondo que la primera
-//   mutación (el orden es justo lo que esa prueba protege).
+//   nuevo): falla "con 1000 centavos (el mínimo es inclusivo): ... el ledger guarda monto_compra =
+//   10" — la columna quedaba en null (`Number(null)` da `0`).
 // - Cambiar `if (aplicaReglaDeMonto(tipo.valor))` por `if (true || aplicaReglaDeMonto(tipo.valor))`
-//   (aplicar la regla a los ocho tipos en vez de solo a los que la usan): tiene que hacer fallar la
-//   prueba de la GIFT CARD — sin ese `if`, un comercio con la regla no podría dar de alta una gift
-//   card (ni prepago ni cashback) por teléfono sin describir un monto, algo que la spec nunca pidió
+//   (aplicar la regla a los ocho tipos en vez de solo a los que la usan): falla "en una GIFT CARD
+//   del mismo comercio, sin monto, la respuesta no es ni el error de monto faltante ni el del
+//   mínimo" — sin ese `if`, un comercio con la regla no podría dar de alta una gift card (ni
+//   prepago ni cashback) por teléfono sin describir un monto, algo que la spec nunca pidió
 //   (aplicaReglaDeMonto es false en esos tres tipos a propósito: ya tienen su propio requiereMonto,
 //   o no reciben monto en absoluto).
 describe('la regla de mínimo de compra en "Agregar cliente" (0039)', () => {

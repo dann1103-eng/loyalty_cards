@@ -117,14 +117,9 @@ const CASILLA_VISIBLE = /<input\b[^>]*type="checkbox"[^>]*name="pedir_monto_comp
 // React SSR pueden salir en cualquier orden).
 const SUBBLOQUE_VISIBLE = /<input\b[^>]*type="checkbox"[^>]*name="exigir_monto_compra"|<input\b[^>]*name="exigir_monto_compra"[^>]*type="checkbox"/;
 
-// AVISO (Tarea 4, 2026-09-23): las CUATRO pruebas de este describe NO se tocaron — siguen exactas a
-// como estaban — pero hoy quedan en rojo igual, con "column comercios.exigir_monto_compra does not
-// exist" (42703): `dibujarReglas` ahora pasa por `datosFormularioControles`, que llama a
-// `leerControles`, que agregó las dos columnas nuevas al select, y esa columna no existe hasta que
-// Daniel aplique la migración 0039 en Supabase Studio. Es la medida exacta de lo que rompería en
-// producción si esto se publicara sin la migración (regla del CLAUDE.md del proyecto). Se confirmó
-// que las cuatro fallan por ESA razón y ninguna otra; su verde vuelve solo, sin cambiar nada acá, en
-// cuanto la 0039 esté aplicada (Tarea 9).
+// Las CUATRO pruebas de este describe no dependen de ninguna mutación de la Tarea 9: corren en verde
+// con la migración 0039 aplicada (2026-09-23), igual que antes de que `dibujarReglas` empezara a
+// pasar por `datosFormularioControles`.
 describe('accionGuardarControles — la perilla del monto donde el programa principal no lo usa', () => {
   it('en un CUPÓN no se le ofrece la casilla al dueño', async () => {
     const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'cupon', pedir_monto_compra: true });
@@ -182,36 +177,32 @@ describe('accionGuardarControles — la perilla del monto donde el programa prin
 
 // TAREA 4 — el sub-bloque nuevo (checkbox "Exigir" + campo "Mínimo") y su guardado.
 //
-// Mutation-testing: PURAS (lib/comercio/controlesAcreditacion.test.ts) confirmadas 2026-09-23. Las
-// de acá abajo (HTML + Supabase) quedan PENDIENTES (Tarea 9, con la 0039 aplicada) — hoy ninguna
-// puede correr en verde, así que ninguna se corrió todavía:
-// - Precargar con `String(centavos / 100)` en vez de `formatearCentavos`: falla la aserción del
+// Mutation-testing: PURAS (lib/comercio/controlesAcreditacion.test.ts) y estas de acá abajo (HTML +
+// Supabase) CONFIRMADAS (2026-09-23, con la 0039 aplicada), cada una restaurada después de corrida:
+// - Precargar con `String(centavos / 100)` en vez de `formatearCentavos`: falla "guardar 'Exigir' +
+//   mínimo $10.50 se relee true/1050, y el HTML lo precarga EXACTO" de acá abajo — la aserción del
 //   HTML "$10.50" exacto (la prueba de ida y vuelta de controlesAcreditacion.test.ts NO la atrapa,
 //   porque "10.5" vuelve a parsear a 1050 igual).
 // - Volver a condicionar el checkbox "Pedir" solo a `usaMontoDeCompra` (sin `|| ofreceReglaDeMonto`
-//   en FormularioControles.tsx): falla "membresía + sellos secundario" de abajo.
+//   en FormularioControles.tsx): falla los DOS casos "membresía + sellos secundario" (activo y
+//   desactivado) del describe de más abajo, "FormularioControles — a quién se le ofrece el
+//   sub-bloque".
 // - Quitar `{ soloActivos: false }` de la llamada a `listarProgramas` DENTRO de
 //   `datosFormularioControles` (datosControles.ts, compartida por page.tsx y por `dibujarReglas`):
-//   ahora SÍ la atrapa directamente "membresía + sellos secundario DESACTIVADO" de abajo — antes de
-//   esta revisión, cuando `dibujarReglas` copiaba la llamada en vez de compartir la función, esta
+//   falla "membresía + sellos secundario DESACTIVADO" del mismo describe de abajo — antes de esta
+//   revisión, cuando `dibujarReglas` copiaba la llamada en vez de compartir la función, esta
 //   mutación no la atrapaba ninguna prueba de acá (hacía falta el navegador contra page.tsx real).
-// - `type="number"` en vez de `type="text"` en el campo del mínimo: falla la aserción de tipo del
-//   HTML.
+// - `type="number"` en vez de `type="text"` en el campo del mínimo: falla "guardar 'Exigir' + mínimo
+//   $10.50 ..." de acá abajo — la aserción de tipo del HTML.
 // - Agregar inputs OCULTOS para `exigir_monto_compra`/`monto_minimo_compra` en la rama sin
 //   sub-bloque (preservando el valor guardado, como ya hace `pedir_monto_compra`): falla las DOS
-//   pruebas de "sub-bloque ausente" de abajo (cupón y cashback) — es justo el diseño que la spec
+//   pruebas de "sub-bloque ausente" de acá abajo (cupón y cashback) — es justo el diseño que la spec
 //   descarta a propósito (ver el comentario del sub-bloque en FormularioControles.tsx).
 //
 // TODAS las pruebas de este bloque pasan por `dibujarReglas` → `datosFormularioControles` →
 // `leerControles`, que selecciona `exigir_monto_compra` y `monto_minimo_compra_centavos` — columnas
-// de la migración 0039, TODAVÍA NO aplicada en esta base (confirmado con scripts/verificar-0039.ts
-// el 2026-09-23). Por eso TODAS quedan hoy en rojo con el mismo error de Postgres, 42703 "column
-// comercios.exigir_monto_compra does not exist" — EXCEPTO las que siembran la fila con un UPDATE
-// directo ANTES de llamar a dibujarReglas (cupón y cashback), que fallan un paso antes, con
-// PGRST204 (PostgREST rechaza el UPDATE contra su caché de esquema sin llegar a tocar Postgres). Se
-// corrieron las seis para confirmar que ninguna falla por otra razón; el verde de las seis y sus
-// mutaciones (arriba) se difieren a la Tarea 9.
-describe('accionGuardarControles — el mínimo de compra (Tarea 4, migración 0039 pendiente)', () => {
+// de la migración 0039, aplicada y verificada (2026-09-23). Las seis corren en verde.
+describe('accionGuardarControles — el mínimo de compra (Tarea 4)', () => {
   async function comercioDePuntos() {
     const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'puntos' });
     sesion.comercioId = comercioId;
@@ -335,9 +326,10 @@ describe('accionGuardarControles — el mínimo de compra (Tarea 4, migración 0
 // TAREA 4 — cuándo se le ofrece al dueño el sub-bloque, más allá del tipo PRINCIPAL: la pregunta que
 // contesta `ofreceReglaDeMonto` (lib/comercio/montoAcreditacion.ts), usada por
 // `datosFormularioControles` (datosControles.ts) mirando TODOS los programas, no solo el principal.
-// Mismo aviso que el bloque de arriba: las tres pasan por `dibujarReglas` → `datosFormularioControles`
-// → `leerControles`, así que hoy quedan en rojo por 42703 (columna faltante, migración 0039
-// pendiente); se corrieron para confirmar que fallan por ESA razón. Verde y mutaciones: Tarea 9.
+// Las tres pasan por `dibujarReglas` → `datosFormularioControles` → `leerControles`, que selecciona
+// las columnas de la migración 0039 (aplicada y verificada, 2026-09-23). Corren en verde; sus
+// mutaciones quedan documentadas en el encabezado del describe de arriba
+// ("accionGuardarControles — el mínimo de compra (Tarea 4)").
 describe('FormularioControles — a quién se le ofrece el sub-bloque (Tarea 4)', () => {
   it('membresía PRINCIPAL + sellos SECUNDARIO: se dibuja la casilla "Pedir" y el sub-bloque', async () => {
     const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'membresia' });

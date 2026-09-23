@@ -173,26 +173,16 @@ describe('ofreceReglaDeMonto', () => {
 });
 
 // Contra Supabase de verdad. Las columnas de este módulo (exigir_monto_compra,
-// monto_minimo_compra_centavos) llegan con la migración 0039, TODAVÍA NO aplicada en esta base
-// (confirmado corriendo scripts/verificar-0039.ts el 2026-09-23). Hoy, de las tres pruebas de este
-// describe, DOS quedan en rojo por esa razón — las dos que llaman a leerReglaDeMonto sobre un
-// comercio que existe de verdad — y NO con el mismo error, porque cada una dispara una operación
-// distinta de supabase-js:
-// - "un comercio recién creado..." (el control positivo) llama a leerReglaDeMonto directo, que hace
-//   un SELECT: ese SELECT sí llega a Postgres y vuelve con el 42703 real,
-//   "column comercios.exigir_monto_compra does not exist".
-// - "las tres columnas seteadas..." primero hace un UPDATE crudo (para setear la regla antes de
-//   leerla): ese UPDATE lo rechaza PostgREST ANTES de tocar Postgres, comparando contra su caché de
-//   esquema, con PGRST204 "Could not find the 'exigir_monto_compra' column of 'comercios' in the
-//   schema cache" — nunca llega a ejecutar el SELECT de leerReglaDeMonto.
-// La tercera (id inexistente) queda en VERDE hoy, pero por casualidad: el mismo 42703 del SELECT de
-// leerReglaDeMonto también cae en el `if (error || !data) return null` que "no existe la fila" —
-// por eso va DESPUÉS del control positivo, que es la prueba que de verdad demuestra que la lectura
-// funciona (y en cuanto la 0039 esté aplicada, atrapa una mutación tipo `exigir: true` fijo, que el
-// caso "id inexistente" no vería nunca: acá el resultado esperado también sería null). El plan
-// (Tarea 9) difiere el verde de las dos primeras a cuando Daniel aplique la migración a mano en
-// Supabase Studio.
-describe('leerReglaDeMonto (Supabase — pendiente de la migración 0039)', () => {
+// monto_minimo_compra_centavos) llegan con la migración 0039, aplicada y verificada (2026-09-23) —
+// las tres pruebas de este describe corren en VERDE.
+//
+// Mutation-testing CONFIRMADO (2026-09-23), restaurada después de corrida:
+// - `exigir: true` fijo en el `return` de `leerReglaDeMonto` (en vez de `data.exigir_monto_compra`):
+//   falla "un comercio recién creado (sin configurar nada) → los defaults" — `{ exigir: true,
+//   minimoCentavos: null }` en vez de `{ exigir: false, minimoCentavos: null }`. Es justo la prueba
+//   que hace de control positivo: la tercera ("un id inexistente → null") no habría visto esta
+//   mutación, porque su resultado esperado es `null` de todos modos.
+describe('leerReglaDeMonto (Supabase)', () => {
   const supabase = createServiceClient();
   const entorno = crearEntorno(supabase);
 

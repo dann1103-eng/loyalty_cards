@@ -4,24 +4,25 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { crearEntorno } from '@/test/fixtures/entornoComercio';
 
-// Archivo APARTE de reglas/actions.test.ts a propósito: ese archivo está en rojo hoy por las
-// columnas de la Tarea 4 (exigir_monto_compra/monto_minimo_compra_centavos, migración 0039
-// pendiente) — mezclar esta prueba ahí la dejaría en rojo sin que fuera culpa de esta prueba, y sin
-// que nadie notara si de verdad se rompe. La de acá corre en VERDE hoy: el camino que ejercita
-// (pedir marcado + link vacío) corta ANTES de tocar la base (`guardarResenaGoogle` valida y devuelve
-// el error sin llamar a `supabase.update`, ver resenaGoogle.test.ts, describe "corta antes de tocar
-// la base"), así que no depende de que la 0039 esté aplicada.
+// Archivo APARTE de reglas/actions.test.ts a propósito, por una razón que sigue vigente aunque la
+// migración 0039 ya esté aplicada: ese archivo prueba el sub-bloque de exigir/mínimo (Tarea 4), y
+// mezclar esta prueba ahí acoplaría sin necesidad dos features que no comparten nada. La de acá corre
+// en VERDE: el camino que ejercita (pedir marcado + link vacío) corta ANTES de tocar la base
+// (`guardarResenaGoogle` valida y devuelve el error sin llamar a `supabase.update`, ver
+// resenaGoogle.test.ts, describe "corta antes de tocar la base").
 //
 // Item 7(b) de la revisión de código del commit 455b165: a diferencia de una prueba pura que arma el
 // FormData a mano, esta sale del HTML REAL que dibuja FormularioResenaGoogle — así queda fijado el
 // PEGAMENTO entre el marcado y la acción: los nombres `pedir_resena_google`/`resena_google_url` y el
 // `=== 'on'` con el que accionGuardarResenaGoogle lee la casilla.
 //
-// MUTACIÓN verificada: cambiar el `name="pedir_resena_google"` del checkbox en
-// FormularioResenaGoogle.tsx por otro nombre hace fallar esta prueba — la acción deja de ver la
-// casilla marcada, `pedir` queda en `false`, y como `pedir=false` no corta antes de la base, termina
-// intentando un UPDATE de verdad (que hoy falla con la columna faltante y devuelve el error genérico
-// "No se pudo guardar la configuración.", no el de "Pegá el link…" que la prueba espera).
+// MUTACIÓN verificada (2026-09-23, con la 0039 aplicada): cambiar el `name="pedir_resena_google"` del
+// checkbox en FormularioResenaGoogle.tsx por otro nombre hace fallar esta prueba — la acción deja de
+// ver la casilla marcada, `pedir` queda en `false`, y como `pedir=false` no corta antes de la base,
+// termina haciendo un UPDATE de verdad. Con la 0039 aplicada ese UPDATE tiene ÉXITO (pedir:false,
+// url:null es una combinación válida), así que la acción devuelve `{ guardado: true }` en vez del
+// `{ error: 'Pegá el link…' }` que la prueba espera — sigue fallando, pero por un motivo distinto al
+// que valía antes de la migración (antes el UPDATE fallaba por la columna faltante).
 
 const { sesion } = vi.hoisted(() => ({ sesion: { comercioId: '' } }));
 vi.mock('@/lib/comercio/verifyComercioOwner', () => ({

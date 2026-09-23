@@ -117,13 +117,9 @@ describe('accionBuscarPorToken — las recompensas que se le muestran al cajero'
 // cupón un monto que se descartaba. Se mide sobre la acción, no sobre `usaMontoDeCompra`: el defecto
 // vivía en esta consulta, no en el catálogo.
 //
-// AVISO (Tarea 5, 2026-09-23): la prueba "sobre la tarjeta de PUNTOS del mismo comercio, sí" NO se
-// tocó, pero hoy queda en rojo: `accionBuscarPorToken` sumó `exigir_monto_compra,
-// monto_minimo_compra_centavos` al `select` de `comercios` (migración 0039, todavía sin aplicar acá
-// — confirmado con scripts/verificar-0039.ts), y PostgREST rechaza el `select` ENTERO cuando pide una
-// columna que no existe. El resultado: `comercio` queda `null`, `pedirMontoCompra` sale `false` en vez
-// de `true`. Se confirmó que falla por ESA razón y ninguna otra; vuelve a verde solo, sin tocar esta
-// prueba, en cuanto la 0039 esté aplicada (Tarea 9).
+// `accionBuscarPorToken` suma `exigir_monto_compra, monto_minimo_compra_centavos` al `select` de
+// `comercios` (migración 0039, aplicada y verificada el 2026-09-23) — la prueba "sobre la tarjeta de
+// PUNTOS del mismo comercio, sí" corre en verde.
 describe('accionBuscarPorToken — si al cajero se le pide el monto de la compra', () => {
   async function comercioDePuntosConCupon() {
     const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'puntos', pedir_monto_compra: true });
@@ -277,17 +273,10 @@ describe('autorizar una operación bloqueada — acredita lo que la operación v
     expect(await saldoDe(id), '5 % de $250.00 son $12.50').toBe(1250);
   });
 
-  // AVISO (Tarea 5, 2026-09-23): esta prueba NO se tocó, pero hoy queda en rojo. `ejecutarOperacion`
-  // ahora llama a `leerReglaDeMonto` ANTES de acreditar en la rama `default` (puntos/sellos), y esa
-  // función falla hacia lo restrictivo (spec, sección 2): si la lectura de la regla falla, rechaza
-  // con "No se pudo verificar la regla de monto. Probá de nuevo." — y hoy SIEMPRE falla, porque
-  // `exigir_monto_compra` no existe (migración 0039, sin aplicar acá). O sea: hasta que la 0039 esté
-  // aplicada, TODA acreditación de puntos/sellos por el escáner queda bloqueada, tenga o no el
-  // comercio la regla configurada — es la medida exacta de lo que rompería en producción si esto se
-  // publicara sin la migración (regla del CLAUDE.md del proyecto: migración primero, deploy después).
-  // Confirmado con el log de `leerReglaDeMonto` ("[monto] no se pudo leer la regla de monto del
-  // comercio: … column comercios.exigir_monto_compra does not exist", 42703). Vuelve a verde solo,
-  // sin tocar esta prueba, en cuanto la 0039 esté aplicada (Tarea 9).
+  // `ejecutarOperacion` llama a `leerReglaDeMonto` ANTES de acreditar en la rama `default`
+  // (puntos/sellos) — con la migración 0039 aplicada y verificada (2026-09-23), esta prueba corre en
+  // verde: el comercio de este describe no configura la regla, así que `validarMontoAcreditacion`
+  // no la bloquea.
   it('SELLOS y PUNTOS siguen acreditando lo que el cajero intentó: un sello, y los puntos que tecleó', async () => {
     const comercioId = await entorno.crearComercio({ tope_acreditaciones_dia: 1, techo_puntos_acreditacion: 3 });
     sesion.comercioId = comercioId;
@@ -404,31 +393,20 @@ describe('autorizar una operación bloqueada — acredita lo que la operación v
 // primer onboarding real (2026-09-22): un comercio quiere "solo sumar sellos con compras de $10 en
 // adelante" en vez de sumar con cualquier compra.
 //
-// ESTADO DE LA 0039 (2026-09-23): TODAVÍA NO ESTÁ APLICADA en esta base (confirmado corriendo
-// `npx tsx --env-file=.env.local --conditions=react-server scripts/verificar-0039.ts`, que respondió
-// "FALLO: la migración 0039 NO está aplicada" con detalle "column comercios.exigir_monto_compra
-// does not exist" — ese script hace un SELECT, que PostgREST valida contra el catálogo de Postgres
-// y rechaza con 42703). Por eso `setearReglaMinimo` de abajo (el único punto de este bloque que toca
-// las columnas nuevas) hace fallar TODAS las pruebas de este describe — no hay forma de setear la
-// regla sin las columnas —, pero con un mensaje DISTINTO: `setearReglaMinimo` hace un UPDATE, que
-// PostgREST valida contra su caché de esquema en vez de contra Postgres directamente, y ese camino
-// responde PGRST204: "Could not find the 'exigir_monto_compra' column of 'comercios' in the schema
-// cache" (es el mensaje que efectivamente se ve al correr este archivo hoy). Mismo problema de fondo
-// (la columna no existe), dos códigos de error distintos según el verbo. Es el rojo esperado por
-// "Antes de empezar" del plan: se escriben igual, y el verde + las mutaciones de abajo se difieren a
-// la Tarea 9 (cierre, con la 0039 ya migrada en Supabase).
-//
-// MUTACIONES PENDIENTES (correrlas recién en la Tarea 9, con la base migrada):
+// Mutation-testing CONFIRMADO (2026-09-23, con la 0039 aplicada), cada una restaurada después de
+// corrida:
 // - Pasar `autorizado: false` fijo en la llamada a `validarMontoAcreditacion` dentro de
-//   `ejecutarOperacion` (en vez de `autorizacion !== null`): tiene que hacer fallar "accionAutorizarOperacion
-//   con '9.99' y motivo → ok:true, saldo sube" — el dueño se quedaría sin ninguna forma de autorizar
-//   una compra bajo el mínimo.
+//   `ejecutarOperacion` (en vez de `autorizacion !== null`): falla "el dueño autoriza con motivo una
+//   compra de '9.99' bajo el mínimo: se acredita y el saldo sube" — el dueño se quedaba sin ninguna
+//   forma de autorizar una compra bajo el mínimo.
 // - Mover la llamada a `leerReglaDeMonto`/`validarMontoAcreditacion` de ADENTRO del caso `default`
-//   del switch a ANTES del switch entero (aplicándola a los ocho tipos): tiene que hacer fallar el
-//   caso del CUPÓN — un cupón sin monto pasaría a rechazarse con el error de monto faltante, cuando
-//   usar un cupón no debería mirar esta regla en absoluto.
-// - Quitar `bloqueoLimite: chequeo.bloqueoLimite` del `return` del rechazo (dejar solo `error`): tiene
-//   que hacer fallar la aserción `bloqueoLimite: true` del caso '9.99' sin autorizar.
+//   del switch a ANTES del switch entero (aplicándola a los ocho tipos): falla "en un CUPÓN del
+//   mismo comercio, sin monto, la respuesta no es ni el error de monto faltante ni el del mínimo" —
+//   un cupón sin monto pasaba a rechazarse con el error de monto faltante, cuando usar un cupón no
+//   debería mirar esta regla en absoluto.
+// - Quitar `bloqueoLimite: chequeo.bloqueoLimite` del `return` del rechazo (dejar solo `error`):
+//   falla "con '9.99' (mínimo $10.00): se rechaza con el mensaje exacto, bloqueoLimite, y el saldo
+//   no cambia" — la aserción `bloqueoLimite: true`.
 describe('la regla de mínimo de compra en el escáner (0039)', () => {
   const MOTIVO = 'Es clienta de toda la vida, se lo autorizo';
 

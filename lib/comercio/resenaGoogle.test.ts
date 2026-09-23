@@ -26,20 +26,15 @@ import {
 //   normalizan" (HTTPS://G.PAGE/r/abc no vuelve como https://g.page/r/abc si se devuelve el texto
 //   crudo sin normalizar).
 //
-// Las de leerResenaGoogle/guardarResenaGoogle CONTRA SUPABASE (más abajo) y su mutación de la
-// revalidación al leer quedan PENDIENTES: la migración 0039 todavía no está aplicada en esta base
-// (confirmado con scripts/verificar-0039.ts el 2026-09-23), así que hoy ninguna puede correr en
-// verde. Se corrieron las cinco para confirmar que fallan por la columna faltante y ninguna otra
-// razón — pero no todas por el MISMO camino ni el MISMO código de error:
-// - Las CUATRO que llegan a un `.update()` sobre `comercios` (guardar link válido; guardar con pedir
-//   apagado; los dos updates directos de "link inválido"/"'' guardado") fallan con PGRST204:
-//   "Could not find the 'pedir_resena_google' column of 'comercios' in the schema cache" — el cliente
-//   de PostgREST rechaza el UPDATE contra su caché de esquema sin llegar a tocar Postgres.
-// - La de "pedir SIN link" NO llega a escribir nada (guardarResenaGoogle corta antes, con el error de
-//   "Pegá el link…", sin tocar la base — ver el describe de abajo que prueba justo esto con un
-//   stub): falla más adelante, en la RELECTURA (`leerResenaGoogle`), con 42703: "column
-//   comercios.pedir_resena_google does not exist" — ese es un SELECT, y ahí sí llega a Postgres.
-// Verde y la mutación pendiente (quitar la revalidación en `leerResenaGoogle`): Tarea 9.
+// Las de leerResenaGoogle/guardarResenaGoogle CONTRA SUPABASE (más abajo), con la migración 0039
+// aplicada y verificada (2026-09-23), corren en verde.
+//
+// Mutation-testing CONFIRMADO (2026-09-23, con la 0039 aplicada), restaurada después de corrida:
+// - Quitar la revalidación en `leerResenaGoogle` (devolver `data.resena_google_url` crudo en vez de
+//   `revalidado.url`): falla "un link inválido escrito por UPDATE directo (bypass de esta capa) se
+//   relee como url: null" — el link inválido volvía tal cual, sin pasar de nuevo por
+//   `validarUrlResenaGoogle`. (El caso "guardado como '' se relee como url: null" no discrimina esta
+//   mutación: `'' || null` también da `null`.)
 
 describe('validarUrlResenaGoogle', () => {
   describe('aceptados', () => {
@@ -245,7 +240,7 @@ describe('guardarResenaGoogle — corta antes de tocar la base', () => {
   });
 });
 
-describe('guardarResenaGoogle / leerResenaGoogle (contra Supabase — migración 0039 pendiente)', () => {
+describe('guardarResenaGoogle / leerResenaGoogle (contra Supabase)', () => {
   const supabase = createServiceClient();
   const entorno = crearEntorno(supabase);
 

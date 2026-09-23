@@ -9,11 +9,12 @@ import { altaYAcreditacionPorTelefono } from './altaPorTelefono';
 // spec lo pide explícitamente ("falla hacia lo restrictivo: una falla de lectura acá casi seguro
 // tumbaría el RPC igual", sección 2).
 //
-// Esa rama queda SIN PROBAR en cuanto la migración 0039 esté aplicada: hoy la cubren de casualidad
-// las 6 pruebas de altaPorTelefono.test.ts que están en rojo por la columna faltante (mismo mensaje
-// de error, pero por una causa de infraestructura — la columna no existe — y no por el
-// comportamiento que esta rama existe para proteger). En cuanto la 0039 exista, esas 6 pruebas
-// pasan a verde y dejan de tocar este código en absoluto.
+// Esa rama queda SIN PROBAR por otro archivo ahora que la migración 0039 está aplicada: antes, la
+// cubrían de casualidad las 6 pruebas de altaPorTelefono.test.ts que estaban en rojo por la columna
+// faltante (mismo mensaje de error, pero por una causa de infraestructura — la columna no existía —
+// y no por el comportamiento que esta rama existe para proteger). Con la 0039 aplicada, esas 6
+// pruebas corren en verde y ya no tocan este código en absoluto — este archivo es la única prueba
+// que ejercita la rama de fallo hacia lo restrictivo.
 //
 // El truco que usa escanear/actions.test.ts para forzar esta misma rama SIN mockear nada (un
 // comercioId que no resuelve ninguna fila) no sirve acá: en altaPorTelefono.ts, `obtenerPrograma`

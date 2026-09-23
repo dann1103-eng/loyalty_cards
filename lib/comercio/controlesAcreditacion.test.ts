@@ -13,10 +13,8 @@ import { ZONA_HORARIA_DEFAULT } from './zonasHorarias';
 //
 // El resto — guardar y releer de verdad, y las combinaciones que el formulario SÍ puede producir —
 // se prueba en app/comercio/(protegido)/reglas/actions.test.ts, porque ahí vive el formulario real
-// (dibujarReglas) y porque esas rutas SÍ tocan las columnas de la migración 0039, que hoy —
-// 2026-09-23, confirmado con scripts/verificar-0039.ts — todavía no está aplicada. Esas pruebas de
-// Supabase están escritas y corridas para confirmar que fallan por la columna faltante (ver el
-// encabezado de ese archivo); su verde y sus mutaciones quedan para la Tarea 9.
+// (dibujarReglas) y porque esas rutas SÍ tocan las columnas de la migración 0039, aplicada y
+// verificada el 2026-09-23 (ver el encabezado de ese archivo para sus mutaciones confirmadas).
 //
 // Mutation-testing CONFIRMADO (2026-09-23), cada una restaurada después de corrida:
 // - Cambiar el `Number.NaN` de `aMinimo` por `null` (mantener lo que devuelve centavosDesdeTexto tal
