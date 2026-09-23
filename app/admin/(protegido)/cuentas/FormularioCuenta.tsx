@@ -45,7 +45,14 @@ export default function FormularioCuenta({
   const [activaDesde, setActivaDesde] = useState(inicial?.licencia_activa_desde ?? '');
   // Solo importa en el alta (!inicial): editar una cuenta existente no renderiza este campo, así
   // que el estado nunca se lee en ese caso — no hace falta condicionar el useState en sí.
-  const [cobranza, setCobranza] = useState<string>('normal');
+  //
+  // Arranca en 'exenta', no en 'normal': toda cuenta nueva empieza con su mes de prueba gratis y
+  // pasar a 'normal' es SIEMPRE una decisión manual de FM, cuenta por cuenta (memoria "cobranza: mes
+  // gratis a usuarios reales"; mismo criterio que el alta self-service, altaAutoservicio.ts). Una
+  // cuenta 'normal' sin ningún pago queda "vencida" desde el día uno (su vencimiento es
+  // cobranza_desde = hoy), así que el default viejo le pedía pagar a un cliente recién dado de alta
+  // en pleno onboarding.
+  const [cobranza, setCobranza] = useState<string>('exenta');
 
   // Elegir un plan PRECARGA monto y límite sugeridos — siguen siendo editables después (tratos
   // negociados), esto es solo una ayuda para no tipear de memoria los 3 valores del catálogo.
