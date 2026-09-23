@@ -9,8 +9,11 @@ import { manifiestoAdmin } from '@/lib/manifiestos';
 // Mismo patrón de carpeta con punto que app/api/tarjetas/[tarjetaId]/pass.pkpass/route.ts: el
 // nombre de la carpeta ES la URL.
 //
-// Sin datos de request => Next lo optimiza estáticamente (se genera en build y se cachea), igual
-// que app/mi-tarjeta/icono-192/route.tsx.
+// Los Route Handlers NO se cachean por default (node_modules/next/dist/docs/01-app/01-getting-
+// started/15-route-handlers.md, sección "Caching"): sin `dynamic = 'force-static'` cada visita
+// recalcularía este objeto fijo. Con él, Next lo genera una vez en build y lo sirve cacheado.
+export const dynamic = 'force-static';
+
 export function GET() {
   return NextResponse.json(manifiestoAdmin(), {
     headers: { 'Content-Type': 'application/manifest+json' },

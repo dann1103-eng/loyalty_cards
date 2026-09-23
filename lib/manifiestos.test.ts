@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import type { MetadataRoute } from 'next';
+import manifestoRaiz from '@/app/manifest';
 import {
   manifiestoComercio,
   manifiestoAdmin,
@@ -8,18 +11,8 @@ import {
   URL_MANIFIESTO_ADMIN,
 } from './manifiestos';
 
-// Mutaciones corridas a mano (romper, confirmar el mensaje de fallo, restaurar) — ver el reporte
-// de la tarea para la transcripción completa de cada corrida:
-// - `scope: '/admin/'` (con barra) en manifiestoAdmin() → CONFIRMADA: falla
-//   "invariante: start_url está dentro de scope" en el describe de admin.
-// - `start_url: '/mi-tarjeta'` en manifiestoComercio() → CONFIRMADA: falla "apunta a /comercio/panel
-//   como start_url e id" Y "no es el manifest del cliente".
-// - Borrar `export const metadata` de app/comercio/elegir/page.tsx dejando el `import` →
-//   CONFIRMADA: el guardarraíl lista `app/comercio/elegir/page.tsx` en el mensaje de fallo.
-// - Borrar la clave `manifest` de app/registro-comercio/page.tsx dejando el `import` → CONFIRMADA:
-//   el guardarraíl lista `app/registro-comercio/page.tsx`.
-// - Comentar la línea `manifest: URL_MANIFIESTO_ADMIN` de app/admin/login/page.tsx → CONFIRMADA:
-//   el guardarraíl lista `app/admin/login/page.tsx`.
+// MUTATION-TESTING (cada fila se corrió el 2026-09-23: romper, confirmar el mensaje de fallo
+// exacto, restaurar). Detalle completo al final del archivo.
 
 const RAIZ = join(__dirname, '..');
 
@@ -81,28 +74,56 @@ describe('manifiestoAdmin()', () => {
   });
 });
 
+// lib/manifiestos.ts duplica a propósito el fondo y los íconos de app/manifest.ts (no los importa:
+// los tres manifests quedan independientes entre sí). Esta prueba es lo que mantiene esa
+// duplicación honesta: si alguien cambia el color o el ícono en uno de los tres lugares y se
+// olvida de los otros dos, esto falla en vez de quedar desincronizado en silencio.
+describe('background_color, theme_color e icons no se desincronizan de app/manifest.ts', () => {
+  const raiz = manifestoRaiz();
+
+  it('comercio', () => {
+    const m = manifiestoComercio();
+    expect(m.background_color).toBe(raiz.background_color);
+    expect(m.theme_color).toBe(raiz.theme_color);
+    expect(m.icons).toEqual(raiz.icons);
+  });
+
+  it('admin', () => {
+    const m = manifiestoAdmin();
+    expect(m.background_color).toBe(raiz.background_color);
+    expect(m.theme_color).toBe(raiz.theme_color);
+    expect(m.icons).toEqual(raiz.icons);
+  });
+});
+
 // Guardarraíl de archivos, mismo estilo que lib/marca.test.ts: un barrido a mano responde "ya les
 // puse el manifest a todos" una vez; esta prueba lo responde siempre. Sin ella, una pantalla nueva
 // del dueño (o de FM) vuelve a heredar en silencio el manifest del portal del CLIENTE —el mismo bug
 // que originó esta tarea— porque next inyecta el manifest de la raíz salvo que el segmento diga lo
 // contrario.
 
-// Quita comentarios de línea y de bloque, igual que sinComentarios() en lib/marca.test.ts: sin esto,
-// un archivo que menciona la constante solo en un comentario ("TODO: declarar manifest:
-// URL_MANIFIESTO_ADMIN acá") pasaría la prueba sin haber declarado nada de verdad.
+// Quita comentarios de línea y de bloque, igual que sinComentarios() en lib/marca.test.ts —con UN
+// arreglo: split(/\r?\n/) y no split('\n'). El working tree de este repo es CRLF (core.autocrlf,
+// ver CLAUDE.md). Con split('\n') cada "línea" le queda un '\r' colgando al final; `.` no matchea
+// '\r' y `$` sin bandera `m` es fin de STRING, así que `/\/\/.*$/` nunca encuentra dónde matchear y
+// el comentario queda SIN quitar. Eso deja pasar un caso real: una `metadata` vacía con un
+// comentario tramposo al final de la línea, tipo
+// `export const metadata: Metadata = {};  // manifest: URL_MANIFIESTO_ADMIN`, donde no hay ninguna
+// declaración de verdad pero el texto del comentario matchea el regex de abajo igual. Confirmado
+// con mutación (ver M6 al final del archivo).
 function sinComentarios(contenido: string): string {
   return contenido
     .replace(/\/\*[\s\S]*?\*\//g, '')
-    .split('\n')
+    .split(/\r?\n/)
     .filter((linea) => !/^\s*(\/\/|\*)/.test(linea))
     .map((linea) => linea.replace(/\/\/.*$/, ''))
     .join('\n');
 }
 
 // Recorre una carpeta de app/ y junta los archivos que TIENEN que declarar su propio manifest:
-// - todo page.tsx que NO cuelgue de una carpeta (protegido) (esas páginas no tienen sesión: son
-//   login, activar, clave, elegir, suspendida — el manifest tiene que estar ahí para que el primer
-//   atajo que instala alguien ya sea el correcto);
+// - todo page.tsx que NO cuelgue de una carpeta (protegido) (esas páginas no heredan metadata de
+//   ningún layout del panel —login, activar, clave, elegir, suspendida—, así que sin su propia
+//   declaración el manifest que reciben es el de la raíz, el del portal del CLIENTE);
 // - el layout.tsx de cada carpeta (protegido) (cubre a TODAS las páginas del panel de una sola vez,
 //   por herencia de metadata — no hace falta tocar cada page.tsx de adentro).
 function archivosQueNecesitanManifest(raizRelativa: string): string[] {
@@ -134,25 +155,43 @@ function archivosQueNecesitanManifest(raizRelativa: string): string[] {
   return encontrados;
 }
 
+// Normaliza a formato POSIX ('/') para que las aserciones no dependan del separador de rutas del
+// SO (join() usa '\' en Windows).
+function normalizar(rutaAbsoluta: string): string {
+  return relative(RAIZ, rutaAbsoluta).replace(/\\/g, '/');
+}
+
 describe('todas las pantallas del dueño y de FM declaran su propio manifest', () => {
   const archivosComercio = archivosQueNecesitanManifest('app/comercio');
   const archivosAdmin = archivosQueNecesitanManifest('app/admin');
+  // app/registro-comercio es el alta self-service del dueño: vive fuera de app/comercio, pero es
+  // una pantalla suya igual, y la misma función sirve para recorrerla (no tiene carpeta
+  // (protegido) adentro, así que encuentra únicamente su page.tsx).
+  const archivosRegistroComercio = archivosQueNecesitanManifest('app/registro-comercio');
 
-  it('el barrido encontró de verdad las carpetas del proyecto (6 de comercio + 2 de admin)', () => {
-    // Si esto diera menos de 8, la prueba de abajo podría pasar sin haber mirado nada —el error
+  it('el barrido encontró de verdad las carpetas del proyecto (6 de comercio + 2 de admin + 1 de registro-comercio)', () => {
+    // Si esto diera menos de 9, la prueba de abajo podría pasar sin haber mirado nada —el error
     // más silencioso posible, igual que el expect(archivos.length) de lib/marca.test.ts.
-    expect(archivosComercio.length + archivosAdmin.length).toBeGreaterThanOrEqual(8);
+    expect(archivosComercio.length + archivosAdmin.length + archivosRegistroComercio.length).toBeGreaterThanOrEqual(9);
   });
 
-  it('cada archivo referencia la constante de SU manifest (no el nombre suelto, la clave completa)', () => {
-    // app/registro-comercio/page.tsx vive fuera de app/comercio y app/admin (es el alta
-    // self-service del dueño, no un archivo del panel), así que el recorrido de arriba no lo
-    // encuentra: se agrega a mano, como pide el diseño.
+  it('encontró los dos layouts de (protegido) (confirma que esa rama del recorrido corrió de verdad)', () => {
+    expect(archivosComercio.map(normalizar)).toContain('app/comercio/(protegido)/layout.tsx');
+    expect(archivosAdmin.map(normalizar)).toContain('app/admin/(protegido)/layout.tsx');
+  });
+
+  it('cada archivo declara su manifest con export (no el nombre suelto, la clave completa)', () => {
     const objetivos: { archivo: string; constante: 'URL_MANIFIESTO_COMERCIO' | 'URL_MANIFIESTO_ADMIN' }[] = [
       ...archivosComercio.map((archivo) => ({ archivo, constante: 'URL_MANIFIESTO_COMERCIO' as const })),
       ...archivosAdmin.map((archivo) => ({ archivo, constante: 'URL_MANIFIESTO_ADMIN' as const })),
-      { archivo: join(RAIZ, 'app/registro-comercio/page.tsx'), constante: 'URL_MANIFIESTO_COMERCIO' as const },
+      ...archivosRegistroComercio.map((archivo) => ({ archivo, constante: 'URL_MANIFIESTO_COMERCIO' as const })),
     ];
+
+    // "export const metadata" o "export function/async function generateMetadata": sin exigir el
+    // `export`, `const metadata = { manifest: … }` a secas matchea el regex de la clave de abajo
+    // pero Next lo ignora en silencio (no es una export reconocida) — pasaría la prueba sin que el
+    // manifest se aplique de verdad.
+    const regexExportMetadata = /export\s+const\s+metadata\b|export\s+(async\s+)?function\s+generateMetadata\b/;
 
     const culpables: string[] = [];
     for (const { archivo, constante } of objetivos) {
@@ -161,24 +200,45 @@ describe('todas las pantallas del dueño y de FM declaran su propio manifest', (
       // que conserva `import { URL_MANIFIESTO_COMERCIO } from '@/lib/manifiestos'` pero perdió la
       // clave `manifest` dentro de `metadata` pasaría un match contra el nombre solo, y ese es
       // justo el caso que rompe el atajo sin que nadie se entere.
-      const regex = new RegExp(`manifest:\\s*${constante}\\b`);
-      if (!regex.test(codigo)) {
-        culpables.push(relative(RAIZ, archivo));
+      const regexClave = new RegExp(`manifest:\\s*${constante}\\b`);
+      if (!regexClave.test(codigo) || !regexExportMetadata.test(codigo)) {
+        culpables.push(normalizar(archivo));
       }
     }
 
     expect(
       culpables,
-      `No declaran su manifest (o perdieron la clave "manifest: ${'URL_MANIFIESTO_…'}"):\n${culpables.join('\n')}`,
+      `No declaran su manifest con export (o perdieron la clave "manifest: URL_MANIFIESTO_…"):\n${culpables.join('\n')}`,
     ).toEqual([]);
   });
 });
 
+// Los Route Handlers responden en /manifiestos/*.webmanifest (el nombre de la carpeta ES la URL,
+// igual que pass.pkpass). Esto NO lo cubre ninguna prueba de arriba: manifiestoComercio() y
+// manifiestoAdmin() son funciones puras, pero nada probaba todavía que la ruta de admin sirviera el
+// de admin y no el de comercio (o que la carpeta exista con el nombre correcto).
+const RUTAS_MANIFIESTOS: { url: string; manifiestoEsperado: () => MetadataRoute.Manifest }[] = [
+  { url: URL_MANIFIESTO_COMERCIO, manifiestoEsperado: manifiestoComercio },
+  { url: URL_MANIFIESTO_ADMIN, manifiestoEsperado: manifiestoAdmin },
+];
+
+describe.each(RUTAS_MANIFIESTOS)('el Route Handler de $url', ({ url, manifiestoEsperado }) => {
+  // 'manifiestos/comercio.webmanifest/route.ts' — sin la barra inicial de la URL.
+  const archivoRuta = join(RAIZ, 'app', ...url.split('/').filter(Boolean), 'route.ts');
+
+  it('existe en disco', () => {
+    expect(existsSync(archivoRuta)).toBe(true);
+  });
+
+  it('el GET responde ese manifest exacto con el content-type de manifest', async () => {
+    const modulo = await import(pathToFileURL(archivoRuta).href);
+    const respuesta = await modulo.GET();
+    expect(respuesta.headers.get('content-type')).toBe('application/manifest+json');
+    expect(await respuesta.json()).toEqual(manifiestoEsperado());
+  });
+});
+
 describe('las constantes de URL son las que sirven los Route Handlers', () => {
-  // app/manifiestos/comercio.webmanifest/route.ts y .../admin.webmanifest/route.ts responden en
-  // exactamente estas rutas (el nombre de carpeta ES la URL, como pass.pkpass). Si estas
-  // constantes cambiaran sin tocar esas carpetas, el `<link rel="manifest">` de cada pantalla
-  // apuntaría a un 404.
   it('comercio', () => {
     expect(URL_MANIFIESTO_COMERCIO).toBe('/manifiestos/comercio.webmanifest');
   });
@@ -187,3 +247,57 @@ describe('las constantes de URL son las que sirven los Route Handlers', () => {
     expect(URL_MANIFIESTO_ADMIN).toBe('/manifiestos/admin.webmanifest');
   });
 });
+
+// MUTATION-TESTING — transcripción completa, cada fila corrida el 2026-09-23 (romper, confirmar el
+// mensaje de fallo exacto, restaurar):
+//
+//   M1. `scope: '/admin/'` (con barra) en manifiestoAdmin()
+//       → fallan 2 pruebas, ambas del describe de manifiestoAdmin(): "el scope es /admin, sin
+//         barra final" (expected '/admin/' to be '/admin') y "invariante: start_url está dentro de
+//         scope" (expected false to be true).
+//
+//   M2. `start_url: '/mi-tarjeta'` en manifiestoComercio()
+//       → fallan 3 pruebas, las tres del describe de manifiestoComercio(): "arranca e identifica la
+//         instalación en /comercio/panel: la página que comparten dueño y cajero" (expected
+//         '/mi-tarjeta' to be '/comercio/panel'), "invariante: start_url está dentro de scope"
+//         (expected false to be true) y "no es el manifest del cliente: start_url no empieza con
+//         /mi-tarjeta" (expected true to be false).
+//
+//   M3. Borrar `export const metadata` de app/comercio/elegir/page.tsx dejando el `import`
+//       → falla "cada archivo declara su manifest con export (no el nombre suelto, la clave
+//         completa)"; el mensaje lista `app/comercio/elegir/page.tsx`.
+//
+//   M4. Borrar la clave `manifest` de app/registro-comercio/page.tsx dejando el `import`
+//       → falla la misma prueba; el mensaje lista `app/registro-comercio/page.tsx`.
+//
+//   M5. Comentar la línea `manifest: URL_MANIFIESTO_ADMIN` de app/admin/login/page.tsx
+//       → falla la misma prueba; el mensaje lista `app/admin/login/page.tsx`.
+//
+//   M6. El bug de CRLF en sinComentarios(), en dos pasos:
+//       (a) con `split('\n')` (sin la alternativa `\r?`) Y `export const metadata: Metadata = {};
+//           // manifest: URL_MANIFIESTO_ADMIN` en app/admin/login/page.tsx (CRLF real: `git
+//           ls-files --eol` da `w/crlf`; metadata vacía, la clave real NO está) → LAS 21 PRUEBAS
+//           PASAN: el `\r` final de cada línea hace que `/\/\/.*$/` nunca matchee, el comentario
+//           queda sin quitar, y su texto matchea el regex de la clave por accidente. Falso negativo
+//           confirmado.
+//       (b) mismo archivo roto, con `split(/\r?\n/)` (el arreglo) → AHORA SÍ falla "cada archivo
+//           declara su manifest con export (no el nombre suelto, la clave completa)"; el mensaje
+//           lista `app/admin/login/page.tsx`. Confirma que el arreglo atrapa lo que el bug dejaba
+//           pasar.
+//
+//   M7. El GET de app/manifiestos/admin.webmanifest/route.ts responde manifiestoComercio() en vez
+//       de manifiestoAdmin()
+//       → falla "el GET responde ese manifest exacto con el content-type de manifest" en la fila
+//         `el Route Handler de '/manifiestos/admin.webmanifest'` (el body no matchea: trae
+//         start_url/scope/id/name/short_name de comercio).
+//
+//   M8. Renombrar la carpeta app/manifiestos/comercio.webmanifest (a comercio-temp.webmanifest)
+//       → fallan las 2 pruebas de la fila `el Route Handler de '/manifiestos/comercio.webmanifest'`:
+//         "existe en disco" (expected false to be true) y "el GET responde ese manifest exacto..."
+//         (Error: Cannot find module — ya no puede importar el archivo movido).
+//
+//   M9. Quitar el `export` de `export const metadata` en app/comercio/login/page.tsx (queda
+//       `const metadata = …`, con la clave `manifest` intacta)
+//       → falla "cada archivo declara su manifest con export (no el nombre suelto, la clave
+//         completa)"; el mensaje lista `app/comercio/login/page.tsx`. Sin el chequeo de `export`
+//         nuevo (regexExportMetadata) esta mutación NO se detecta: la clave sigue matcheando.

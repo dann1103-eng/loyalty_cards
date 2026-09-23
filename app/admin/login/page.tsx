@@ -3,8 +3,8 @@ import FormularioLogin from './FormularioLogin';
 import SelectorTema from '@/app/_ui/SelectorTema';
 import { URL_MANIFIESTO_ADMIN } from '@/lib/manifiestos';
 
-// Fuera de (protegido): sin esta declaración propia heredaría el manifest del portal del cliente
-// (ver el comentario de app/admin/(protegido)/layout.tsx).
+// Fuera de (protegido): sin esta declaración propia heredaría el manifest del portal del cliente.
+// Ver lib/manifiestos.ts.
 export const metadata: Metadata = { manifest: URL_MANIFIESTO_ADMIN };
 
 const MENSAJES: Record<string, string> = {
