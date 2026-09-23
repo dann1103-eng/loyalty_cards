@@ -424,9 +424,10 @@ aplicada" y corta antes de cualquier insert.
 - Modificar: `app/registro/[comercioSlug]/RegistroCliente.tsx` — el paso nuevo antes del formulario
   (textos EXACTOS de la spec), `target="_blank" rel="noopener noreferrer"`, dos estados con nombre
   propio: `tocoGoogle` (habilita "Ya la dejé", se guarda en `sessionStorage` por slug) y `continuo`
-  (pasa al formulario, no se guarda). La LECTURA de `sessionStorage` va en un `useEffect` después de
-  montar (nunca en el render ni en el inicializador de `useState`: rompe la hidratación y deja el
-  botón deshabilitado tras recargar); try/catch en cada acceso.
+  (pasa al formulario, no se guarda). La LECTURA de `sessionStorage` va con `useSyncExternalStore`
+  y snapshot de servidor `false` (nunca en el render ni en el inicializador de `useState`: rompe la
+  hidratación y deja el botón deshabilitado tras recargar; y no con `useEffect` + `setState`, que la
+  regla `react-hooks/set-state-in-effect` rechaza en este repo); try/catch en cada acceso.
 
 - [ ] **Paso 1:** implementar. No hay pruebas de componentes en este repo (CLAUDE.md): la lógica de
   "¿mostrar el paso?" es `resenaGoogleUrl !== null && !continuo`; si crece más que eso, sacarla a una

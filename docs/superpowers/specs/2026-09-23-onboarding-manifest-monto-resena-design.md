@@ -334,9 +334,12 @@ Con link, antes del formulario hay un paso nuevo:
   formulario de siempre.
 - Se recuerda en `sessionStorage` (clave por slug de comercio, lecturas y escrituras en try/catch) que
   el cliente ya tocó el link, para que si iOS recarga la pestaña al volver de la app de Google Maps no
-  tenga que tocarlo de nuevo. **La lectura va en un `useEffect` después de montar**, nunca durante el
-  render ni en el inicializador de `useState`: en el servidor ese acceso no existe, y el desajuste de
-  hidratación dejaría el botón "Ya la dejé" deshabilitado justo en el caso para el que existe esto.
+  tenga que tocarlo de nuevo. **La lectura NO va en el render ni en el inicializador de `useState`**:
+  en el servidor ese acceso no existe, y el desajuste de hidratación dejaría el botón "Ya la dejé"
+  deshabilitado justo en el caso para el que existe esto. Se lee con `useSyncExternalStore` con
+  snapshot de servidor `false` (React hidrata con ese valor y después re-renderiza con el real); no
+  con `useEffect` + `setState`, porque la regla de lint `react-hooks/set-state-in-effect` es ERROR en
+  este repo (precedente: `app/_ui/SelectorTema.tsx`).
 - Dos estados con nombre propio: `tocoGoogle` (se guarda en `sessionStorage`, habilita el botón) y
   `continuo` (pasa al formulario; no se guarda).
 

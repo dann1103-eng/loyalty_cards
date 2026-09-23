@@ -111,16 +111,19 @@ function VistaTarjeta({
   );
 }
 
-// Clave de sessionStorage del paso de reseña, por slug de comercio (spec sección 3, Tarea 8): si el
-// mismo teléfono tiene abiertas dos pestañas de dos comercios distintos, "ya toqué el link" de uno
-// no tiene que habilitar el botón del otro.
+// Clave de sessionStorage del paso de reseña, por slug de comercio (spec sección 3, Tarea 8).
+// sessionStorage ya es por pestaña, pero una misma pestaña puede pasar por el registro de dos
+// comercios (escaneó el QR de uno y después el de otro): el toque del link de A no tiene que
+// habilitar el botón de B.
 function claveResenaTocada(comercioSlug: string): string {
   return `cardly:resena-tocada:${comercioSlug}`;
 }
 
-// useSyncExternalStore no necesita re-suscribirse a nada: sessionStorage solo cambia por nuestro
-// propio clic (cubierto por tocoGoogleEnMemoria, un useState normal), nunca por otra pestaña ni por
-// un evento del navegador. El "store" existe únicamente para el snapshot inicial.
+// useSyncExternalStore no necesita suscribirse a nada: sessionStorage solo cambia por nuestro propio
+// clic (cubierto por tocoGoogleEnMemoria, un useState normal), nunca por otra pestaña ni por un
+// evento del navegador. NO "arreglar" esto agregando una suscripción: el valor guardado igual llega,
+// porque después de hidratar React vuelve a llamar a getSnapshot en un efecto pasivo y, si difiere
+// del snapshot del servidor, re-renderiza — ahí se habilita el botón tras una recarga.
 const suscribirNada = () => () => {};
 
 // Lo que sessionStorage recuerda de una visita anterior a ESTA pestaña: true si iOS la recargó
@@ -300,17 +303,19 @@ export default function RegistroCliente({
             {/* Deshabilitado hasta tocoGoogle: sistema de honor, pero con un empujón — el cliente
                 tiene que pasar por el link antes de que este botón responda. Es un <button>
                 (a diferencia del de arriba, que es un <a>), así que `disabled` alcanza: el
-                navegador ya bloquea `onClick` solo, sin JS extra. */}
+                navegador ya bloquea `onClick` solo, sin JS extra. Secundario (`btn-borde`), no un
+                segundo principal: la acción principal de este paso es la reseña, y es la
+                convención de la app (un principal + un borde). `width: 100%` porque `btn-borde` no
+                lo trae y tiene que quedar alineado con el de arriba. */}
             <button
-              className="btn-primary"
+              className="btn-borde"
               type="button"
-              style={{ marginTop: 10 }}
+              style={{ marginTop: 10, width: '100%' }}
               disabled={!tocoGoogle}
               onClick={() => setContinuo(true)}
             >
               Ya la dejé, sacar mi tarjeta
             </button>
-            <p className="nota">Se abre en una pestaña nueva.</p>
           </div>
         </div>
       </main>
