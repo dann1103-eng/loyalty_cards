@@ -57,7 +57,12 @@ export async function altaYAcreditacionPorTelefono(
   supabase: SupabaseClient<Database>,
   comercioId: string,
   datos: DatosAltaPorTelefono,
-  opciones?: OpcionesAcreditar,
+  // Sin 'montoCompra': esta función ya tiene su PROPIO canal para el monto (datos.
+  // montoCompraCentavos, arriba), calculado desde la regla del comercio y no desde lo que mande el
+  // llamador. Si `opciones` admitiera montoCompra, un `{ ...opciones, montoCompra: ... }` más abajo
+  // pisaría en silencio cualquier valor que el llamador hubiera puesto ahí — un solo canal para el
+  // monto, sin una segunda puerta que se pueda ignorar por accidente.
+  opciones?: Omit<OpcionesAcreditar, 'montoCompra'>,
 ): Promise<ResultadoAltaPorTelefono> {
   const nombre = datos.nombre.trim();
   if (!nombre) return { ok: false, error: 'Escribí el nombre del cliente.' };

@@ -3,7 +3,7 @@ import { verifyComercioAcceso } from '@/lib/comercio/verifyComercioAcceso';
 import { createServiceClient } from '@/lib/supabase/server';
 import { listarProgramas } from '@/lib/comercio/programas';
 import { leerReglaDeMonto } from '@/lib/comercio/montoAcreditacion';
-import { tipoOPuntos, formatearCentavos } from '@/lib/tarjetas/tipos';
+import { tipoOPuntos, formatearCentavos, aplicaReglaDeMonto } from '@/lib/tarjetas/tipos';
 import FormularioAgregarCliente from './FormularioAgregarCliente';
 
 export const dynamic = 'force-dynamic';
@@ -30,18 +30,23 @@ export default async function PaginaAgregarCliente() {
   // lib/comercio/montoAcreditacion.ts). Se lee acá (server) y no en el formulario (client component)
   // porque leerReglaDeMonto toca Supabase con el service client. Cuál tarjeta va a elegir el cajero
   // lo decide recién en el navegador, así que se le pasa la regla entera y el formulario la cruza
-  // con `aplicaReglaDeMonto` del programa elegido. Si no hay ninguna tarjeta elegible el formulario
-  // ni se dibuja: no vale la pena la consulta.
+  // con `aplicaReglaDeMonto` del programa elegido. Si NINGÚN elegible pasa `aplicaReglaDeMonto`
+  // (comercio de prepago, gift card o cashback nomás) la regla no puede gatear nada acá — mismo
+  // criterio de "consulta de más" que altaPorTelefono.ts.
   let exigirMontoCompra = false;
   let montoMinimoTexto: string | null = null;
-  if (elegibles.length > 0) {
+  if (elegibles.some((p) => aplicaReglaDeMonto(p.tipoTarjeta))) {
     const regla = await leerReglaDeMonto(supabase, comercioId);
-    // Si la lectura falla, se DEGRADA hacia MOSTRAR el campo (en vez de esconderlo):
-    // altaYAcreditacionPorTelefono también falla CERRADO ante la misma falla de lectura ("No se
-    // pudo verificar la regla de monto. Probá de nuevo."), así que esconder el campo dejaría al
-    // cajero sin ninguna pista de por qué el servidor rechaza el alta.
-    exigirMontoCompra = regla === null ? true : regla.exigir || regla.minimoCentavos !== null;
-    montoMinimoTexto = regla?.minimoCentavos != null ? formatearCentavos(regla.minimoCentavos) : null;
+    const minimo = regla?.minimoCentavos ?? null;
+    // Si la lectura falla, se DEGRADA hacia MOSTRAR el campo en vez de esconderlo. No es solo para
+    // no dejar al cajero sin pista: la falla puede ser TRANSITORIA (esta lectura, al cargar la
+    // página, se cae; pero la misma lectura dentro de altaYAcreditacionPorTelefono, al enviar el
+    // formulario segundos después, sí anda). Si acá se escondiera el campo y el envío SÍ pudiera
+    // leer la regla y la encontrara activa, el cajero se toparía con "Escribí el monto de la
+    // compra" sin ningún campo en pantalla donde escribirlo — un rechazo sin salida. Mostrarlo de
+    // más solo cuesta un campo visible en un comercio sin la regla encendida.
+    exigirMontoCompra = regla === null ? true : regla.exigir || minimo !== null;
+    montoMinimoTexto = minimo !== null ? formatearCentavos(minimo) : null;
   }
 
   return (

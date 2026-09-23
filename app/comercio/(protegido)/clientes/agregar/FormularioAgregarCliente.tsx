@@ -115,8 +115,11 @@ export default function FormularioAgregarCliente({
           tarjeta ELEGIDA es de un tipo al que le aplica (puntos o sellos, aplicaReglaDeMonto) — en
           una gift card o un prepago el campo quedaría ahí de adorno, ignorado por
           altaYAcreditacionPorTelefono. `type="text" inputMode="decimal"` y NO `type="number"`,
-          mismo criterio que el mínimo del formulario de Reglas: un monto se teclea como "10.50", y
-          `type="number"` no lo entendería si alguna vez se precargara con el signo `$`. */}
+          mismo criterio que el mínimo del formulario de Reglas: el cajero teclea un monto como
+          "10,50" (coma, no punto — así lo escribe la mayoría acá) o con el símbolo "$10", y
+          `centavosDesdeTexto` los entiende a los dos; un `type="number"` los rechaza o vacía el
+          campo apenas se tipea la coma o el "$", y el cajero termina mandando el monto en blanco
+          sin darse cuenta. */}
       {exigirMontoCompra && elegido && aplicaReglaDeMonto(elegido.tipoTarjeta) && (
         <div className="field">
           <label

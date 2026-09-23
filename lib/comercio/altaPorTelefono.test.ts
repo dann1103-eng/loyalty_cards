@@ -35,6 +35,23 @@ async function estadoDe(tarjetaId: string) {
   return data!;
 }
 
+// AVISO (Tarea 6, 2026-09-23): las 6 pruebas de más abajo que acreditan sobre un comercio de
+// SELLOS (aplicaReglaDeMonto('sellos') === true) hoy quedan en ROJO, aunque ninguna se tocó en esta
+// tarea: `altaYAcreditacionPorTelefono` ahora llama a `leerReglaDeMonto` antes de acreditar
+// (lib/comercio/altaPorTelefono.ts), y esa función falla hacia lo restrictivo (spec, sección 2) —
+// hoy SIEMPRE falla, porque `exigir_monto_compra` no existe todavía (migración 0039, sin aplicar
+// acá; confirmado con `npx tsx --env-file=.env.local --conditions=react-server
+// scripts/verificar-0039.ts`). Las 6 fallan con el mismo mensaje, "No se pudo verificar la regla de
+// monto. Probá de nuevo." — es la medida exacta de lo que rompería en producción publicar esto sin
+// la migración (regla del CLAUDE.md: migración primero, deploy después). Mismo mecanismo que
+// documenta escanear/actions.test.ts (~280-290) para su propio describe. Vuelven a verde solas, sin
+// tocarlas, en cuanto la 0039 esté aplicada (Tarea 9):
+//   - "a un teléfono nuevo le crea la tarjeta y le acredita de una"
+//   - "a un teléfono que YA tiene tarjeta le acredita sobre la que existe"
+//   - "el teléfono se normaliza: \"7777-1234\" y \"+50377771234\" son el MISMO cliente"
+//   - "hereda los topes antifraude porque pasa por el camino de acreditar"
+//   - "con apellido lo guarda recortado"
+//   - "en blanco o ausente, el cliente queda con apellido null (no con \"\")"
 describe('altaYAcreditacionPorTelefono', () => {
   it('a un teléfono nuevo le crea la tarjeta y le acredita de una', async () => {
     const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
@@ -310,6 +327,12 @@ describe('altaYAcreditacionPorTelefono', () => {
 // - Leer la regla (`leerReglaDeMonto`) recién DESPUÉS de `registrarCliente` en vez de antes: tiene
 //   que hacer fallar "sin monto → ... NO existe cliente" por la misma razón de fondo que la primera
 //   mutación (el orden es justo lo que esa prueba protege).
+// - Cambiar `if (aplicaReglaDeMonto(tipo.valor))` por `if (true || aplicaReglaDeMonto(tipo.valor))`
+//   (aplicar la regla a los ocho tipos en vez de solo a los que la usan): tiene que hacer fallar la
+//   prueba de la GIFT CARD — sin ese `if`, un comercio con la regla no podría dar de alta una gift
+//   card (ni prepago ni cashback) por teléfono sin describir un monto, algo que la spec nunca pidió
+//   (aplicaReglaDeMonto es false en esos tres tipos a propósito: ya tienen su propio requiereMonto,
+//   o no reciben monto en absoluto).
 describe('la regla de mínimo de compra en "Agregar cliente" (0039)', () => {
   // Las TRES columnas juntas en UN update: `exigir` implica `pedir`, y el mínimo implica `exigir`
   // (los dos CHECK nuevos de la 0039) — poner solo `monto_minimo_compra_centavos` sin las otras dos
@@ -377,10 +400,18 @@ describe('la regla de mínimo de compra en "Agregar cliente" (0039)', () => {
       expect(res.error).toBe('Escribí el monto de la compra (por ejemplo 19.99).');
       expect(res.bloqueoLimite).toBeUndefined();
     }
-    expect(
-      await tarjetaPorTelefono(comercioId, telefono),
-      'el monto faltante se resuelve tecleando el dato: no debió crear ni cliente ni tarjeta',
-    ).toBeNull();
+    // Se consulta `clientes` directo (como la prueba de 121 caracteres, más arriba) y no
+    // `tarjetaPorTelefono`: esa devuelve null también si existiera un CLIENTE sin tarjeta, y ese
+    // cliente quedaría huérfano — `entorno.limpiar()` solo encuentra lo que creó vía las tarjetas
+    // de sus comercios, así que un cliente sin tarjeta sobreviviría a la limpieza sin que esta
+    // prueba se diera cuenta.
+    const { data: cliente, error } = await supabase
+      .from('clientes')
+      .select('id')
+      .eq('telefono', telefono)
+      .maybeSingle();
+    if (error) throw error;
+    expect(cliente, 'el monto faltante se resuelve tecleando el dato: no debió crear ni cliente ni tarjeta').toBeNull();
   });
 
   it('con 999 centavos (mínimo $10.00): ok:false, bloqueoLimite, error EXACTO del mínimo, la tarjeta SÍ existe con saldo 0', async () => {
@@ -424,5 +455,45 @@ describe('la regla de mínimo de compra en "Agregar cliente" (0039)', () => {
 
     const transaccion = await primeraTransaccionDe(res.tarjetaId);
     expect(Number(transaccion?.monto_compra), 'la compra que originó el sello, en dólares').toBe(10);
+  });
+
+  it('en una GIFT CARD del mismo comercio, sin monto, la respuesta no es ni el error de monto faltante ni el del mínimo', async () => {
+    // Un tipo al que la regla NO aplica (aplicaReglaDeMonto: false — gift card ya tiene su propio
+    // requiereMonto) no debe ni siquiera LEER la regla del comercio. Sin este caso, ninguna prueba
+    // atrapa la mutación `if (true || aplicaReglaDeMonto(tipo.valor))`: como las demás pruebas de
+    // este describe usan sellos y el cupón se rechaza antes de llegar acá (tipo.contador ===
+    // 'ninguno'), esa mutación pasaría desapercibida — y en producción, un comercio con la regla de
+    // mínimo encendida para sellos no podría dar de alta una gift card por teléfono sin describir
+    // un monto que la spec nunca le pidió para ese tipo. Gift card y no cupón (mismo criterio que
+    // Tarea 5 con el cupón en el escáner): así se prueba un tipo que SÍ pasa el chequeo de
+    // `tipo.contador === 'ninguno'` y SÍ llega hasta el bloque de la regla, cosa que un cupón no
+    // hace.
+    const comercioId = await comercioDeSellosConMinimo();
+    const giftCard = await crearPrograma(supabase, comercioId, {
+      nombre: 'Saldo',
+      tipoTarjeta: 'gift_card',
+      cashbackPorcentaje: null,
+      multipassVisitas: null,
+      membresiaDias: null,
+      cuponVigenciaDias: null,
+    });
+    if (!giftCard.ok) throw new Error(`[test] no se pudo crear la gift card: ${giftCard.error}`);
+
+    const res = await altaYAcreditacionPorTelefono(supabase, comercioId, {
+      telefono: telefonoUnico(),
+      nombre: 'Cliente Delivery',
+      programaId: giftCard.id,
+      cantidad: 500,
+    });
+
+    // No se afirma `ok: true`: una gift card recién creada por el fixture puede fallar por razones
+    // propias que no tienen nada que ver con esta regla. Lo único que le corresponde a esta prueba
+    // es que la regla de monto —que no aplica a 'gift_card'— no la haya tocado.
+    if (!res.ok) {
+      expect(res.error, 'la regla de monto no debe aplicarse a una gift card').not.toBe(
+        'Escribí el monto de la compra (por ejemplo 19.99).',
+      );
+      expect(res.error).not.toBe('La compra mínima para sumar es $10.00.');
+    }
   });
 });
