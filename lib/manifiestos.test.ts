@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { MetadataRoute } from 'next';
-import manifestoRaiz from '@/app/manifest';
+import manifiestoRaiz from '@/app/manifest';
 import {
   manifiestoComercio,
   manifiestoAdmin,
@@ -79,7 +79,7 @@ describe('manifiestoAdmin()', () => {
 // duplicación honesta: si alguien cambia el color o el ícono en uno de los tres lugares y se
 // olvida de los otros dos, esto falla en vez de quedar desincronizado en silencio.
 describe('background_color, theme_color e icons no se desincronizan de app/manifest.ts', () => {
-  const raiz = manifestoRaiz();
+  const raiz = manifiestoRaiz();
 
   it('comercio', () => {
     const m = manifiestoComercio();
