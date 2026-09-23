@@ -103,8 +103,12 @@ async function main() {
         .insert({ nombre: `Verificación 0039 ${etiqueta} ${Date.now()}`, slug, ...datos })
         .select('id')
         .single();
-      if (intento.error?.code === '23514') {
+      // El 23514 tiene que venir del constraint BAJO PRUEBA: si lo frenara otro CHECK, este
+      // seguiría sin estar verificado aunque el insert haya fallado "bien".
+      if (intento.error?.code === '23514' && intento.error.message.includes(constraintEsperado)) {
         ok(`rechaza ${etiqueta} (23514 — ${intento.error.message}).`);
+      } else if (intento.error?.code === '23514') {
+        fallo(`"${etiqueta}" lo frenó un CHECK distinto de ${constraintEsperado}`, intento.error.message);
       } else if (intento.error?.code === '23505') {
         fallo(`el CHECK de "${etiqueta}" (${constraintEsperado}) no está activo: el insert llegó hasta el índice único del slug (23505)`, intento.error.message);
       } else if (intento.error) {
