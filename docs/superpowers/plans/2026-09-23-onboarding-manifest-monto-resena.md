@@ -133,6 +133,18 @@ ANTES de empezar la Tarea 2.
 - [ ] **Paso 8 (Daniel):** en Android, borrar el atajo viejo y volver a agregarlo desde el login del
   comercio. Anotar el resultado acá.
 
+**Estado (2026-09-23): pasos 1-7 ✅, publicado en `master` (`d27b327`, deploy de Vercel `success`).**
+Commits `9d2a08d` + `655a678` (correcciones de la revisión de calidad) + `d27b327` (dos menores).
+Spec-compliance ✅; calidad: "Cambios requeridos" en la primera pasada —el hallazgo real fue que
+`sinComentarios` no quitaba los `//` al final de línea en archivos CRLF (el working tree de este repo
+lo es), así que una declaración comentada pasaba la guarda; además dos comentarios falsos (que
+`app/manifest.ts` solo admite default export; que los Route Handlers se cachean solos) y ninguna
+prueba de las rutas— y "Aprobado" en la segunda. M1-M9 confirmadas (encabezado de
+`lib/manifiestos.test.ts`). Navegador: cada pantalla del dueño/FM lleva UN `link[rel=manifest]` al
+suyo; `/mi-tarjeta`, `/registro/…` y `/` siguen con el de la raíz; los dos manifests responden 200 con
+`application/manifest+json` sin cookies. Producción: verificado con `curl` el mismo resultado. El mismo
+bug de CRLF queda latente en `lib/marca.test.ts` (falla ruidoso, no silencioso): tarea aparte.
+
 ---
 
 ## Tarea 2 — Migración 0039 y tipos
@@ -154,7 +166,16 @@ ANTES de empezar la Tarea 2.
 - [ ] **Paso 3 (controlador):** pegarle a Daniel el SQL EXACTO del archivo en el chat para que lo corra en
   Supabase Studio. Cuando avise, correr
   `npx tsx --env-file=.env.local --conditions=react-server scripts/verificar-0039.ts` desde el worktree y
-  anotar el resultado acá.
+  anotar el resultado acá. — SQL pegado en el chat el 2026-09-23; **pendiente de que Daniel lo aplique.**
+
+**Estado (2026-09-23): pasos 1-2 ✅** (commits `0038f16` + `1243f8a` + `906a5c4`). Revisión combinada
+spec+calidad: aprobada; el revisor aplicó el `.sql` en un Postgres 18 descartable, con filas
+existentes, y probó cada CHECK contra su violación. Menores aplicados: encabezado del `.sql` (eran TRES
+implicaciones, no dos, y el NOT NULL de `pedir_monto_compra` importa para filas FUTURAS), el script
+intenta violar los cinco CHECK sin dejar nada escrito (slug existente: si el CHECK no frenara, frena el
+unique del slug con 23505) y exige que el 23514 venga del constraint bajo prueba, conteos con
+`count: 'exact'`, y `42703` distinguido de otros errores. Hoy el script responde "0039 NO está
+aplicada" y corta antes de cualquier insert.
 
 ---
 
