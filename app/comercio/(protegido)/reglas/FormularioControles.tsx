@@ -6,6 +6,7 @@ import { accionGuardarControles, type EstadoControles } from './actions';
 import { ZONAS_HORARIAS } from '@/lib/comercio/zonasHorarias';
 import type { ControlesAcreditacion } from '@/lib/comercio/controlesAcreditacion';
 import type { Unidad } from '@/lib/tarjetas/unidadPrograma';
+import { formatearCentavos } from '@/lib/tarjetas/tipos';
 
 // CAMPOS NO CONTROLADOS + `key` derivada de los valores guardados. Es a propósito y va en contra de
 // la convención del resto de los formularios del proyecto (useState controlado), así que vale la
@@ -52,6 +53,7 @@ export default function FormularioControles({
   esDePuntos,
   aplicanLimites,
   usaMontoDeCompra,
+  ofreceReglaDeMonto,
 }: {
   controles: ControlesAcreditacion;
   // Cómo se llama lo que cuenta ESTE programa. Reemplaza al viejo booleano `esDePuntos` para los
@@ -80,6 +82,15 @@ export default function FormularioControles({
   // tecleaba un monto que se descartaba. Mira el principal como el resto de esta pantalla; el
   // escáner, en cambio, decide por el tipo de cada tarjeta escaneada.
   usaMontoDeCompra: boolean;
+  // ¿Algún programa del comercio —principal o secundario, activo o no— es de puntos o sellos? (Tarea
+  // 4, `ofreceReglaDeMonto` en lib/comercio/montoAcreditacion.ts, calculada por page.tsx con
+  // `listarProgramas(…, { soloActivos: false })`.) Decide DOS cosas, y no las mismas que
+  // `usaMontoDeCompra`: a diferencia de esa pregunta —que mira solo el PRINCIPAL—, un comercio de
+  // membresía con un programa SECUNDARIO de sellos también necesita el checkbox "Pedir" (para poder
+  // apagarlo) y el sub-bloque de "Exigir"/"Mínimo" — si esto dependiera solo de `usaMontoDeCompra`,
+  // ese dueño tildaría "Exigir" (que prende "Pedir" por la implicación del Server Action) y después
+  // no tendría ningún control a la vista para volver a apagar "Pedir".
+  ofreceReglaDeMonto: boolean;
 }) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoControles, FormData>(
     accionGuardarControles,
@@ -96,6 +107,8 @@ export default function FormularioControles({
     controles.techoPuntosAcreditacion,
     controles.topePuntosDia,
     controles.pedirMontoCompra,
+    controles.exigirMontoCompra,
+    controles.montoMinimoCompraCentavos,
     controles.zonaHoraria,
   ].join('|');
 
@@ -213,7 +226,7 @@ export default function FormularioControles({
         </p>
       </div>
 
-      {usaMontoDeCompra ? (
+      {(usaMontoDeCompra || ofreceReglaDeMonto) ? (
         <div className="field">
           <label htmlFor="pedir_monto_compra" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <input
@@ -228,6 +241,49 @@ export default function FormularioControles({
             Suma un paso al mostrador, pero te deja ver cuánto se vendió por cada {palabra.singular}.
             Es lo que convierte una sospecha en evidencia.
           </p>
+
+          {/* Sub-bloque de la Tarea 4 (0039): exigir el monto y fijar un mínimo para que la
+              acreditación cuente. Solo si ALGÚN programa del comercio es de puntos o sellos
+              (`ofreceReglaDeMonto`, comentario del prop más arriba) — sin ningún programa que la
+              regla alcance, esta configuración no gobierna nada. */}
+          {ofreceReglaDeMonto && (
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--borde-relieve)' }}>
+              <label htmlFor="exigir_monto_compra" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input
+                  id="exigir_monto_compra"
+                  name="exigir_monto_compra"
+                  type="checkbox"
+                  defaultChecked={controles.exigirMontoCompra}
+                />
+                Exigir el monto para sumar
+              </label>
+
+              <div className="field" style={{ marginTop: 10 }}>
+                <label htmlFor="monto_minimo_compra">Mínimo de compra para sumar ($)</label>
+                {/* type="text" inputMode="decimal", NO type="number": el valor precargado es
+                    formatearCentavos(centavos), p. ej. "$10.50" — no es un número válido para un
+                    input numérico, así que el navegador VACIARÍA el campo al montarlo y el dueño
+                    perdería su mínimo guardado sin ninguna señal de que pasó. centavosDesdeTexto
+                    (lib/tarjetas/tipos.ts) ya tolera el "$" al parsear de vuelta, así que no hace
+                    falta que sea numérico. */}
+                <input
+                  id="monto_minimo_compra"
+                  name="monto_minimo_compra"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Sin mínimo"
+                  defaultValue={
+                    controles.montoMinimoCompraCentavos === null
+                      ? ''
+                      : formatearCentavos(controles.montoMinimoCompraCentavos)
+                  }
+                />
+                <p className="admin-fila-slug" style={{ marginTop: 6 }}>
+                  Si lo llenás, el monto pasa a ser obligatorio.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <>

@@ -33,6 +33,13 @@ export async function accionGuardarControles(
     techoPuntosAcreditacion: String(formData.get('techo_puntos_acreditacion') ?? ''),
     topePuntosDia: String(formData.get('tope_puntos_dia') ?? ''),
     pedirMontoCompra: formData.get('pedir_monto_compra') === 'on',
+    // Los dos campos del sub-bloque nuevo (Tarea 4). Cuando FormularioControles no lo dibuja
+    // (`ofreceReglaDeMonto` en false) no viaja NINGÚN input con estos nombres — a propósito, ver el
+    // comentario de FormularioControles.tsx — así que acá se leen igual que cualquier campo
+    // ausente: la casilla como apagada y el texto como vacío, y controlesDesdeFormulario los deja en
+    // exigir=false / mínimo=null.
+    exigirMontoCompra: formData.get('exigir_monto_compra') === 'on',
+    montoMinimoCompra: String(formData.get('monto_minimo_compra') ?? ''),
     zonaHoraria: String(formData.get('zona_horaria') ?? ''),
   });
 

@@ -10,6 +10,7 @@ import AvisoComercioActivo from '../AvisoComercioActivo';
 import { leerControles } from '@/lib/comercio/controlesAcreditacion';
 import { leerConfiguracionAvisoInactividad } from '@/lib/comercio/avisoInactividad';
 import { listarProgramas } from '@/lib/comercio/programas';
+import { ofreceReglaDeMonto } from '@/lib/comercio/montoAcreditacion';
 import { unidadPrograma } from '@/lib/tarjetas/unidadPrograma';
 import { aplicanControlesAcreditacion, usaMontoDeCompra } from '@/lib/tarjetas/tipos';
 
@@ -33,7 +34,13 @@ export default async function PaginaReglas() {
   // El tipo sale del programa PRINCIPAL, no de comercios.tipo_tarjeta (columna legada desde la
   // 0024). Con la columna vieja, un comercio al que FM le cambió el tipo sin propagarlo veía el
   // formulario antifraude equivocado: los campos de "puntos" en un programa de sellos, o al revés.
-  const programas = await listarProgramas(supabase, comercioId);
+  //
+  // { soloActivos: false }: el default de listarProgramas filtra los activos, pero acá hacen falta
+  // TODOS. Para el principal es seguro buscarlo en la lista completa —desactivarPrograma filtra
+  // es_principal = false, así que el principal nunca se desactiva—, y ofreceReglaDeMonto (Tarea 4)
+  // necesita ver también los programas SECUNDARIOS desactivados: sus tarjetas se siguen escaneando
+  // y acreditando, así que la regla de monto les sigue aplicando.
+  const programas = await listarProgramas(supabase, comercioId, { soloActivos: false });
   const principal = (programas ?? []).find((p) => p.esPrincipal) ?? null;
   const tipoPrincipal = principal?.tipoTarjeta ?? 'puntos';
   const unidad = unidadPrograma(tipoPrincipal);
@@ -45,6 +52,9 @@ export default async function PaginaReglas() {
   // del mostrador le entrega el monto a su RPC, así que la casilla era una perilla muerta. El
   // detalle, tipo por tipo, está en `usaMontoDeCompra` (lib/tarjetas/tipos.ts).
   const usaMonto = usaMontoDeCompra(tipoPrincipal);
+  // ¿Algún programa —principal o secundario— es de puntos o sellos? Decide si se le ofrece al dueño
+  // el sub-bloque nuevo de exigir/mínimo (Tarea 4, lib/comercio/montoAcreditacion.ts).
+  const ofreceMonto = ofreceReglaDeMonto(programas ?? []);
 
   if (error) console.error('[comercio] falló la consulta de reglas:', error);
 
@@ -105,6 +115,7 @@ export default async function PaginaReglas() {
             esDePuntos={tipoPrincipal === 'puntos'}
             aplicanLimites={aplicanLimites}
             usaMontoDeCompra={usaMonto}
+            ofreceReglaDeMonto={ofreceMonto}
           />
         ) : (
           <p className="admin-error" role="alert">
