@@ -321,8 +321,8 @@ describe('aplicaReglaDeMonto', () => {
   it('todo tipo con aplicaReglaDeMonto también tiene usaMontoDeCompra', () => {
     // La implicación que tiene que valer siempre, mismo patrón que "todo tipo que EXIGE el monto
     // también lo usa" (describe usaMontoDeCompra, arriba): no tiene sentido gatear con un mínimo un
-    // monto que la operación ni siquiera recibe. Al revés no vale —puntos y sellos ya lo prueban:
-    // usan el monto sin exigirlo, y acá además reciben la regla— por eso son campos separados.
+    // monto que la operación ni siquiera recibe. Al revés no vale —cashback, gift card y descuento
+    // usan el monto y no reciben la regla— por eso son campos separados.
     for (const tipo of TIPOS) {
       if (tipo.aplicaReglaDeMonto) expect(tipo.usaMontoDeCompra, tipo.valor).toBe(true);
     }

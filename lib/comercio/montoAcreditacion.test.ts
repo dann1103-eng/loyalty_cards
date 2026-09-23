@@ -8,10 +8,9 @@ import { validarMontoAcreditacion, ofreceReglaDeMonto, leerReglaDeMonto } from '
 import { aplicaReglaDeMonto } from '../tarjetas/tipos';
 import type { Programa } from './programas';
 
-// Mutation-testing CONFIRMADO (2026-09-23), cada una restaurada después de corrida. Las pruebas de
-// leerReglaDeMonto contra Supabase están en rojo hoy por la falta de la 0039 (ver el describe de
-// más abajo) y por eso aparecen listadas como "cae también" en todas: no discriminan nada todavía,
-// pero se documenta igual para que quede claro que no se rompió nada nuevo en ellas.
+// Mutation-testing CONFIRMADO (2026-09-23), cada una restaurada después de corrida. Las pruebas
+// contra Supabase (leerReglaDeMonto, describe de más abajo) no participan de estas mutaciones: todas
+// tocan la parte pura.
 //
 // - `<` → `<=` en la comparación del mínimo (paso 2): falla "1000 → ok: el mínimo es inclusivo" — el
 //   mínimo exacto pasa a rechazarse con el error del mínimo.
@@ -71,9 +70,10 @@ describe('validarMontoAcreditacion', () => {
     });
 
     it('monto NaN → error de monto faltante: NaN no es un número positivo', () => {
-      // NaN es lo que centavosDesdeTexto/aEntero usan como marca de "no parseó" (Tarea 4,
-      // lib/comercio/controlesAcreditacion.ts): si esta función lo dejara pasar como si fuera un
-      // monto válido, un typo del dueño quedaría acreditando sin monto real.
+      // NaN es la marca de "no parseó" de aEntero y de controlesDesdeFormulario
+      // (lib/comercio/controlesAcreditacion.ts; centavosDesdeTexto, en cambio, devuelve null): si
+      // esta función lo dejara pasar como si fuera un monto válido, un typo quedaría acreditando sin
+      // monto real.
       expect(validarMontoAcreditacion({ exigir: true, minimoCentavos: null, montoCentavos: NaN, autorizado: false }))
         .toEqual({ ok: false, error: 'Escribí el monto de la compra (por ejemplo 19.99).' });
     });
