@@ -7,12 +7,8 @@ import FormularioControles from './FormularioControles';
 import FormularioAvisoInactividad from './FormularioAvisoInactividad';
 import BotonEliminarRegla from './BotonEliminarRegla';
 import AvisoComercioActivo from '../AvisoComercioActivo';
-import { leerControles } from '@/lib/comercio/controlesAcreditacion';
 import { leerConfiguracionAvisoInactividad } from '@/lib/comercio/avisoInactividad';
-import { listarProgramas } from '@/lib/comercio/programas';
-import { ofreceReglaDeMonto } from '@/lib/comercio/montoAcreditacion';
-import { unidadPrograma } from '@/lib/tarjetas/unidadPrograma';
-import { aplicanControlesAcreditacion, usaMontoDeCompra } from '@/lib/tarjetas/tipos';
+import { datosFormularioControles } from './datosControles';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,32 +25,14 @@ export default async function PaginaReglas() {
   // Los controles antifraude (Tanda 1) viven acá y no en Marca porque son política de acreditación,
   // no imagen — y así no hace falta un sexto destino en la barra, que descentraría el botón de
   // Escanear (ver lib/comercio/navegacion.ts).
-  const controles = await leerControles(supabase, comercioId);
-  const avisoInactividad = await leerConfiguracionAvisoInactividad(supabase, comercioId);
-  // El tipo sale del programa PRINCIPAL, no de comercios.tipo_tarjeta (columna legada desde la
-  // 0024). Con la columna vieja, un comercio al que FM le cambió el tipo sin propagarlo veía el
-  // formulario antifraude equivocado: los campos de "puntos" en un programa de sellos, o al revés.
   //
-  // { soloActivos: false }: el default de listarProgramas filtra los activos, pero acá hacen falta
-  // TODOS. Para el principal es seguro buscarlo en la lista completa —desactivarPrograma filtra
-  // es_principal = false, así que el principal nunca se desactiva—, y ofreceReglaDeMonto (Tarea 4)
-  // necesita ver también los programas SECUNDARIOS desactivados: sus tarjetas se siguen escaneando
-  // y acreditando, así que la regla de monto les sigue aplicando.
-  const programas = await listarProgramas(supabase, comercioId, { soloActivos: false });
-  const principal = (programas ?? []).find((p) => p.esPrincipal) ?? null;
-  const tipoPrincipal = principal?.tipoTarjeta ?? 'puntos';
-  const unidad = unidadPrograma(tipoPrincipal);
-  // Los cuatro límites antifraude viven DENTRO de acreditar_atomico (0015). En cupón, membresía y
-  // descuento la operación del mostrador es otra función (0019, 0023) que no los consulta: el
-  // dueño estaba configurando perillas que su tarjeta nunca lee.
-  const aplicanLimites = aplicanControlesAcreditacion(tipoPrincipal);
-  // Mismo razonamiento para la casilla del monto: en cupón, membresía y prepago ninguna operación
-  // del mostrador le entrega el monto a su RPC, así que la casilla era una perilla muerta. El
-  // detalle, tipo por tipo, está en `usaMontoDeCompra` (lib/tarjetas/tipos.ts).
-  const usaMonto = usaMontoDeCompra(tipoPrincipal);
-  // ¿Algún programa —principal o secundario— es de puntos o sellos? Decide si se le ofrece al dueño
-  // el sub-bloque nuevo de exigir/mínimo (Tarea 4, lib/comercio/montoAcreditacion.ts).
-  const ofreceMonto = ofreceReglaDeMonto(programas ?? []);
+  // datosFormularioControles (datosControles.ts) es COMPARTIDA con la prueba (reglas/actions.test.ts,
+  // `dibujarReglas`): las dos tienen que armar exactamente los mismos datos a partir del comercio, o
+  // una prueba que copiara la lógica en vez de compartirla podría desincronizarse sin que ninguna
+  // prueba lo note. Ver el comentario del archivo.
+  const { controles, tipoPrincipal, unidad, aplicanLimites, usaMontoDeCompra: usaMonto, ofreceReglaDeMonto: ofreceMonto } =
+    await datosFormularioControles(supabase, comercioId);
+  const avisoInactividad = await leerConfiguracionAvisoInactividad(supabase, comercioId);
 
   if (error) console.error('[comercio] falló la consulta de reglas:', error);
 

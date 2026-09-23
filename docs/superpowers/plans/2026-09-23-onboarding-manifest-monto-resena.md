@@ -244,14 +244,21 @@ aplicada" y corta antes de cualquier insert.
   **El campo del mínimo es `type="text" inputMode="decimal"`, NO `type="number"`** como sus vecinos:
   `value="$10.50"` no es un número válido, el navegador vaciaría el campo, y el dueño guardaría `null`
   borrando su mínimo sin enterarse.
-- Modificar: `app/comercio/(protegido)/reglas/page.tsx` — llamar a
+- Crear: `app/comercio/(protegido)/reglas/datosControles.ts` — `datosFormularioControles(supabase,
+  comercioId)`, sin `'use server'`: junta `leerControles`, la llamada
   `listarProgramas(supabase, comercioId, { soloActivos: false })` (el default filtra los activos,
   `lib/comercio/programas.ts:188-205`; el principal no se puede desactivar —`desactivarPrograma` filtra
-  `es_principal = false`—, así que buscarlo en la lista completa es seguro) y pasar
-  `ofreceReglaDeMonto(programas ?? [])` (la función compartida de la Tarea 3).
+  `es_principal = false`—, así que buscarlo en la lista completa es seguro), la derivación del tipo
+  principal y `ofreceReglaDeMonto(programas ?? [])` (la función compartida de la Tarea 3) en un solo
+  punto de entrada. Es COMPARTIDA por `page.tsx` y por `dibujarReglas` en `actions.test.ts` — no una
+  copia de la llamada en cada lado (revisión de calidad, 2026-09-23: la primera versión de esta tarea
+  tenía la prueba repitiendo la lógica, y una mutación que le sacara `{ soloActivos: false }` a
+  page.tsx no la atrapaba ninguna prueba).
+- Modificar: `app/comercio/(protegido)/reglas/page.tsx` — llamar a `datosFormularioControles` en vez de
+  armar `leerControles`/`listarProgramas`/las derivaciones por su cuenta.
 - Modificar: `app/comercio/(protegido)/reglas/actions.test.ts` — casos contra Supabase y de HTML; su
-  helper `dibujarReglas` (líneas ~42-90) pasa `ofreceReglaDeMonto` calculado con la MISMA función y
-  la MISMA llamada `listarProgramas(…, { soloActivos: false })` que la página, no con una copia.
+  helper `dibujarReglas` (líneas ~42-90) llama a la MISMA `datosFormularioControles` que `page.tsx`, así
+  que ya no recibe el tipo principal a mano — lo deriva del comercio real, igual que la pantalla.
 
 - [ ] **Paso 1: pruebas puras (rojo)** en `controlesAcreditacion.test.ts`:
   - Mínimo `''` → `null`; `'10'` → `1000`; `'$10.50'` → `1050`; `'10x'` → `NaN`; `'-5'` → `NaN`.
@@ -275,9 +282,14 @@ aplicada" y corta antes de cualquier insert.
   `|| minimo !== null` de la implicación de exigir (falla); precargar con `String(centavos / 100)` en vez
   de `formatearCentavos` (falla la aserción del HTML `$10.50` — la de ida y vuelta NO la atrapa, porque
   `"10.5"` vuelve a parsear a 1050); volver a condicionar el checkbox "Pedir" solo a `usaMontoDeCompra`
-  (falla el caso membresía + sellos); llamar a `listarProgramas` sin `{ soloActivos: false }` (falla el
-  caso del sellos desactivado); `type="number"` en el mínimo (falla la aserción de `type="text"`). Las
-  que tocan la base, según la ruta de la 0039.
+  (falla el caso membresía + sellos); llamar a `listarProgramas` sin `{ soloActivos: false }` DENTRO de
+  `datosFormularioControles` (falla el caso del sellos desactivado — con la función compartida, esta
+  mutación la atrapa la prueba directamente, no hace falta el navegador contra `page.tsx` real);
+  `type="number"` en el mínimo (falla la aserción de `type="text"`). Las que tocan la base, según la
+  ruta de la 0039. Sumar también, puras y confirmables HOY sin la 0039 (llamando a `guardarControles`
+  con un `comercioId` cualquiera, ya que `validar()` corta antes de tocar Supabase): borrar cada una de
+  las cuatro ramas nuevas de `validar()` (mínimo no positivo, el tope, exigir sin pedir, mínimo sin
+  exigir) — cada una cae con el mensaje exacto de esa rama.
 - [ ] **Paso 5:** tsc + eslint, commit.
 
 ---

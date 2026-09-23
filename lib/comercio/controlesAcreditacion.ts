@@ -17,9 +17,8 @@ export interface ControlesAcreditacion {
   techoPuntosAcreditacion: number | null;
   topePuntosDia: number | null;
   pedirMontoCompra: boolean;
-  // Las dos columnas de la migración 0039 (todavía no aplicada — ver controlesAcreditacion.test.ts
-  // y el encabezado de reglas/actions.test.ts). Nacen de "solo sello consumos de $10 en adelante":
-  // el dueño puede exigir el monto de la compra (no solo pedirlo, como pedirMontoCompra) y fijar un
+  // Las dos columnas de la migración 0039. Nacen de "solo sello consumos de $10 en adelante": el
+  // dueño puede exigir el monto de la compra (no solo pedirlo, como pedirMontoCompra) y fijar un
   // mínimo para que la acreditación cuente. Ver lib/comercio/montoAcreditacion.ts, que es quien
   // aplica esto de verdad — acá solo se lee y se guarda.
   exigirMontoCompra: boolean;
@@ -69,7 +68,7 @@ function validar(datos: ControlesAcreditacion): string | null {
   // el "0" (una compra de $0.00 no es un mínimo). null SÍ es válido: es "sin mínimo".
   if (datos.montoMinimoCompraCentavos !== null) {
     if (!Number.isInteger(datos.montoMinimoCompraCentavos) || datos.montoMinimoCompraCentavos <= 0) {
-      return 'El mínimo de compra para sumar debe ser un monto mayor que cero, o quedar vacío para no exigir un mínimo.';
+      return 'El mínimo de compra para sumar debe ser un monto válido mayor que cero (por ejemplo 10.00), o quedar vacío para no exigir un mínimo.';
     }
     if (datos.montoMinimoCompraCentavos > MAXIMO_MONTO_MINIMO_CENTAVOS) {
       return `El mínimo de compra para sumar no puede pasar de ${formatearCentavos(MAXIMO_MONTO_MINIMO_CENTAVOS)}.`;

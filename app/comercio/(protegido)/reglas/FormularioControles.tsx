@@ -83,13 +83,15 @@ export default function FormularioControles({
   // escáner, en cambio, decide por el tipo de cada tarjeta escaneada.
   usaMontoDeCompra: boolean;
   // ¿Algún programa del comercio —principal o secundario, activo o no— es de puntos o sellos? (Tarea
-  // 4, `ofreceReglaDeMonto` en lib/comercio/montoAcreditacion.ts, calculada por page.tsx con
-  // `listarProgramas(…, { soloActivos: false })`.) Decide DOS cosas, y no las mismas que
+  // 4, `ofreceReglaDeMonto` en lib/comercio/montoAcreditacion.ts, calculada por
+  // `datosFormularioControles` — datosControles.ts, compartida por page.tsx y por la prueba,
+  // `dibujarReglas` en reglas/actions.test.ts.) Decide DOS cosas, y no las mismas que
   // `usaMontoDeCompra`: a diferencia de esa pregunta —que mira solo el PRINCIPAL—, un comercio de
   // membresía con un programa SECUNDARIO de sellos también necesita el checkbox "Pedir" (para poder
   // apagarlo) y el sub-bloque de "Exigir"/"Mínimo" — si esto dependiera solo de `usaMontoDeCompra`,
-  // ese dueño tildaría "Exigir" (que prende "Pedir" por la implicación del Server Action) y después
-  // no tendría ningún control a la vista para volver a apagar "Pedir".
+  // ese dueño tildaría "Exigir" (que prende "Pedir" por la implicación de `controlesDesdeFormulario`,
+  // lib/comercio/controlesAcreditacion.ts) y después no tendría ningún control a la vista para volver
+  // a apagar "Pedir".
   ofreceReglaDeMonto: boolean;
 }) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoControles, FormData>(
@@ -257,6 +259,11 @@ export default function FormularioControles({
                 />
                 Exigir el monto para sumar
               </label>
+              <p className="admin-fila-slug" style={{ marginTop: 6 }}>
+                También activa &quot;Pedir el monto de la compra al acreditar&quot;: no tiene sentido
+                exigir un dato que no se pide. Al guardar, esa casilla de arriba va a quedar marcada
+                sola.
+              </p>
 
               <div className="field" style={{ marginTop: 10 }}>
                 <label htmlFor="monto_minimo_compra">Mínimo de compra para sumar ($)</label>
@@ -291,11 +298,18 @@ export default function FormularioControles({
             Tu tarjeta no guarda el monto de la compra: lo que hace tu cajero al escanear no lo
             registra, así que pedírselo sería un paso de más sin nada que ver después.
           </p>
-          {/* Misma mordida que los límites de arriba: la casilla no se dibuja, pero el Server Action
-              la lee igual y lo que no llega lo guarda como false. Sin esto, el dueño que entra a
-              cambiar la zona horaria le apagaría en silencio la perilla a su programa de puntos
-              secundario —— el escáner sigue pidiendo el monto en esas tarjetas. "on" es lo que
-              manda una casilla marcada; vacío se lee como apagada. */}
+          {/* A esta rama se llega solo cuando NINGÚN programa del comercio —ni el principal ni
+              ningún secundario— es de puntos o sellos: ni `usaMontoDeCompra` ni
+              `ofreceReglaDeMonto` dieron true. Hoy, entonces, `pedir_monto_compra` no gobierna
+              nada de verdad: ni el escáner ni "Agregar cliente" lo consultan para gift card,
+              cashback o descuento, que exigen el monto por su cuenta (`requiereMonto`,
+              lib/tarjetas/tipos.ts) sin mirar esta perilla. Se conserva igual como input oculto
+              (el Server Action la lee igual y lo que no llega lo guarda como false) por dos
+              razones: la spec lo pide, y para el día que el dueño cree un programa SECUNDARIO de
+              puntos o sellos — sin este input oculto, cualquier guardado mientras tanto (p. ej.
+              cambiar la zona horaria) le habría apagado la perilla en silencio, y ese día la
+              encontraría apagada sin haberla tocado nunca. "on" es lo que manda una casilla
+              marcada; vacío se lee como apagada. */}
           <input type="hidden" name="pedir_monto_compra" value={controles.pedirMontoCompra ? 'on' : ''} />
         </>
       )}

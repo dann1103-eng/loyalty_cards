@@ -4,10 +4,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { crearEntorno } from '@/test/fixtures/entornoComercio';
 import { leerControles, MAXIMO_MONTO_MINIMO_CENTAVOS } from '@/lib/comercio/controlesAcreditacion';
-import { crearPrograma, desactivarPrograma, listarProgramas } from '@/lib/comercio/programas';
-import { ofreceReglaDeMonto } from '@/lib/comercio/montoAcreditacion';
-import { unidadPrograma } from '@/lib/tarjetas/unidadPrograma';
-import { aplicanControlesAcreditacion, formatearCentavos, usaMontoDeCompra } from '@/lib/tarjetas/tipos';
+import { crearPrograma, desactivarPrograma } from '@/lib/comercio/programas';
+import { formatearCentavos } from '@/lib/tarjetas/tipos';
+import { datosFormularioControles } from './datosControles';
 
 // El gate del dueño se mockea porque necesita cookies de una request real; se prueba aparte en
 // verifyComercioOwner. Mismo criterio que las pruebas de sucursales y del cartel.
@@ -76,25 +75,27 @@ function enviar(html: string, cambios: Record<string, string | false> = {}): For
   return fd;
 }
 
-// El formulario con las MISMAS props que le arma page.tsx a partir del programa principal —
-// incluido `ofreceReglaDeMonto` (Tarea 4): la MISMA función y la MISMA llamada
-// `listarProgramas(…, { soloActivos: false })` que usa page.tsx, no una copia del filtro acá. Si
-// esta prueba armara la regla a mano ("¿tiene sellos?"), una mutación que le sacara
-// `{ soloActivos: false }` a page.tsx (y así le escondiera al dueño los programas desactivados)
-// pasaría igual — el mismo defecto de "reemplazo en todos los sitios" que ya documenta el
-// CLAUDE.md del proyecto.
-async function dibujarReglas(comercioId: string, tipoPrincipal: string): Promise<string> {
-  const controles = await leerControles(supabase, comercioId);
-  if (!controles) throw new Error('[test] no se pudieron leer los controles');
-  const programas = await listarProgramas(supabase, comercioId, { soloActivos: false });
+// El formulario con las MISMAS props que le arma page.tsx: `dibujarReglas` llama a la MISMA función
+// compartida, `datosFormularioControles` (datosControles.ts) — no arma `listarProgramas` ni
+// `ofreceReglaDeMonto` por su cuenta. Antes de esta revisión, esta función tenía su PROPIA copia de
+// esa lógica ("la MISMA llamada que page.tsx", decía el comentario — pero no lo era), y una mutación
+// que le sacara `{ soloActivos: false }` a page.tsx no la atrapaba ninguna prueba: exactamente el
+// defecto que describe el CLAUDE.md del proyecto ("un reemplazo en todos los sitios de llamada
+// asume que todos hacen lo mismo, y casi nunca es cierto"; "cargá la configuración por el camino de
+// producción"). Con la función compartida, page.tsx y esta prueba corren el MISMO código — y ya no
+// hace falta pasarle el tipo principal a mano: `datosFormularioControles` lo deriva del comercio
+// real, del mismo modo que lo haría la pantalla.
+async function dibujarReglas(comercioId: string): Promise<string> {
+  const datos = await datosFormularioControles(supabase, comercioId);
+  if (!datos.controles) throw new Error('[test] no se pudieron leer los controles');
   return renderToStaticMarkup(
     createElement(FormularioControles, {
-      controles,
-      unidad: unidadPrograma(tipoPrincipal),
-      esDePuntos: tipoPrincipal === 'puntos',
-      aplicanLimites: aplicanControlesAcreditacion(tipoPrincipal),
-      usaMontoDeCompra: usaMontoDeCompra(tipoPrincipal),
-      ofreceReglaDeMonto: ofreceReglaDeMonto(programas ?? []),
+      controles: datos.controles,
+      unidad: datos.unidad,
+      esDePuntos: datos.tipoPrincipal === 'puntos',
+      aplicanLimites: datos.aplicanLimites,
+      usaMontoDeCompra: datos.usaMontoDeCompra,
+      ofreceReglaDeMonto: datos.ofreceReglaDeMonto,
     }),
   );
 }
@@ -118,17 +119,18 @@ const SUBBLOQUE_VISIBLE = /<input\b[^>]*type="checkbox"[^>]*name="exigir_monto_c
 
 // AVISO (Tarea 4, 2026-09-23): las CUATRO pruebas de este describe NO se tocaron — siguen exactas a
 // como estaban — pero hoy quedan en rojo igual, con "column comercios.exigir_monto_compra does not
-// exist" (42703): `dibujarReglas` ahora llama a `leerControles`, que agregó las dos columnas nuevas
-// al select, y esa columna no existe hasta que Daniel aplique la migración 0039 en Supabase Studio.
-// Es la medida exacta de lo que rompería en producción si esto se publicara sin la migración (regla
-// del CLAUDE.md del proyecto). Se confirmó que las cuatro fallan por ESA razón y ninguna otra; su
-// verde vuelve solo, sin cambiar nada acá, en cuanto la 0039 esté aplicada (Tarea 9).
+// exist" (42703): `dibujarReglas` ahora pasa por `datosFormularioControles`, que llama a
+// `leerControles`, que agregó las dos columnas nuevas al select, y esa columna no existe hasta que
+// Daniel aplique la migración 0039 en Supabase Studio. Es la medida exacta de lo que rompería en
+// producción si esto se publicara sin la migración (regla del CLAUDE.md del proyecto). Se confirmó
+// que las cuatro fallan por ESA razón y ninguna otra; su verde vuelve solo, sin cambiar nada acá, en
+// cuanto la 0039 esté aplicada (Tarea 9).
 describe('accionGuardarControles — la perilla del monto donde el programa principal no lo usa', () => {
   it('en un CUPÓN no se le ofrece la casilla al dueño', async () => {
     const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'cupon', pedir_monto_compra: true });
     sesion.comercioId = comercioId;
 
-    const html = await dibujarReglas(comercioId, 'cupon');
+    const html = await dibujarReglas(comercioId);
 
     expect(html, 'usar un cupón no recibe monto: la casilla sería una perilla muerta').not.toMatch(CASILLA_VISIBLE);
   });
@@ -139,7 +141,7 @@ describe('accionGuardarControles — la perilla del monto donde el programa prin
     const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'cupon', pedir_monto_compra: true });
     sesion.comercioId = comercioId;
 
-    const html = await dibujarReglas(comercioId, 'cupon');
+    const html = await dibujarReglas(comercioId);
     const res = await accionGuardarControles(undefined, enviar(html, { zona_horaria: 'America/Guatemala' }));
 
     expect(res).toEqual({ guardado: true });
@@ -155,7 +157,7 @@ describe('accionGuardarControles — la perilla del monto donde el programa prin
     const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'cupon', pedir_monto_compra: false });
     sesion.comercioId = comercioId;
 
-    const html = await dibujarReglas(comercioId, 'cupon');
+    const html = await dibujarReglas(comercioId);
     await accionGuardarControles(undefined, enviar(html));
 
     expect((await perillaGuardada(comercioId)).pedir_monto_compra).toBe(false);
@@ -168,7 +170,7 @@ describe('accionGuardarControles — la perilla del monto donde el programa prin
     const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'puntos', pedir_monto_compra: true });
     sesion.comercioId = comercioId;
 
-    const html = await dibujarReglas(comercioId, 'puntos');
+    const html = await dibujarReglas(comercioId);
     expect(html).toMatch(CASILLA_VISIBLE);
 
     const res = await accionGuardarControles(undefined, enviar(html, { pedir_monto_compra: false }));
@@ -188,22 +190,27 @@ describe('accionGuardarControles — la perilla del monto donde el programa prin
 //   porque "10.5" vuelve a parsear a 1050 igual).
 // - Volver a condicionar el checkbox "Pedir" solo a `usaMontoDeCompra` (sin `|| ofreceReglaDeMonto`
 //   en FormularioControles.tsx): falla "membresía + sellos secundario" de abajo.
-// - Quitar `{ soloActivos: false }` de la llamada a `listarProgramas` en page.tsx: falla "membresía +
-//   sellos secundario DESACTIVADO" de abajo (necesita el test del NAVEGADOR contra page.tsx real
-//   para atraparlo del todo — acá solo se prueba `dibujarReglas`, que YA llama con `{ soloActivos:
-//   false }` a propósito de no repetir el filtro; ver el comentario del helper).
+// - Quitar `{ soloActivos: false }` de la llamada a `listarProgramas` DENTRO de
+//   `datosFormularioControles` (datosControles.ts, compartida por page.tsx y por `dibujarReglas`):
+//   ahora SÍ la atrapa directamente "membresía + sellos secundario DESACTIVADO" de abajo — antes de
+//   esta revisión, cuando `dibujarReglas` copiaba la llamada en vez de compartir la función, esta
+//   mutación no la atrapaba ninguna prueba de acá (hacía falta el navegador contra page.tsx real).
 // - `type="number"` en vez de `type="text"` en el campo del mínimo: falla la aserción de tipo del
 //   HTML.
+// - Agregar inputs OCULTOS para `exigir_monto_compra`/`monto_minimo_compra` en la rama sin
+//   sub-bloque (preservando el valor guardado, como ya hace `pedir_monto_compra`): falla las DOS
+//   pruebas de "sub-bloque ausente" de abajo (cupón y cashback) — es justo el diseño que la spec
+//   descarta a propósito (ver el comentario del sub-bloque en FormularioControles.tsx).
 //
-// TODAS las pruebas de este bloque pasan por `dibujarReglas`, que llama a `leerControles`, que
-// selecciona `exigir_monto_compra` y `monto_minimo_compra_centavos` — columnas de la migración 0039,
-// TODAVÍA NO aplicada en esta base (confirmado con scripts/verificar-0039.ts el 2026-09-23). Por eso
-// TODAS quedan hoy en rojo con el mismo error de Postgres, 42703 "column
-// comercios.exigir_monto_compra does not exist" — EXCEPTO la que siembra la fila con un UPDATE
-// directo ANTES de llamar a dibujarReglas, que falla un paso antes, con PGRST204 (PostgREST rechaza
-// el UPDATE contra su caché de esquema sin llegar a tocar Postgres). Se corrieron las cinco para
-// confirmar que ninguna falla por otra razón; el verde de las cinco y sus mutaciones (arriba) se
-// difieren a la Tarea 9.
+// TODAS las pruebas de este bloque pasan por `dibujarReglas` → `datosFormularioControles` →
+// `leerControles`, que selecciona `exigir_monto_compra` y `monto_minimo_compra_centavos` — columnas
+// de la migración 0039, TODAVÍA NO aplicada en esta base (confirmado con scripts/verificar-0039.ts
+// el 2026-09-23). Por eso TODAS quedan hoy en rojo con el mismo error de Postgres, 42703 "column
+// comercios.exigir_monto_compra does not exist" — EXCEPTO las que siembran la fila con un UPDATE
+// directo ANTES de llamar a dibujarReglas (cupón y cashback), que fallan un paso antes, con
+// PGRST204 (PostgREST rechaza el UPDATE contra su caché de esquema sin llegar a tocar Postgres). Se
+// corrieron las seis para confirmar que ninguna falla por otra razón; el verde de las seis y sus
+// mutaciones (arriba) se difieren a la Tarea 9.
 describe('accionGuardarControles — el mínimo de compra (Tarea 4, migración 0039 pendiente)', () => {
   async function comercioDePuntos() {
     const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'puntos' });
@@ -213,29 +220,29 @@ describe('accionGuardarControles — el mínimo de compra (Tarea 4, migración 0
 
   it("mínimo '10x' (typo) → NaN → error del mínimo", async () => {
     const comercioId = await comercioDePuntos();
-    const html = await dibujarReglas(comercioId, 'puntos');
+    const html = await dibujarReglas(comercioId);
 
     const res = await accionGuardarControles(undefined, enviar(html, { monto_minimo_compra: '10x' }));
 
     expect(res).toEqual({
-      error: 'El mínimo de compra para sumar debe ser un monto mayor que cero, o quedar vacío para no exigir un mínimo.',
+      error: 'El mínimo de compra para sumar debe ser un monto válido mayor que cero (por ejemplo 10.00), o quedar vacío para no exigir un mínimo.',
     });
   });
 
   it("mínimo '0' → error: no es un mínimo mayor que cero", async () => {
     const comercioId = await comercioDePuntos();
-    const html = await dibujarReglas(comercioId, 'puntos');
+    const html = await dibujarReglas(comercioId);
 
     const res = await accionGuardarControles(undefined, enviar(html, { monto_minimo_compra: '0' }));
 
     expect(res).toEqual({
-      error: 'El mínimo de compra para sumar debe ser un monto mayor que cero, o quedar vacío para no exigir un mínimo.',
+      error: 'El mínimo de compra para sumar debe ser un monto válido mayor que cero (por ejemplo 10.00), o quedar vacío para no exigir un mínimo.',
     });
   });
 
   it('mínimo $1,000.01 (encima del tope) → error del tope', async () => {
     const comercioId = await comercioDePuntos();
-    const html = await dibujarReglas(comercioId, 'puntos');
+    const html = await dibujarReglas(comercioId);
 
     const res = await accionGuardarControles(undefined, enviar(html, { monto_minimo_compra: '1000.01' }));
 
@@ -246,7 +253,7 @@ describe('accionGuardarControles — el mínimo de compra (Tarea 4, migración 0
 
   it('guardar "Exigir" + mínimo $10.50 se relee true/1050, y el HTML lo precarga EXACTO ($10.50, no 10.5)', async () => {
     const comercioId = await comercioDePuntos();
-    const html = await dibujarReglas(comercioId, 'puntos');
+    const html = await dibujarReglas(comercioId);
 
     const res = await accionGuardarControles(
       undefined,
@@ -263,7 +270,7 @@ describe('accionGuardarControles — el mínimo de compra (Tarea 4, migración 0
     // otro formato — y tiene que seguir siendo `type="text"`, nunca `type="number"` (ver el
     // comentario largo del campo en FormularioControles.tsx: un input numérico con value="$10.50" se
     // vaciaría solo al montar).
-    const htmlReleido = await dibujarReglas(comercioId, 'puntos');
+    const htmlReleido = await dibujarReglas(comercioId);
     const precarga = /<input\b(?=[^>]*\bname="monto_minimo_compra")(?=[^>]*\btype="text")(?=[^>]*\bvalue="\$10\.50")[^>]*>/;
     expect(htmlReleido).toMatch(precarga);
   });
@@ -286,8 +293,35 @@ describe('accionGuardarControles — el mínimo de compra (Tarea 4, migración 0
       .eq('id', comercioId);
     expect(errorSiembra).toBeNull();
 
-    const html = await dibujarReglas(comercioId, 'cupon');
+    const html = await dibujarReglas(comercioId);
     expect(html, 'un cupón sin programa de puntos/sellos no ofrece el sub-bloque').not.toMatch(SUBBLOQUE_VISIBLE);
+
+    const res = await accionGuardarControles(undefined, enviar(html));
+    expect(res).toEqual({ guardado: true });
+
+    const controlesFinales = await leerControles(supabase, comercioId);
+    expect(controlesFinales?.exigirMontoCompra).toBe(false);
+    expect(controlesFinales?.montoMinimoCompraCentavos).toBeNull();
+  });
+
+  it('guardar con el sub-bloque ausente TAMBIÉN resetea en CASHBACK, donde "Pedir" SÍ se ve', async () => {
+    // A diferencia del cupón de arriba (donde ni "Pedir" se dibuja), cashback SÍ usa el monto
+    // (`usaMontoDeCompra: true` — el monto ya es obligatorio por `requiereMonto`) pero NO ofrece la
+    // regla de mínimo (`aplicaReglaDeMonto: false`, lib/tarjetas/tipos.ts: "el monto ya es
+    // obligatorio por su propio tipo"). Ejercita la otra rama: el checkbox "Pedir" queda VISIBLE Y
+    // MARCADO (refleja el `pedir_monto_compra` sembrado), pero exigir/mínimo igual desaparecen del
+    // FormData porque dependen solo de `ofreceReglaDeMonto`, no de si "Pedir" se ve.
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'cashback' });
+    sesion.comercioId = comercioId;
+    const { error: errorSiembra } = await supabase
+      .from('comercios')
+      .update({ pedir_monto_compra: true, exigir_monto_compra: true, monto_minimo_compra_centavos: 1050 })
+      .eq('id', comercioId);
+    expect(errorSiembra).toBeNull();
+
+    const html = await dibujarReglas(comercioId);
+    expect(html, 'cashback usa el monto pero no ofrece la regla de mínimo').toMatch(CASILLA_VISIBLE);
+    expect(html).not.toMatch(SUBBLOQUE_VISIBLE);
 
     const res = await accionGuardarControles(undefined, enviar(html));
     expect(res).toEqual({ guardado: true });
@@ -299,9 +333,10 @@ describe('accionGuardarControles — el mínimo de compra (Tarea 4, migración 0
 });
 
 // TAREA 4 — cuándo se le ofrece al dueño el sub-bloque, más allá del tipo PRINCIPAL: la pregunta que
-// contesta `ofreceReglaDeMonto` (lib/comercio/montoAcreditacion.ts) mirando TODOS los programas, no
-// solo el principal. Mismo aviso que el bloque de arriba: las tres pasan por `dibujarReglas` →
-// `leerControles`, así que hoy quedan en rojo por 42703 (columna faltante, migración 0039
+// contesta `ofreceReglaDeMonto` (lib/comercio/montoAcreditacion.ts), usada por
+// `datosFormularioControles` (datosControles.ts) mirando TODOS los programas, no solo el principal.
+// Mismo aviso que el bloque de arriba: las tres pasan por `dibujarReglas` → `datosFormularioControles`
+// → `leerControles`, así que hoy quedan en rojo por 42703 (columna faltante, migración 0039
 // pendiente); se corrieron para confirmar que fallan por ESA razón. Verde y mutaciones: Tarea 9.
 describe('FormularioControles — a quién se le ofrece el sub-bloque (Tarea 4)', () => {
   it('membresía PRINCIPAL + sellos SECUNDARIO: se dibuja la casilla "Pedir" y el sub-bloque', async () => {
@@ -317,7 +352,7 @@ describe('FormularioControles — a quién se le ofrece el sub-bloque (Tarea 4)'
     });
     expect(sellos.ok).toBe(true);
 
-    const html = await dibujarReglas(comercioId, 'membresia');
+    const html = await dibujarReglas(comercioId);
 
     expect(html, 'la membresía sola no usa el monto, pero el sellos secundario sí ofrece la regla').toMatch(CASILLA_VISIBLE);
     expect(html).toMatch(SUBBLOQUE_VISIBLE);
@@ -339,7 +374,7 @@ describe('FormularioControles — a quién se le ofrece el sub-bloque (Tarea 4)'
     const desactivado = await desactivarPrograma(supabase, comercioId, sellos.id);
     expect(desactivado.ok).toBe(true);
 
-    const html = await dibujarReglas(comercioId, 'membresia');
+    const html = await dibujarReglas(comercioId);
 
     expect(html).toMatch(SUBBLOQUE_VISIBLE);
   });
@@ -348,7 +383,7 @@ describe('FormularioControles — a quién se le ofrece el sub-bloque (Tarea 4)'
     const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'cupon' });
     sesion.comercioId = comercioId;
 
-    const html = await dibujarReglas(comercioId, 'cupon');
+    const html = await dibujarReglas(comercioId);
 
     expect(html).not.toMatch(CASILLA_VISIBLE);
     expect(html).not.toMatch(SUBBLOQUE_VISIBLE);
