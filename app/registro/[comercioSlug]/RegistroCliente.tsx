@@ -286,7 +286,7 @@ export default function RegistroCliente({
           </h1>
           {/* Texto fijo, sin personalización por comercio (decisión 5 de la spec): la promesa del
               primer sello la hace el comercio de palabra (cartel, cajero), no esta pantalla. */}
-          <p className="lede reveal d2">¿Nos dejás una reseña en Google? Nos ayuda muchísimo.</p>
+          <p className="lede reveal d2">¿Nos dejas una reseña en Google? Nos ayuda muchísimo.</p>
           <div className="panel reveal d3">
             <a
               className="btn-primary"

@@ -325,8 +325,10 @@ Las dos páginas de registro (`app/registro/[comercioSlug]/page.tsx` y
 
 Con link, antes del formulario hay un paso nuevo:
 
-- Título: **"Antes de tu tarjeta"**. Texto: **"¿Nos dejás una reseña en Google? Nos ayuda
-  muchísimo."**
+- Título: **"Antes de tu tarjeta"**. Texto: **"¿Nos dejas una reseña en Google? Nos ayuda
+  muchísimo."** En TUTEO, no voseo: las pantallas del cliente final (registro y portal) tutean por
+  decisión de Daniel del 2026-09-08 (`lib/tarjetas/textosPorTipo.ts`); la primera versión de esta spec
+  lo había escrito en voseo.
 - Botón principal **"Dejar mi reseña en Google"**: `<a target="_blank" rel="noopener noreferrer">`.
 - Botón **"Ya la dejé, sacar mi tarjeta"**: deshabilitado hasta que se toca el de Google. Lleva al
   formulario de siempre.
