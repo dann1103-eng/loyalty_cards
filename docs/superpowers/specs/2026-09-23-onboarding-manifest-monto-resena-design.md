@@ -291,14 +291,28 @@ otras de esa página):
 ### Validación del link (`lib/comercio/resenaGoogle.ts`, pura, con mutaciones)
 
 `validarUrlResenaGoogle(texto)`: recorta; vacío → `null`; `new URL()` que no parsea → error; protocolo
-distinto de `https:` → error; host fuera de la lista → error. Hosts aceptados: `g.page`, `goo.gl`,
-`maps.app.goo.gl`, `google.com` y `*.google.com`, `google.com.sv` y `*.google.com.sv` (el mercado es El
-Salvador y un link copiado de Maps puede venir con el dominio local). Comparación EXACTA de host o
-sufijo con punto (nunca `includes`): rechaza `google.com.malo.com`, `malogoogle.com`, `javascript:…`.
+distinto de `https:` → error; usuario, contraseña o puerto en la URL → error; host o ruta fuera de la
+lista → error; más de 500 caracteres (el CHECK de la 0039) → error propio. Devuelve y se guarda
+`url.href` (lo que se validó es exactamente lo que se sirve), y el largo se mide sobre eso.
+
+Lista (comparación EXACTA de host, nunca `includes` ni sufijo abierto), corregida el 2026-09-23 tras la
+revisión de la Tarea 7:
+- `g.page` y `maps.app.goo.gl`, con cualquier ruta.
+- `goo.gl` SOLO con ruta que empiece con `/maps/` (el acortador genérico de Google redirigía a
+  cualquier sitio; su forma de Maps no).
+- `google.com`, `www.google.com`, `search.google.com`, `maps.google.com` y los mismos cuatro con
+  `.com.sv` (el mercado es El Salvador y un link copiado de Maps puede venir con el dominio local).
+  En estos hosts se rechazan las rutas que empiezan con `/url` o `/amp` (redirecciones abiertas de
+  Google, usadas en phishing).
+- **No** `*.google.com` en general: dejaba pasar `sites.google.com` (páginas que publica cualquiera) y
+  `docs.google.com/forms` (formularios que piden datos).
+
+Rechaza `google.com.malo.com`, `malogoogle.com`, `sites.google.com/…`, `https://g.page@malo.com`,
+`javascript:…`.
 
 Por qué la lista: el link se muestra en una página pública que el cliente toma como del negocio. Ataja
 el pegado equivocado (el link de Instagram) y le quita a una cuenta de dueño comprometida la forma de
-mandar a los clientes a cualquier sitio.
+mandar a los clientes a cualquier sitio, incluidos los sitios que se pueden publicar DENTRO de Google.
 
 **Se revalida al LEER, antes de usarlo como `href`** (lo que sale de la base es dato hostil, regla del
 proyecto): un valor guardado que ya no pasa la validación se trata como si no hubiera link.
