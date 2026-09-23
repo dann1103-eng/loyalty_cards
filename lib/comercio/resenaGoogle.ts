@@ -15,32 +15,74 @@ import type { Database } from '../supabase/types';
 // una cuenta de dueño comprometida tendría una forma lista para mandar clientes a cualquier sitio.
 // Validar contra un puñado de hosts de Google ataja las dos cosas sin impedir el pegado normal (un
 // link de "Pedir reseñas" del Perfil de Empresa, o uno copiado de Google Maps).
+//
+// CORREGIDO el 2026-09-23, tras la revisión de código de este mismo archivo (commit 455b165): la
+// primera versión aceptaba CUALQUIER subdominio de google.com (`host === 'google.com' ||
+// host.endsWith('.google.com')`). Eso dejaba pasar `sites.google.com` —páginas que publica
+// cualquiera, sin relación con el negocio— y `docs.google.com/forms` —un formulario que le pide
+// datos al cliente con la marca de Google puesta encima—. La lista ahora es de HOSTS EXACTOS, sin
+// ningún sufijo abierto.
 
-const HOSTS_EXACTOS = new Set(['g.page', 'goo.gl', 'maps.app.goo.gl']);
-// El mercado es El Salvador: un link copiado de Maps puede venir con el dominio local (.com.sv), no
-// solo el genérico.
-const SUFIJOS_GOOGLE = ['google.com', 'google.com.sv'];
+// g.page y maps.app.goo.gl: cualquier ruta. Son los links que da directamente "Pedir reseñas" del
+// Perfil de Empresa y el enlace corto que arma Google Maps; no existe una página DENTRO de esos dos
+// hosts que no sea justamente eso.
+const HOSTS_RUTA_LIBRE = new Set(['g.page', 'maps.app.goo.gl']);
 
-// Comparación EXACTA de host o SUFIJO CON PUNTO — nunca `includes`. `endsWith('google.com')` SIN el
-// punto delante aceptaría `malogoogle.com` (termina en esas diez letras, no es un subdominio); un
-// `includes('google.com')` aceptaría `google.com.malo.com` (lo contiene en el medio, no al final).
-// Las dos son la vía de inyección que esta función existe para cerrar. `url.hostname` ya llega en
-// minúsculas (lo normaliza el propio parser de URL).
-function hostPermitido(host: string): boolean {
-  if (HOSTS_EXACTOS.has(host)) return true;
-  return SUFIJOS_GOOGLE.some((sufijo) => host === sufijo || host.endsWith(`.${sufijo}`));
+// google.com/.com.sv y sus tres subdominios de Maps/búsqueda — los ocho hosts, EXACTOS, con los que
+// un link de reseña puede llegar. `maps.google.com` y `search.google.com` son los que arma un
+// "Compartir" desde la app de Maps o desde una búsqueda; `www.google.com` es el genérico. El
+// mercado es El Salvador: un link copiado ahí puede traer el dominio local (.com.sv), no solo el
+// genérico — por eso los mismos cuatro, dos veces.
+const HOSTS_GOOGLE = new Set([
+  'google.com', 'www.google.com', 'search.google.com', 'maps.google.com',
+  'google.com.sv', 'www.google.com.sv', 'search.google.com.sv', 'maps.google.com.sv',
+]);
+
+// google.com/url y google.com/amp son los saltos GENÉRICOS de Google (el "esto te saca del sitio" de
+// los resultados de búsqueda, y el visor de páginas AMP): los dos reenvían a lo que traiga la query o
+// el resto de la ruta, sea lo que sea — exactamente la puerta que esta función existe para cerrar. Un
+// link de reseña legítimo nunca empieza así.
+function esRutaDeRedireccion(pathname: string): boolean {
+  return pathname.startsWith('/url') || pathname.startsWith('/amp');
+}
+
+// Comparación EXACTA de host (`Set.has`), nunca `includes` ni sufijo abierto: `malogoogle.com` no
+// está en `HOSTS_GOOGLE`, ni tampoco `google.com.malo.com` ni `sites.google.com` — ninguno de los
+// tres es una de las ocho cadenas exactas. `url.hostname` ya llega en minúsculas (lo normaliza el
+// propio parser de URL).
+function hostYRutaPermitidos(url: URL): boolean {
+  const host = url.hostname;
+  if (HOSTS_RUTA_LIBRE.has(host)) return true;
+  // goo.gl es el acortador GENÉRICO de Google: goo.gl/xxxxx puede apuntar a cualquier sitio del
+  // mundo. Su forma de Maps, en cambio, siempre empieza con /maps/ y solo la arma Google Maps.
+  if (host === 'goo.gl') return url.pathname.startsWith('/maps/');
+  if (HOSTS_GOOGLE.has(host)) return !esRutaDeRedireccion(url.pathname);
+  return false;
 }
 
 export type ResultadoValidacionUrl = { ok: true; url: string | null } | { ok: false; error: string };
 
+// El CHECK de la 0039 (`resena_google_url` con `char_length(...) <= 500`): sin este atajador acá, un
+// link larguísimo pasaría esta validación y recién la BD lo rechazaría — el dueño vería el genérico
+// "No se pudo guardar la configuración." sin ninguna pista de qué estuvo mal.
+export const MAXIMO_LARGO_URL_RESENA = 500;
+
 const ERROR_NO_ES_LINK =
   'Ese texto no es un link. Pegá el link para dejar reseña que te da Google (empieza con https://g.page/…).';
 const ERROR_NO_HTTPS = 'El link tiene que empezar con https://.';
+const ERROR_CREDENCIALES_O_PUERTO =
+  'Ese link no puede llevar usuario, contraseña ni puerto. Pegá el link tal como te lo da Google.';
 const ERROR_HOST_AJENO =
   'Ese link no es de Google. Pegá el link para dejar reseña que te da Google (empieza con https://g.page/…).';
+const ERROR_MUY_LARGO =
+  "Ese link es muy largo. Usá el de \"Pedir reseñas\" de tu Perfil de Empresa de Google (https://g.page/…).";
 
 // Vacío (tras recortar) es válido: es "no hay link todavía", no un error — el dueño puede guardar la
 // casilla apagada sin haber pegado nada.
+//
+// Devuelve y guarda `url.href`, NUNCA el texto tal como lo tecleó el dueño: es lo que de verdad se
+// va a usar como `href` en la página de registro (Tarea 8), así que es lo que hay que validar —
+// incluido el largo, que se mide sobre `url.href` y no sobre el texto crudo.
 export function validarUrlResenaGoogle(texto: string): ResultadoValidacionUrl {
   const limpio = texto.trim();
   if (!limpio) return { ok: true, url: null };
@@ -59,11 +101,23 @@ export function validarUrlResenaGoogle(texto: string): ResultadoValidacionUrl {
     return { ok: false, error: ERROR_NO_HTTPS };
   }
 
-  if (!hostPermitido(url.hostname)) {
+  // `https://malo.com@g.page/r/x` tiene un HOST válido (g.page) con un usuario que imita otro sitio;
+  // sin este chequeo se colaría porque el chequeo de host de abajo solo mira `url.hostname`, nunca
+  // `url.username`. Va ANTES del chequeo de host a propósito: un link con usuario/contraseña/puerto
+  // se rechaza por eso, aunque el host en sí fuera uno permitido.
+  if (url.username || url.password || url.port) {
+    return { ok: false, error: ERROR_CREDENCIALES_O_PUERTO };
+  }
+
+  if (!hostYRutaPermitidos(url)) {
     return { ok: false, error: ERROR_HOST_AJENO };
   }
 
-  return { ok: true, url: limpio };
+  if (url.href.length > MAXIMO_LARGO_URL_RESENA) {
+    return { ok: false, error: ERROR_MUY_LARGO };
+  }
+
+  return { ok: true, url: url.href };
 }
 
 export interface ResenaGoogle {
