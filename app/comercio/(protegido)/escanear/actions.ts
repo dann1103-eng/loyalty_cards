@@ -210,14 +210,17 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
     // el `if`, el escáner le mostraría "Mínimo $10.00" al cajero sobre un cupón, que ignora el
     // monto por completo.
     ...(aplicaReglaDeMonto(tipo.valor)
-      ? {
-          exigirMontoCompra:
-            (comercio?.exigir_monto_compra ?? false) || (comercio?.monto_minimo_compra_centavos ?? null) !== null,
-          montoMinimoTexto:
-            comercio?.monto_minimo_compra_centavos != null
-              ? formatearCentavos(comercio.monto_minimo_compra_centavos)
-              : null,
-        }
+      ? (() => {
+          // Una sola variable para el mínimo, chequeada UNA vez: antes había dos estilos de
+          // null-check del mismo campo (`?? false` acá, `!= null` más abajo) para la misma
+          // columna, que es la clase de inconsistencia que hace dudar si son dos chequeos
+          // distintos.
+          const minimo = comercio?.monto_minimo_compra_centavos ?? null;
+          return {
+            exigirMontoCompra: (comercio?.exigir_monto_compra ?? false) || minimo !== null,
+            montoMinimoTexto: minimo !== null ? formatearCentavos(minimo) : null,
+          };
+        })()
       : {}),
   };
 }
@@ -291,7 +294,9 @@ export async function accionAutorizarOperacion(
 ): Promise<RespuestaOperacion> {
   const sesion = await verifyComercioAcceso();
   if (sesion.rol !== 'owner') {
-    return { ok: false, error: 'Solo el dueño puede autorizar una acreditación por encima del límite.' };
+    // Texto genérico a propósito: esta acción ya no autoriza solo "por encima de un límite" (las
+    // perillas antifraude) — desde la Tarea 5 también autoriza una compra por DEBAJO de un mínimo.
+    return { ok: false, error: 'Solo el dueño puede autorizar esta acreditación.' };
   }
 
   // Antes de tocar nada: sin motivo no hay autorización. acreditarForzado lo vuelve a validar, y el
@@ -533,6 +538,11 @@ async function ejecutarOperacion(
         // nadie describió.
         const regla = await leerReglaDeMonto(supabase, sesion.comercioId);
         if (regla === null) {
+          // Falla CERRADA a propósito (spec, "La regla, en una función pura"): hasta que la
+          // migración 0039 (exigir_monto_compra, monto_minimo_compra_centavos en comercios) esté
+          // aplicada, esta lectura SIEMPRE falla, así que esta rama rechaza TODA acreditación de
+          // puntos/sellos del escáner — no un caso raro. Por eso este código no se publica antes
+          // de que la 0039 esté aplicada (spec, "Orden y despliegue"; Tarea 9 del plan).
           return { ok: false, error: 'No se pudo verificar la regla de monto. Probá de nuevo.' };
         }
         const chequeo = validarMontoAcreditacion({

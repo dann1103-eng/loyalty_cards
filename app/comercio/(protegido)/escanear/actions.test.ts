@@ -376,7 +376,7 @@ describe('autorizar una operación bloqueada — acredita lo que la operación v
 
     expect(res).toEqual({
       ok: false,
-      error: 'Solo el dueño puede autorizar una acreditación por encima del límite.',
+      error: 'Solo el dueño puede autorizar esta acreditación.',
     });
     expect(await saldoDe(id)).toBe(0);
   });
@@ -407,11 +407,16 @@ describe('autorizar una operación bloqueada — acredita lo que la operación v
 // ESTADO DE LA 0039 (2026-09-23): TODAVÍA NO ESTÁ APLICADA en esta base (confirmado corriendo
 // `npx tsx --env-file=.env.local --conditions=react-server scripts/verificar-0039.ts`, que respondió
 // "FALLO: la migración 0039 NO está aplicada" con detalle "column comercios.exigir_monto_compra
-// does not exist"). Por eso `setearReglaMinimo` de abajo (el único punto de este bloque que toca las
-// columnas nuevas) hace fallar TODAS las pruebas de este describe con ESE mismo error — no hay forma
-// de setear la regla sin las columnas. Es el rojo esperado por "Antes de empezar" del plan: se
-// escriben igual, y el verde + las mutaciones de abajo se difieren a la Tarea 9 (cierre, con la 0039
-// ya migrada en Supabase).
+// does not exist" — ese script hace un SELECT, que PostgREST valida contra el catálogo de Postgres
+// y rechaza con 42703). Por eso `setearReglaMinimo` de abajo (el único punto de este bloque que toca
+// las columnas nuevas) hace fallar TODAS las pruebas de este describe — no hay forma de setear la
+// regla sin las columnas —, pero con un mensaje DISTINTO: `setearReglaMinimo` hace un UPDATE, que
+// PostgREST valida contra su caché de esquema en vez de contra Postgres directamente, y ese camino
+// responde PGRST204: "Could not find the 'exigir_monto_compra' column of 'comercios' in the schema
+// cache" (es el mensaje que efectivamente se ve al correr este archivo hoy). Mismo problema de fondo
+// (la columna no existe), dos códigos de error distintos según el verbo. Es el rojo esperado por
+// "Antes de empezar" del plan: se escriben igual, y el verde + las mutaciones de abajo se difieren a
+// la Tarea 9 (cierre, con la 0039 ya migrada en Supabase).
 //
 // MUTACIONES PENDIENTES (correrlas recién en la Tarea 9, con la base migrada):
 // - Pasar `autorizado: false` fijo en la llamada a `validarMontoAcreditacion` dentro de
@@ -561,5 +566,48 @@ describe('la regla de mínimo de compra en el escáner (0039)', () => {
       false,
     );
     expect(resultadoCupon.montoMinimoTexto ?? null).toBeNull();
+  });
+});
+
+// A diferencia del describe de arriba, ESTA prueba corre HOY, sin la 0039: no depende de setear la
+// regla en `comercios` (esa es la parte que necesita las columnas nuevas), sino de que
+// `leerReglaDeMonto` no pueda resolver NINGUNA fila para el `comercioId` de la sesión — algo que pasa
+// tanto hoy (la columna no existe: 42703) como después de la 0039 (con un `comercioId` que no matchea
+// ninguna fila: sin error, pero `!data` es true). En los dos casos `leerReglaDeMonto` devuelve `null`
+// por el mismo motivo de fondo (revisión de calidad, 2026-09-23): es la tentación más realista del
+// próximo que vea "el escáner rechaza todo" y quiera pasar esta rama a fallar ABIERTA (asumir "sin
+// regla" cuando no se puede leer) en vez de CERRADA. Eso estaría mal incluso con la 0039 aplicada: la
+// spec dice explícitamente "falla hacia lo restrictivo: una falla de lectura acá casi seguro tumbaría
+// el RPC igual" (sección 2, "La regla, en una función pura").
+//
+// Por qué la ejecución SÍ llega hasta la lectura de la regla con un comercioId inexistente (y no
+// falla antes, por otra razón): `resolverProgramaDeTarjeta` (lib/comercio/programas.ts:478-485)
+// filtra `tarjetas` por `id` Y `comercio_id` juntos; sin fila que matchee esos dos, devuelve `null`
+// SIN lanzar, y `ejecutarOperacion` cae al tipo por default ('puntos'), que es justo la rama `default`
+// del switch donde vive la lectura de la regla. Verificado leyendo el código, no asumido.
+//
+// MUTACIÓN CONFIRMADA (2026-09-23): cambiar el `if (regla === null) return {...}` por
+// `const regla = (await leerReglaDeMonto(supabase, sesion.comercioId)) ?? { exigir: false,
+// minimoCentavos: null };` (fallar ABIERTA en vez de CERRADA) hace fallar esta prueba: en vez de
+// `{ ok: false, error: 'No se pudo verificar la regla de monto. Probá de nuevo.' }`, devuelve
+// `{ ok: false, error: 'Esa tarjeta no existe en tu comercio.' }` (lib/comercio/acreditar.ts:182) —
+// la ejecución sigue de largo hasta `acreditar`, que es justamente lo que esta prueba existe para
+// impedir. Corrida y restaurada.
+describe('la regla de monto — falla hacia lo restrictivo si no se puede leer (corre HOY, sin la 0039)', () => {
+  it('un comercioId que no resuelve ninguna fila rechaza sin acreditar, con el mensaje de "no se pudo verificar"', async () => {
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    const tarjeta = await entorno.crearTarjeta(comercioId, 0);
+    // La sesión usa un comercioId que NINGUNA tarjeta tiene — a propósito, no el del comercio real
+    // que se acaba de crear (ver el comentario de arriba sobre por qué esto llega hasta la lectura
+    // de la regla en vez de fallar antes).
+    sesion.comercioId = '00000000-0000-0000-0000-000000000000';
+
+    const res = await accionOperacionPrincipal(tarjeta.id, null, 1, '10.00');
+
+    expect(res).toEqual({ ok: false, error: 'No se pudo verificar la regla de monto. Probá de nuevo.' });
+
+    const { data, error } = await supabase.from('tarjetas').select('puntos_actuales').eq('id', tarjeta.id).single();
+    if (error) throw error;
+    expect(data.puntos_actuales, 'el intento con un comercioId que no resuelve nada no escribió nada').toBe(0);
   });
 });

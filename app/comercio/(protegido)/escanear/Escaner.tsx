@@ -402,9 +402,16 @@ export default function Escaner({
                   : 'Monto de la compra (opcional)'}
               </span>
               {/* El mínimo configurado (0039), junto al campo, para que el cajero sepa de entrada
-                  cuánto tiene que llegar la compra en vez de enterarse recién al rechazo. */}
-              {resultado.montoMinimoTexto && (
+                  cuánto tiene que llegar la compra en vez de enterarse recién al rechazo. Con
+                  exigirMontoCompra pero SIN mínimo (el dueño exigió el monto sin fijar un piso), la
+                  etiqueta ya perdió el "(opcional)" de arriba, pero sin este aviso el botón queda
+                  deshabilitado sin que el cajero entienda por qué. */}
+              {resultado.montoMinimoTexto ? (
                 <span className="nota" style={{ margin: 0 }}>Mínimo {resultado.montoMinimoTexto}</span>
+              ) : (
+                resultado.exigirMontoCompra && (
+                  <span className="nota" style={{ margin: 0 }}>Obligatorio</span>
+                )
               )}
             </label>
             <input
