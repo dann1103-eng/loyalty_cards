@@ -1,12 +1,21 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { verifyComercioAccesoSinBloqueo } from '@/lib/comercio/verifyComercioAcceso';
 import { listarProgramas } from '@/lib/comercio/programas';
 import { createServiceClient } from '@/lib/supabase/server';
 import type { EstadoCobranza } from '@/lib/comercios/cobranza';
 import { formatearFecha } from '@/lib/tarjetas/vigencia';
+import { URL_MANIFIESTO_COMERCIO } from '@/lib/manifiestos';
 import MenuOpciones from './MenuOpciones';
 import NavInferior from './NavInferior';
 import SelectorContexto, { type ComercioConSucursales } from './SelectorContexto';
+
+// Cubre TODO el panel del dueño y del cajero (herencia de metadata: el segmento más profundo
+// gana, pero acá no hace falta pisarlo). Sin esto, un dueño que en Android toca "Agregar a
+// pantalla de inicio" desde su panel instala el manifest de la raíz —el portal del CLIENTE
+// (app/manifest.ts)— y el atajo le abre /mi-tarjeta en vez de su propio panel (onboarding real,
+// 2026-09-22). Ver lib/manifiestos.ts.
+export const metadata: Metadata = { manifest: URL_MANIFIESTO_COMERCIO };
 
 // Banner de cobranza para el dueño (spec 2026-09-21-cobranza-design.md, "Pantallas → Dueño"). Solo
 // los estados que necesitan avisarle algo devuelven banner: `al_dia` no tiene nada que decir, y

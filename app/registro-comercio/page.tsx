@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import FormularioRegistro from './FormularioRegistro';
 import { openGraphDe, twitterDe } from '@/lib/metadatosOg';
+import { URL_MANIFIESTO_COMERCIO } from '@/lib/manifiestos';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +20,10 @@ export const metadata: Metadata = {
   // Es un formulario de alta, no una página de contenido: no aporta nada en resultados de búsqueda
   // y compite con la portada por la misma consulta.
   robots: { index: false, follow: true },
+  // Es el alta self-service del DUEÑO: sin esto heredaría el manifest de la raíz (el portal del
+  // cliente) y su primer atajo instalado —si lo agrega desde acá antes de tener panel— sería el
+  // equivocado. Ver lib/manifiestos.ts.
+  manifest: URL_MANIFIESTO_COMERCIO,
 };
 
 // Alta self-service. Reemplaza los cuatro pasos manuales que había entre "conozco Cardly" y "estoy

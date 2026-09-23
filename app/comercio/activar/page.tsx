@@ -1,7 +1,13 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+import { URL_MANIFIESTO_COMERCIO } from '@/lib/manifiestos';
 import FormularioActivar from './FormularioActivar';
 
 export const dynamic = 'force-dynamic';
+
+// Fuera de (protegido): sin esta declaración propia heredaría el manifest del portal del cliente
+// (ver el comentario de app/comercio/(protegido)/layout.tsx).
+export const metadata: Metadata = { manifest: URL_MANIFIESTO_COMERCIO };
 
 // Pantalla de bienvenida del link que FM le comparte al dueño por WhatsApp. Abrir esta página NO
 // canjea nada: solo muestra el botón. El canje vive en la Server Action (POST) porque el token es

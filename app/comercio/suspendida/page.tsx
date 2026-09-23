@@ -1,6 +1,12 @@
+import type { Metadata } from 'next';
 import { verifyComercioAccesoSinBloqueo } from '@/lib/comercio/verifyComercioAcceso';
+import { URL_MANIFIESTO_COMERCIO } from '@/lib/manifiestos';
 
 export const dynamic = 'force-dynamic';
+
+// Fuera de (protegido): sin esta declaración propia heredaría el manifest del portal del cliente
+// (ver el comentario de app/comercio/(protegido)/layout.tsx).
+export const metadata: Metadata = { manifest: URL_MANIFIESTO_COMERCIO };
 
 // Pantalla del CAJERO cuando la cuenta del comercio está `bloqueada` (spec 2026-09-21-cobranza-design.md,
 // "Cómo se bloquea" y "Pantallas → Dueño", último ítem). Es un callejón sin salida a propósito: el

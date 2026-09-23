@@ -1,9 +1,16 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { verifyFmAdmin } from '@/lib/fm/verifyFmAdmin';
 import { contarPagosAtencion } from '@/lib/comercios/pagosAdmin';
 import { createServiceClient } from '@/lib/supabase/server';
 import SelectorTema from '@/app/_ui/SelectorTema';
+import { URL_MANIFIESTO_ADMIN } from '@/lib/manifiestos';
 import { cerrarSesion } from '../actions';
+
+// Cubre todo el panel interno (herencia de metadata). Mismo motivo que
+// app/comercio/(protegido)/layout.tsx: sin esto, "Agregar a pantalla de inicio" desde acá
+// instalaría el manifest de la raíz (el portal del cliente). Ver lib/manifiestos.ts.
+export const metadata: Metadata = { manifest: URL_MANIFIESTO_ADMIN };
 
 export default async function LayoutProtegido({ children }: { children: React.ReactNode }) {
   // Primera barrera. NO es la única: cada página y cada Server Action repiten el chequeo,

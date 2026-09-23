@@ -1,9 +1,15 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClienteServidor } from '@/lib/supabase/server';
+import { URL_MANIFIESTO_COMERCIO } from '@/lib/manifiestos';
 import FormularioClave from './FormularioClave';
 
 export const dynamic = 'force-dynamic';
+
+// Fuera de (protegido): sin esta declaración propia heredaría el manifest del portal del cliente
+// (ver el comentario de app/comercio/(protegido)/layout.tsx).
+export const metadata: Metadata = { manifest: URL_MANIFIESTO_COMERCIO };
 
 // Pantalla donde el dueño invitado define SU contraseña, justo después de canjear el link en
 // /comercio/activar. Vive FUERA de (protegido) porque todavía no hay nada que proteger con el gate

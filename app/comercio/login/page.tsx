@@ -1,4 +1,10 @@
+import type { Metadata } from 'next';
+import { URL_MANIFIESTO_COMERCIO } from '@/lib/manifiestos';
 import FormularioLoginComercio from './FormularioLoginComercio';
+
+// Fuera de (protegido): sin esta declaración propia heredaría el manifest del portal del cliente
+// (ver el comentario de app/comercio/(protegido)/layout.tsx).
+export const metadata: Metadata = { manifest: URL_MANIFIESTO_COMERCIO };
 
 const MENSAJES: Record<string, string> = {
   'sin-permiso': 'Esa cuenta no tiene acceso al panel del comercio.',

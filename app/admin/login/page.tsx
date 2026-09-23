@@ -1,5 +1,11 @@
+import type { Metadata } from 'next';
 import FormularioLogin from './FormularioLogin';
 import SelectorTema from '@/app/_ui/SelectorTema';
+import { URL_MANIFIESTO_ADMIN } from '@/lib/manifiestos';
+
+// Fuera de (protegido): sin esta declaración propia heredaría el manifest del portal del cliente
+// (ver el comentario de app/admin/(protegido)/layout.tsx).
+export const metadata: Metadata = { manifest: URL_MANIFIESTO_ADMIN };
 
 const MENSAJES: Record<string, string> = {
   'sin-permiso': 'Esa cuenta no tiene acceso al panel de FM.',

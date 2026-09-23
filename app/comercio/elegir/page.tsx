@@ -1,10 +1,16 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClienteServidor, createServiceClient } from '@/lib/supabase/server';
 import { membresiasDeUsuario } from '@/lib/comercio/membresiasDeUsuario';
+import { URL_MANIFIESTO_COMERCIO } from '@/lib/manifiestos';
 import { cerrarSesionComercio } from '../actions';
 import { elegirComercio } from './actions';
 
 export const dynamic = 'force-dynamic';
+
+// Fuera de (protegido): sin esta declaración propia heredaría el manifest del portal del cliente
+// (ver el comentario de app/comercio/(protegido)/layout.tsx).
+export const metadata: Metadata = { manifest: URL_MANIFIESTO_COMERCIO };
 
 // Pantalla de selección de comercio para una cuenta que administra VARIOS (2+ membresías owner).
 // Vive FUERA de (protegido): si estuviera dentro, el gate del layout que redirige acá crearía un
