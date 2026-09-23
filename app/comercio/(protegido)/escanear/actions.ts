@@ -9,9 +9,20 @@ import { quitarPuntos } from '@/lib/comercio/ajuste';
 import { resolverSucursalDeAccion } from '@/lib/comercio/atribucionEscaner';
 import { sucursalPerteneceAComercio } from '@/lib/comercio/sucursales';
 import { resolverProgramaDeTarjeta } from '@/lib/comercio/programas';
+import { leerReglaDeMonto, validarMontoAcreditacion } from '@/lib/comercio/montoAcreditacion';
 import { notificarCambioTarjeta } from '@/lib/apple/notificarCambioTarjeta';
 import { syncObjetoTarjeta } from '@/lib/google/syncObjeto';
-import { tipoOPuntos, describirSaldo, centavosDesdeTexto, nivelParaAcumulado, puedeCanjearRecompensas, usaMontoDeCompra, type AccionPrincipal } from '@/lib/tarjetas/tipos';
+import {
+  tipoOPuntos,
+  describirSaldo,
+  centavosDesdeTexto,
+  formatearCentavos,
+  nivelParaAcumulado,
+  puedeCanjearRecompensas,
+  usaMontoDeCompra,
+  aplicaReglaDeMonto,
+  type AccionPrincipal,
+} from '@/lib/tarjetas/tipos';
 import { usarCupon, renovarMembresia, hoyEnZona } from '@/lib/tarjetas/vigencia';
 import { unidadPrograma, describirCosto, mensajeAcreditacion, type Unidad } from '@/lib/tarjetas/unidadPrograma';
 import { usarVisita, venderPaquete } from '@/lib/tarjetas/prepago';
@@ -56,6 +67,14 @@ export interface ResultadoEscaneo {
   requiereMonto?: boolean;
   // El contador tiene sentido para el cajero (sellos, visitas, plata) o no existe (cupón, membresía).
   tieneContador?: boolean;
+  // Regla de monto obligatorio / mínimo de compra del comercio (migración 0039,
+  // lib/comercio/montoAcreditacion.ts), calculada solo para los tipos que la aplican
+  // (aplicaReglaDeMonto: puntos y sellos). Ausente en el resto: no hay un mínimo que mostrarle al
+  // cajero en un cupón, y `requiereMonto` ya cubre cashback/gift card/descuento.
+  exigirMontoCompra?: boolean;
+  // El mínimo formateado ("$10.00"), o null si el comercio exige el monto sin fijar uno. Solo viaja
+  // junto con exigirMontoCompra.
+  montoMinimoTexto?: string | null;
 }
 
 // Qué dicen los botones de cada tipo. Viven del lado del SERVIDOR, junto a la lógica que realmente
@@ -95,7 +114,14 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
   // `pedir_monto_compra` SÍ sigue siendo del comercio: es una perilla antifraude (Tanda 1) y es
   // política del local, no del programa.
   const [{ data: comercio }, programa, { data: estado }] = await Promise.all([
-    supabase.from('comercios').select('pedir_monto_compra, zona_horaria').eq('id', comercioId).maybeSingle(),
+    supabase
+      .from('comercios')
+      // exigir_monto_compra / monto_minimo_compra_centavos: la regla de mínimo de compra (0039),
+      // igual que pedir_monto_compra, un ÚNICO literal (ver el comentario de leerReglaDeMonto en
+      // lib/comercio/montoAcreditacion.ts sobre por qué no se concatena).
+      .select('pedir_monto_compra, exigir_monto_compra, monto_minimo_compra_centavos, zona_horaria')
+      .eq('id', comercioId)
+      .maybeSingle(),
     resolverProgramaDeTarjeta(supabase, comercioId, tarjeta.tarjetaId),
     // Estado propio de los tipos con vigencia o con nivel. Se lee acá y no en buscarTarjetaPorToken
     // para no cargar de columnas el camino que usan los tipos con contador.
@@ -178,6 +204,21 @@ export async function accionBuscarPorToken(qrToken: string): Promise<ResultadoEs
     // recibe monto (ver `usaMontoDeCompra` en lib/tarjetas/tipos.ts). Sin el tipo, el cajero
     // tecleaba sobre el cupón un monto que se descartaba.
     pedirMontoCompra: (comercio?.pedir_monto_compra ?? false) && usaMontoDeCompra(tipo.valor),
+    // Regla de mínimo de compra (0039): igual que `pedirMontoCompra`, solo tiene sentido para el
+    // TIPO de esta tarjeta (aplicaReglaDeMonto: puntos y sellos) — en el resto ya se cubre con
+    // `requiereMonto` (cashback/gift card/descuento) o no aplica (cupón, membresía, prepago). Sin
+    // el `if`, el escáner le mostraría "Mínimo $10.00" al cajero sobre un cupón, que ignora el
+    // monto por completo.
+    ...(aplicaReglaDeMonto(tipo.valor)
+      ? {
+          exigirMontoCompra:
+            (comercio?.exigir_monto_compra ?? false) || (comercio?.monto_minimo_compra_centavos ?? null) !== null,
+          montoMinimoTexto:
+            comercio?.monto_minimo_compra_centavos != null
+              ? formatearCentavos(comercio.monto_minimo_compra_centavos)
+              : null,
+        }
+      : {}),
   };
 }
 
@@ -481,8 +522,31 @@ async function ejecutarOperacion(
           : await renovarMembresia(supabase, sesion.comercioId, tarjetaId, opciones);
         break;
       default: {
-        // puntos y sellos: el camino de siempre. El monto viaja si el comercio lo pide (Tanda 1),
-        // aunque este tipo no lo necesite para calcular nada.
+        // puntos y sellos: el camino de siempre. Acá se aplica la regla de mínimo de compra (0039,
+        // lib/comercio/montoAcreditacion.ts): nace del primer onboarding real (2026-09-22), donde
+        // el dueño quiere "solo sumar sellos con compras de $10 en adelante". El rechazo va ANTES
+        // de `acreditar` (no después) a propósito: así no se consume ninguna perilla antifraude ni
+        // se escribe el ledger por una compra que no llegó al mínimo. El dueño autoriza el mínimo
+        // con motivo por el MISMO panel que las perillas antifraude (decisión 6 de la spec) —
+        // `autorizado: autorizacion !== null` —, pero el monto faltante (paso 1 de
+        // validarMontoAcreditacion) no se autoriza: no hay nada que autorizar sobre una compra que
+        // nadie describió.
+        const regla = await leerReglaDeMonto(supabase, sesion.comercioId);
+        if (regla === null) {
+          return { ok: false, error: 'No se pudo verificar la regla de monto. Probá de nuevo.' };
+        }
+        const chequeo = validarMontoAcreditacion({
+          exigir: regla.exigir,
+          minimoCentavos: regla.minimoCentavos,
+          montoCentavos: centavos,
+          autorizado: autorizacion !== null,
+        });
+        if (!chequeo.ok) {
+          return { ok: false, error: chequeo.error, bloqueoLimite: chequeo.bloqueoLimite };
+        }
+
+        // El monto viaja si el comercio lo pide (Tanda 1), aunque este tipo no lo necesite para
+        // calcular nada.
         const res = await acreditar(supabase, sesion.comercioId, tarjetaId, cantidad, {
           ...opciones,
           montoCompra: centavos !== null ? centavos / 100 : null,

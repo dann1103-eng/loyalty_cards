@@ -343,6 +343,11 @@ export default function Escaner({
   }
 
   const puntos = resultado.puntosActuales ?? 0;
+  // El input no está dentro de un <form> (los botones son onClick, no submit), así que `required`
+  // no hace nada acá: esto es la única traba del lado del cliente antes de que el cajero apriete el
+  // botón. La validación de verdad —la que no se puede saltear— es la del servidor
+  // (validarMontoAcreditacion en ejecutarOperacion).
+  const montoObligatorioFaltante = Boolean(resultado.exigirMontoCompra) && !montoCompra.trim();
 
   return (
     <div className="reveal d1">
@@ -380,13 +385,27 @@ export default function Escaner({
         )}
 
         {/* El monto es OBLIGATORIO en cashback, gift card y descuento -- sin el no hay porcentaje
-            que calcular, saldo que descontar ni gasto que acumular -- y opcional en puntos y sellos
-            si el dueno activo pedir_monto_compra (Tanda 1). En cupon, membresia y prepago no sale:
-            `pedirMontoCompra` ya viene en false del servidor, que mira el tipo de ESTA tarjeta. */}
-        {(resultado.requiereMonto || resultado.pedirMontoCompra) && (
+            que calcular, saldo que descontar ni gasto que acumular --; opcional en puntos y sellos
+            si el dueno activo pedir_monto_compra (Tanda 1); y también obligatorio en puntos y
+            sellos si el dueno exige el monto o fijo un minimo de compra (0039, exigirMontoCompra).
+            En cupon, membresia y prepago no sale: `pedirMontoCompra`/`exigirMontoCompra` ya vienen
+            en false/undefined del servidor, que mira el tipo de ESTA tarjeta. */}
+        {(resultado.requiereMonto || resultado.pedirMontoCompra || resultado.exigirMontoCompra) && (
           <div className="field" style={{ marginTop: 14, textAlign: 'left' }}>
-            <label htmlFor="monto-compra">
-              {resultado.requiereMonto ? 'Monto de la compra' : 'Monto de la compra (opcional)'}
+            <label
+              htmlFor="monto-compra"
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}
+            >
+              <span>
+                {resultado.requiereMonto || resultado.exigirMontoCompra
+                  ? 'Monto de la compra'
+                  : 'Monto de la compra (opcional)'}
+              </span>
+              {/* El mínimo configurado (0039), junto al campo, para que el cajero sepa de entrada
+                  cuánto tiene que llegar la compra en vez de enterarse recién al rechazo. */}
+              {resultado.montoMinimoTexto && (
+                <span className="nota" style={{ margin: 0 }}>Mínimo {resultado.montoMinimoTexto}</span>
+              )}
             </label>
             <input
               id="monto-compra"
@@ -415,12 +434,22 @@ export default function Escaner({
               className="dato-mono campo-suelto"
               style={{ width: 90, padding: '0 12px' }}
             />
-            <button className="btn-acento" style={{ flex: 1 }} onClick={operacionPrincipal} disabled={pendiente}>
+            <button
+              className="btn-acento"
+              style={{ flex: 1 }}
+              onClick={operacionPrincipal}
+              disabled={pendiente || montoObligatorioFaltante}
+            >
               {pendiente ? 'Guardando...' : resultado.etiquetaAccion}
             </button>
           </div>
         ) : (
-          <button className="btn-acento" style={{ marginTop: 16 }} onClick={operacionPrincipal} disabled={pendiente}>
+          <button
+            className="btn-acento"
+            style={{ marginTop: 16 }}
+            onClick={operacionPrincipal}
+            disabled={pendiente || montoObligatorioFaltante}
+          >
             <span className="icono" aria-hidden="true">add_circle</span>
             {pendiente ? 'Guardando...' : resultado.etiquetaAccion}
           </button>
