@@ -1297,3 +1297,43 @@ las pantallas en el navegador.
 App instalable (PWA) para el dueño y avisos al celular (Web Push, VAPID): pago pendiente y pago próximo,
 derivados de las fechas de los períodos y enviados desde el cron que ya existe (Vercel Hobby permite dos).
 Necesita su propia spec.
+
+## 2026-09-23 — Después del primer onboarding: atajo de Android, monto mínimo y reseña de Google
+
+Spec: `docs/superpowers/specs/2026-09-23-onboarding-manifest-monto-resena-design.md`. Registro por tarea:
+`docs/superpowers/plans/2026-09-23-onboarding-manifest-monto-resena.md`. Antes, el 2026-09-22, se publicaron
+la cobranza y el rework del admin (plan `2026-09-21-cobranza-y-rework-admin.md`) y dos arreglos del primer
+onboarding real: el alta self-service nacía bloqueada (`licencia_estado: 'inactivo'` + el gate nuevo) y
+"Nueva cuenta" del admin arrancaba en cobranza `'normal'`; las dos ahora nacen `activo` + `exenta`.
+
+### ⚠️ NO publicar `origin/master..HEAD` antes de la migración 0039
+
+Desde el commit de la Tarea 2 de ese plan, la rama `claude/cobranza-y-rework-admin` lee y escribe columnas
+de `comercios` que llegan con `supabase/migrations/0039_monto_minimo_y_resena.sql`. **Publicar la rama
+antes de aplicar la 0039 deja a TODOS los comercios sin poder sumar sellos ni puntos por el escáner** (la
+lectura de la regla de monto falla hacia lo restrictivo y rechaza la acreditación), rompe el guardado y la
+lectura de Reglas, y puede tumbar el registro de clientes. `master` quedó publicado hasta `d27b327` (el
+atajo de Android, Tarea 1), que NO depende de la 0039. Orden: Daniel corre la 0039 en Studio →
+`scripts/verificar-0039.ts` la confirma → Tarea 9 del plan (pruebas diferidas, mutaciones, navegador) →
+recién ahí `git push origin HEAD:master`.
+
+### Lo que entró
+
+- **Atajo de Android (publicado):** el dueño que instala el panel desde el navegador abría `/mi-tarjeta` (el
+  portal del cliente), porque `app/manifest.ts` era el único manifest y Next lo inyecta en todo el sitio.
+  Ahora cada pantalla del dueño y de FM declara su manifest (`metadata.manifest`), servido por Route
+  Handlers en `/manifiestos/*.webmanifest` (fuera del matcher del proxy: el navegador pide el manifest sin
+  cookies). Next 16 NO admite `manifest.ts` anidado. Un atajo ya instalado no se corrige solo: hay que
+  borrarlo y volver a agregarlo.
+- **Monto mínimo de compra (en la rama, esperando la 0039):** por comercio, en Reglas → Controles: exigir el
+  monto y fijar un mínimo para sumar sellos/puntos. Bajo el mínimo se rechaza; el dueño puede autorizarlo
+  con motivo por el mismo panel de las perillas antifraude. Aplica en el escáner y en "Agregar cliente".
+- **Reseña de Google antes del registro (en la rama, esperando la 0039):** por comercio; sistema de honor.
+
+### Pendiente de Daniel
+
+1. Correr la 0039 en Supabase Studio (el SQL está en el archivo y se pegó en el chat el 2026-09-23).
+2. En Android: borrar el atajo viejo del panel y volver a agregarlo desde el login del comercio.
+3. Confirmar las decisiones 6 y 7 de la spec (el dueño puede autorizar bajo el mínimo — y esa autorización
+   también saltea las perillas antifraude, como cualquier autorización —; la regla aplica también a
+   "Agregar cliente").
