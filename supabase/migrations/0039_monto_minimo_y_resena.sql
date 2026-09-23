@@ -8,9 +8,10 @@
 -- reseña en Google antes de sacar su tarjeta (sistema de honor, sin verificación real).
 --
 -- Todas las filas existentes cumplen los CHECK sin backfill: las cuatro columnas nacen en su
--- default (false/null) y las dos implicaciones son ciertas cuando el lado izquierdo es false/null.
--- `pedir_monto_compra` es NOT NULL desde la 0015, así que la implicación (a) no depende de una
--- columna que pudiera ser null.
+-- default (false/null) y las tres implicaciones son ciertas cuando su lado izquierdo es
+-- false/null. Que `pedir_monto_compra` sea NOT NULL (0015) importa para las filas FUTURAS: un
+-- CHECK que evalúa a NULL pasa, así que con `pedir` nullable la combinación `exigir = true,
+-- pedir = null` se colaría.
 begin;
 
 -- ─────────────────────────────────────────────────────────────────────────────
