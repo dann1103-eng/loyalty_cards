@@ -116,6 +116,13 @@ const CASILLA_VISIBLE = /<input\b[^>]*type="checkbox"[^>]*name="pedir_monto_comp
 // React SSR pueden salir en cualquier orden).
 const SUBBLOQUE_VISIBLE = /<input\b[^>]*type="checkbox"[^>]*name="exigir_monto_compra"|<input\b[^>]*name="exigir_monto_compra"[^>]*type="checkbox"/;
 
+// AVISO (Tarea 4, 2026-09-23): las CUATRO pruebas de este describe NO se tocaron — siguen exactas a
+// como estaban — pero hoy quedan en rojo igual, con "column comercios.exigir_monto_compra does not
+// exist" (42703): `dibujarReglas` ahora llama a `leerControles`, que agregó las dos columnas nuevas
+// al select, y esa columna no existe hasta que Daniel aplique la migración 0039 en Supabase Studio.
+// Es la medida exacta de lo que rompería en producción si esto se publicara sin la migración (regla
+// del CLAUDE.md del proyecto). Se confirmó que las cuatro fallan por ESA razón y ninguna otra; su
+// verde vuelve solo, sin cambiar nada acá, en cuanto la 0039 esté aplicada (Tarea 9).
 describe('accionGuardarControles — la perilla del monto donde el programa principal no lo usa', () => {
   it('en un CUPÓN no se le ofrece la casilla al dueño', async () => {
     const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'cupon', pedir_monto_compra: true });
