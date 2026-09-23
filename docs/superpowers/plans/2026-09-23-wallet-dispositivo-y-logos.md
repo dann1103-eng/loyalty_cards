@@ -196,6 +196,11 @@ casos del logo ancho, un solo lugar para las URLs, `?v=`, degradación sin base 
 - Base URL: medir y armar rutas compuestas SOLO si `esBaseUrlPublica(process.env.NEXT_PUBLIC_BASE_URL)`
   (`lib/google/baseUrlPublica.ts`); si no (desarrollo: `http://localhost:3000`), URL cruda y sin logo ancho
   — con un chequeo de presencia, cada sync de clase desde el dev server fallaría con 400.
+- Mismo arreglo en `urlFranjaClase` y `urlHeroTarjeta` (`lib/google/heroUrl.ts` ~25-26, ~131-132), que
+  hoy chequean solo presencia: en desarrollo la `heroImage` de la clase apunta a `localhost` y Google
+  rechaza el patch ENTERO, así que ni siquiera con el logo crudo se sincroniza la clase de un comercio
+  con portada (todos los demos la tienen, `scripts/seed-demo-comercios.ts` ~232-235). En producción no
+  cambia nada (la base es `https://www.cardly-sv.site`). Prueba y mutación en `heroUrl.test.ts`.
 - Modificar: `lib/google/syncClase.ts`, `lib/google/syncClasePrograma.ts`, `lib/google/linkGuardar.ts`
   (en este, la MISMA rama programa/comercio que la portada, ~133-141) — medir y llamar a `logosDeClase`.
 - Modificar: `scripts/actualizar-frente-google.ts` para que compile con la firma nueva (sin tocar las
@@ -210,7 +215,11 @@ casos del logo ancho, un solo lugar para las URLs, `?v=`, degradación sin base 
   (URL; `'wideProgramLogo' in clase` con valor `null`; clave ausente); a nivel sync, que el `requestBody`
   del patch lleve `wideProgramLogo === null` para un logo medido no ancho (`syncClase.test.ts` ya
   captura el `requestBody`, ~88); a nivel `linkGuardar`, que la clase del COMERCIO (sin `?programa=`)
-  lleve el logo del comercio aunque el programa tenga logo propio (modelo: `linkGuardar.test.ts` ~142); de `medidasLogo` (caché: la segunda llamada no descarga; un fallo no
+  lleve el logo del comercio aunque el programa tenga logo propio (modelo: `linkGuardar.test.ts` ~142; para
+  que salga la clase del COMERCIO con un programa con logo propio, la sync de la clase del programa tiene
+  que FALLAR: `insertClaseMock.mockRejectedValueOnce(...)` — el comercio del fixture ya tiene clase y el
+  único insert es el del programa. El caso "programa sin clase propia" no sirve: ahí los dos logos son el
+  mismo y la mutación no se atrapa); de `medidasLogo` (caché: la segunda llamada no descarga; un fallo no
   se cachea; timeout → null), de `componerLogo` (medidas de salida 660×660 y 1280×400; un logo 3:1 entra
   entero en el área segura) y de las rutas (PNG y medidas; 404 sin logo y programa ajeno; con una
   composición forzada a fallar, sirve el original). En las pruebas de rutas, `fetch` se stubea para
@@ -259,7 +268,9 @@ casos del logo ancho, un solo lugar para las URLs, `?v=`, degradación sin base 
   (5) Si quedó puesto (Google rechazó el `null`), restaurar con `loyaltyclass.update` usando el cuerpo
   del `get` SIN `wideProgramLogo` (`update` borra lo que no se manda; re-sincronizar NO sirve: un patch
   que omite el campo lo conserva, y desde este worktree el sync nuevo falla sin las rutas desplegadas).
-  Ese `update` es además el "arreglo manual" del plan B: queda probado acá.
+  Ese `update` es además el "arreglo manual" del plan B: queda probado acá. El cuerpo del `update` lleva
+  `reviewStatus: 'UNDER_REVIEW'` (como `construirClase`, `construirRecursos.ts` ~40): el `get` puede
+  devolver el estado aprobado, y Google solo acepta `draft`/`underReview` al escribir.
 - [ ] Anotar el resultado acá. Si Google rechaza el `null`: aplicar el plan B de la spec (omitir para
   logos no anchos; documentar el arreglo manual del cambio ancho → cuadrado) ANTES de publicar, con su
   prueba ajustada.
