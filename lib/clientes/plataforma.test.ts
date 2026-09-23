@@ -1,15 +1,40 @@
-// Mutaciones CONFIRMADAS (corridas y revertidas a mano, Tarea 1 del plan de Wallet/logos):
-// - Quitar `iPad` de la regex de detectarPlataforma → el iPad viejo (iOS 12) cae a 'otra'. La
-//   prueba "un iPad VIEJO (iOS 12) da 'ios'" falla con `expected 'otra' to be 'ios'`.
-// - Quitar `iPhone` de la misma regex → los tres casos de iPhone (Safari, Chrome CriOS, WhatsApp)
-//   caen a 'otra'. Las pruebas de esos tres casos fallan con `expected 'otra' to be 'ios'`.
-// - En botonesWallet, en la rama 'android', mostrar el link también sin Google disponible
-//   (`link: !mostrarOtro` en vez de `link: googleDisponible && !mostrarOtro`) → la prueba
-//   "android sin Google: solo Apple, sin link" falla con `expected true to be false`.
-// - En la rama 'otra', devolver `google: false` fijo (en vez de `googleDisponible`) → la prueba
-//   "'otra': los dos disponibles" falla con `expected false to be true` en `google`.
-// - Devolver `notaSafari: apple` en la rama 'android' (en vez de `false` fijo) → la prueba
-//   "android con Google revelado: nunca la nota de Safari" falla con `expected true to be false`.
+// Mutaciones CONFIRMADAS (corridas y revertidas a mano, Tarea 1 del plan de Wallet/logos — cada
+// línea de abajo copia lo que VITEST imprimió en la corrida real, no lo que se esperaba que
+// imprimiera; la versión anterior de este encabezado se escribió al revés y quedó mal en tres
+// puntos, ver la revisión del commit 8750ae3).
+//
+// - Quitar `iPad` de la regex de `detectarPlataforma` → cae 1 prueba: "un iPad VIEJO (iOS 12, el UA
+//   dice "iPad") da "ios"", con `Expected: "ios"` / `Received: "otra"`.
+// - Quitar `iPhone` de la misma regex → caen 4 pruebas (no 3): "Safari en iPhone (iOS 17) da "ios"",
+//   "Chrome en iPhone (CriOS) da "ios"", "navegador interno de WhatsApp en iPhone da "ios"" Y
+//   "navegador interno de Instagram en iPhone da "ios"" — Instagram también depende de `iPhone` en
+//   su UA (`iPhone14,2` es un dato dentro del token de Instagram, no del bloque de dispositivo, pero
+//   el bloque de dispositivo en sí sigue diciendo `iPhone`). Las 4 con `Expected: "ios"` /
+//   `Received: "otra"`.
+// - En `botonesWallet`/'android', `link: !mostrarOtro` (sin exigir `googleDisponible`) → cae 1
+//   prueba: "android sin Google: solo Apple, sin link (no hay nada mejor que ofrecer)". Las pruebas
+//   de `botonesWallet` usan `toEqual` sobre un objeto, así que vitest no imprime "expected X to be
+//   Y": imprime un diff del objeto completo — acá, `-   "link": false,` / `+   "link": true,`.
+// - En la rama 'otra', `google: false` fijo (en vez de `googleDisponible`) → caen 2 pruebas (con la
+//   fila nueva de la tabla 3×2×2, no 1): "'otra', Google disponible: los dos de una, sin link, con
+//   la nota de Safari" y "'otra', Google disponible, con mostrarOtro en true: no cambia nada (ya
+//   estaban los dos)". Diff en las dos: `-   "google": true,` / `+   "google": false,`.
+// - `notaSafari: apple` en la rama 'android' (en vez de `false` fijo) → caen 3 pruebas (no 1):
+//   "android, Google disponible, revelado: los dos, sin link, sin la nota de Safari", "android sin
+//   Google: solo Apple, sin link (no hay nada mejor que ofrecer)" y "android sin Google, con
+//   mostrarOtro en true: igual solo Apple, sin link, sin la nota de Safari" — en las tres, `apple`
+//   termina siendo `true` por caminos distintos, así que las tres exponen la misma mutación. Diff en
+//   las tres: `-   "notaSafari": false,` / `+   "notaSafari": true,`.
+// - En la rama 'ios', `google: mostrarOtro` (sin exigir `googleDisponible`) → cae 1 prueba: "ios sin
+//   Google disponible, con mostrarOtro en true (el link nunca debió tocarse: no hay nada que
+//   mostrar)", diff `-   "google": false,` / `+   "google": true,`. ESTA MUTACIÓN SOBREVIVÍA (27/27
+//   verde) antes de agregar esa fila: las otras dos filas de 'ios' en la tabla dan el mismo
+//   resultado con o sin el `&&` (con `googleDisponible: true` el `&&` no cambia nada; con
+//   `googleDisponible: false, mostrarOtro: false` el `mostrarOtro` solo ya da `false` igual). Hace
+//   falta la combinación `googleDisponible: false, mostrarOtro: true` para que el `&&` importe — y
+//   es justo el estado que alcanza el portal en la Tarea 2 al cambiar de una tarjeta con Google
+//   (con el link ya tocado) a una sin Google: sin este `&&`, `BotonesWallet.tsx` recibiría
+//   `resultado.google: true` con `urlGoogle: null`.
 import { describe, it, expect } from 'vitest';
 import { detectarPlataforma, botonesWallet, fraseWalletDelFormulario } from './plataforma';
 
@@ -27,8 +52,11 @@ describe('detectarPlataforma', () => {
   });
 
   it('navegador interno de WhatsApp en iPhone da "ios"', () => {
-    // WhatsApp abre los links en un WKWebView propio: no agrega un token distintivo al UA, sigue
-    // diciendo iPhone/AppleWebKit como Safari.
+    // OJO: no tengo certeza del UA EXACTO que usa hoy la app de WhatsApp en iOS (no hay una fuente
+    // que pueda citar con la misma confianza que para Chrome/Instagram, cuyo token es público y
+    // documentado). Este es un UA representativo de un WKWebView sin token propio — el caso "no
+    // agrega nada distintivo, pero conserva iPhone" — que es el comportamiento reportado de
+    // WhatsApp. Si aparece evidencia de un token real, este UA debería reemplazarse por ese.
     const ua =
       'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148';
     expect(detectarPlataforma(ua)).toBe('ios');
@@ -53,8 +81,11 @@ describe('detectarPlataforma', () => {
   });
 
   it('Chrome en Android da "android"', () => {
+    // Formato real de Chrome >= 110 en Android: desde esa versión Chrome "congela" el modelo de
+    // dispositivo en el UA (por reducción de fingerprinting) y manda el literal `K` en vez del
+    // modelo real — no es un dato de prueba simplificado, es lo que el navegador manda de verdad.
     const ua =
-      'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36';
+      'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36';
     expect(detectarPlataforma(ua)).toBe('android');
   });
 
@@ -119,6 +150,21 @@ describe('botonesWallet', () => {
     });
   });
 
+  it('ios sin Google disponible, con mostrarOtro en true (el link nunca debió tocarse: no hay nada que mostrar)', () => {
+    // Completa la tabla 3×2×2. Este es el caso que atrapa la mutación de `google: mostrarOtro`
+    // (sin exigir `googleDisponible`) en la rama ios: sin este renglón esa mutación sobrevivía,
+    // porque las otras dos filas de ios dan el mismo resultado con o sin el `&&` (ver el
+    // encabezado de este archivo). Es también el estado que alcanza el portal en la Tarea 2: un
+    // cliente que ya tocó el link en una tarjeta CON Google, y cambia a una tarjeta SIN Google —
+    // ahí `mostrarOtro` puede seguir en true mientras `googleDisponible` ya es false.
+    expect(botonesWallet({ plataforma: 'ios', googleDisponible: false, mostrarOtro: true })).toEqual({
+      apple: true,
+      google: false,
+      link: false,
+      notaSafari: true,
+    });
+  });
+
   it('android, Google disponible, sin revelar: solo Google + link, sin la nota de Safari', () => {
     expect(botonesWallet({ plataforma: 'android', googleDisponible: true, mostrarOtro: false })).toEqual({
       apple: false,
@@ -149,6 +195,19 @@ describe('botonesWallet', () => {
     });
   });
 
+  it('android sin Google, con mostrarOtro en true: igual solo Apple, sin link, sin la nota de Safari', () => {
+    // Completa la tabla: mismo caso que el de arriba, pero con `mostrarOtro` en true (el mismo
+    // estado "de sobra" que puede llegar del portal al cambiar de tarjeta — ver el comentario del
+    // caso análogo en ios). El resultado no cambia: sin Google, `mostrarOtro` no tiene nada que
+    // revelar.
+    expect(botonesWallet({ plataforma: 'android', googleDisponible: false, mostrarOtro: true })).toEqual({
+      apple: true,
+      google: false,
+      link: false,
+      notaSafari: false,
+    });
+  });
+
   it('"otra", Google disponible: los dos de una, sin link, con la nota de Safari', () => {
     expect(botonesWallet({ plataforma: 'otra', googleDisponible: true, mostrarOtro: false })).toEqual({
       apple: true,
@@ -158,8 +217,29 @@ describe('botonesWallet', () => {
     });
   });
 
+  it('"otra", Google disponible, con mostrarOtro en true: no cambia nada (ya estaban los dos)', () => {
+    // Completa la tabla: en 'otra' la función ignora `mostrarOtro` (ver la rama por defecto en
+    // plataforma.ts) — este renglón lo deja asentado con una prueba, no solo con el comentario del
+    // código.
+    expect(botonesWallet({ plataforma: 'otra', googleDisponible: true, mostrarOtro: true })).toEqual({
+      apple: true,
+      google: true,
+      link: false,
+      notaSafari: true,
+    });
+  });
+
   it('"otra" sin Google disponible: solo Apple, sin link', () => {
     expect(botonesWallet({ plataforma: 'otra', googleDisponible: false, mostrarOtro: false })).toEqual({
+      apple: true,
+      google: false,
+      link: false,
+      notaSafari: true,
+    });
+  });
+
+  it('"otra" sin Google disponible, con mostrarOtro en true: no cambia nada', () => {
+    expect(botonesWallet({ plataforma: 'otra', googleDisponible: false, mostrarOtro: true })).toEqual({
       apple: true,
       google: false,
       link: false,

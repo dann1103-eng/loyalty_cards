@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { botonesWallet, type Plataforma } from '@/lib/clientes/plataforma';
 
 // Los íconos vivían en RegistroCliente.tsx; se mudan acá porque ahora los dibujan DOS pantallas
@@ -52,43 +52,63 @@ export default function BotonesWallet({
   textoGoogle: string;
 }) {
   const [mostrarOtro, setMostrarOtro] = useState(false);
+  // El botón "revelado" por el link: cuando el <button> del link se desmonta (resultado.link pasa a
+  // false), el foco cae al <body> —— nada en el DOM sabe dónde estaba parado el cliente. Sin este
+  // ref, alguien navegando con teclado o lector de pantalla pierde el lugar justo después de tocar
+  // el link que pidió ver más opciones. El botón revelado SIEMPRE es el segundo visible (ver el
+  // filtro de `visibles` más abajo: antes de revelar hay 1 botón + el link; después, los 2 botones y
+  // el link desaparece), así que basta enfocar el de índice 1 cuando `mostrarOtro` pasa a true.
+  const botonReveladoRef = useRef<HTMLAnchorElement>(null);
+
+  useEffect(() => {
+    if (mostrarOtro) botonReveladoRef.current?.focus();
+  }, [mostrarOtro]);
+
   const resultado = botonesWallet({
     plataforma,
     googleDisponible: urlGoogle !== null,
     mostrarOtro,
   });
 
-  // En Android el botón de Google va PRIMERO (es la billetera del cliente); en todo lo demás,
-  // Apple sigue primero como siempre. El primero visible lleva el marginTop de siempre (.wallet-btn,
-  // 20px); el segundo, si hay dos, lleva el marginTop de 10px que hoy los separaba entre sí.
-  const orden: Array<'apple' | 'google'> = plataforma === 'android' ? ['google', 'apple'] : ['apple', 'google'];
-  // resultado.google nunca es true sin urlGoogle: se calculó pasándole `urlGoogle !== null` como
-  // googleDisponible unas líneas arriba, así que no hace falta repetir el chequeo acá.
-  const visibles = orden.filter((id) => (id === 'apple' ? resultado.apple : resultado.google));
+  // La entrada del botón de Google solo se arma cuando HAY a dónde apuntar: `resultado.google` sin
+  // `urlGoogle` sería un botón que apunta a ningún lado. Construirlo acá (en vez de castear
+  // `urlGoogle` más abajo) deja que TypeScript angoste `href` a `string` de verdad, sin `as string`.
+  const botonApple = resultado.apple
+    ? { id: 'apple' as const, href: urlApple, texto: textoApple, Icono: IconoWallet }
+    : null;
+  const botonGoogle = resultado.google && urlGoogle !== null
+    ? { id: 'google' as const, href: urlGoogle, texto: textoGoogle, Icono: IconoGoogle }
+    : null;
+
+  // En Android el botón de Google va PRIMERO (es la billetera del cliente); en todo lo demás, Apple
+  // sigue primero como siempre.
+  const orden = plataforma === 'android' ? [botonGoogle, botonApple] : [botonApple, botonGoogle];
+  const visibles = orden.filter((boton): boton is NonNullable<typeof boton> => boton !== null);
 
   return (
-    <>
-      {visibles.map((id, i) =>
-        id === 'apple' ? (
-          <a key="apple" className="wallet-btn" style={i > 0 ? { marginTop: 10 } : undefined} href={urlApple}>
-            <IconoWallet />
-            {textoApple}
-          </a>
-        ) : (
-          <a
-            key="google"
-            className="wallet-btn"
-            style={i > 0 ? { marginTop: 10 } : undefined}
-            href={urlGoogle as string}
-          >
-            <IconoGoogle />
-            {textoGoogle}
-          </a>
-        ),
-      )}
+    // UN solo elemento envolviendo todo (antes era un fragmento): así, si algún día este componente
+    // se usa dentro de un contenedor flex con `gap` (el portal, Tarea 2: `.portal-detalle` tiene
+    // `gap: 18px`), ese gap se aplica UNA vez entre este bloque y sus vecinos, no una vez POR CADA
+    // botón/link/nota que devuelva — que habría sumado el gap del padre a cada `marginTop` de acá
+    // abajo (18 + 10 = 28px entre los dos botones, en vez de los 10px de siempre).
+    <div style={{ textAlign: 'center' }}>
+      {visibles.map(({ id, href, texto, Icono }, i) => (
+        <a
+          key={id}
+          ref={i === 1 ? botonReveladoRef : undefined}
+          className="wallet-btn"
+          style={i > 0 ? { marginTop: 10 } : undefined}
+          href={href}
+        >
+          <Icono />
+          {texto}
+        </a>
+      ))}
       {resultado.link && (
-        // Clase reusada de PortalCliente.tsx (link secundario, subrayado): no hay una clase propia
-        // para "revelar otra opción" y esta ya da el estilo correcto sin agregar CSS nuevo.
+        // Clase reusada de PortalCliente.tsx (link secundario, subrayado). Acá NO hace falta
+        // `align-self: flex-start` (solo tiene efecto dentro de un contenedor flex, y este div no lo
+        // es) — por eso el link queda centrado por el `textAlign: 'center'` del contenedor, sin
+        // tocar esa regla para el otro uso de `.portal-link` (que sí vive en un flex y la necesita).
         <button type="button" className="portal-link" onClick={() => setMostrarOtro(true)}>
           ¿Tienes otro teléfono?
         </button>
@@ -98,6 +118,6 @@ export default function BotonesWallet({
           ¿No se abrió? Mantén presionado el botón y elige “Descargar”, o ábrelo desde Safari.
         </p>
       )}
-    </>
+    </div>
   );
 }

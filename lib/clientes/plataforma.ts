@@ -3,18 +3,19 @@
 //
 // POR QUÉ EXISTE: hasta el 2026-09-23 la pantalla de éxito del registro mostraba SIEMPRE "Agregar a
 // Apple Wallet" primero, y "Agregar a Google Wallet" debajo si estaba disponible. En un onboarding
-// real, un cliente de Android vio primero el botón de Apple —que en Android no hace nada útil— y no
-// llegó al de Google que sí le servía. La detección resuelve eso: en Android se ofrece Google, y
-// Apple queda detrás de un link "¿Tienes otro teléfono?" por si la detección falló.
+// real, un cliente de Android veía primero el botón de Apple, que no le sirve (spec Wallet/logos
+// §1). La detección resuelve eso: en Android se ofrece Google, y Apple queda detrás de un link
+// "¿Tienes otro teléfono?" por si la detección falló.
 
 export type Plataforma = 'ios' | 'android' | 'otra';
 
 // Detección por user agent, del lado del SERVIDOR (headers(), no navigator.userAgent): así la
 // primera pintura ya es la correcta y no hay desajuste de hidratación entre servidor y cliente.
 //
-// - 'ios': `iPhone`, `iPod` o `iPad` en el UA. Cubre Safari, Chrome (`CriOS`), Firefox y los
-//   navegadores internos de WhatsApp/Instagram en iPhone: todos siguen diciendo `iPhone` porque son
-//   WKWebView/SFSafariViewController sobre el mismo motor, no un user agent propio.
+// - 'ios': `iPhone`, `iPod` o `iPad` en el UA. Cubre Safari, Chrome (`CriOS`) y los navegadores
+//   internos de WhatsApp/Instagram en iPhone: Chrome e Instagram SÍ agregan su propio token
+//   (`CriOS/…`, `Instagram …`), pero todos corren sobre WKWebView/SFSafariViewController y
+//   CONSERVAN `iPhone` en la parte del UA que describe el dispositivo.
 // - 'android': `Android` en el UA (Chrome, Samsung Internet, navegadores internos de apps).
 // - 'otra': todo lo demás — computadoras, user agent ausente, y el caso adrede irresoluble: un iPad
 //   con iPadOS 13+ reporta `Macintosh` (Apple lo hace a propósito, para que los sitios le sirvan la

@@ -2025,6 +2025,11 @@ details.admin-fila:has(> summary:active) {
   color: var(--texto-2);
   background: none;
   border: none;
+  /* Sin esto, un <button> conserva el padding y (en algunos navegadores) el relieve por defecto del
+     agente de usuario aunque ya se le quite el fondo y el borde — se nota como una caja fantasma
+     alrededor del texto en vez de un link centrado a secas (BotonesWallet.tsx, Tarea 1). */
+  padding: 0;
+  appearance: none;
   cursor: pointer;
   text-decoration: underline;
 }
