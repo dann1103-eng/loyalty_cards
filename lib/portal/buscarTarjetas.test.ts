@@ -219,6 +219,53 @@ describe('buscarTarjetasPorTelefono', () => {
     expect(res.tarjetas[0].recompensas[0].nombre).toBe('Café gratis');
   });
 
+  it('googleDisponible es true cuando el comercio tiene logo_url', async () => {
+    const comercioId = await crearComercio({ logo_url: 'https://ejemplo.test/logo-comercio.png' });
+    const telefono = await crearClienteConTarjeta(comercioId, 5);
+
+    const res = await buscarTarjetasPorTelefono(supabase, telefono);
+
+    expect(res.tarjetas[0].googleDisponible).toBe(true);
+  });
+
+  it('googleDisponible es false cuando el comercio no tiene logo_url', async () => {
+    const comercioId = await crearComercio(); // sin logo_url (default null)
+    const telefono = await crearClienteConTarjeta(comercioId, 5);
+
+    const res = await buscarTarjetasPorTelefono(supabase, telefono);
+
+    expect(res.tarjetas[0].googleDisponible).toBe(false);
+  });
+
+  it('googleDisponible es false si el comercio no tiene logo aunque su programa principal sí tenga uno propio', async () => {
+    // Caso que motiva la regla (linkGuardar.ts:38 exige el logo DEL COMERCIO, no el del
+    // programa): un comercio sin logo propio pero con un programa de branding propio + logo no
+    // puede mostrar el botón de Google, porque syncClaseComercio/generarLinkGuardar arman la
+    // clase con el logo del COMERCIO y esa ruta responde null (404) sin él. Con la regla
+    // equivocada (logo efectivo del programa) este caso daría `true` y el botón apuntaría a un
+    // link que Google/generarLinkGuardar rechaza.
+    //
+    // Mutación confirmada (revertida): `googleDisponible` calculado como
+    // `(p?.branding_propio ? p.logo_url : c.logo_url) != null` (logo EFECTIVO del programa, con
+    // `programas_tarjeta.logo_url` sumado al select para que el campo exista) hace fallar
+    // ÚNICAMENTE esta prueba — "expected true to be false" — sin tocar las otras dos de
+    // `googleDisponible`. Las otras dos no distinguen la regla porque en ambas el programa no
+    // tiene `branding_propio`, así que la fórmula mutada cae al mismo `c.logo_url` que la
+    // correcta.
+    const comercioId = await crearComercio(); // sin logo_url
+    const programaId = requerirProgramaPrincipal(comercioId);
+    const { error } = await supabase
+      .from('programas_tarjeta')
+      .update({ branding_propio: true, logo_url: 'https://ejemplo.test/logo-programa.png' })
+      .eq('id', programaId);
+    if (error) throw error;
+    const telefono = await crearClienteConTarjeta(comercioId, 5);
+
+    const res = await buscarTarjetasPorTelefono(supabase, telefono);
+
+    expect(res.tarjetas[0].googleDisponible).toBe(false);
+  });
+
   it('devuelve las tarjetas de varios comercios sin mezclar sus recompensas', async () => {
     const comercioA = await crearComercio();
     const comercioB = await crearComercio();

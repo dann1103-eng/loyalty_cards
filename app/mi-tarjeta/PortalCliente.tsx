@@ -9,6 +9,8 @@ import {
   describirDeltaMovimiento,
   describirSaldoMovimiento,
 } from '@/lib/comercio/historial';
+import type { Plataforma } from '@/lib/clientes/plataforma';
+import BotonesWallet from '@/app/_ui/BotonesWallet';
 
 function CaraTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
   // Usa los colores reales del comercio (como el pass). Fallback al fondo oscuro del sistema v2
@@ -29,7 +31,7 @@ function CaraTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
   );
 }
 
-function DetalleTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
+function DetalleTarjeta({ tarjeta, plataforma }: { tarjeta: TarjetaPortal; plataforma: Plataforma }) {
   return (
     <div className="portal-detalle">
       <CaraTarjeta tarjeta={tarjeta} />
@@ -134,10 +136,25 @@ function DetalleTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
         </div>
       )}
 
-      {/* Reusa el endpoint de descarga existente (mismo patrón que RegistroCliente). */}
-      <a className="wallet-btn" href={`/api/tarjetas/${tarjeta.tarjetaId}/pass.pkpass`}>
-        Descargar mi pass de nuevo
-      </a>
+      {/* Mismo componente que la pantalla de éxito del registro (app/_ui/BotonesWallet.tsx):
+          decide qué botón mostrar primero según la plataforma detectada en el servidor (spec
+          Wallet/logos §1). "Descargar mi pass de nuevo" en vez de "Agregar a Apple Wallet" —— acá
+          el pass YA existe, no se está agregando por primera vez. `urlGoogle` es null cuando el
+          comercio no tiene logo propio (`googleDisponible`, ver buscarTarjetas.ts): ese null ES
+          la señal que BotonesWallet usa para no ofrecer el botón de Google.
+          Un solo <div> envolviendo el componente: `.portal-detalle` es un flex con `gap: 18px`
+          (ver app/globals.css) y ese gap se aplica UNA vez entre este bloque y sus vecinos, igual
+          que documenta el comentario de BotonesWallet.tsx — no una vez por cada botón/link/nota
+          interno. */}
+      <div>
+        <BotonesWallet
+          plataforma={plataforma}
+          urlApple={`/api/tarjetas/${tarjeta.tarjetaId}/pass.pkpass`}
+          urlGoogle={tarjeta.googleDisponible ? `/api/tarjetas/${tarjeta.tarjetaId}/google-wallet` : null}
+          textoApple="Descargar mi pass de nuevo"
+          textoGoogle="Agregar a Google Wallet"
+        />
+      </div>
       <p className="nota">
         El canje se hace en persona: muestra tu pass al cajero. Esta vista es solo para consultar.
       </p>
@@ -145,7 +162,7 @@ function DetalleTarjeta({ tarjeta }: { tarjeta: TarjetaPortal }) {
   );
 }
 
-export default function PortalCliente() {
+export default function PortalCliente({ plataforma }: { plataforma: Plataforma }) {
   const [telefono, setTelefono] = useState('');
   // El portal necesita el país por el mismo motivo que el registro: la búsqueda normaliza el
   // teléfono antes de comparar contra la columna canónica, así que un guatemalteco tecleando sus 8
@@ -225,7 +242,16 @@ export default function PortalCliente() {
                 </div>
               )}
 
-              <div className="reveal d3">{activa && <DetalleTarjeta tarjeta={activa} />}</div>
+              <div className="reveal d3">
+                {activa && (
+                  // key={activa.tarjetaId}: sin esto, al cambiar de tarjeta React reutiliza la
+                  // MISMA instancia de DetalleTarjeta (misma posición en el árbol) y con ella el
+                  // estado interno `mostrarOtro` de BotonesWallet — el cliente revela el botón de
+                  // Apple en la tarjeta A y, al pasar a la tarjeta B, lo encuentra ya revelado sin
+                  // haber tocado el link. El key fuerza un remount por tarjeta.
+                  <DetalleTarjeta key={activa.tarjetaId} tarjeta={activa} plataforma={plataforma} />
+                )}
+              </div>
             </>
           )}
 

@@ -29,6 +29,13 @@ export interface TarjetaPortal {
   // Movimientos recientes con proyección reducida (Tanda 1). Ver lib/portal/historialCliente.ts:
   // NO lleva cajero, motivo, marca de forzada ni monto — eso es interno del comercio.
   movimientos: MovimientoPortal[];
+  // Si el botón "Agregar a Google Wallet" tiene a dónde apuntar (Tarea 2, spec Wallet/logos §1).
+  // MISMA regla que generarLinkGuardar (lib/google/linkGuardar.ts:38): exige el logo DEL
+  // COMERCIO, no el del programa — generarLinkGuardar arma la clase con `tarjeta.comercios.logo_url`
+  // y devuelve null sin él, aunque el programa tenga su propio branding con logo. Con la regla del
+  // logo EFECTIVO del programa, un comercio sin logo propio pero con un programa de branding
+  // propio + logo mostraría un botón que apunta a un link que Google rechaza (404).
+  googleDisponible: boolean;
 }
 
 export interface ResultadoConsulta {
@@ -93,7 +100,9 @@ export async function buscarTarjetasPorTelefono(
     // vigencia_hasta, usado_en y acumulado_centavos NO son opcionales: sin ellos, describirFila no
     // puede distinguir un cupón vigente de uno vencido ni resolver el nivel de descuento, y el
     // cliente vería "0 puntos" en los tres tipos que no tienen contador.
-    .select('id, puntos_actuales, vigencia_hasta, usado_en, acumulado_centavos, programas_tarjeta(tipo_tarjeta, sello_meta, branding_propio, color_fondo, color_texto, color_label), comercios(id, nombre, color_fondo, color_texto, color_label, tipo_tarjeta, sello_meta, zona_horaria)')
+    // logo_url de comercios: solo para calcular googleDisponible (Tarea 2) — no agrega
+    // consultas, se suma al mismo select embebido.
+    .select('id, puntos_actuales, vigencia_hasta, usado_en, acumulado_centavos, programas_tarjeta(tipo_tarjeta, sello_meta, branding_propio, color_fondo, color_texto, color_label), comercios(id, nombre, color_fondo, color_texto, color_label, tipo_tarjeta, sello_meta, zona_horaria, logo_url)')
     .eq('cliente_id', cliente.id);
 
   if (errorTarjetas) {
@@ -211,6 +220,7 @@ export async function buscarTarjetasPorTelefono(
       ),
       recompensas: recompensasPorComercio.get(c.id) ?? [],
       movimientos: movimientosPorTarjeta.get(t.id) ?? [],
+      googleDisponible: c.logo_url != null,
     };
   });
 
