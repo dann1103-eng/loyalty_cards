@@ -224,6 +224,12 @@ aplicada" y corta antes de cualquier insert.
 
 ---
 
+**Estado (2026-09-23): código ✅, revisado y aprobado** (commits `81fcd4c` + `6a5d514` + `81365c7`).
+63 pruebas puras verdes; 2 contra Supabase de `leerReglaDeMonto` en rojo por la 0039 (control positivo
+con 42703 y el caso de las tres columnas con PGRST204), diferidas a la Tarea 9. Hallazgo real de la
+revisión: con `NaN` el paso 1 dejaba pasar la acreditación (`NaN <= 0` es false) — la condición pasó
+a `!(montoCentavos > 0)`. 9 mutaciones confirmadas (encabezado de `montoAcreditacion.test.ts`).
+
 ## Tarea 4 — Configuración en Reglas → Controles
 
 **Spec:** sección 2, "Configuración" y "Validación de la configuración".
@@ -296,6 +302,15 @@ aplicada" y corta antes de cualquier insert.
 
 ---
 
+**Estado (2026-09-23): código ✅, revisado y aprobado** (commits `28ff084` + `ce35f35` + `f5da3dc` +
+`03f5986`). 17 pruebas puras verdes, 6 mutaciones puras confirmadas; `reglas/actions.test.ts` 13/13 en
+rojo SOLO por la 0039 (incluidas las 4 viejas: `leerControles` ahora selecciona las columnas nuevas).
+Hallazgos reales de la revisión: (1) `dibujarReglas` COPIABA la llamada a `listarProgramas` de la
+página — quitarle `{ soloActivos: false }` a la página no lo atrapaba nada —; se extrajo
+`reglas/datosControles.ts`, que usan las dos; (2) si la lista de programas fallaba, el sub-bloque se
+escondía y guardar borraba el mínimo en silencio — ahora degrada hacia mostrarlo. Mutaciones del HTML
+y de la base: pendientes (Tarea 9).
+
 ## Tarea 5 — La regla en el escáner
 
 **Spec:** sección 2, "Dónde se aplica → Escáner" y "Escáner (UI)".
@@ -338,6 +353,13 @@ aplicada" y corta antes de cualquier insert.
 
 ---
 
+**Estado (2026-09-23): código ✅, revisado y aprobado** (commits `2c50242` + `9d89ce5`).
+`escanear/actions.test.ts`: 11 verdes, 8 en rojo SOLO por la 0039 (6 nuevas + 2 viejas). La prueba de
+la falla cerrada (lectura de la regla ilegible → "No se pudo verificar la regla de monto…") corre
+VERDE hoy y su mutación (fallar abierto) está confirmada por el controlador. **Consecuencia que hay que
+saber:** como esa lectura falla hacia lo restrictivo, publicar esta rama antes de la 0039 rechaza TODA
+acreditación de puntos/sellos del escáner en todos los comercios (aviso en el ESTADO y en la memoria).
+
 ## Tarea 6 — La regla en "Agregar cliente"
 
 **Spec:** sección 2, "Dónde se aplica → Agregar cliente" (decisión 7).
@@ -371,6 +393,13 @@ aplicada" y corta antes de cualquier insert.
   ledger).
 
 ---
+
+**Estado (2026-09-23): código ✅, revisado y aprobado** (commits `7f102cd` + `bb0a05a`).
+`altaPorTelefono.test.ts`: 4 verdes, 10 en rojo SOLO por la 0039 (6 viejas por la falla cerrada, 4
+nuevas por PGRST204). `altaPorTelefono.reglaIlegible.test.ts` (mock de `leerReglaDeMonto`) corre VERDE
+hoy, con sus 2 mutaciones confirmadas. Hallazgo de la revisión: ninguna prueba protegía la condición
+`aplicaReglaDeMonto` (un comercio con la regla no habría podido dar de alta gift card/prepago): se
+agregó el caso de gift card (pendiente de la 0039).
 
 ## Tarea 7 — Configuración de la reseña de Google
 
@@ -410,6 +439,14 @@ aplicada" y corta antes de cualquier insert.
 
 ---
 
+**Estado (2026-09-23): código ✅, revisado y aprobado** (commits `455b165` + `727efa2`; spec `ff365d2`).
+32 verdes (puras, stub que prueba que "pedir sin link" y "link inválido" no tocan la base, y la acción
+desde el HTML real del formulario), 5 contra Supabase en rojo SOLO por la 0039. **Cambio de spec por
+seguridad** tras la revisión: la lista `*.google.com` dejaba pasar `sites.google.com`,
+`docs.google.com/forms` y las redirecciones `/url`/`/amp` — ahora hosts exactos, `goo.gl` solo con
+`/maps/`, sin usuario/contraseña/puerto, se guarda `url.href` y se valida su largo (CHECK de la 0039).
+Mutación pendiente: la revalidación al leer.
+
 ## Tarea 8 — El paso de reseña en el registro del cliente
 
 **Spec:** sección 3, "Lo que ve el cliente".
@@ -436,6 +473,13 @@ aplicada" y corta antes de cualquier insert.
 - [ ] **Paso 3 (controlador, Tarea 9):** verificación en el navegador.
 
 ---
+
+**Estado (2026-09-23): código ✅, revisado** (commits `125bb7f` + `55e474e` + `fd4e384`). Con la 0039
+sin aplicar, `leerResenaGoogle` devuelve null y el registro queda exactamente como antes. Correcciones:
+el texto del paso pasó a TUTEO (las pantallas del cliente tutean por decisión del 2026-09-08; la spec
+lo había escrito en voseo); la lectura de `sessionStorage` es con `useSyncExternalStore` (la regla de
+lint prohíbe `setState` en `useEffect`); "Ya la dejé" es `btn-borde`; se quitó una nota que la spec no
+pedía. Falta la verificación en el navegador (Tarea 9).
 
 ## Tarea 9 — Cierre: correr todo con la base migrada, verificar y publicar
 
