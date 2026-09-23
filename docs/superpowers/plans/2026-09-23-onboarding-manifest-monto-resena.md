@@ -166,7 +166,9 @@ bug de CRLF queda latente en `lib/marca.test.ts` (falla ruidoso, no silencioso):
 - [ ] **Paso 3 (controlador):** pegarle a Daniel el SQL EXACTO del archivo en el chat para que lo corra en
   Supabase Studio. Cuando avise, correr
   `npx tsx --env-file=.env.local --conditions=react-server scripts/verificar-0039.ts` desde el worktree y
-  anotar el resultado acá. — SQL pegado en el chat el 2026-09-23; **pendiente de que Daniel lo aplique.**
+  anotar el resultado acá. — **APLICADA por Daniel el 2026-09-23**; `verificar-0039.ts`: las cuatro
+  columnas existen, los 21 comercios en sus defaults, y los cinco CHECK rechazan su violación (23514 con
+  el nombre de constraint correcto).
 
 **Estado (2026-09-23): pasos 1-2 ✅** (commits `0038f16` + `1243f8a` + `906a5c4`). Revisión combinada
 spec+calidad: aprobada; el revisor aplicó el `.sql` en un Postgres 18 descartable, con filas
@@ -505,3 +507,21 @@ Requiere que Daniel haya aplicado la 0039 y que `verificar-0039.ts` la haya conf
   dice "no encontrado").
 - [ ] Actualizar la memoria `backlog-post-onboarding-2026-09-22` (qué quedó hecho) y el
   `docs/superpowers/ESTADO-Y-PLAN-2026-07-28.md` (sección más reciente).
+
+**Estado de la Tarea 9 (2026-09-23):**
+- Migración 0039 aplicada y verificada (Tarea 2, Paso 3).
+- Los 8 archivos que dependían de ella: 126/126 verdes. Las 13 mutaciones que habían quedado pendientes,
+  confirmadas (`a967547`, encabezados actualizados; ninguna sobrevivió); el controlador reprodujo la de
+  `soloActivos` en `datosControles.ts` (cae "sellos DESACTIVADO").
+- Suite completa: **2059/2059, 164/164 archivos**. `tsc --noEmit` y `npm run lint` limpios.
+- Navegador (controlador, comercio demo `cafe-aurora-demo`, restaurado después): el paso de reseña se
+  dibuja con los textos exactos; "Ya la dejé" deshabilitado hasta tocar el link (`href`, `target`,
+  `rel` correctos) y habilitado después; **tras recargar la pestaña vuelve habilitado** (sessionStorage +
+  `useSyncExternalStore`), sin errores de consola; al continuar, el formulario de siempre. Con la
+  reseña apagada, `/registro/cafe-aurora-demo`, `die-oma-cafe-bistro` y `pulso-cafe` muestran el
+  formulario normal.
+- **No verificado en el navegador, por decisión de Daniel** ("publicá ya, lo pruebo yo"): Reglas, el
+  escáner y "Agregar cliente" necesitan una sesión de dueño. Su lógica de servidor y el HTML del
+  formulario de Reglas sí están cubiertos por pruebas; el detalle visual del escáner (botón
+  deshabilitado, "Mínimo $X"/"Obligatorio") lo prueba Daniel en producción.
+- Publicado en `master` (ver el commit de este registro).

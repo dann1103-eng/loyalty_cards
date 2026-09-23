@@ -1306,16 +1306,15 @@ la cobranza y el rework del admin (plan `2026-09-21-cobranza-y-rework-admin.md`)
 onboarding real: el alta self-service nacía bloqueada (`licencia_estado: 'inactivo'` + el gate nuevo) y
 "Nueva cuenta" del admin arrancaba en cobranza `'normal'`; las dos ahora nacen `activo` + `exenta`.
 
-### ⚠️ NO publicar `origin/master..HEAD` antes de la migración 0039
+### Migración 0039: aplicada y publicada (2026-09-23)
 
-Desde el commit de la Tarea 2 de ese plan, la rama `claude/cobranza-y-rework-admin` lee y escribe columnas
-de `comercios` que llegan con `supabase/migrations/0039_monto_minimo_y_resena.sql`. **Publicar la rama
-antes de aplicar la 0039 deja a TODOS los comercios sin poder sumar sellos ni puntos por el escáner** (la
-lectura de la regla de monto falla hacia lo restrictivo y rechaza la acreditación), rompe el guardado y la
-lectura de Reglas, y puede tumbar el registro de clientes. `master` quedó publicado hasta `d27b327` (el
-atajo de Android, Tarea 1), que NO depende de la 0039. Orden: Daniel corre la 0039 en Studio →
-`scripts/verificar-0039.ts` la confirma → Tarea 9 del plan (pruebas diferidas, mutaciones, navegador) →
-recién ahí `git push origin HEAD:master`.
+Daniel aplicó `supabase/migrations/0039_monto_minimo_y_resena.sql` y `scripts/verificar-0039.ts` la
+confirmó (columnas, defaults y los cinco CHECK). Recién después se publicó la rama. Lo que queda como
+lección: el código de esta feature **lee** columnas nuevas de `comercios` en caminos críticos (el escáner
+rechaza la acreditación si no puede leer la regla de monto, falla hacia lo restrictivo), así que
+publicarlo antes de la migración habría dejado a TODOS los comercios sin sumar sellos ni puntos. Una
+migración que agrega columnas que el código LEE en el mostrador es tan bloqueante como una que el código
+escribe: migración primero, deploy después, siempre.
 
 ### Lo que entró
 
@@ -1325,15 +1324,21 @@ recién ahí `git push origin HEAD:master`.
   Handlers en `/manifiestos/*.webmanifest` (fuera del matcher del proxy: el navegador pide el manifest sin
   cookies). Next 16 NO admite `manifest.ts` anidado. Un atajo ya instalado no se corrige solo: hay que
   borrarlo y volver a agregarlo.
-- **Monto mínimo de compra (en la rama, esperando la 0039):** por comercio, en Reglas → Controles: exigir el
-  monto y fijar un mínimo para sumar sellos/puntos. Bajo el mínimo se rechaza; el dueño puede autorizarlo
-  con motivo por el mismo panel de las perillas antifraude. Aplica en el escáner y en "Agregar cliente".
-- **Reseña de Google antes del registro (en la rama, esperando la 0039):** por comercio; sistema de honor.
+- **Monto mínimo de compra (publicado):** por comercio, en Reglas → Controles: exigir el monto y fijar un
+  mínimo para sumar sellos/puntos. Bajo el mínimo se rechaza; el dueño puede autorizarlo con motivo por
+  el mismo panel de las perillas antifraude. Aplica en el escáner y en "Agregar cliente". Solo se ofrece
+  si el comercio tiene algún programa de puntos o sellos (activo o no).
+- **Reseña de Google antes del registro (publicado):** por comercio, en Reglas → Registro de clientes;
+  sistema de honor. El link solo acepta hosts exactos de reseñas/mapas de Google (sin `sites.`, `docs.`
+  ni redirecciones) y se revalida al leer.
 
 ### Pendiente de Daniel
 
-1. Correr la 0039 en Supabase Studio (el SQL está en el archivo y se pegó en el chat el 2026-09-23).
+1. ~~Correr la 0039~~ **HECHO** (2026-09-23).
 2. En Android: borrar el atajo viejo del panel y volver a agregarlo desde el login del comercio.
-3. Confirmar las decisiones 6 y 7 de la spec (el dueño puede autorizar bajo el mínimo — y esa autorización
+3. Probar en producción, con sesión de dueño, lo que no se vio en el navegador: Reglas (el sub-bloque de
+   monto y el de reseña), el escáner con un mínimo (campo sin "(opcional)", "Mínimo $X", botón
+   deshabilitado vacío, el panel de autorización bajo el mínimo) y "Agregar cliente" con monto.
+4. Confirmar las decisiones 6 y 7 de la spec (el dueño puede autorizar bajo el mínimo — y esa autorización
    también saltea las perillas antifraude, como cualquier autorización —; la regla aplica también a
    "Agregar cliente").
