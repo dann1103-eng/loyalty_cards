@@ -11,6 +11,7 @@ import {
   puedeCanjearRecompensas,
   aplicanControlesAcreditacion,
   usaMontoDeCompra,
+  aplicaReglaDeMonto,
 } from './tipos';
 
 // Módulo puro. Lo que se prueba acá es lo que, si falla, le muestra plata equivocada a un cliente.
@@ -283,5 +284,37 @@ describe('usaMontoDeCompra', () => {
 
   it('un tipo desconocido degrada a puntos, que sí lo usa', () => {
     expect(usaMontoDeCompra('lo-que-sea')).toBe(true);
+  });
+});
+
+describe('aplicaReglaDeMonto', () => {
+  // La regla de monto obligatorio / mínimo de compra del comercio (migración 0039) solo tiene
+  // sentido donde el monto es OPCIONAL por defecto: puntos y sellos. En cashback, gift card y
+  // descuento el monto YA es obligatorio por su propio tipo (requiereMonto) — superponerles un
+  // mínimo sería una regla que nadie pidió. Prepago, cupón y membresía no reciben monto en
+  // absoluto, así que no hay nada que gatear.
+  //
+  // MUTACIÓN verificada: `aplicaReglaDeMonto: true` en cashback hace fallar esta prueba.
+  it('exactamente puntos y sellos', () => {
+    const aplican = TIPOS.filter((t) => aplicaReglaDeMonto(t.valor)).map((t) => t.valor).sort();
+    expect(aplican).toEqual(['puntos', 'sellos']);
+  });
+
+  it('los otros seis no: monto ya obligatorio por su tipo, o ningún monto en absoluto', () => {
+    for (const valor of ['prepago', 'gift_card', 'cashback', 'cupon', 'membresia', 'descuento']) {
+      expect(aplicaReglaDeMonto(valor), `"${valor}" no recibe la regla de monto del comercio`).toBe(false);
+    }
+  });
+
+  it('la respuesta sale del CATÁLOGO, no de una lista escrita aparte', () => {
+    for (const tipo of TIPOS) {
+      expect(typeof tipo.aplicaReglaDeMonto, tipo.valor).toBe('boolean');
+      expect(aplicaReglaDeMonto(tipo.valor)).toBe(tipo.aplicaReglaDeMonto);
+    }
+  });
+
+  it('un tipo desconocido degrada a puntos, que sí la recibe', () => {
+    // Mismo fallback que el resto del módulo: una fila vieja no deja al cajero sin ningún control.
+    expect(aplicaReglaDeMonto('lo-que-sea')).toBe(true);
   });
 });

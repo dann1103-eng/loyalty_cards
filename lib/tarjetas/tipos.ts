@@ -54,6 +54,18 @@ export interface TipoTarjeta {
   // otra qué recibe la función del mostrador. Un campo propio por la misma razón que el anterior:
   // un noveno tipo no compila hasta que alguien decida si su operación recibe el monto.
   usaMontoDeCompra: boolean;
+  // ¿Le aplica a este tipo la regla de monto obligatorio / mínimo de compra del comercio
+  // (`exigir_monto_compra` / `monto_minimo_compra_centavos`, migración 0039)? Tampoco es un `if` con
+  // 'puntos' | 'sellos' escrito a mano, por la misma razón que los dos campos de arriba: un noveno
+  // tipo no compila hasta que alguien decida si la regla del comercio lo alcanza.
+  //
+  // `true` en puntos y sellos: son los dos tipos donde el monto es OPCIONAL por defecto
+  // (`pedir_monto_compra`) y el mínimo existe para gatear ESA acreditación — "solo sello consumos de
+  // $10 en adelante". En cashback, gift card y descuento el monto YA es obligatorio por su propio
+  // tipo (`requiereMonto`); superponerles un segundo mínimo de compra sería una regla de negocio que
+  // nadie pidió. Prepago, cupón y membresía no reciben monto en absoluto
+  // (`usaMontoDeCompra: false`), así que no hay nada que gatear.
+  aplicaReglaDeMonto: boolean;
 }
 
 export const TIPOS: readonly TipoTarjeta[] = [
@@ -69,6 +81,9 @@ export const TIPOS: readonly TipoTarjeta[] = [
     aplicanControlesAcreditacion: true,
     // acreditar_atomico (0015) recibe p_monto_compra; el escáner se lo pasa cuando viene tecleado.
     usaMontoDeCompra: true,
+    // El monto acá es opcional por defecto (pedir_monto_compra): el mínimo de compra existe
+    // justamente para poder exigirlo y gatear la acreditación.
+    aplicaReglaDeMonto: true,
   },
   {
     valor: 'sellos',
@@ -82,6 +97,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     aplicanControlesAcreditacion: true,
     // Mismo camino que puntos: acreditar_atomico (0015) recibe p_monto_compra.
     usaMontoDeCompra: true,
+    // Mismo caso que puntos: "solo sello consumos de $10 en adelante" es exactamente esto.
+    aplicaReglaDeMonto: true,
   },
   {
     valor: 'prepago',
@@ -99,6 +116,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     // llama a venderPaquete solo con sucursal y cajero: el monto no llega nunca. Si algún día se
     // cablea en la venta, este valor cambia junto con esa llamada, no antes.
     usaMontoDeCompra: false,
+    // No recibe monto en ninguna operación (arriba): no hay nada que la regla pueda gatear.
+    aplicaReglaDeMonto: false,
   },
   {
     valor: 'gift_card',
@@ -114,6 +133,9 @@ export const TIPOS: readonly TipoTarjeta[] = [
     aplicanControlesAcreditacion: true,
     // consumir_saldo_atomico (0022) recibe p_monto: el monto ES lo que se descuenta del saldo.
     usaMontoDeCompra: true,
+    // El monto ya es obligatorio por su propio tipo (requiereMonto): un mínimo de compra encima no
+    // tiene sentido de negocio, y la regla del comercio no lo alcanza.
+    aplicaReglaDeMonto: false,
   },
   {
     valor: 'cashback',
@@ -128,6 +150,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     // acreditarCashback calcula el porcentaje sobre el monto y se lo pasa a acreditar_atomico (0015)
     // como p_monto_compra.
     usaMontoDeCompra: true,
+    // Mismo caso que gift card: el monto ya es obligatorio por ser cashback (requiereMonto).
+    aplicaReglaDeMonto: false,
   },
   {
     valor: 'cupon',
@@ -141,6 +165,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     aplicanControlesAcreditacion: false,
     // usar_cupon_atomico (0019) recibe comercio, tarjeta, sucursal y cajero. Ningún monto.
     usaMontoDeCompra: false,
+    // No recibe monto en ninguna operación: no hay nada que la regla pueda gatear.
+    aplicaReglaDeMonto: false,
   },
   {
     valor: 'membresia',
@@ -155,6 +181,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     // renovar_membresia_atomico (0019, y la 0031 la redefine con la MISMA firma) recibe comercio,
     // tarjeta, sucursal y cajero. Ningún monto: la renovación no guarda cuánto se cobró.
     usaMontoDeCompra: false,
+    // No recibe monto en ninguna operación: no hay nada que la regla pueda gatear.
+    aplicaReglaDeMonto: false,
   },
   {
     valor: 'descuento',
@@ -168,6 +196,8 @@ export const TIPOS: readonly TipoTarjeta[] = [
     aplicanControlesAcreditacion: false,
     // registrar_compra_atomico (0023) recibe p_monto_centavos: el monto ES lo que acumula el nivel.
     usaMontoDeCompra: true,
+    // Mismo caso que gift card y cashback: el monto ya es obligatorio por ser descuento (requiereMonto).
+    aplicaReglaDeMonto: false,
   },
 ] as const;
 
@@ -212,6 +242,14 @@ export function aplicanControlesAcreditacion(tipoTarjeta: string): boolean {
 // mostrar el campo), porque un comercio de puntos puede tener además un programa de cupón.
 export function usaMontoDeCompra(tipoTarjeta: string): boolean {
   return tipoOPuntos(tipoTarjeta).usaMontoDeCompra;
+}
+
+// ¿Le aplica a este tipo la regla de monto obligatorio / mínimo de compra del comercio? Ver el
+// campo homónimo del catálogo. La consultan tanto `ofreceReglaDeMonto` (Reglas: si algún programa
+// del comercio la usa) como el escáner y "Agregar cliente" (si mostrarle el campo a ESTA tarjeta),
+// igual que `usaMontoDeCompra` de arriba.
+export function aplicaReglaDeMonto(tipoTarjeta: string): boolean {
+  return tipoOPuntos(tipoTarjeta).aplicaReglaDeMonto;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
