@@ -140,10 +140,19 @@ false/null; `pedir_monto_compra` es NOT NULL desde 0015).
 
 ### Configuración (por comercio, en *Reglas → Controles*, `FormularioControles.tsx`)
 
-El checkbox actual **"Pedir el monto de la compra" no cambia** (ni su visibilidad ni su input oculto de
-preservación, que tienen pruebas en `reglas/actions.test.ts`). Debajo, un sub-bloque nuevo, **visible
-si el comercio tiene al menos un programa ACTIVO de puntos o sellos** (no solo el principal: un
-comercio de membresía con un programa secundario de sellos también tiene que poder fijar el mínimo):
+El checkbox actual **"Pedir el monto de la compra" conserva su comportamiento** y su input oculto de
+preservación (tienen pruebas en `reglas/actions.test.ts`); lo único que cambia es que también se
+muestra cuando se muestra el sub-bloque nuevo: se dibuja si `usaMontoDeCompra(principal) ||
+ofreceReglaDeMonto`. Sin eso, en un comercio de membresía con un programa secundario de sellos el
+dueño tildaría "Exigir" (que prende `pedir` por la implicación de abajo) y después no tendría ningún
+control a la vista para apagar "Pedir".
+
+Debajo, un sub-bloque nuevo, **visible si el comercio tiene al menos un programa de puntos o sellos,
+activo o no** (`ofreceReglaDeMonto`, una función compartida entre la página y su prueba). No solo el
+principal: un comercio de membresía con un programa secundario de sellos también tiene que poder fijar
+el mínimo. Y no solo los activos: `obtenerPrograma` (`lib/comercio/programas.ts`) no filtra por
+`activo`, así que las tarjetas de un programa desactivado se siguen escaneando y acreditando, y la
+regla les sigue aplicando:
 
 - Checkbox **"Exigir el monto para sumar"**.
 - Campo **"Mínimo de compra para sumar ($)"**, opcional. Leyenda: "Si lo llenás, el monto pasa a ser
@@ -151,15 +160,18 @@ comercio de membresía con un programa secundario de sellos también tiene que p
 
 Cuando el sub-bloque NO se muestra, sus campos no viajan y el guardado deja `exigir = false` y
 `mínimo = null`. **No se preservan con inputs ocultos, a propósito:** sin ningún programa de puntos o
-sellos activo esa configuración no gobierna nada, y preservarla crearía dos problemas encontrados en
-la revisión: una perilla invisible que vuelve a aplicarse sola si mañana se activa un programa de
-sellos, y un `exigir` guardado que (por la implicación `pedir = pedir || exigir`) impediría destildar
+sellos (ni activo ni desactivado) esa configuración no gobierna nada, y preservarla crearía dos
+problemas encontrados en la revisión: una perilla invisible que vuelve a aplicarse sola si mañana se
+crea un programa de sellos, y un `exigir` guardado que (por la implicación `pedir = pedir || exigir`) impediría destildar
 "Pedir" sin que el dueño pudiera ver por qué. El `key` del formulario suma los dos campos nuevos (se
 remonta tras guardar, como ya hace con los otros).
 
 El mínimo guardado vuelve al campo como texto con `formatearCentavos` (aritmética entera; nunca
 `centavos / 100`), y una prueba confirma que ese texto vuelve a parsear a los mismos centavos exactos
-(`centavosDesdeTexto` tolera el `$`).
+(`centavosDesdeTexto` tolera el `$`). Por eso el campo es `type="text" inputMode="decimal"` y no
+`type="number"`: `"$10.50"` no es un número válido, el navegador vaciaría el campo y el dueño
+guardaría `null` sin enterarse. La página de Reglas lista los programas con
+`listarProgramas(…, { soloActivos: false })`: el default filtra los activos.
 
 ### Validación de la configuración (`lib/comercio/controlesAcreditacion.ts`)
 
@@ -304,7 +316,11 @@ Con link, antes del formulario hay un paso nuevo:
   formulario de siempre.
 - Se recuerda en `sessionStorage` (clave por slug de comercio, lecturas y escrituras en try/catch) que
   el cliente ya tocó el link, para que si iOS recarga la pestaña al volver de la app de Google Maps no
-  tenga que tocarlo de nuevo.
+  tenga que tocarlo de nuevo. **La lectura va en un `useEffect` después de montar**, nunca durante el
+  render ni en el inicializador de `useState`: en el servidor ese acceso no existe, y el desajuste de
+  hidratación dejaría el botón "Ya la dejé" deshabilitado justo en el caso para el que existe esto.
+- Dos estados con nombre propio: `tocoGoogle` (se guarda en `sessionStorage`, habilita el botón) y
+  `continuo` (pasa al formulario; no se guarda).
 
 Sistema de honor: `/api/registro` no cambia y no verifica nada. "Agregar cliente" (alta por teléfono)
 no pasa por este paso. Las tarjetas ya emitidas no se tocan.
@@ -323,6 +339,12 @@ no pasa por este paso. Las tarjetas ya emitidas no se tocan.
    `null` y el escáner no podría leer la regla de monto. Publicar antes de la migración rompe el
    registro de clientes de todos los comercios.
 
+Aplicar la 0039 ANTES de publicar el código nuevo es seguro: el código de `master` no selecciona
+ninguna de las cuatro columnas. Y las páginas de registro leen la reseña con `leerResenaGoogle`, una
+consulta APARTE que falla hacia `null` (sin paso de reseña) en vez de ensanchar la consulta del
+comercio, que es la que decide "no encontrado"; así el QR de registro sobrevive aunque la columna
+falte. Las páginas lo dicen en un comentario.
+
 `lib/supabase/types.ts` suma las cuatro columnas en `Row`/`Insert`/`Update` de `comercios` (y la
 lista de migraciones del encabezado).
 
@@ -336,8 +358,8 @@ lista de migraciones del encabezado).
   y la lectura de la reseña; `ejecutarOperacion` con un comercio que exige mínimo (bajo el mínimo no
   cambia el saldo y responde `bloqueoLimite`; en el mínimo suma; autorizado bajo el mínimo suma);
   `altaYAcreditacionPorTelefono` con monto faltante (no crea cliente) y bajo el mínimo (crea la tarjeta
-  sin acreditar). Las acciones de Reglas conservan la configuración de monto cuando el sub-bloque no se
-  muestra.
+  sin acreditar). Las acciones de Reglas conservan `pedir_monto_compra` como hoy, y dejan
+  `exigir = false` / `mínimo = null` cuando el sub-bloque no se muestra (ver §2, Configuración).
 - Navegador: el paso de reseña (con y sin link, y tras recargar), el escáner con el campo obligatorio y
   el panel de autorización del mínimo, los controles nuevos en Reglas, "Agregar cliente" con monto, y el
   `<link rel="manifest">` por sección.
