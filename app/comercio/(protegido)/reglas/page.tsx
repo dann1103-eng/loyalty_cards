@@ -5,9 +5,11 @@ import { TIPOS_REGLA } from '@/lib/comercio/reglas';
 import FormularioRegla from './FormularioRegla';
 import FormularioControles from './FormularioControles';
 import FormularioAvisoInactividad from './FormularioAvisoInactividad';
+import FormularioResenaGoogle from './FormularioResenaGoogle';
 import BotonEliminarRegla from './BotonEliminarRegla';
 import AvisoComercioActivo from '../AvisoComercioActivo';
 import { leerConfiguracionAvisoInactividad } from '@/lib/comercio/avisoInactividad';
+import { leerResenaGoogle } from '@/lib/comercio/resenaGoogle';
 import { datosFormularioControles } from './datosControles';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +35,7 @@ export default async function PaginaReglas() {
   const { controles, tipoPrincipal, unidad, aplicanLimites, usaMontoDeCompra: usaMonto, ofreceReglaDeMonto: ofreceMonto } =
     await datosFormularioControles(supabase, comercioId);
   const avisoInactividad = await leerConfiguracionAvisoInactividad(supabase, comercioId);
+  const resenaGoogle = await leerResenaGoogle(supabase, comercioId);
 
   if (error) console.error('[comercio] falló la consulta de reglas:', error);
 
@@ -107,6 +110,19 @@ export default async function PaginaReglas() {
           <FormularioAvisoInactividad configuracion={avisoInactividad} tipoTarjeta={tipoPrincipal} />
         </div>
       )}
+
+      {/* Reseña de Google antes del registro (Tarea 7, migración 0039). Mismo criterio que los
+          controles de arriba: si la lectura falla, un mensaje de error en vez de tumbar la pantalla
+          entera — el dueño sigue viendo el resto de Reglas. */}
+      <div className="reveal d2" style={{ marginTop: 22 }}>
+        {resenaGoogle ? (
+          <FormularioResenaGoogle resena={resenaGoogle} />
+        ) : (
+          <p className="admin-error" role="alert">
+            No se pudo cargar la configuración de la reseña. Recargá la página.
+          </p>
+        )}
+      </div>
 
       <div className="admin-lista reveal d3" style={{ marginTop: 22 }}>
         {error ? (

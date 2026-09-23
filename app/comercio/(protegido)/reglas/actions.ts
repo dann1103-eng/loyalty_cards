@@ -10,12 +10,15 @@ import {
   guardarConfiguracionAvisoInactividad,
   configuracionDesdeFormulario as avisoInactividadDesdeFormulario,
 } from '@/lib/comercio/avisoInactividad';
+import { guardarResenaGoogle } from '@/lib/comercio/resenaGoogle';
 
 export type EstadoRegla = { error: string } | undefined;
 
 export type EstadoControles = { error: string } | { guardado: true } | undefined;
 
 export type EstadoAvisoInactividad = { error: string } | { guardado: true } | undefined;
+
+export type EstadoResenaGoogle = { error: string } | { guardado: true } | undefined;
 
 // Guarda las perillas antifraude (Tanda 1). NO dispara notificarCambioComercio a propósito: a
 // diferencia de las reglas y las recompensas, estos límites no se imprimen en el reverso del pass
@@ -63,6 +66,26 @@ export async function accionGuardarAvisoInactividad(
   });
 
   const res = await guardarConfiguracionAvisoInactividad(createServiceClient(), comercioId, datos);
+  if (!res.ok) return { error: res.error };
+
+  revalidatePath('/comercio/reglas');
+  return { guardado: true };
+}
+
+// Guarda el bloque "Registro de clientes" (Tarea 7, migración 0039): pedir una reseña en Google
+// antes de sacar la tarjeta, y el link al que se manda al cliente. NO dispara notificarCambioComercio
+// por el mismo motivo que accionGuardarControles: este paso vive en el REGISTRO del cliente
+// (RegistroCliente.tsx, Tarea 8), no en el reverso del pass ya emitido.
+export async function accionGuardarResenaGoogle(
+  _estadoPrevio: EstadoResenaGoogle,
+  formData: FormData,
+): Promise<EstadoResenaGoogle> {
+  const { comercioId } = await verifyComercioOwner();
+
+  const res = await guardarResenaGoogle(createServiceClient(), comercioId, {
+    pedir: formData.get('pedir_resena_google') === 'on',
+    urlTexto: String(formData.get('resena_google_url') ?? ''),
+  });
   if (!res.ok) return { error: res.error };
 
   revalidatePath('/comercio/reglas');
