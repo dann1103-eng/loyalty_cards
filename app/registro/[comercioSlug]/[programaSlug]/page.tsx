@@ -1,7 +1,9 @@
+import { headers } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import { resolverProgramaPorSlug } from '@/lib/comercio/programas';
 import { leerResenaGoogle } from '@/lib/comercio/resenaGoogle';
+import { detectarPlataforma } from '@/lib/clientes/plataforma';
 import { marcaDelRegistro } from '../marcaDelRegistro';
 import RegistroCliente from '../RegistroCliente';
 
@@ -53,6 +55,10 @@ export default async function PaginaRegistroPrograma({
     leerResenaGoogle(supabase, comercio.id),
   ]);
 
+  // Del lado del SERVIDOR (spec Wallet/logos §1): la primera pintura ya muestra el botón de Wallet
+  // correcto, sin esperar a que el cliente se hidrate y sin desajuste entre las dos.
+  const plataforma = detectarPlataforma((await headers()).get('user-agent'));
+
   return (
     <RegistroCliente
       comercioSlug={comercioSlug}
@@ -65,6 +71,7 @@ export default async function PaginaRegistroPrograma({
       // El "hoy" del COMERCIO, resuelto acá: la tarjeta de muestra es 'use client' y un new Date()
       // adentro daría mismatch de hidratación (y en UTC correría el vencimiento un día).
       hoyIso={hoyEnZona(comercio.zona_horaria)}
+      plataforma={plataforma}
     />
   );
 }

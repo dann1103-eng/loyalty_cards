@@ -2,30 +2,11 @@
 
 import { useState, useSyncExternalStore, type FormEvent } from 'react';
 import { PAISES, PAIS_DEFAULT, buscarPaisPorClave } from '@/lib/clientes/paises';
+import { fraseWalletDelFormulario, type Plataforma } from '@/lib/clientes/plataforma';
 import { frentePase } from '@/lib/tarjetas/frentePase';
 import { promesaRegistro, promesaTarjetaLista, rotuloTarjeta } from '@/lib/tarjetas/textosPorTipo';
+import BotonesWallet from '@/app/_ui/BotonesWallet';
 import type { MarcaRegistro } from './marcaDelRegistro';
-
-function IconoWallet() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="2.5" y="5.5" width="19" height="14" rx="3" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M2.5 9.5h19" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M16.5 14.5h2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconoGoogle() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.07 5.07 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
-      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.99.66-2.25 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.85A10.99 10.99 0 0 0 12 23z" />
-      <path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.05H2.18a11 11 0 0 0 0 9.9l3.66-2.85z" />
-      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1a10.99 10.99 0 0 0-9.82 6.05l3.66 2.85C6.71 7.3 9.14 5.38 12 5.38z" />
-    </svg>
-  );
-}
 
 // La tarjeta de muestra que ve el cliente junto al botón de Wallet. Es una RÉPLICA de su pase, no
 // un adorno: hasta el 2026-09-08 tenía un degradado marrón cableado, el rótulo "Tarjeta de lealtad"
@@ -157,6 +138,7 @@ export default function RegistroCliente({
   marca,
   resenaGoogleUrl,
   hoyIso,
+  plataforma,
 }: {
   comercioSlug: string;
   // null = el programa principal (migración 0024) — ver app/registro/[comercioSlug]/page.tsx.
@@ -175,6 +157,10 @@ export default function RegistroCliente({
   resenaGoogleUrl: string | null;
   // El "hoy" del comercio, resuelto en el servidor (hoyEnZona). Baja hasta la tarjeta de muestra.
   hoyIso: string;
+  // Detectada en el SERVIDOR (detectarPlataforma sobre el user agent), en la page.tsx que llama:
+  // decide qué botón de Wallet ve primero el cliente (spec Wallet/logos §1) y qué dice la promesa
+  // del formulario ("Directo en tu ___").
+  plataforma: Plataforma;
 }) {
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
@@ -252,23 +238,13 @@ export default function RegistroCliente({
               marca={marca}
               hoyIso={hoyIso}
             />
-            <a className="wallet-btn" href={`/api/tarjetas/${tarjetaId}/pass.pkpass`}>
-              <IconoWallet />
-              Agregar a Apple Wallet
-            </a>
-            {googleWalletDisponible && (
-              <a
-                className="wallet-btn"
-                style={{ marginTop: 10 }}
-                href={`/api/tarjetas/${tarjetaId}/google-wallet`}
-              >
-                <IconoGoogle />
-                Agregar a Google Wallet
-              </a>
-            )}
-            <p className="nota">
-              ¿No se abrió? Mantén presionado el botón y elige “Descargar”, o ábrelo desde Safari.
-            </p>
+            <BotonesWallet
+              plataforma={plataforma}
+              urlApple={`/api/tarjetas/${tarjetaId}/pass.pkpass`}
+              urlGoogle={googleWalletDisponible ? `/api/tarjetas/${tarjetaId}/google-wallet` : null}
+              textoApple="Agregar a Apple Wallet"
+              textoGoogle="Agregar a Google Wallet"
+            />
           </div>
         </div>
       </main>
@@ -331,7 +307,7 @@ export default function RegistroCliente({
             puntos a los ocho tipos: a quien venía por una membresía se le prometía algo que su
             tarjeta no hace. */}
         <p className="lede reveal d2">
-          {promesaRegistro(tipoTarjeta)} Directo en tu Apple Wallet, sin apps y sin plásticos.
+          {promesaRegistro(tipoTarjeta)} {fraseWalletDelFormulario(plataforma)}, sin apps y sin plásticos.
         </p>
 
         <form className="panel reveal d3" onSubmit={handleSubmit}>
