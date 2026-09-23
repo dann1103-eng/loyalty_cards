@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useState, useSyncExternalStore, type FormEvent } from 'react';
 import { PAISES, PAIS_DEFAULT, buscarPaisPorClave } from '@/lib/clientes/paises';
 import { frentePase } from '@/lib/tarjetas/frentePase';
 import { promesaRegistro, promesaTarjetaLista, rotuloTarjeta } from '@/lib/tarjetas/textosPorTipo';
@@ -111,6 +111,40 @@ function VistaTarjeta({
   );
 }
 
+// Clave de sessionStorage del paso de reseña, por slug de comercio (spec sección 3, Tarea 8): si el
+// mismo teléfono tiene abiertas dos pestañas de dos comercios distintos, "ya toqué el link" de uno
+// no tiene que habilitar el botón del otro.
+function claveResenaTocada(comercioSlug: string): string {
+  return `cardly:resena-tocada:${comercioSlug}`;
+}
+
+// useSyncExternalStore no necesita re-suscribirse a nada: sessionStorage solo cambia por nuestro
+// propio clic (cubierto por tocoGoogleEnMemoria, un useState normal), nunca por otra pestaña ni por
+// un evento del navegador. El "store" existe únicamente para el snapshot inicial.
+const suscribirNada = () => () => {};
+
+// Lo que sessionStorage recuerda de una visita anterior a ESTA pestaña: true si iOS la recargó
+// después de que el cliente ya tocó el link de Google (Safari puede descartarla por memoria al
+// volver de la app de Maps y reconstruirla desde cero). Se lee con useSyncExternalStore y NO con
+// useState + useEffect: el snapshot del SERVIDOR es siempre `false` (sessionStorage no existe ahí),
+// y React usa ESE MISMO valor para el primer render del cliente — la garantía de hidratación que
+// pide la spec, sin el patrón "leer en un efecto y guardar con setState" (esa regla de lint es
+// ERROR en este repo; mismo criterio que useEstaEnCliente en app/_ui/SelectorTema.tsx).
+function useTocoGoogleAlmacenado(comercioSlug: string, activo: boolean): boolean {
+  return useSyncExternalStore(
+    suscribirNada,
+    () => {
+      if (!activo) return false; // sin paso de reseña, ni vale la pena tocar sessionStorage
+      try {
+        return sessionStorage.getItem(claveResenaTocada(comercioSlug)) === '1';
+      } catch {
+        return false; // modo privado de Safari u otro storage bloqueado
+      }
+    },
+    () => false,
+  );
+}
+
 export default function RegistroCliente({
   comercioSlug,
   programaSlug,
@@ -118,6 +152,7 @@ export default function RegistroCliente({
   tipoTarjeta,
   selloMeta,
   marca,
+  resenaGoogleUrl,
   hoyIso,
 }: {
   comercioSlug: string;
@@ -130,6 +165,11 @@ export default function RegistroCliente({
   tipoTarjeta: string;
   selloMeta: number | null;
   marca: MarcaRegistro;
+  // El link de reseña de Google, YA REVALIDADO por `leerResenaGoogle` — o `null` si el comercio no
+  // pide reseña (`pedir_resena_google` apagado) o si la lectura falló (columna de la 0039 todavía
+  // no aplicada, error de red…). Con `null` esta pantalla no cambia en nada: el paso de reseña
+  // directamente no se dibuja (spec sección 3, "Lo que ve el cliente").
+  resenaGoogleUrl: string | null;
   // El "hoy" del comercio, resuelto en el servidor (hoyEnZona). Baja hasta la tarjeta de muestra.
   hoyIso: string;
 }) {
@@ -143,6 +183,30 @@ export default function RegistroCliente({
   const [googleWalletDisponible, setGoogleWalletDisponible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
+
+  // Paso de reseña de Google, dos estados con nombre propio (spec sección 3):
+  // - tocoGoogle: el cliente tocó "Dejar mi reseña en Google". Habilita "Ya la dejé". Es la unión de
+  //   DOS fuentes: tocoGoogleEnMemoria (el clic de ESTA carga de la página, un useState normal, para
+  //   que el botón responda al toque sin esperar ninguna vuelta al servidor ni a sessionStorage) y
+  //   tocoGoogleAlmacenado (lo que sessionStorage recuerda de ANTES de esta carga — ver el comentario
+  //   de useTocoGoogleAlmacenado más arriba).
+  // - continuo: el cliente ya pasó al formulario de siempre. NO se guarda: el paso de reseña es algo
+  //   que el COMERCIO pide en cada registro, no una preferencia del cliente que deba sobrevivir una
+  //   visita nueva.
+  const [tocoGoogleEnMemoria, setTocoGoogleEnMemoria] = useState(false);
+  const tocoGoogleAlmacenado = useTocoGoogleAlmacenado(comercioSlug, resenaGoogleUrl !== null);
+  const tocoGoogle = tocoGoogleEnMemoria || tocoGoogleAlmacenado;
+  const [continuo, setContinuo] = useState(false);
+
+  function tocarLinkGoogle() {
+    setTocoGoogleEnMemoria(true);
+    try {
+      sessionStorage.setItem(claveResenaTocada(comercioSlug), '1');
+    } catch {
+      // Modo privado de Safari u otro storage bloqueado: el toque no sobrevive una recarga de la
+      // pestaña, pero tocoGoogleEnMemoria ya alcanza para habilitar "Ya la dejé" en esta carga.
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -202,6 +266,51 @@ export default function RegistroCliente({
             <p className="nota">
               ¿No se abrió? Mantén presionado el botón y elige “Descargar”, o ábrelo desde Safari.
             </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Paso de reseña de Google, antes del formulario de siempre. Se dibuja mientras haya link (el
+  // comercio lo pide) y el cliente todavía no haya tocado "Ya la dejé, sacar mi tarjeta" — la misma
+  // condición que documenta el plan (Tarea 8): no crece más allá de esto, así que se queda inline en
+  // vez de salir a una función pura aparte.
+  if (resenaGoogleUrl !== null && !continuo) {
+    return (
+      <main className="shell">
+        <div className="stack">
+          <p className="kicker reveal d1">{nombreComercio}</p>
+          <h1 className="title reveal d2">
+            Antes de <em>tu tarjeta</em>
+          </h1>
+          {/* Texto fijo, sin personalización por comercio (decisión 5 de la spec): la promesa del
+              primer sello la hace el comercio de palabra (cartel, cajero), no esta pantalla. */}
+          <p className="lede reveal d2">¿Nos dejás una reseña en Google? Nos ayuda muchísimo.</p>
+          <div className="panel reveal d3">
+            <a
+              className="btn-primary"
+              href={resenaGoogleUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={tocarLinkGoogle}
+            >
+              Dejar mi reseña en Google
+            </a>
+            {/* Deshabilitado hasta tocoGoogle: sistema de honor, pero con un empujón — el cliente
+                tiene que pasar por el link antes de que este botón responda. Es un <button>
+                (a diferencia del de arriba, que es un <a>), así que `disabled` alcanza: el
+                navegador ya bloquea `onClick` solo, sin JS extra. */}
+            <button
+              className="btn-primary"
+              type="button"
+              style={{ marginTop: 10 }}
+              disabled={!tocoGoogle}
+              onClick={() => setContinuo(true)}
+            >
+              Ya la dejé, sacar mi tarjeta
+            </button>
+            <p className="nota">Se abre en una pestaña nueva.</p>
           </div>
         </div>
       </main>
