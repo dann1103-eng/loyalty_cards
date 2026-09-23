@@ -249,7 +249,9 @@ aplicada" y corta antes de cualquier insert.
   `listarProgramas(supabase, comercioId, { soloActivos: false })` (el default filtra los activos,
   `lib/comercio/programas.ts:188-205`; el principal no se puede desactivar —`desactivarPrograma` filtra
   `es_principal = false`—, así que buscarlo en la lista completa es seguro), la derivación del tipo
-  principal y `ofreceReglaDeMonto(programas ?? [])` (la función compartida de la Tarea 3) en un solo
+  principal y `programas === null || ofreceReglaDeMonto(programas)` (la función compartida de la
+  Tarea 3; si la lista falla, se MUESTRA el sub-bloque en vez de esconderlo, porque esconderlo haría
+  que guardar cualquier campo borre el mínimo sin que el dueño se entere) en un solo
   punto de entrada. Es COMPARTIDA por `page.tsx` y por `dibujarReglas` en `actions.test.ts` — no una
   copia de la llamada en cada lado (revisión de calidad, 2026-09-23: la primera versión de esta tarea
   tenía la prueba repitiendo la lógica, y una mutación que le sacara `{ soloActivos: false }` a

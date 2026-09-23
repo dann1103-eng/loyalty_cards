@@ -301,9 +301,9 @@ export default function FormularioControles({
           {/* A esta rama se llega solo cuando NINGÚN programa del comercio —ni el principal ni
               ningún secundario— es de puntos o sellos: ni `usaMontoDeCompra` ni
               `ofreceReglaDeMonto` dieron true. Hoy, entonces, `pedir_monto_compra` no gobierna
-              nada de verdad: ni el escáner ni "Agregar cliente" lo consultan para gift card,
-              cashback o descuento, que exigen el monto por su cuenta (`requiereMonto`,
-              lib/tarjetas/tipos.ts) sin mirar esta perilla. Se conserva igual como input oculto
+              nada de verdad: el escáner lo lee (escanear/actions.ts), pero en gift card, cashback
+              y descuento no cambia nada, porque `requiereMonto` (lib/tarjetas/tipos.ts) ya muestra
+              el campo y la etiqueta depende solo de eso. Se conserva igual como input oculto
               (el Server Action la lee igual y lo que no llega lo guarda como false) por dos
               razones: la spec lo pide, y para el día que el dueño cree un programa SECUNDARIO de
               puntos o sellos — sin este input oculto, cualquier guardado mientras tanto (p. ej.
