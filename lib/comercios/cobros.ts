@@ -107,7 +107,7 @@ export const METODO_WOMPI = 'Wompi';
 // (spec 2026-09-21-cobranza-design.md, "Acciones de FM" #4 — ver lib/comercios/pedirPago.ts). NO ocupa el
 // índice único `cobros_un_intento_pendiente` (ese filtra por `metodo = 'Wompi'`), así que convive sin
 // chocar con un intento propio del dueño.
-export const METODO_PEDIDO_FM = 'Pedido por FM';
+export const METODO_PEDIDO_FM = 'Pedido por Cardly SV';
 
 // Un intento de pago de la app con su enlace TODAVÍA VIGENTE se puede seguir desde el mismo cobro. Uno ya
 // pagado o anulado, uno que registró FM a mano (`metodo` distinto de 'Wompi'), uno sin enlace, o uno con el

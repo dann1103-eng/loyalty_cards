@@ -123,7 +123,7 @@ export async function accionPagarCobro(
     });
   } catch (error) {
     // Falta configuración (variables de Wompi, URL base) o se cayó algo inesperado: el dueño no necesita el detalle.
-    console.error('[pagos] no se pudo procesar el pago del cobro pedido por FM:', error);
+    console.error('[pagos] no se pudo procesar el pago del cobro solicitado por Cardly SV:', error);
     return { error: 'No pudimos iniciar el pago. Probá de nuevo en un rato.' };
   }
   if (!resultado.ok) return { error: resultado.error };

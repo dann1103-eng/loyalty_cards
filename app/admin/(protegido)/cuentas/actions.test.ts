@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createServiceClient } from '@/lib/supabase/server';
+import { METODO_PEDIDO_FM } from '@/lib/comercios/cobros';
 
 // El gate de FM se mockea porque necesita cookies de una request real; se prueba aparte en
 // verifyFmAdmin. Mismo criterio que las pruebas de acciones del comercio (sucursales/actions.test.ts).
@@ -43,7 +44,7 @@ async function crearCobroPedido(cuentaId: string): Promise<string> {
       periodo_hasta: '2026-09-30',
       monto: 1,
       estado: 'pendiente',
-      metodo: 'Pedido por FM',
+      metodo: METODO_PEDIDO_FM,
     })
     .select('id')
     .single();
@@ -71,7 +72,7 @@ describe('accionPedirPago', () => {
     const { data: cobro } = await supabase.from('cobros').select('*').eq('cuenta_id', cuentaId).single();
     expect(cobro).toMatchObject({
       estado: 'pendiente',
-      metodo: 'Pedido por FM',
+      metodo: METODO_PEDIDO_FM,
       tipo: 'periodo',
       plan_destino: 'growth',
     });

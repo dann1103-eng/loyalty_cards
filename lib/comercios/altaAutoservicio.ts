@@ -18,16 +18,22 @@ import { EMAIL_RE } from '../comercio/cajeros';
 //   - `generarAccesoDueno` crea la cuenta de Auth pero deja que FM comparta el link a mano, y
 //     necesita un comercio que ya exista.
 //
-// ══ POR QUÉ NO COBRA ══
-// El pago online depende de una entidad legal que todavía no existe (sin personería jurídica no hay
-// DTE — ver lib/comercios/cobros.ts, y es la misma razón por la que N1co está en espera). Así que el
-// alta y el cobro se construyen SEPARADOS: la cuenta nace con el plan elegido pero con
-// `licencia_estado: 'inactivo'`, que es la verdad — todavía no pagó. Cuando exista la pasarela, el
-// paso de cobro se enchufa acá sin tocar nada de lo demás.
+// ══ POR QUÉ NACE 'activo' + 'exenta' (no 'inactivo') ══
+// Regla de negocio (memoria de sesión "cobranza: mes gratis a usuarios reales"): el registro es
+// gratis y da un mes de prueba ANTES de cobrar; el cobro real espera a tener Wompi probado en
+// producción, y pasar una cuenta de 'exenta' a 'normal' es SIEMPRE manual, cuenta por cuenta — nunca
+// automático al vencer el mes.
 //
-// Que nazca 'inactivo' es además SEGURO hoy: `licencia_estado` no gatea ningún flujo del panel del
-// comercio (solo lo lee el admin de FM), así que nadie queda afuera de su propio panel — pero FM ve
-// de inmediato en `/admin/cuentas` a quién le falta cobrar.
+// Hasta la Tarea 3 del plan de cobranza (2026-09-21-cobranza-y-rework-admin.md) esta cuenta nacía con
+// `licencia_estado: 'inactivo'` y era seguro: esa columna no gateaba ningún flujo del panel del
+// comercio, solo la leía el admin de FM. Ya NO es así — `estadoEfectivo` (lib/comercios/cobranza.ts)
+// trata 'inactivo' como el interruptor de corte MANUAL de FM y bloquea el panel entero sin mirar
+// nada más. Si esta función siguiera creando cuentas 'inactivo', TODO alta self-service quedaría
+// bloqueada desde el minuto uno — exactamente el bug que un recorrido real con clientes reveló el
+// 2026-09-22. Por eso: `licenciaEstado: 'activo'` (el dueño entra a su panel) y `cobranza: 'exenta'`
+// (no se le pide pagar durante el mes de prueba). `licenciaActivaDesde` se deja `null` a propósito:
+// ese campo significa "fecha del PRIMER PAGO" (ver planCuenta.ts, marcarPagado) — llenarlo acá le
+// mentiría a esa semántica antes de que exista ningún cobro real.
 
 // Mínimo de Supabase Auth es 6; se pide 8 porque esta clave protege la base de clientes de un
 // negocio, no un foro.
@@ -129,11 +135,12 @@ export async function crearCuentaAutoservicio(
     nombre,
     limiteNegocios: plan.limiteSugerido,
     plan: plan.valor,
-    licenciaEstado: 'inactivo',
+    licenciaEstado: 'activo',
     licenciaMontoMensual: plan.montoMensual,
-    // null y no la fecha de hoy: la licencia arranca cuando se cobra, no cuando se registra.
+    // null y no la fecha de hoy: `licenciaActivaDesde` es la fecha del PRIMER PAGO (planCuenta.ts),
+    // no la de registro — todavía no hay ningún cobro real.
     licenciaActivaDesde: null,
-  });
+  }, 'exenta');
   if (!cuenta.ok) {
     await revertir({});
     return { ok: false, error: cuenta.error };

@@ -38,7 +38,7 @@ export async function pagarCobroPedido(
     return { ok: false, error: 'No encontramos ese cobro en tu cuenta. Recargá la página.' };
   }
   if (cobro.metodo !== METODO_PEDIDO_FM) {
-    return { ok: false, error: 'Ese cobro no es uno que FM te haya pedido.' };
+    return { ok: false, error: 'Ese cobro no es uno que Cardly SV te haya pedido.' };
   }
   if (cobro.estado !== 'pendiente') {
     return { ok: false, error: 'Ese cobro ya no está pendiente.' };
@@ -58,8 +58,8 @@ export async function pagarCobroPedido(
     const enlace = await deps.wompi.crearEnlacePago({
       identificador: cobro.id,
       monto: cobro.monto,
-      nombreProducto: 'Cardly SV · Pago pedido por FM',
-      descripcion: 'Pago que FM te pidió.',
+      nombreProducto: 'Cardly SV · Cobro solicitado',
+      descripcion: 'Pago solicitado por Cardly SV.',
       urlRedirect: `${deps.baseUrl}/comercio/plan/pago/resultado`,
       urlRetorno: `${deps.baseUrl}/comercio/plan`,
       urlWebhook: `${deps.baseUrl}/api/wompi/webhook`,
@@ -74,7 +74,7 @@ export async function pagarCobroPedido(
     });
     return { ok: true, url: enlace.urlEnlace };
   } catch (error) {
-    console.error('[pagos] no se pudo crear el enlace del cobro pedido por FM:', error);
+    console.error('[pagos] no se pudo crear el enlace del cobro solicitado por Cardly SV:', error);
     return { ok: false, error: ERROR_ENLACE };
   }
 }

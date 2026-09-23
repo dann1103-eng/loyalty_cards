@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createServiceClient } from '../supabase/server';
 import { pedirPago } from './pedirPago';
+import { METODO_PEDIDO_FM } from './cobros';
 
 // Contra Supabase (necesita .env.local). NO depende de la migración 0038: usa columnas de `cobros` que
 // ya existen desde la 0037.
@@ -29,7 +30,7 @@ async function crearCuenta(): Promise<string> {
 }
 
 describe('pedirPago', () => {
-  it('crea un cobro pendiente, tipo periodo, metodo "Pedido por FM", con el monto y el plan que eligió FM', async () => {
+  it('crea un cobro pendiente, tipo periodo, metodo "Pedido por Cardly SV", con el monto y el plan que eligió FM', async () => {
     const cuentaId = await crearCuenta();
 
     const r = await pedirPago(supabase, cuentaId, {
@@ -46,7 +47,7 @@ describe('pedirPago', () => {
       cuenta_id: cuentaId,
       tipo: 'periodo',
       estado: 'pendiente',
-      metodo: 'Pedido por FM',
+      metodo: METODO_PEDIDO_FM,
       plan_destino: 'growth',
       periodo_desde: '2026-09-01',
       periodo_hasta: '2026-09-30',

@@ -19,7 +19,7 @@ import {
 // FM") en la lista de cobros del dueño. No vive en cobros.ts junto a METODO_WOMPI/METODO_PEDIDO_FM
 // porque esta tarea no toca ese archivo — si otro módulo llega a necesitarlo, se puede mover ahí sin
 // romper a nadie (es un string literal, no un tipo).
-export const METODO_PERDONADO_FM = 'Perdonado por FM';
+export const METODO_PERDONADO_FM = 'Perdonado por Cardly SV';
 
 // Mismo criterio liviano que `validarCobro` (cobros.ts, `FORMATO_FECHA`): solo la FORMA AAAA-MM-DD,
 // sin validar que sea un día de calendario real (a diferencia de `esFechaValida` en cuentas.ts, que

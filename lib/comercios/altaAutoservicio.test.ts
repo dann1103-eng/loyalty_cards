@@ -82,10 +82,12 @@ describe('crearCuentaAutoservicio', () => {
     expect(membresias![0].auth_user_id).toBe(res.authUserId);
   });
 
-  it('la cuenta nace con el plan elegido y su monto del catálogo, y SIN licencia activa', async () => {
-    // 'inactivo' es lo correcto y es seguro: el dueño todavía no pagó, y hoy licencia_estado no
-    // gatea ningún flujo del panel comercio — así FM ve en su bandeja quién falta cobrar sin que
-    // nadie quede afuera de su propio panel.
+  it('la cuenta nace activa y exenta: un mes de prueba gratis, sin bloquear al dueño', async () => {
+    // 'activo' + 'exenta' es lo correcto: el registro es gratis y da un mes de prueba antes de
+    // cobrar (memoria "cobranza: mes gratis a usuarios reales"). 'inactivo' es el interruptor de
+    // corte MANUAL de FM (estadoEfectivo, lib/comercios/cobranza.ts) — si esta cuenta naciera así,
+    // el gate bloquearía al dueño desde el minuto uno. Pasar de 'exenta' a 'normal' cuando se acaba
+    // el mes es SIEMPRE una acción manual de FM, cuenta por cuenta (nunca automática acá).
     const res = await crearCuentaAutoservicio(supabase, {
       nombreComercio: 'Negocio Growth',
       email: correoUnico(),
@@ -101,14 +103,18 @@ describe('crearCuentaAutoservicio', () => {
       .from('comercios').select('cuenta_id').eq('id', res.comercioId).single();
     const { data: cuenta } = await supabase
       .from('cuentas_comercio')
-      .select('plan, licencia_monto_mensual, limite_negocios, licencia_estado')
+      .select('plan, licencia_monto_mensual, limite_negocios, licencia_estado, cobranza, licencia_activa_desde')
       .eq('id', comercio!.cuenta_id!)
       .single();
 
     expect(cuenta!.plan).toBe('growth');
     expect(Number(cuenta!.licencia_monto_mensual)).toBe(49);
     expect(cuenta!.limite_negocios).toBe(3);
-    expect(cuenta!.licencia_estado).toBe('inactivo');
+    expect(cuenta!.licencia_estado).toBe('activo');
+    expect(cuenta!.cobranza).toBe('exenta');
+    // null y no la fecha de hoy: `licencia_activa_desde` es la fecha del PRIMER PAGO, no la de
+    // registro — todavía no hay ningún cobro real.
+    expect(cuenta!.licencia_activa_desde).toBeNull();
   });
 
   it('un correo que ya tiene cuenta se rechaza SIN dejar comercio huérfano', async () => {

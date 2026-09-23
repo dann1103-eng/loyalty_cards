@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { DatosEnlace } from '../wompi/cliente';
 import { createServiceClient } from '../supabase/server';
 import { pagarCobroPedido } from './accionPagarCobro';
+import { METODO_PEDIDO_FM } from './cobros';
 
 // Contra Supabase (necesita .env.local; NO depende de la migración 0038). Wompi es falso: no se llama a
 // ninguna API real, igual que iniciarPagoPlanSupabase.test.ts.
@@ -39,7 +40,7 @@ async function crearCobro(cuentaId: string, campos: Record<string, unknown> = {}
       periodo_hasta: '2026-09-30',
       monto: 29,
       estado: 'pendiente',
-      metodo: 'Pedido por FM',
+      metodo: METODO_PEDIDO_FM,
       ...campos,
     })
     .select('id')
@@ -121,14 +122,14 @@ describe('pagarCobroPedido', () => {
     expect(enlaces).toHaveLength(1);
   });
 
-  it('rechaza un cobro que NO es "Pedido por FM"', async () => {
+  it('rechaza un cobro que NO es "Pedido por Cardly SV"', async () => {
     const cuentaId = await crearCuenta();
     const cobroId = await crearCobro(cuentaId, { metodo: 'Wompi' });
     const { wompi, enlaces } = wompiFalso();
 
     const r = await pagarCobroPedido(supabase, cuentaId, cobroId, deps(wompi));
 
-    expect(r).toEqual({ ok: false, error: 'Ese cobro no es uno que FM te haya pedido.' });
+    expect(r).toEqual({ ok: false, error: 'Ese cobro no es uno que Cardly SV te haya pedido.' });
     expect(enlaces).toHaveLength(0);
   });
 
