@@ -284,3 +284,145 @@ describe('altaYAcreditacionPorTelefono', () => {
     expect(res.ok).toBe(false);
   });
 });
+
+// La regla de mínimo de compra del comercio (migración 0039, lib/comercio/montoAcreditacion.ts),
+// aplicada acá en "Agregar cliente" (Tarea 6, plan 2026-09-23-onboarding-manifest-monto-resena.md,
+// decisión 7 de la spec): sin esto, dar de alta por teléfono sería el camino para esquivar el
+// mínimo que el escáner ya exige (Tarea 5, app/comercio/(protegido)/escanear/actions.test.ts).
+//
+// ESTADO DE LA 0039 (2026-09-23): TODAVÍA NO ESTÁ APLICADA en esta base (confirmado corriendo
+// `npx tsx --env-file=.env.local --conditions=react-server scripts/verificar-0039.ts`, que respondió
+// "FALLO: la migración 0039 NO está aplicada" con detalle "column comercios.exigir_monto_compra
+// does not exist"). `setearReglaMinimo` de abajo hace un UPDATE con las columnas nuevas, y
+// PostgREST lo rechaza con PGRST204 ("Could not find the 'exigir_monto_compra' column of
+// 'comercios' in the schema cache") ANTES de que cualquier prueba de este describe llegue a llamar
+// a `altaYAcreditacionPorTelefono` — es el rojo esperado por "Antes de empezar" del plan (mismo
+// mecanismo, mismo mensaje, que documenta escanear/actions.test.ts para su describe homónimo). El
+// verde y las mutaciones de abajo se difieren a la Tarea 9 (cierre, con la 0039 ya migrada).
+//
+// MUTACIONES PENDIENTES (correrlas recién en la Tarea 9, con la base migrada):
+// - Mover el chequeo del monto FALTANTE (paso 1 de validarMontoAcreditacion, hoy ANTES de
+//   registrarCliente en altaPorTelefono.ts) a DESPUÉS de registrarCliente: tiene que hacer fallar
+//   "sin monto → ... y NO existe cliente con ese teléfono" — el cliente pasaría a existir igual.
+// - No pasar `montoCompra` a `acreditarPuntos` (dejar `opciones` tal cual venía, sin el spread
+//   nuevo): tiene que hacer fallar "con 1000 → ... la transacción del ledger tiene monto_compra =
+//   10" — la columna quedaría en null.
+// - Leer la regla (`leerReglaDeMonto`) recién DESPUÉS de `registrarCliente` en vez de antes: tiene
+//   que hacer fallar "sin monto → ... NO existe cliente" por la misma razón de fondo que la primera
+//   mutación (el orden es justo lo que esa prueba protege).
+describe('la regla de mínimo de compra en "Agregar cliente" (0039)', () => {
+  // Las TRES columnas juntas en UN update: `exigir` implica `pedir`, y el mínimo implica `exigir`
+  // (los dos CHECK nuevos de la 0039) — poner solo `monto_minimo_compra_centavos` sin las otras dos
+  // viola esos CHECK aunque las columnas SÍ existieran. Mismo helper que
+  // escanear/actions.test.ts:setearReglaMinimo.
+  async function setearReglaMinimo(comercioId: string, minimoCentavos: number) {
+    const { error } = await supabase
+      .from('comercios')
+      .update({ pedir_monto_compra: true, exigir_monto_compra: true, monto_minimo_compra_centavos: minimoCentavos })
+      .eq('id', comercioId);
+    if (error) throw error;
+  }
+
+  async function comercioDeSellosConMinimo() {
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    await setearReglaMinimo(comercioId, 1000);
+    return comercioId;
+  }
+
+  async function tarjetaPorTelefono(comercioId: string, telefono: string) {
+    const { data: cliente, error: e1 } = await supabase
+      .from('clientes')
+      .select('id')
+      .eq('telefono', telefono)
+      .maybeSingle();
+    if (e1) throw e1;
+    if (!cliente) return null;
+    const { data: tarjeta, error: e2 } = await supabase
+      .from('tarjetas')
+      .select('id, puntos_actuales')
+      .eq('cliente_id', cliente.id)
+      .eq('comercio_id', comercioId)
+      .maybeSingle();
+    if (e2) throw e2;
+    return tarjeta;
+  }
+
+  async function primeraTransaccionDe(tarjetaId: string) {
+    const { data, error } = await supabase
+      .from('transacciones_puntos')
+      .select('monto_compra')
+      .eq('tarjeta_id', tarjetaId)
+      .eq('tipo', 'acreditacion')
+      .order('created_at')
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+
+  it('sin monto: error de monto faltante EXACTO y NO existe cliente con ese teléfono', async () => {
+    const comercioId = await comercioDeSellosConMinimo();
+    const programaId = entorno.obtenerProgramaPrincipal(comercioId);
+    const telefono = telefonoUnico();
+
+    const res = await altaYAcreditacionPorTelefono(supabase, comercioId, {
+      telefono,
+      nombre: 'Cliente Delivery',
+      programaId,
+      cantidad: 1,
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toBe('Escribí el monto de la compra (por ejemplo 19.99).');
+      expect(res.bloqueoLimite).toBeUndefined();
+    }
+    expect(
+      await tarjetaPorTelefono(comercioId, telefono),
+      'el monto faltante se resuelve tecleando el dato: no debió crear ni cliente ni tarjeta',
+    ).toBeNull();
+  });
+
+  it('con 999 centavos (mínimo $10.00): ok:false, bloqueoLimite, error EXACTO del mínimo, la tarjeta SÍ existe con saldo 0', async () => {
+    const comercioId = await comercioDeSellosConMinimo();
+    const programaId = entorno.obtenerProgramaPrincipal(comercioId);
+    const telefono = telefonoUnico();
+
+    const res = await altaYAcreditacionPorTelefono(supabase, comercioId, {
+      telefono,
+      nombre: 'Cliente Delivery',
+      programaId,
+      cantidad: 1,
+      montoCompraCentavos: 999,
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toBe('La compra mínima para sumar es $10.00.');
+      expect(res.bloqueoLimite).toBe(true);
+    }
+    const tarjeta = await tarjetaPorTelefono(comercioId, telefono);
+    expect(tarjeta, 'el mínimo se rechaza CON la tarjeta ya creada, mismo contrato que las perillas antifraude').not.toBeNull();
+    expect(tarjeta?.puntos_actuales, 'el intento bajo el mínimo no puede haber escrito nada').toBe(0);
+  });
+
+  it('con 1000 centavos (el mínimo es inclusivo): ok:true, saldo 1, y el ledger guarda monto_compra = 10', async () => {
+    const comercioId = await comercioDeSellosConMinimo();
+    const programaId = entorno.obtenerProgramaPrincipal(comercioId);
+
+    const res = await altaYAcreditacionPorTelefono(supabase, comercioId, {
+      telefono: telefonoUnico(),
+      nombre: 'Cliente Delivery',
+      programaId,
+      cantidad: 1,
+      montoCompraCentavos: 1000,
+    });
+
+    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    if (!res.ok) return;
+    expect(res.puntosActuales).toBe(1);
+
+    const transaccion = await primeraTransaccionDe(res.tarjetaId);
+    expect(Number(transaccion?.monto_compra), 'la compra que originó el sello, en dólares').toBe(10);
+  });
+});

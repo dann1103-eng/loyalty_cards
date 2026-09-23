@@ -7,6 +7,7 @@ import { altaYAcreditacionPorTelefono } from '@/lib/comercio/altaPorTelefono';
 import { resolverSucursalDeAccion } from '@/lib/comercio/atribucionEscaner';
 import { notificarCambioTarjeta } from '@/lib/apple/notificarCambioTarjeta';
 import { syncObjetoTarjeta } from '@/lib/google/syncObjeto';
+import { centavosDesdeTexto } from '@/lib/tarjetas/tipos';
 
 export type EstadoAgregar = { error: string; bloqueoLimite?: boolean } | { ok: true; mensaje: string } | undefined;
 
@@ -36,6 +37,10 @@ export async function accionAgregarClientePorTelefono(
       apellido: String(formData.get('apellido') ?? ''),
       programaId: String(formData.get('programa_id') ?? ''),
       cantidad: Number.isFinite(cantidad) ? cantidad : Number.NaN,
+      // Monto de la compra (regla de mínimo, 0039). `centavosDesdeTexto` ya devuelve null tanto en
+      // '' como en un texto que no parsea ("10x"): no hace falta distinguirlos acá, y si la regla
+      // del comercio aplica, altaYAcreditacionPorTelefono trata cualquier null como monto faltante.
+      montoCompraCentavos: centavosDesdeTexto(String(formData.get('monto_compra') ?? '')),
     },
     {
       sucursalId: resolverSucursalDeAccion(sesion.rol, sesion.sucursalId, sesion.sucursalActiva?.id ?? null),

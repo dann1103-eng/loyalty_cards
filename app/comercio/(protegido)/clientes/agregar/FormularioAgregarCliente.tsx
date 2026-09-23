@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 import { accionAgregarClientePorTelefono, type EstadoAgregar } from './actions';
 import { unidadPrograma } from '@/lib/tarjetas/unidadPrograma';
+import { aplicaReglaDeMonto } from '@/lib/tarjetas/tipos';
 
 export interface ProgramaElegible {
   id: string;
@@ -23,7 +24,17 @@ export interface ProgramaElegible {
 //   campo más acá es un campo más que puede quedar mal.
 // - El selector de tarjeta aparece SOLO si el comercio tiene más de una. Con una sola, elegir entre
 //   una opción es una pregunta sin sentido.
-export default function FormularioAgregarCliente({ programas }: { programas: ProgramaElegible[] }) {
+export default function FormularioAgregarCliente({
+  programas,
+  exigirMontoCompra,
+  montoMinimoTexto,
+}: {
+  programas: ProgramaElegible[];
+  // Regla de monto obligatorio / mínimo de compra del comercio (migración 0039). Ya viene calculada
+  // del servidor (page.tsx): acá solo se cruza con el TIPO del programa elegido.
+  exigirMontoCompra: boolean;
+  montoMinimoTexto: string | null;
+}) {
   const [estado, ejecutar, pendiente] = useActionState<EstadoAgregar, FormData>(
     accionAgregarClientePorTelefono,
     undefined,
@@ -99,6 +110,34 @@ export default function FormularioAgregarCliente({ programas }: { programas: Pro
           required
         />
       </div>
+
+      {/* Regla de monto mínimo del comercio (0039): solo tiene sentido si el comercio la exige Y la
+          tarjeta ELEGIDA es de un tipo al que le aplica (puntos o sellos, aplicaReglaDeMonto) — en
+          una gift card o un prepago el campo quedaría ahí de adorno, ignorado por
+          altaYAcreditacionPorTelefono. `type="text" inputMode="decimal"` y NO `type="number"`,
+          mismo criterio que el mínimo del formulario de Reglas: un monto se teclea como "10.50", y
+          `type="number"` no lo entendería si alguna vez se precargara con el signo `$`. */}
+      {exigirMontoCompra && elegido && aplicaReglaDeMonto(elegido.tipoTarjeta) && (
+        <div className="field">
+          <label
+            htmlFor="monto_compra"
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}
+          >
+            <span>Monto de la compra ($)</span>
+            <span className="nota" style={{ margin: 0 }}>
+              {montoMinimoTexto ? `Mínimo ${montoMinimoTexto}` : 'Obligatorio'}
+            </span>
+          </label>
+          <input
+            id="monto_compra"
+            name="monto_compra"
+            type="text"
+            inputMode="decimal"
+            placeholder="10.00"
+            required
+          />
+        </div>
+      )}
 
       <button className="btn-primary" type="submit" disabled={pendiente} style={{ width: '100%' }}>
         {pendiente ? 'Guardando…' : 'Dar de alta y acreditar'}

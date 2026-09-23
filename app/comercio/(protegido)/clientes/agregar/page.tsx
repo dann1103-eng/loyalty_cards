@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { verifyComercioAcceso } from '@/lib/comercio/verifyComercioAcceso';
 import { createServiceClient } from '@/lib/supabase/server';
 import { listarProgramas } from '@/lib/comercio/programas';
-import { tipoOPuntos } from '@/lib/tarjetas/tipos';
+import { leerReglaDeMonto } from '@/lib/comercio/montoAcreditacion';
+import { tipoOPuntos, formatearCentavos } from '@/lib/tarjetas/tipos';
 import FormularioAgregarCliente from './FormularioAgregarCliente';
 
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,24 @@ export default async function PaginaAgregarCliente() {
     .filter((p) => p.activo && tipoOPuntos(p.tipoTarjeta).contador !== 'ninguno')
     .map((p) => ({ id: p.id, nombre: p.nombre, tipoTarjeta: p.tipoTarjeta }));
 
+  // Regla de monto obligatorio / mínimo de compra del comercio (migración 0039,
+  // lib/comercio/montoAcreditacion.ts). Se lee acá (server) y no en el formulario (client component)
+  // porque leerReglaDeMonto toca Supabase con el service client. Cuál tarjeta va a elegir el cajero
+  // lo decide recién en el navegador, así que se le pasa la regla entera y el formulario la cruza
+  // con `aplicaReglaDeMonto` del programa elegido. Si no hay ninguna tarjeta elegible el formulario
+  // ni se dibuja: no vale la pena la consulta.
+  let exigirMontoCompra = false;
+  let montoMinimoTexto: string | null = null;
+  if (elegibles.length > 0) {
+    const regla = await leerReglaDeMonto(supabase, comercioId);
+    // Si la lectura falla, se DEGRADA hacia MOSTRAR el campo (en vez de esconderlo):
+    // altaYAcreditacionPorTelefono también falla CERRADO ante la misma falla de lectura ("No se
+    // pudo verificar la regla de monto. Probá de nuevo."), así que esconder el campo dejaría al
+    // cajero sin ninguna pista de por qué el servidor rechaza el alta.
+    exigirMontoCompra = regla === null ? true : regla.exigir || regla.minimoCentavos !== null;
+    montoMinimoTexto = regla?.minimoCentavos != null ? formatearCentavos(regla.minimoCentavos) : null;
+  }
+
   return (
     <main className="admin-main" style={{ maxWidth: 560 }}>
       <div className="admin-encabezado reveal d1">
@@ -44,7 +63,11 @@ export default async function PaginaAgregarCliente() {
             <Link href="/comercio/escanear">Escanear</Link>.
           </p>
         ) : (
-          <FormularioAgregarCliente programas={elegibles} />
+          <FormularioAgregarCliente
+            programas={elegibles}
+            exigirMontoCompra={exigirMontoCompra}
+            montoMinimoTexto={montoMinimoTexto}
+          />
         )}
       </div>
     </main>

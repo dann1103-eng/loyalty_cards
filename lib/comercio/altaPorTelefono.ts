@@ -4,7 +4,8 @@ import { normalizarTelefono } from '../clientes/normalizarTelefono';
 import { registrarCliente } from '../clientes/registrarCliente';
 import { acreditarPuntos, type OpcionesAcreditar } from './acreditar';
 import { obtenerPrograma } from './programas';
-import { tipoOPuntos, describirSaldo } from '../tarjetas/tipos';
+import { leerReglaDeMonto, validarMontoAcreditacion, type ResultadoMontoAcreditacion } from './montoAcreditacion';
+import { tipoOPuntos, describirSaldo, aplicaReglaDeMonto } from '../tarjetas/tipos';
 import { describirCosto } from '../tarjetas/unidadPrograma';
 
 // Dar de alta y acreditar por TELÉFONO, desde el panel del comercio.
@@ -38,6 +39,14 @@ export interface DatosAltaPorTelefono {
   // En la unidad del programa. OJO: en gift card y cashback son CENTAVOS, como en todo el resto del
   // sistema (ver el encabezado de lib/tarjetas/tipos.ts).
   cantidad: number;
+  // Monto de la compra, en CENTAVOS (regla de monto mínimo, migración 0039,
+  // lib/comercio/montoAcreditacion.ts). OPCIONAL a propósito: ausente o null significa que no vino
+  // ningún monto, así los llamadores y pruebas que existían antes de esta regla siguen compilando
+  // sin tocarlas. Con la regla del comercio activa para el tipo del programa elegido
+  // (aplicaReglaDeMonto), un monto ausente se rechaza como "falta el monto" — decisión 7 de la
+  // spec: sin esto, "Agregar cliente" sería el camino para esquivar el mínimo que el escáner ya
+  // exige (Tarea 5).
+  montoCompraCentavos?: number | null;
 }
 
 export type ResultadoAltaPorTelefono =
@@ -97,12 +106,60 @@ export async function altaYAcreditacionPorTelefono(
     return { ok: false, error: 'Ese teléfono no se entiende. Escribilo con 8 dígitos, por ejemplo 7777-1234.' };
   }
 
+  // Regla de monto obligatorio / mínimo de compra del comercio (migración 0039,
+  // lib/comercio/montoAcreditacion.ts). Va DESPUÉS de validar nombre/apellido/cantidad/programa/
+  // tipo/teléfono (el orden de arriba, sin tocar) y ANTES de registrarCliente: solo se lee si el
+  // TIPO del programa elegido la usa (aplicaReglaDeMonto: puntos y sellos) — en el resto no hay
+  // nada que gatear, y leerla sería una consulta de más. Se valida ACÁ, antes de tocar la base, para
+  // poder separar los dos pasos de validarMontoAcreditacion: el monto FALTANTE se resuelve
+  // tecleando el dato, así que rechaza sin crear nada ("una validación que falla no crea nada",
+  // igual que el resto de las validaciones de arriba); el mínimo, en cambio, es un bloqueoLimite que
+  // se rechaza recién DESPUÉS de registrarCliente (ver más abajo), con la tarjeta ya creada — mismo
+  // contrato que las perillas antifraude: el dueño la autoriza con motivo desde el MISMO panel del
+  // escáner (decisión 6 de la spec), y "Agregar cliente" no tiene ese panel. No hace falta leer la
+  // regla dos veces: se guarda el resultado de esta única validación y se lo vuelve a mirar después
+  // de crear el cliente.
+  const montoCentavos = datos.montoCompraCentavos ?? null;
+  let chequeoMonto: ResultadoMontoAcreditacion | null = null;
+  if (aplicaReglaDeMonto(tipo.valor)) {
+    const regla = await leerReglaDeMonto(supabase, comercioId);
+    if (regla === null) {
+      // Falla CERRADA, igual que el escáner (spec, "La regla, en una función pura"): sin la 0039
+      // aplicada, esta lectura SIEMPRE falla, y esta rama rechaza TODA alta de puntos/sellos por
+      // teléfono — no es un caso raro, es la medida de lo que rompería publicar sin la migración.
+      return { ok: false, error: 'No se pudo verificar la regla de monto. Probá de nuevo.' };
+    }
+    chequeoMonto = validarMontoAcreditacion({
+      exigir: regla.exigir,
+      minimoCentavos: regla.minimoCentavos,
+      montoCentavos,
+      autorizado: false,
+    });
+    if (!chequeoMonto.ok && !chequeoMonto.bloqueoLimite) {
+      // Paso 1 (monto faltante): nada que autorizar sobre una compra que nadie describió.
+      return { ok: false, error: chequeoMonto.error };
+    }
+  }
+
   // registrarCliente es idempotente por (cliente, programa): si ese teléfono ya tiene su tarjeta,
   // devuelve la que existe en vez de crear una segunda. Y desde el 2026-08-07 deja la tarjeta
   // instalable (serial + token de Apple), así que la que nace por acá sirve igual que la del QR.
   const alta = await registrarCliente(supabase, comercioId, programa.id, nombre, apellido, telefonoCanonico);
 
-  const res = await acreditarPuntos(supabase, comercioId, alta.tarjetaId, datos.cantidad, opciones);
+  // Paso 2 (mínimo de compra): recién ACÁ, con la tarjeta ya creada. `chequeoMonto` solo puede
+  // seguir en `!ok` por el mínimo — el monto faltante ya cortó arriba antes de crear nada.
+  if (chequeoMonto && !chequeoMonto.ok) {
+    return { ok: false, error: chequeoMonto.error, bloqueoLimite: true };
+  }
+
+  const res = await acreditarPuntos(supabase, comercioId, alta.tarjetaId, datos.cantidad, {
+    ...opciones,
+    // Evidencia del monto en el ledger (transacciones_puntos.monto_compra), en DÓLARES: es el
+    // contrato de OpcionesAcreditar (lib/comercio/acreditar.ts:65-67), que este camino hasta ahora
+    // no mandaba. Vale aunque la regla no esté activa para este tipo, si vino el monto: acá solo es
+    // evidencia, lo que gatea la acreditación es el chequeo de arriba.
+    montoCompra: montoCentavos !== null ? montoCentavos / 100 : null,
+  });
   if (!res.ok) {
     // La tarjeta YA quedó creada aunque la acreditación se haya bloqueado, y está bien: el cliente
     // existe y el dueño puede acreditarle después (o autorizarlo, si fue una perilla antifraude).
