@@ -38,7 +38,9 @@ desajuste de hidratación y la primera pintura ya es la correcta.
 ### Pantalla de éxito del registro
 Las dos páginas de registro (`app/registro/[comercioSlug]/page.tsx` y `.../[programaSlug]/page.tsx`)
 pasan `plataforma` a `RegistroCliente`.
-- `'ios'`: solo "Agregar a Apple Wallet", y la nota de Safari.
+- `'ios'`: solo "Agregar a Apple Wallet". La nota "¿No se abrió? … ábrelo desde Safari" se muestra
+  siempre que el botón de Apple esté a la vista en `'ios'` u `'otra'` (un iPad con iPadOS 13+ cae en
+  `'otra'` y la necesita); en `'android'` no.
 - `'android'`: solo "Agregar a Google Wallet" si `googleWalletDisponible`; si Google no está disponible
   (el comercio no tiene logo, o la sincronización de la clase falló en ese momento), se muestra el de
   Apple como hoy y NO se muestra el link "¿Tienes otro teléfono?" (no hay otro botón que revelar).
@@ -132,7 +134,11 @@ calientes — `syncClaseComercio` corre en CADA registro de cliente (`app/api/re
   dada siempre mide lo mismo; la caché es por instancia del servidor y está bien que se pierda). Se
   cachean SOLO las mediciones exitosas: un `null` por timeout (p. ej. un arranque en frío justo
   después de subir el logo) no puede dejar el logo ancho apagado hasta que reinicie la instancia.
-- Sin `NEXT_PUBLIC_BASE_URL` no se mide nada (no hay rutas compuestas; se degrada a la URL cruda).
+- Sin base URL PÚBLICA no se mide nada (no hay rutas compuestas; se degrada a la URL cruda). "Pública" es
+  `esBaseUrlPublica` (`lib/google/baseUrlPublica.ts`), no solo "que exista": en desarrollo
+  `NEXT_PUBLIC_BASE_URL` es `http://localhost:3000`, y Google rechaza el patch ENTERO (`400 Image cannot be
+  loaded`) si una imagen de la clase apunta a un host local — con un chequeo de presencia, toda
+  sincronización de clase desde el dev server fallaría para todos los comercios.
 - `logosDeClase` es PURA: recibe `medidas: { ancho, alto } | null` ya resueltas y decide. Así las
   pruebas no dependen de la red (las de `syncClase*`/`linkGuardar` usan logos falsos como
   `https://ejemplo.com/logo.png`: la medición se inyecta o se mockea en esas pruebas).
@@ -165,7 +171,8 @@ alcanza también a `scripts/actualizar-frente-google.ts` (tsconfig compila `scri
 todo lo que altera la imagen (URL del logo — que ya trae su propio `?v=<timestamp>` del bucket —,
 `colorFondo` y una constante de versión de la composición). Cambiar el logo o el color cambia la URL.
 
-**Sin `NEXT_PUBLIC_BASE_URL`** (desarrollo): se degrada a la URL cruda del logo (como hace
+**Sin base URL pública** (`esBaseUrlPublica` falso: ausente, `http://` o localhost — desarrollo): se
+degrada a la URL cruda del logo (como hace
 `heroUrlDeClase`), sin logo ancho.
 
 **Pases ya emitidos:** el logo es de la CLASE (asimetría clase/objeto, CLAUDE.md), así que basta
@@ -199,7 +206,7 @@ Sin cambios: su área de logo es apaisada y `redimensionarLogo` usa `fit: 'insid
   Chrome/Samsung en Android, iPad con iPadOS que dice Macintosh → 'otra', Windows, Mac, vacío/null);
   la caja del logo del cartel (cuadrado, circular, 3:1, 1:3, sin medidas) en las seis combinaciones;
   `logosDeClase` (URLs, `?v=` que cambia con el logo y con el color; ancho → URL, no ancho → `null`,
-  sin medidas → clave omitida; degradación sin base URL; rama comercio vs programa).
+  sin medidas → clave omitida; degradación sin base URL pública (ausente Y `http://localhost:3000`); rama comercio vs programa).
 - `medidasLogo`: caché por URL (la segunda llamada no descarga), timeout → `null`.
 - Rutas `logo.png` y `logo-ancho.png`: responden PNG con las medidas correctas (660×660 / 1280×400),
   404 sin logo y para un programa ajeno, y **si la composición falla sirven el logo original** (nunca
