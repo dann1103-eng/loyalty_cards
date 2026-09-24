@@ -1616,7 +1616,7 @@ export type Database = {
       //   - p_comercios: el ALCANCE ("Todo" = los ids del dueño, en una sola llamada). Los ids salen del
       //     gate, nunca del cliente;
       //   - p_desde/p_hasta: INCLUSIVOS, en la zona de CADA comercio; null = sin ese borde (salvo
-      //     reporte_por_dia, donde p_hasta null = cero filas);
+      //     reporte_por_dia, donde p_hasta es obligatorio: null = cero filas);
       //   - p_sucursal_id/p_cajero_id: null = todos.
       // Clientes = quien tuvo al menos una visita o un premio (no es la definición de reporte_cajeros).
       //
@@ -1646,6 +1646,12 @@ export type Database = {
       };
       // p_agrupar: 'dia' | 'mes' | 'auto' (otro valor = 'auto'). `periodo` es el día, o el día 1 del
       // mes si `es_mes`.
+      // CERO FILAS si y solo si p_hasta es null, o el alcance filtrado no tuvo actividad hasta
+      // p_hasta, o p_desde > p_hasta. Un período sin actividad en un alcance que ya operaba devuelve el
+      // tramo con filas en CERO: "sin actividad en el período" se decide con la fila total de
+      // reporte_resumen, NUNCA con `filas.length === 0` de esta función. Los filtros de sucursal y
+      // cajero también recortan el comienzo del tramo (con "Desde siempre" y un cajero, la serie
+      // arranca en el primer día de ese cajero).
       reporte_por_dia: {
         Args: {
           p_comercios: string[];

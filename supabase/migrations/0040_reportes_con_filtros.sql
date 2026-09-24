@@ -13,10 +13,13 @@
 -- Ninguna función se reemplaza ni se borra: entre esta migración y el deploy el código publicado
 -- sigue llamando a las de la 0033, y después las siguen usando el panel (reporte_sucursales), la
 -- pantalla de cajeros (reporte_cajeros) y el FM (reporte_fm_comercios). En particular reporte_cajeros
--- NO gana parámetros: `create or replace` con un argumento más crea una SEGUNDA función con el mismo
--- nombre (0015:101-104), y la llamada de 3 argumentos que ya está publicada se vuelve ambigua para
--- PostgREST (PGRST203). De ahí el nombre propio, reporte_cajeros_alcance. Las viejas se retiran en una
--- migración posterior, cuando nada las use.
+-- NO gana parámetros: `create or replace` con otra lista de argumentos no reemplaza nada, crea una
+-- SEGUNDA función con el mismo nombre (0015:101-104). Mientras los parámetros nuevos no lleven
+-- `default`, PostgREST igual resolvería la llamada publicada de 3 argumentos (descarta la función que
+-- pide argumentos que no le llegan); pero alcanzaría con que alguien le pusiera un `default` a uno de
+-- ellos para que esa llamada se volviera ambigua (PGRST203), y dos funciones con el mismo nombre
+-- obligan a escribir la firma en cada drop, revoke y grant. Un nombre propio, reporte_cajeros_alcance,
+-- no deja esa trampa armada. Las viejas se retiran en una migración posterior, cuando nada las use.
 --
 -- ══ LA FORMA COMÚN — la misma en las cuatro, a propósito ══
 --   • `lim`: un renglón por comercio del alcance, con los bordes del período convertidos a INSTANTES
@@ -162,7 +165,16 @@ $$;
 -- período entero, días sin actividad incluidos; solo se recorta por delante cuando el alcance es más
 -- nuevo que el período, y es lo que le pone principio a "Desde siempre" (que no tiene desde). Lleva
 -- los mismos filtros que `actividad` salvo el período, y excluye los ajustes por la razón de arriba.
--- Sin actividad en el alcance, `primera` es null y la función devuelve cero filas.
+-- Los filtros de sucursal y cajero van en `primera` A PROPÓSITO: con "Desde siempre" y un cajero
+-- elegido, la serie arranca en el primer día de ESE cajero, no en el del comercio.
+--
+-- CERO FILAS sale si y solo si: 1) p_hasta es null; 2) el alcance filtrado (comercios, sucursal,
+-- cajero, sin ajustes) no tuvo actividad hasta p_hasta — ninguna, o solo posterior —; o 3) p_desde
+-- es posterior a p_hasta (la app los da vuelta antes de llamar, así que no lo manda). Un período SIN
+-- actividad en un alcance que ya operaba NO da cero filas: devuelve el tramo entero con filas en
+-- CERO. Por eso "sin actividad en el período" se decide con la fila total de reporte_resumen (sus
+-- operaciones y canjes en cero), NUNCA con `filas.length === 0` de esta función: es el mismo
+-- criterio que el de la fila total del resumen, más arriba.
 --
 -- Cada fila se cuenta en el día local de SU comercio (la zona sale de `lim`, que por eso la trae).
 --
@@ -219,8 +231,10 @@ as $$
       and (p_cajero_id is null or c.cajero_usuario_id = p_cajero_id)
   ),
   -- El primer día local con actividad en el alcance, por comercio y después el más temprano. Se toma
-  -- el min(created_at) de cada comercio y recién ahí se pasa a fecha local: dentro de una zona la
-  -- conversión es monótona, así que es el mismo día que daría convertir fila por fila.
+  -- el min(created_at) de cada comercio y recién ahí se pasa a fecha local. Vale porque lo monótono
+  -- dentro de una zona es la FECHA local, no la conversión entera: en el cambio de hora de otoño la
+  -- HORA local retrocede, pero el día no. Así, el día del instante más temprano es el más temprano de
+  -- los días, el mismo que daría convertir fila por fila.
   primera as (
     select min(x.dia) as dia
     from (
@@ -298,10 +312,18 @@ $$;
 -- antes de paginar. El offset se acota con el total para que una página más allá del final se lea
 -- como la ÚLTIMA:
 --   least(greatest(p_offset, 0), greatest(((total - 1) / limite) * limite, 0))
--- en aritmética ENTERA (bigint / integer trunca hacia cero). Con floor() o con numeric, total 0 daría
--- -limite, y Postgres lanza "OFFSET must not be negative". Gracias al acotado, cero filas significa
--- exactamente total 0: la app no puede leer `total` de una respuesta vacía. `offset_efectivo` le dice
--- a la app qué página recibió de verdad.
+-- Tres detalles de esa fórmula:
+--   • `limite` es el límite YA acotado, no p_limite crudo: con p_limite 0 (o null) se dividiría por
+--     cero.
+--   • La división es ENTERA (bigint / integer trunca) para alinear el tope al comienzo de la última
+--     página: con numeric, 312 filas de a 50 darían un offset de 311 en vez de 300, y la "última
+--     página" mostraría una sola fila. floor() sobre numeric daría lo mismo que la división entera
+--     (el único numerador negativo es el de total 0, y lo arregla el greatest de afuera), así que una
+--     mutación a floor() no la tira ninguna prueba.
+--   • El greatest(…, 0) de afuera evita el offset negativo cuando total = 0 y limite = 1:
+--     (0 - 1) / 1 = -1. Con un límite de 2 o más, la división entera ya da 0.
+-- Gracias al acotado, cero filas significa exactamente total 0: la app no puede leer `total` de una
+-- respuesta vacía. `offset_efectivo` le dice a la app qué página recibió de verdad.
 --
 -- OJO con `.range()` desde PostgREST: el limit/offset que agrega va POR FUERA de este resultado (que
 -- ya viene paginado), y la segunda página saldría vacía. Esta función se pagina SOLO con p_offset.
