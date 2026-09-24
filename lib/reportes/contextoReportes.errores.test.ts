@@ -19,6 +19,19 @@ import type { UsuarioDelComercio } from '../comercio/cajeros';
 // Rojo de partida (2026-09-24, con el cargador como stub `{ ok: false, error: 'TODO Tarea 3' }`): caen
 // las 6, por ejemplo "las sucursales fallan…" con `expected { ok: false, error: 'TODO Tarea 3' } to
 // deeply equal { ok: false, …(1) }` (asierta el mensaje EXACTO, no solo `ok: false`).
+//
+// MUTATION-TESTING (corridas el 2026-09-24, una por vez y restauradas; con el mensaje que se vio caer):
+// cada lectura con su null convertido en vacío (`.then((x) => x ?? [])`, o el error de las zonas
+// ignorado) deja pasar un contexto "sano", y cae SOLO la prueba de esa lectura, con `expected { ok:
+// true, contexto: { …(5) } } to deeply equal { ok: false, …(1) }`:
+// - `listarSucursales(…) ?? []` → "las sucursales fallan (null)…";
+// - `listarUsuariosDelComercio(…) ?? []` → "los usuarios fallan (null)…";
+// - `listarProgramas(…) ?? []` → "los programas de UNO de los comercios fallan…";
+// - la consulta de zonas con su `error` ignorado → "la consulta de zonas falla…".
+// Además: la zona del activo tomada del comercio ELEGIDO tira "con todo sano…" con `expected { ok: true,
+// contexto: { …(5) } } to deeply equal { ok: true, contexto: { …(5) } }`, y listarUsuariosDelComercio
+// con el comercioId en lugar del authUserId, con `expected "vi.fn()" to be called with arguments: [
+// Anything, …(2) ]`.
 
 vi.mock('../comercio/sucursales', () => ({ listarSucursales: vi.fn() }));
 vi.mock('../comercio/cajeros', () => ({ listarUsuariosDelComercio: vi.fn() }));

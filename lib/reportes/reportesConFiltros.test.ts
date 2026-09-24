@@ -33,6 +33,47 @@ import { resolverFiltrosReportes } from './filtrosReportes';
 // false, error: 'TODO Tarea 3' } to deeply equal { ok: true, contexto: { …(5) } }`. Las 5 que pasaban
 // son las de "un error de la base da null" (un stub que devuelve null las cumple): lo que las hace
 // valer es la mutación "null convertido en []", abajo.
+//
+// MUTATION-TESTING (corridas el 2026-09-24, una por vez y restauradas; con el mensaje que se vio caer):
+// - `.range(offset, offset + limite - 1)` sobre reporte_clientes (en pedirPaginaClientes): caen cinco,
+//   "todas, con tamaño de página 2: los 5 clientes…" con `expected [ …(2) ] to deeply equal [ …(5) ]`,
+//   "…4 clientes (múltiplo exacto)…" con `expected [ …(2) ] to deeply equal [ …(4) ]`, "una página: la
+//   pedida…" con `expected [] to deeply equal [ …(2) ]`, "una página más allá del final…" con
+//   `expected { filas: [], total: +0, …(1) } to deeply equal { Object (filas, total, ...) }` y "dos
+//   comercios: el mismo cliente es DOS filas…" con `expected [ { …(11) }, { …(11) } ] to have a length
+//   of 6 but got 2`. Es el defecto que describe la 0040: PostgREST salta filas POR FUERA de la página.
+// - Tamaño FIJO en vez del inyectado, sitio por sitio:
+//   - reporteClientes 'todas' con MAXIMO_POR_PAGINA: caen "todas…los 5 clientes…" con `expected [ [
+//     1000, +0, 'visitas', true ] ] to deeply equal [ [ 2, +0, 'visitas', true ], …(2) ]` y "…4
+//     clientes…" con `expected [ +0 ] to deeply equal [ +0, 2 ]` (las filas salían completas: solo el
+//     conteo de llamadas lo ve);
+//   - reporteClientes 'pagina' con TAMANO_PAGINA_CLIENTES: caen cuatro, entre ellas "una página: la
+//     pedida…" con `expected [ …(5) ] to deeply equal [ …(2) ]` y "sin actividad, la página 5…" con
+//     `expected { filas: [], total: +0, …(1) } to deeply equal { filas: [], total: +0, …(1) }` (offset
+//     200 en vez de 8);
+//   - reporteResumen: cae "con tamaño de página 2: las 4 filas…" con `expected [ { …(5) } ] to have a
+//     length of 3 but got 1`;
+//   - reportePorDia: caen las dos de tamaño 2 con `expected [ { …(6) } ] to have a length of 3 but got 1`;
+//   - reporteCajerosAlcance: cae "con tamaño de página 2: las 3 filas…" con `expected [ { …(5) } ] to
+//     have a length of 2 but got 1`.
+// - `null` convertido en `[]` (el `return null` del error vuelto `return []`, el fail-soft viejo), sitio
+//   por sitio: reporteResumen, reportePorDia y reporteCajerosAlcance caen cada una en su prueba de "un
+//   error de la base da null" con `expected { filas: [], alcanzoTope: false } to be null`; en
+//   reporteClientes (el error como página vacía) caen las dos, 'todas' con `expected { filas: [],
+//   alcanzoTope: false } to be null` y 'pagina' con `expected { filas: [], total: +0, …(1) } to be null`.
+// - El cargador con el prechequeo viejo (`sesion.comercios.find((c) => c.comercioId ===
+//   parametros.comercio) ?? null` en vez de comercioAConsultar): cae "un comercio único queda resuelto
+//   SIN ?comercio…" con `expected null to be '<el id del comercio>'` (comercioDeLasListas null: sin
+//   listas, y el ?sucursal= de un dueño con un solo comercio no filtraría nunca).
+// - Extras: la fila total al final (`es_total` ascendente) tira "…la fila total PRIMERA" con `expected [
+//   false, false, false, true ] to deeply equal [ true, false, false, false ]` y "filtra por sucursal y
+//   por cajero…"; filtrosRpc cruzando sucursal y cajero tira las tres "filtra…" (por ejemplo la de
+//   reportePorDia con `expected [] to deeply equal [ [ '2026-03-10', +0, 1 ], …(2) ]`); la zona del
+//   activo tomada del comercio ELEGIDO tira "dos comercios: ?comercio=…" con `expected { ok: true,
+//   contexto: { …(5) } } to deeply equal { ok: true, contexto: { …(5) } }`; y listarUsuariosDelComercio
+//   con el comercioId en lugar del authUserId tira "un comercio único…" con `expected Map{ …(2) } to
+//   deeply equal Map{ …(2) }` (nadie es "Vos").
+// Las mutaciones de "?? []" en las listas del cargador están en contextoReportes.errores.test.ts.
 
 const supabase = createServiceClient();
 
