@@ -95,7 +95,10 @@ antes de esas tareas.
   no se puede chequear por REST sin credenciales: lo garantiza la prueba de PGlite (mutación arriba).
 - **2 HECHA** — `a2ace7e`, `f786f05`, `5c7a2f1`, `4ce64b7`; 144 pruebas; revisión aprobada en la
   segunda pasada.
-- **0040 pegada a Daniel el 2026-09-23.** Falta su aviso y `verificar-0040`.
+- **0040 APLICADA por Daniel (2026-09-24) y verificada:** `verificar-0040` → las cuatro funciones
+  responden con sus columnas; `anon` recibe 42501; **20 de 20 comparaciones** contra las funciones viejas
+  en los 5 demos (resumen, cajeros, clientes, últimos 14 días). Desde acá, la 0040 NO se edita: un
+  arreglo va en una 0041.
 - **4a HECHA** — `e92c765`, `c68786d`, `d182b3f` (+ menores de la revisión). Revisión aprobada. Dos cosas
   que la revisión dejó para después:
   - **Para la Tarea 3:** `ContextoReportes.usuarios` (y `sucursales`) no aceptan `null`. Si el cargador
