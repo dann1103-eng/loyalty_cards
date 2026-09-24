@@ -38,7 +38,7 @@ export function fechaExcel(instante: Date | string, zonaHoraria: string): Date {
 }
 
 // Un día que YA es local (el `periodo date` de reporte_por_dia, cortado en la zona de su comercio por
-// la SQL, o un fechaLocal()) → su Date de Excel. No se convierte nada: solo se arma en UTC.
+// la SQL, o un hoyEnZona(zona, instante) de vigencia.ts) → su Date de Excel. No se convierte nada: solo se arma en UTC.
 export function diaExcel(dia: string): Date {
   if (!esFechaValida(dia)) throw new Error(`diaExcel: día inválido: ${dia}`);
   const [anio, mes, d] = dia.split('-').map(Number);

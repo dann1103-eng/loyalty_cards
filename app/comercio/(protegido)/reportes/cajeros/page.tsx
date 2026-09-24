@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { reporteCajeros } from '@/lib/reportes/reportes';
-import { resolverRangoFechas, rangoUltimosDias } from '@/lib/reportes/rangoFechas';
+import { resolverRangoFechas, rangoUltimosDias, completarRango } from '@/lib/reportes/rangoFechas';
 import { ZONA_HORARIA_DEFAULT, etiquetaZonaHoraria } from '@/lib/comercio/zonasHorarias';
 import { listarCajeros } from '@/lib/comercio/cajeros';
 import { listarProgramas } from '@/lib/comercio/programas';
@@ -45,12 +45,12 @@ export default async function PaginaReporteCajeros({
   const unidad = unidadPrograma(tipoPrincipal);
 
   // Sin filtro explícito, los últimos 30 días en la zona del comercio.
+  // completarRango nunca devuelve desde > hasta (un borde del default que choca con uno pedido se
+  // suelta): con el piso de 2000, `?desde=1999-06-01&hasta=2026-01-15` dejaba el desde en "hace 30
+  // días", después del hasta, y la lista salía vacía.
   const pedido = resolverRangoFechas(desdeCrudo, hastaCrudo);
   const porDefecto = rangoUltimosDias(new Date(), 30, zona);
-  const rango = {
-    desde: pedido.desde ?? porDefecto.desde,
-    hasta: pedido.hasta ?? porDefecto.hasta,
-  };
+  const rango = completarRango(pedido, porDefecto);
 
   const filas = await reporteCajeros(supabase, comercioId, rango.desde, rango.hasta);
 

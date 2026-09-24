@@ -3,14 +3,17 @@ import {
   esFechaValida,
   resolverRangoFechas,
   rangoUltimosDias,
-  fechaLocal,
-  sumarDias,
+  completarRango,
   resolverPeriodo,
   esPeriodo,
   FECHA_MINIMA,
   PERIODOS,
   PERIODO_POR_DEFECTO,
 } from './rangoFechas';
+// Los dos ladrillos de calendario son los de vigencia.ts (este módulo los importa, no los copia). Se
+// prueban acá también porque de ellos depende que los presets no se corran de día: vigencia.ts no
+// tenía prueba pura de hoyEnZona con la zona del PROCESO forzada.
+import { hoyEnZona, sumarDias } from '@/lib/tarjetas/vigencia';
 
 // Módulo puro: sin BD, sin reloj propio. Todo lo que depende del tiempo entra por argumento.
 //
@@ -20,17 +23,30 @@ import {
 // de medianoche corren además con la zona del proceso FORZADA a otras tres (mismo mecanismo que
 // lib/tarjetas/formatearFecha.test.ts, con el chequeo de que el cambio tomó).
 //
-// MUTATION-TESTING (corridas el 2026-09-23, con el mensaje que se vio caer):
+// MUTATION-TESTING (corridas el 2026-09-23, con el mensaje que se vio caer; las de 24 h y la del
+// reloj del proceso, vueltas a correr tras pasar a hoyEnZona/sumarDias de vigencia.ts):
 // - Restar 24 h en vez de calendario, en rangoUltimosDias (lo que hacía antes: `desde:
-//   fechaLocal(new Date(ahora.getTime() - (cuantos - 1) * 86_400_000), zonaHoraria)`). Caen "Europe/
+//   hoyEnZona(zonaHoraria, new Date(ahora.getTime() - (cuantos - 1) * 86_400_000))`). Caen "Europe/
 //   Madrid, día del atraso de hora" con `expected { desde: '2026-10-20', …(1) } to deeply equal
 //   { desde: '2026-10-19', …(1) }` y "Europe/Madrid, día del adelanto de hora" con `expected { desde:
 //   '2026-03-28', …(1) } to deeply equal { desde: '2026-03-29', …(1) }`. (Son las mismas dos que
 //   cayeron en rojo contra el código viejo, antes de reescribirlo.)
-// - Lo mismo en resolverPeriodo, '7d' (`ahora.getTime() - 6 * 86_400_000`): cae "Europe/Madrid el día
-//   del atraso de hora: ayer y 7d por calendario" con `expected { desde: '2026-10-20', …(1) } to deeply
-//   equal { desde: '2026-10-19', …(1) }`; y en 'ayer' (`- 86_400_000`), la misma prueba con `expected
-//   { desde: '2026-10-25', …(1) } to deeply equal { desde: '2026-10-24', …(1) }`.
+// - Lo mismo en CADA preset de resolverPeriodo que retrocede días; cae siempre "Europe/Madrid el día
+//   del atraso de hora: ayer, 7d, 30d y mes por calendario":
+//   · '7d' (`ahora.getTime() - 6 * 86_400_000`): `expected { desde: '2026-10-20', …(1) } to deeply
+//     equal { desde: '2026-10-19', …(1) }`;
+//   · 'ayer' (`- 86_400_000`): `expected { desde: '2026-10-25', …(1) } to deeply equal { desde:
+//     '2026-10-24', …(1) }`;
+//   · '30d', el que se ve por defecto (`- 29 * 86_400_000`): `expected { desde: '2026-09-27', …(1) }
+//     to deeply equal { desde: '2026-09-26', …(1) }`. Antes de sumarle su caso a esa prueba, esta
+//     mutación quedaba VERDE (lo encontró la revisión);
+//   · 'mes' (retroceder `(día − 1) * 86_400_000` en vez de tomar el 1 del texto): `expected { desde:
+//     '2026-10-02', …(1) } to deeply equal { desde: '2026-10-01', …(1) }`.
+// - completarRango sin su guarda (lo que hacía la pantalla de cajeros: completar sin mirar el orden):
+//   caen tres, entre ellas "el caso de 1999…" con `expected '2026-08-25' to be null`. Dando vuelta en
+//   vez de soltar el borde del default: caen "el caso de 1999…" con `expected '2026-01-15' to be null`
+//   y "desde pedido DESPUÉS del default de hasta…" con `expected { desde: '2026-09-23', …(1) } to
+//   deeply equal { desde: '2026-12-01', hasta: null }`.
 // - Sin el piso (`&& texto >= FECHA_MINIMA` borrado de limpiarFecha): caen "no acepta fechas
 //   anteriores a 2000-01-01" con `expected { desde: '1999-12-31', …(1) } to deeply equal { desde:
 //   null, hasta: '2026-07-28' }` y "fechas antes del piso: 0001-01-01 y 1999-12-31…" con `expected
@@ -40,11 +56,11 @@ import {
 //   `expected '2026-12-01' to be '2026-09-23'`. Con el techo solo en `hasta` (desde sin techo): cae
 //   "un rango entero en el futuro…" con `expected { desde: '2026-12-01', …(1) } to deeply equal
 //   { desde: '2026-09-23', …(1) }` (quedaría invertido).
-// - fechaLocal con el reloj del PROCESO (`${instante.getFullYear()}-…getMonth()…getDate()` en vez de
-//   Intl): caen 11, entre ellas "fechaLocal da el día en la zona pedida…" con `UTC: expected
-//   '2026-09-23' to be '2026-09-22'` y "hoy y ayer cerca de la medianoche de Bogotá" con
-//   `America/El_Salvador: expected { desde: '2026-09-22', …(1) } to deeply equal { desde:
-//   '2026-09-23', …(1) }`.
+// - hoyEnZona (lib/tarjetas/vigencia.ts, mutada ahí y restaurada) con el reloj del PROCESO
+//   (`${ahora.getFullYear()}-…getMonth()…getDate()` en vez de Intl): caen 11, entre ellas "hoyEnZona
+//   da el día en la zona pedida…" con `UTC: expected '2026-09-23' to be '2026-09-22'` y "hoy y ayer
+//   cerca de la medianoche de Bogotá" con `America/El_Salvador: expected { desde: '2026-09-22', …(1) }
+//   to deeply equal { desde: '2026-09-23', …(1) }`.
 // - esPeriodo con `valor in ETIQUETA_PERIODO` en vez de la lista: cae "el catálogo y el default" con
 //   `'toString' no es un período: expected true to be false`.
 
@@ -143,14 +159,16 @@ describe('resolverRangoFechas', () => {
   });
 });
 
-describe('fechaLocal y sumarDias', () => {
-  it('fechaLocal da el día en la zona pedida, no en la del proceso', () => {
+describe('hoyEnZona y sumarDias (de vigencia.ts)', () => {
+  it('hoyEnZona da el día en la zona pedida, no en la del proceso', () => {
     // 05:30 UTC: en Bogotá (UTC−5) ya es el 23 a las 00:30; en El Salvador (UTC−6) todavía el 22.
     const instante = new Date('2026-09-23T05:30:00Z');
     for (const zona of ZONAS_DE_PROCESO) {
       zonaDelProceso(zona);
-      expect(fechaLocal(instante, 'America/Bogota'), zona).toBe('2026-09-23');
-      expect(fechaLocal(instante, 'America/El_Salvador'), zona).toBe('2026-09-22');
+      expect(hoyEnZona('America/Bogota', instante), zona).toBe('2026-09-23');
+      expect(hoyEnZona('America/El_Salvador', instante), zona).toBe('2026-09-22');
+      // Mes y día de una cifra, con su cero: el formato es el que comparan los presets como texto.
+      expect(hoyEnZona('Europe/Madrid', new Date('2026-03-05T12:00:00Z')), zona).toBe('2026-03-05');
     }
   });
 
@@ -220,6 +238,56 @@ describe('rangoUltimosDias', () => {
   });
 });
 
+// La pantalla de cajeros completa lo que falte del rango pedido con su default (los últimos 30 días).
+// El caso real que la rompió: `?desde=1999-06-01&hasta=2026-01-15`. Con el piso de 2000, el desde cae
+// como si no estuviera, se completa con el default (hace 30 días) y queda DESPUÉS del hasta: la
+// consulta devolvía vacío. Antes del piso ese enlace andaba (1999 era, en la práctica, "sin borde").
+describe('completarRango', () => {
+  const porDefecto = { desde: '2026-08-25', hasta: '2026-09-23' };
+
+  it('sin nada pedido: el default', () => {
+    expect(completarRango({ desde: null, hasta: null }, porDefecto)).toEqual(porDefecto);
+  });
+
+  it('con los dos bordes pedidos: esos', () => {
+    expect(completarRango({ desde: '2026-01-01', hasta: '2026-01-15' }, porDefecto)).toEqual({
+      desde: '2026-01-01',
+      hasta: '2026-01-15',
+    });
+  });
+
+  it('un borde pedido que no choca con el default del otro: se completa', () => {
+    expect(completarRango({ desde: null, hasta: '2026-09-01' }, porDefecto)).toEqual({
+      desde: '2026-08-25',
+      hasta: '2026-09-01',
+    });
+    expect(completarRango({ desde: '2026-09-01', hasta: null }, porDefecto)).toEqual({
+      desde: '2026-09-01',
+      hasta: '2026-09-23',
+    });
+  });
+
+  it('el caso de 1999: hasta pedido ANTES del default de desde → sin borde inferior, nunca invertido', () => {
+    const rango = completarRango(resolverRangoFechas('1999-06-01', '2026-01-15'), porDefecto);
+    expect(rango.desde).toBeNull();
+    expect(rango).toEqual({ desde: null, hasta: '2026-01-15' });
+  });
+
+  it('desde pedido DESPUÉS del default de hasta → sin borde superior, nunca invertido', () => {
+    expect(completarRango({ desde: '2026-12-01', hasta: null }, porDefecto)).toEqual({
+      desde: '2026-12-01',
+      hasta: null,
+    });
+  });
+
+  it('dos bordes pedidos al revés (si alguien no pasó por resolverRangoFechas): se dan vuelta', () => {
+    expect(completarRango({ desde: '2026-01-15', hasta: '2026-01-01' }, porDefecto)).toEqual({
+      desde: '2026-01-01',
+      hasta: '2026-01-15',
+    });
+  });
+});
+
 describe('períodos', () => {
   it('el catálogo y el default (confirmados por Daniel el 2026-09-23)', () => {
     expect([...PERIODOS]).toEqual(['hoy', 'ayer', '7d', '30d', 'mes', 'todo', 'rango']);
@@ -270,7 +338,9 @@ describe('resolverPeriodo', () => {
     });
   });
 
-  it('Europe/Madrid el día del atraso de hora: ayer y 7d por calendario', () => {
+  // Cada preset que retrocede días tiene su caso, uno por uno: una prueba por preset es lo que hace
+  // falta para que la mutación "restar 24 h" caiga en CUALQUIERA de ellos, no solo en el que se probó.
+  it('Europe/Madrid el día del atraso de hora: ayer, 7d, 30d y mes por calendario', () => {
     const ahora = new Date('2026-10-25T22:30:00Z'); // 23:30 CET del 25 (día de 25 horas)
     expect(resolverPeriodo('ayer', {}, ahora, 'Europe/Madrid')).toEqual({
       desde: '2026-10-24',
@@ -278,6 +348,16 @@ describe('resolverPeriodo', () => {
     });
     expect(resolverPeriodo('7d', {}, ahora, 'Europe/Madrid')).toEqual({
       desde: '2026-10-19',
+      hasta: '2026-10-25',
+    });
+    // El que se ve por defecto. Restando 29 × 24 h daría el 27 de septiembre.
+    expect(resolverPeriodo('30d', {}, ahora, 'Europe/Madrid')).toEqual({
+      desde: '2026-09-26',
+      hasta: '2026-10-25',
+    });
+    // Retrocediendo (día − 1) × 24 h en vez de tomar el 1 del texto, daría el 2 de octubre.
+    expect(resolverPeriodo('mes', {}, ahora, 'Europe/Madrid')).toEqual({
+      desde: '2026-10-01',
       hasta: '2026-10-25',
     });
   });

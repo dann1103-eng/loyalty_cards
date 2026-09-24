@@ -13,6 +13,17 @@
 // medianoche cae en el día equivocado. Así lo hacía rangoUltimosDias hasta la entrega de Reportes con
 // filtros (2026-09-23), y la pantalla de cajeros lo usaba: "7 días" a las 23:30 del 25 de octubre en
 // Madrid empezaba el 20 y no el 19.
+//
+// Los dos ladrillos de calendario son los de vigencia.ts (el módulo de los días de calendario del
+// proyecto), no copias: `sumarDias` (aritmética en UTC, sin horario de verano) y `hoyEnZona` (el día
+// del reloj de pared de una zona, con Intl y la zona explícita, nunca la del proceso). Se verificó
+// antes de importarlos que dan lo mismo que las copias que hubo acá, en Bogotá, Madrid (los dos
+// cambios de hora), El Salvador y Tokio. Dos diferencias, ninguna alcanzable desde acá: `sumarDias`
+// también acepta un timestamp (toma los 10 primeros caracteres), y `hoyEnZona` con una zona VACÍA o
+// null cae a America/El_Salvador donde la copia lanzaba; resolverFiltrosReportes ya valida la zona
+// antes (con el mismo respaldo, ZONA_HORARIA_DEFAULT), y la pantalla de cajeros pasa la de la base,
+// que respalda el CHECK de la 0015. Una zona no vacía pero inválida lanza en las dos.
+import { hoyEnZona, sumarDias } from '@/lib/tarjetas/vigencia';
 
 export interface RangoFechas {
   desde: string | null;
@@ -72,33 +83,33 @@ export function resolverRangoFechas(
   return { desde, hasta };
 }
 
-// El día (AAAA-MM-DD) que marca el reloj de pared de `zonaHoraria` en `instante`. Con Intl y la zona
-// explícita: el reloj del PROCESO es otro en Vercel (UTC) que en la PC de Daniel (UTC−6). 'en-CA' es
-// el locale que formatea como AAAA-MM-DD.
-export function fechaLocal(instante: Date, zonaHoraria: string): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: zonaHoraria,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(instante);
-}
-
-// Suma (o resta) días de CALENDARIO a una fecha AAAA-MM-DD. Date.UTC normaliza el desborde (el día 0
-// de marzo es el último de febrero, bisiesto incluido) y en UTC no hay horario de verano, así que un
-// día son exactamente 24 h y el resultado no depende de ninguna zona.
-export function sumarDias(fecha: string, dias: number): string {
-  const [anio, mes, dia] = fecha.split('-').map(Number);
-  return new Date(Date.UTC(anio, mes - 1, dia + dias)).toISOString().slice(0, 10);
-}
-
 // Rango por defecto de la pantalla: los últimos `dias` días contando hoy, en la zona del comercio.
 // `ahora` se pasa como argumento (no se llama a new Date() adentro) para que la función sea pura y
 // probable sin congelar el reloj.
 export function rangoUltimosDias(ahora: Date, dias: number, zonaHoraria: string): RangoFechas {
   const cuantos = Math.max(1, Math.floor(dias));
-  const hoy = fechaLocal(ahora, zonaHoraria);
+  const hoy = hoyEnZona(zonaHoraria, ahora);
   return { desde: sumarDias(hoy, -(cuantos - 1)), hasta: hoy };
+}
+
+// Completa lo que falte de un rango PEDIDO (ya pasado por resolverRangoFechas) con el de por defecto,
+// y nunca devuelve desde > hasta. Lo usa la pantalla de cajeros.
+//
+// El caso que la rompió: `?desde=1999-06-01&hasta=2026-01-15`. Con el piso de 2000 el desde cae como
+// si no estuviera, el default lo completaba con "hace 30 días", y quedaba DESPUÉS del hasta: la
+// consulta devolvía vacío, y ese enlace antes andaba (1999 era, en la práctica, "sin borde"). Un
+// borde que vino del DEFAULT y choca con uno pedido se suelta (null = sin ese borde) en vez de
+// invertir el rango: lo que el dueño escribió manda. Si los dos se pidieron al revés (solo si alguien
+// no pasó por resolverRangoFechas), se dan vuelta, como allá.
+export function completarRango(pedido: RangoFechas, porDefecto: RangoFechas): RangoFechas {
+  const desde = pedido.desde ?? porDefecto.desde;
+  const hasta = pedido.hasta ?? porDefecto.hasta;
+  if (desde !== null && hasta !== null && desde > hasta) {
+    if (pedido.desde === null) return { desde: null, hasta };
+    if (pedido.hasta === null) return { desde, hasta: null };
+    return { desde: hasta, hasta: desde };
+  }
+  return { desde, hasta };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -145,7 +156,7 @@ export function resolverPeriodo(
   ahora: Date,
   zonaHoraria: string,
 ): RangoResuelto {
-  const hoy = fechaLocal(ahora, zonaHoraria);
+  const hoy = hoyEnZona(zonaHoraria, ahora);
   switch (periodo) {
     case 'hoy':
       return { desde: hoy, hasta: hoy };
