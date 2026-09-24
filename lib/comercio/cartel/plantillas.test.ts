@@ -3,7 +3,7 @@ import { ENCUADRE_POR_DEFECTO } from '../encuadreFranja';
 import { construirCartelSvg as construirCartelSvgCon, escaparXml } from './plantillas';
 import { dibujarTextoConFuenteDelSistema } from './texto';
 import { dibujarTextoConInter } from './textoInter';
-import type { DatosCartel, FormatoCartel } from './tipos';
+import { DIMENSIONES_CARTEL, type DatosCartel, type FormatoCartel } from './tipos';
 
 // Este archivo mira la ESTRUCTURA del SVG (lienzo, franjas, QR, logo, escapado), que es la misma con
 // cualquiera de los dos dibujantes de texto. Usa el de la vista previa porque deja el texto legible
@@ -20,6 +20,7 @@ const DATOS_BASE: DatosCartel = {
   colorLabel: '#e8b978',
   logoDataUri: null,
   fotoDataUri: null,
+  medidasLogo: null,
   textoCta: '¡Escaneá y sumate!',
   textoTeaser: null,
   urlRegistro: 'https://www.cardly-sv.site/registro/cafe-sol',
@@ -93,6 +94,20 @@ describe('construirCartelSvg — plantilla centrado', () => {
     // "en vez del círculo": si el mutante dibujara los dos, el data URI seguiría estando y la
     // aserción de arriba sobreviviría — sin esto la prueba no protege lo que su nombre promete.
     expect(svg).not.toContain('<circle');
+  });
+
+  // Tarea 3 (2026-09-23): antes de esta tarea, el logo se dibujaba en una caja CUADRADA con
+  // `xMidYMid slice` ("cubrir"), que le recorta los costados a un logo ancho como "Pulso CAFÉ"
+  // (~3:1). MUTACIÓN: volver a `slice` en logoSvg hace caer las dos aserciones de abajo.
+  it('con logo, el <image> usa "meet" (el logo entero, nunca recortado) y no "slice"', async () => {
+    const datos: DatosCartel = { ...DATOS_BASE, logoDataUri: 'data:image/png;base64,AAAA' };
+    const svg = await construirCartelSvg(datos, 'sticker');
+    expect(svg).toContain('preserveAspectRatio="xMidYMid meet"');
+    // Sin foto de fondo en esta plantilla, el logo es la ÚNICA <image> del SVG: "no contiene slice"
+    // alcanza para decir que el logo específicamente no lo usa. (La prueba de la plantilla "foto"
+    // sin medidasFoto, más abajo, es la que sigue esperando "slice" — es la FOTO de fondo, no el
+    // logo, y corre con logoDataUri: null a propósito.)
+    expect(svg).not.toContain('xMidYMid slice');
   });
 
   it('embebe el QR de la URL de registro como SVG anidado, no como <img>/data URI', async () => {
@@ -380,4 +395,133 @@ describe('construirCartelSvg — elementos libres (migración 0030)', () => {
     expect(sticker).toContain('y="320.00"');
     expect(mostrador).toContain('y="454.06"');
   });
+});
+
+// Tarea 3 (2026-09-23): la caja del logo ahora crece con la proporción real de la imagen (cajaLogo.ts)
+// en vez de ser siempre lado×lado. Esto recorre las SEIS combinaciones con un logo bien ANCHO (3:1,
+// el caso real de "Pulso CAFÉ") y uno bien ALTO (1:3), y verifica que la caja nunca se sale del
+// lienzo — ni por la derecha, ni por la IZQUIERDA (el caso que motivó el tope: sin acotar, un 3:1 en
+// split × mostrador queda centrado en 64 y su x da -32).
+//
+// MUTACIÓN: si alguna combinación dejara de acotar su `anchoMaximo` (p. ej. pasara `Infinity`), la
+// caja del logo 3:1 de esa fila se saldría del lienzo y la aserción de X caería.
+describe('construirCartelSvg — la caja del logo no se sale del lienzo (logo ancho y logo alto)', () => {
+  const PLANTILLAS = ['centrado', 'split', 'foto'] as const;
+  const FORMATOS = ['sticker', 'mostrador'] as const;
+  const ASPECTOS = [
+    { etiqueta: '3:1 (ancho, como "Pulso CAFÉ")', medidas: { ancho: 300, alto: 100 } },
+    { etiqueta: '1:3 (alto)', medidas: { ancho: 100, alto: 300 } },
+  ] as const;
+
+  // La caja del logo es el ÚNICO <image> con este data URI — a diferencia de la foto de fondo
+  // (otro data URI, ver más abajo), así que el regex la identifica sin ambigüedad.
+  function cajaDelLogo(svg: string): { x: number; y: number; ancho: number; alto: number } {
+    const m = svg.match(
+      /<image href="data:image\/png;base64,AAAA" x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)" preserveAspectRatio="xMidYMid meet"\/>/,
+    );
+    if (!m) throw new Error('no se encontró la caja del logo en el SVG');
+    return { x: Number(m[1]), y: Number(m[2]), ancho: Number(m[3]), alto: Number(m[4]) };
+  }
+
+  for (const plantilla of PLANTILLAS) {
+    for (const formato of FORMATOS) {
+      for (const { etiqueta, medidas } of ASPECTOS) {
+        it(`${plantilla} × ${formato}, logo ${etiqueta}: la caja cae DENTRO del lienzo en X e Y`, async () => {
+          const datos: DatosCartel = {
+            ...DATOS_BASE,
+            plantilla,
+            logoDataUri: 'data:image/png;base64,AAAA',
+            medidasLogo: medidas,
+            // La plantilla "foto" solo dibuja SU logo con este data URI si también tiene una foto de
+            // fondo con OTRO data URI — no afecta al regex de arriba, que ancla al de "AAAA".
+            fotoDataUri: plantilla === 'foto' ? 'data:image/png;base64,BBBB' : null,
+          };
+          const svg = await construirCartelSvg(datos, formato);
+          const anchoLienzo = Number(svg.match(/viewBox="0 0 ([\d.]+) [\d.]+"/)![1]);
+          const altoLienzo = Number(svg.match(/viewBox="0 0 [\d.]+ ([\d.]+)"/)![1]);
+          const caja = cajaDelLogo(svg);
+
+          expect(caja.x, `x=${caja.x}: la caja se sale del lienzo por la IZQUIERDA`).toBeGreaterThanOrEqual(0);
+          expect(
+            caja.x + caja.ancho,
+            `x+ancho=${caja.x + caja.ancho} > ${anchoLienzo}: la caja se sale del lienzo por la derecha`,
+          ).toBeLessThanOrEqual(anchoLienzo);
+          expect(caja.y, `y=${caja.y}: la caja se sale del lienzo por ARRIBA`).toBeGreaterThanOrEqual(0);
+          expect(
+            caja.y + caja.alto,
+            `y+alto=${caja.y + caja.alto} > ${altoLienzo}: la caja se sale del lienzo por abajo`,
+          ).toBeLessThanOrEqual(altoLienzo);
+        });
+      }
+    }
+  }
+
+  // El caso puntual que motivó el tope de esta tarea: split × sticker tiene el nombre a la DERECHA
+  // del logo y sin ajuste de ancho propio (spec), así que la caja NUNCA puede crecer más allá del
+  // cuadrado de hoy, ni siquiera con un logo bien ancho. MUTACIÓN: usar la caja "ancha" (p. ej. el
+  // mismo cálculo que las demás combinaciones) en vez de `anchoMaximo = lado` hace caer esta prueba.
+  it('split × sticker: un logo 3:1 NO ensancha la caja — se queda en lado×lado', async () => {
+    const h = DIMENSIONES_CARTEL.sticker.viewBox.alto;
+    const altoFranja = h * 0.34;
+    const ladoEsperado = altoFranja * 0.42;
+
+    const datos: DatosCartel = {
+      ...DATOS_BASE,
+      plantilla: 'split',
+      logoDataUri: 'data:image/png;base64,AAAA',
+      medidasLogo: { ancho: 300, alto: 100 },
+    };
+    const svg = await construirCartelSvg(datos, 'sticker');
+    const caja = cajaDelLogo(svg);
+
+    expect(caja.ancho).toBeCloseTo(ladoEsperado, 6);
+    expect(caja.alto).toBeCloseTo(ladoEsperado, 6);
+  });
+});
+
+// Lo único que puede cambiar al crecer la caja del logo es su propio ancho (y, con él, su X): el
+// nombre del comercio y el QR tienen que quedar exactamente donde estaban con un logo cuadrado —
+// spec: "sin mover el nombre, el QR ni nada debajo". Compara el SVG de un logo 1:1 contra uno 3:1
+// combinación por combinación.
+describe('construirCartelSvg — un logo ancho no mueve ni el nombre ni el QR', () => {
+  const PLANTILLAS = ['centrado', 'split', 'foto'] as const;
+  const FORMATOS = ['sticker', 'mostrador'] as const;
+
+  // El QR va SIEMPRE envuelto en el mismo `<g transform="translate(x, y)">`, sea el de
+  // tarjetaBlancaConQr (centrado/split) o el que arma plantillaFoto a mano — es el único elemento
+  // del SVG que usa esta forma (ver grep sobre plantillas.ts/elementos.ts).
+  function yDelQr(svg: string): string {
+    const m = svg.match(/<g transform="translate\([-\d.]+, ([-\d.]+)\)">/);
+    if (!m) throw new Error('no se encontró el <g> del QR en el SVG');
+    return m[1];
+  }
+
+  function yDelNombre(svg: string): string | null {
+    const m = svg.match(new RegExp(`<text x="[-\\d.]+" y="([-\\d.]+)"[^>]*>${DATOS_BASE.nombreComercio}<`));
+    return m ? m[1] : null;
+  }
+
+  for (const plantilla of PLANTILLAS) {
+    for (const formato of FORMATOS) {
+      it(`${plantilla} × ${formato}: la Y del QR es la misma con un logo cuadrado y con uno 3:1`, async () => {
+        const base: DatosCartel = {
+          ...DATOS_BASE,
+          plantilla,
+          logoDataUri: 'data:image/png;base64,AAAA',
+          fotoDataUri: plantilla === 'foto' ? 'data:image/png;base64,BBBB' : null,
+        };
+        const cuadrado = await construirCartelSvg({ ...base, medidasLogo: { ancho: 100, alto: 100 } }, formato);
+        const ancho3a1 = await construirCartelSvg({ ...base, medidasLogo: { ancho: 300, alto: 100 } }, formato);
+
+        expect(yDelQr(ancho3a1)).toBe(yDelQr(cuadrado));
+
+        // La plantilla "foto" no dibuja el nombre del negocio (solo el logo y la frase del CTA) —
+        // ver el comentario de `dibujarTextosExtra` más arriba en este archivo.
+        if (plantilla !== 'foto') {
+          expect(yDelNombre(cuadrado)).not.toBeNull();
+          expect(yDelNombre(ancho3a1)).toBe(yDelNombre(cuadrado));
+        }
+      });
+    }
+  }
 });

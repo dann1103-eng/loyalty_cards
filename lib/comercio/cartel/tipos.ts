@@ -23,6 +23,10 @@ export interface DatosCartel {
   colorLabel: string;
   logoDataUri: string | null;
   fotoDataUri: string | null;
+  // Medidas en píxeles del logo YA descargado (null si no hay logo o sharp no pudo leerlas). Las usa
+  // cajaLogo.ts para que un logo horizontal (p. ej. "Pulso CAFÉ", ~3:1) se dibuje entero en vez de
+  // recortado — antes de la Tarea 3 (2026-09-23) resolverDatosCartel las medía y las descartaba.
+  medidasLogo: Medidas | null;
   textoCta: string;
   textoTeaser: string | null;
   urlRegistro: string;

@@ -171,8 +171,9 @@ export async function resolverDatosCartel(
   // cartel de un comercio que nunca configuró su marca.
   const sinOverrides = combinarDatosCartel(marcaParaCartel, null, programa.tipo_tarjeta);
 
-  // El logo solo necesita el data: URI — se dibuja con su propio recorte cuadrado y el encuadre no
-  // lo toca.
+  // El logo se mide igual que la foto (Tarea 3, 2026-09-23): cajaLogo.ts usa esas medidas para que
+  // un logo horizontal se dibuje entero en vez de recortado. El encuadre (`encuadreFoto`) sigue sin
+  // tocar al logo — es exclusivo de la foto de fondo de la plantilla "foto".
   const [logo, foto] = await Promise.all([
     bajarImagen(combinados.logoUrl),
     bajarImagen(combinados.fotoUrl),
@@ -187,6 +188,7 @@ export async function resolverDatosCartel(
       colorLabel: combinados.colorLabel,
       logoDataUri: logo?.dataUri ?? null,
       fotoDataUri: foto?.dataUri ?? null,
+      medidasLogo: logo?.medidas ?? null,
       textoCta: combinados.textoCta,
       textoTeaser: combinados.textoTeaser,
       urlRegistro,

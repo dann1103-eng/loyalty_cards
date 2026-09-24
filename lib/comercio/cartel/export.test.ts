@@ -23,6 +23,7 @@ const DATOS: DatosCartel = {
   colorLabel: '#e8b978',
   logoDataUri: null,
   fotoDataUri: null,
+  medidasLogo: null,
   textoCta: '¡Escaneá y sumate!',
   textoTeaser: null,
   urlRegistro: 'https://www.cardly-sv.site/registro/cafe-sol',
