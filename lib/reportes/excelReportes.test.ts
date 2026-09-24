@@ -13,7 +13,9 @@ import {
   type FilaPorDiaExcel,
   type FilaCajerosExcel,
 } from './excelReportes';
-import type { ComercioOwner } from './filtrosReportes';
+import type { ComercioOwner, FiltrosReportes } from './filtrosReportes';
+import type { SucursalListada } from '@/lib/comercio/sucursales';
+import type { UsuarioDelComercio } from '@/lib/comercio/cajeros';
 
 // El Excel de Reportes (spec 2026-09-23 §4). Dos niveles:
 //   1. PURO: la estructura que armarHojasExcelReportes le entrega a write-excel-file (hojas, columnas,
@@ -53,8 +55,9 @@ import type { ComercioOwner } from './filtrosReportes';
 //   entre ellas la misma con `expected 'Nombre' to be 'Comercio'`.
 // - Sin la nota de Clientes: cae "filtros en texto…" con `expected [ 'Comercio', 'Sucursal', …(8) ]
 //   to deeply equal [ 'Comercio', 'Sucursal', …(9) ]`.
-// - Sin el aviso de tope: caen 2, "una hoja que alcanzó el tope…" con `expected 'Comercio' to be
-//   'Aviso'` y "varias hojas…" con `el Resumen no tiene el rótulo Aviso`.
+// - Sin el aviso de tope: caen 3 (re-corrida el 2026-09-24 con las pruebas del aviso nuevas), "una
+//   hoja que alcanzó el tope…" con `expected 'Comercio' to be 'Aviso'`, y "con un comercio ya
+//   elegido…" y "varias hojas…" con `el Resumen no tiene el rótulo Aviso`.
 // - Última actividad con la zona de los FILTROS y no la del comercio de la fila: caen 4, la pura con
 //   `expected [ 2026, 9, 23, 17, 30 ] to deeply equal [ 2026, 9, 24, +0, 30 ]`, las ida y vuelta con
 //   `expected 23 to be 24`.
@@ -66,6 +69,22 @@ import type { ComercioOwner } from './filtrosReportes';
 // - Cajero null escrito como su email (null): caen 2, `expected null to deeply equal { value: 'Sin
 //   registrar', …(1) }`. Sucursal null escrita como su nombre (null): caen 2, `expected [ null, 'Centro'
 //   ] to deeply equal [ 'Sin sucursal', 'Centro' ]`.
+//
+// Revisión de la 5a (2026-09-24): la sucursal y el cajero filtrados se exigen en la FIRMA.
+// - Las de TIPO las ve `npx tsc --noEmit` (vitest no chequea tipos), en "la FIRMA exige…":
+//   - `nombre?` y `email?` opcionales en FiltrosExcelReportes: tres `error TS2578: Unused
+//     '@ts-expect-error' directive.` (las líneas de soloIds, sucursalSinNombre y cajeroSinEmail).
+//   - Solo `email?` opcional: una, la de cajeroSinEmail. Cada directiva mide lo suyo.
+//   - Volver al genérico `FiltrosReportes<{ id: string }, { id: string }>`: las tres, más `error
+//     TS2339: Property 'nombre' does not exist on type '{ id: string; }'` (y 'email') en el Resumen.
+// - Sucursal escrita siempre "Todas": cae "…el nombre y el email de los propios filtros" con
+//   `expected { value: 'Todas', …(1) } to deeply equal { value: 'Centro', …(1) }`.
+// - Cajero escrito con su id y no su email: la misma, con `expected { value: 'u-caja1', …(1) } to
+//   deeply equal { value: 'caja1@cafe.sv', …(1) }`.
+// - El aviso sin "qué hacer" (`queHacer = ''`): caen las 3 del aviso.
+// - "elegí un comercio" aunque ya haya uno elegido: cae "con un comercio ya elegido…" con Expected
+//   "…está incompleta: achicá el período." y Received "…está incompleta: achicá el período o elegí un
+//   comercio.". Nunca "elegí un comercio" con "Todo": caen las 2 de "Todo".
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Datos de prueba
@@ -100,6 +119,23 @@ function filtrosDe(alcance: ComercioOwner[], cambios: Partial<FiltrosExcelReport
   };
 }
 
+// Una sucursal y un cajero con la forma REAL de las listas del cargador (listarSucursales y
+// listarUsuariosDelComercio): el Excel los recibe tal cual, con sus campos de más, y lee de ahí el
+// nombre y el email.
+const CENTRO: SucursalListada = {
+  id: 's-centro',
+  nombre: 'Centro',
+  activa: true,
+  esPrincipal: true,
+  latitud: null,
+  longitud: null,
+  mensajeCercania: null,
+  mensajeCampana: null,
+  campanaHasta: null,
+  geopushActivo: false,
+};
+const CAJA1: UsuarioDelComercio = { id: 'u-caja1', email: 'caja1@cafe.sv', rol: 'cajero', activo: true, esVos: false };
+
 // La fila total: clientes_unicos 3, MENOS que la suma de las sucursales (2 + 2): una persona con
 // tarjeta en los dos comercios cuenta una vez. La hoja Resumen tiene que decir 3.
 const TOTAL: FilaResumenExcel = {
@@ -122,8 +158,8 @@ const CENTRO_CAFE: FilaResumenExcel = {
   clientes_unicos: 2,
   es_total: false,
 };
-// Actividad SIN sucursal (anterior a la atribución): sucursal_id null como la fila total, pero no es
-// la total.
+// Actividad SIN sucursal (anterior a la atribución, o de un dueño que escaneó con "Sin especificar"
+// en el selector del escáner): sucursal_id null como la fila total, pero no es la total.
 const SIN_SUCURSAL_PAN: FilaResumenExcel = {
   comercio_id: 'c-pan',
   sucursal_id: null,
@@ -196,7 +232,6 @@ const GENERADO = new Date('2026-09-23T14:05:40Z');
 function datosDe(cambios: Partial<DatosExcelReportes> = {}): DatosExcelReportes {
   return {
     filtros: filtrosDe([CAFE, PAN]),
-    nombres: { sucursal: null, cajero: null },
     generado: GENERADO,
     resumen: { filas: [TOTAL, CENTRO_CAFE, SIN_SUCURSAL_PAN], alcanzoTope: false },
     porDia: { filas: DIAS, alcanzoTope: false },
@@ -518,19 +553,30 @@ describe('armarHojasExcelReportes: Resumen (spec §4)', () => {
     expect(componentesUtc(valor(resumen(enMadrid, 'Generado')))).toEqual([2026, 9, 23, 16, 5]);
   });
 
-  it('un comercio, una sucursal y un cajero elegidos: sus nombres', () => {
+  it('un comercio, una sucursal y un cajero elegidos: el nombre y el email de los propios filtros', () => {
     const r = hoja(
-      armarHojasExcelReportes(
-        datosDeSoloCafe({
-          filtros: filtrosDe([CAFE], { sucursal: { id: 's-centro' }, cajero: { id: 'u-caja1' } }),
-          nombres: { sucursal: 'Centro', cajero: 'caja1@cafe.sv' },
-        }),
-      ),
+      armarHojasExcelReportes(datosDeSoloCafe({ filtros: filtrosDe([CAFE], { sucursal: CENTRO, cajero: CAJA1 }) })),
       'Resumen',
     );
     expect(resumen(r, 'Comercio')).toEqual({ value: 'Café Central', type: String });
     expect(resumen(r, 'Sucursal')).toEqual({ value: 'Centro', type: String });
     expect(resumen(r, 'Cajero')).toEqual({ value: 'caja1@cafe.sv', type: String });
+  });
+
+  it('la FIRMA exige el nombre de la sucursal y el email del cajero filtrados (lo ataja tsc, no un throw)', () => {
+    // Esta prueba la corre `npx tsc --noEmit` (vitest no chequea tipos): si el tipo vuelve a aceptar
+    // un filtro sin su nombre, cada @ts-expect-error queda sin usar y tsc falla.
+    //
+    // Lo que va a pasar la ruta: los filtros del resolver con las listas reales. Entran tal cual.
+    const conListasReales = (f: FiltrosReportes<SucursalListada, UsuarioDelComercio>): FiltrosExcelReportes => f;
+    // Con el resolver genérico (solo ids) no alcanza: el Excel no tendría qué escribir.
+    // @ts-expect-error: FiltrosReportes con solo ids no es asignable a FiltrosExcelReportes.
+    const soloIds = (f: FiltrosReportes<{ id: string }, { id: string }>): FiltrosExcelReportes => f;
+    // @ts-expect-error: una sucursal sin `nombre`.
+    const sucursalSinNombre: FiltrosExcelReportes['sucursal'] = { id: 's-centro' };
+    // @ts-expect-error: un cajero sin `email`.
+    const cajeroSinEmail: FiltrosExcelReportes['cajero'] = { id: 'u-caja1' };
+    expect([conListasReales, soloIds, sucursalSinNombre, cajeroSinEmail]).toHaveLength(4);
   });
 
   it('el período con sus fechas: un día, sin borde inferior, personalizado', () => {
@@ -541,15 +587,6 @@ describe('armarHojasExcelReportes: Resumen (spec §4)', () => {
     expect(periodo({ periodo: 'rango', desde: '2026-01-05', hasta: '2026-02-10' })).toBe(
       'Personalizado: del 05/01/2026 al 10/02/2026',
     );
-  });
-
-  it('una sucursal o un cajero filtrados sin su nombre son un error: nunca "Todas" con un filtro puesto', () => {
-    expect(() =>
-      armarHojasExcelReportes(datosDeSoloCafe({ filtros: filtrosDe([CAFE], { sucursal: { id: 's-centro' } }) })),
-    ).toThrow('excelReportes: falta el nombre de la sucursal filtrada');
-    expect(() =>
-      armarHojasExcelReportes(datosDeSoloCafe({ filtros: filtrosDe([CAFE], { cajero: { id: 'u-caja1' } }) })),
-    ).toThrow('excelReportes: falta el nombre del cajero filtrado');
   });
 
   it('la fila total se reconoce por es_total, venga donde venga (no por "sucursal null")', () => {
@@ -572,13 +609,23 @@ describe('armarHojasExcelReportes: Resumen (spec §4)', () => {
     expect(rotulosResumen(hoja(armarHojasExcelReportes(datosDe()), 'Resumen'))).not.toContain('Aviso');
   });
 
-  it('una hoja que alcanzó el tope: el aviso, ARRIBA de todo', () => {
+  it('una hoja que alcanzó el tope: el aviso ARRIBA de todo, y qué hacer (con "Todo": elegir un comercio)', () => {
     const r = hoja(armarHojasExcelReportes(datosDe({ clientes: { filas: [ANA, BETO], alcanzoTope: true } })), 'Resumen');
     expect(rotulosResumen(r)[0]).toBe('Aviso');
     expect(resumen(r, 'Aviso')).toEqual({
-      value: 'La hoja Clientes llegó al tope de 50 000 filas: está incompleta.',
+      value: 'La hoja Clientes llegó al tope de 50 000 filas y está incompleta: achicá el período o elegí un comercio.',
       type: String,
     });
+  });
+
+  it('con un comercio ya elegido, el aviso no manda a elegir un comercio', () => {
+    const r = hoja(
+      armarHojasExcelReportes(datosDeSoloCafe({ clientes: { filas: [ANA], alcanzoTope: true } })),
+      'Resumen',
+    );
+    expect(valor(resumen(r, 'Aviso'))).toBe(
+      'La hoja Clientes llegó al tope de 50 000 filas y está incompleta: achicá el período.',
+    );
   });
 
   it('varias hojas en el tope: todas, en el orden de las hojas', () => {
@@ -593,7 +640,7 @@ describe('armarHojasExcelReportes: Resumen (spec §4)', () => {
       'Resumen',
     );
     expect(valor(resumen(r, 'Aviso'))).toBe(
-      'Las hojas Por día, Por sucursal y Cajeros llegaron al tope de 50 000 filas: están incompletas.',
+      'Las hojas Por día, Por sucursal y Cajeros llegaron al tope de 50 000 filas y están incompletas: achicá el período o elegí un comercio.',
     );
   });
 });

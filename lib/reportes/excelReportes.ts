@@ -15,8 +15,9 @@ import { TOPE_FILAS, type Paginado } from './paginar';
 //
 // NUNCA UN ARCHIVO QUE PAREZCA CIERTO Y NO LO SEA. Todo lo que no cierra LANZA (y la ruta responde 500):
 // una fila de un comercio fuera del alcance (¿con qué unidad se escribe su acumulado?), un número que
-// no es número, un Resumen sin fila total, "Por día" con filas por mes, un filtro puesto sin su nombre.
-// Mismo criterio que fechaExcel: un dato ilegible no se convierte en uno inventado.
+// no es número, un Resumen sin fila total, "Por día" con filas por mes. Mismo criterio que fechaExcel:
+// un dato ilegible no se convierte en uno inventado. (Un filtro de sucursal o cajero sin su nombre ni
+// siquiera llega acá: lo rechaza el tipo, ver FiltrosExcelReportes.)
 
 type Funciones = Database['public']['Functions'];
 
@@ -56,21 +57,21 @@ export type FilaCajerosExcel = Pick<
   | 'clientes_unicos'
 >;
 
-// Lo que el Excel usa de los filtros resueltos (resolverFiltrosReportes). Un FiltrosReportes<S, U>
-// cualquiera es asignable a esto: se pasa tal cual.
+// Lo que el Excel usa de los filtros resueltos (resolverFiltrosReportes). El resolver es genérico en la
+// sucursal y el usuario (solo valida el id); el Excel NO: tiene que escribir en el Resumen el nombre de
+// la sucursal filtrada y el email del cajero filtrado, así que los exige EN EL TIPO. Un filtro puesto
+// sin su nombre no compila, en vez de lanzar en tiempo de ejecución (o de decir "Todas" sobre un Excel
+// filtrado). Las listas reales ya los traen: SucursalListada tiene `nombre` y UsuarioDelComercio,
+// `email` (NOT NULL), así que un FiltrosReportes<SucursalListada, UsuarioDelComercio> se pasa tal cual.
+// El email y no "Vos": el archivo se reenvía, y en manos de un socio "Vos" no dice quién.
+// (El comercio no hace falta: filtros.comercio y filtros.alcance ya traen su nombre.)
 export type FiltrosExcelReportes = Pick<
-  FiltrosReportes<{ id: string }, { id: string }>,
+  FiltrosReportes<{ id: string; nombre: string }, { id: string; email: string }>,
   'periodo' | 'desde' | 'hasta' | 'zonaHoraria' | 'comercio' | 'alcance' | 'sucursal' | 'cajero' | 'datosAlcance'
 >;
 
 export interface DatosExcelReportes {
   filtros: FiltrosExcelReportes;
-  // Cómo se muestran en el Resumen la sucursal y el cajero FILTRADOS (el nombre de la sucursal; el
-  // email del cajero). En FiltrosReportes la sucursal y el usuario son genéricos (solo se sabe su id),
-  // así que el texto lo pone quien conoce su forma. OBLIGATORIO cuando ese filtro está puesto: si no,
-  // lanza, en vez de decir "Todas" sobre un Excel filtrado. Con el filtro sin poner, se ignora.
-  // (El comercio no hace falta: filtros.comercio y filtros.alcance ya traen su nombre.)
-  nombres: { sucursal: string | null; cajero: string | null };
   // El instante en que se generó (la ruta pasa new Date()); se muestra en la zona de los filtros.
   generado: Date;
   // Las cuatro lecturas, como las devuelven paginarPorOffset/paginarPorRango: sus filas y si se cortaron
@@ -257,8 +258,9 @@ function hojaPorSucursal(filtros: FiltrosExcelReportes, filas: FilaResumenExcel[
       {
         titulo: 'Sucursal',
         ancho: 24,
-        // La actividad sin sucursal (anterior a la atribución) también tiene sucursal_id null; la fila
-        // TOTAL ya se sacó por `es_total`, así que acá null es "sin sucursal".
+        // La actividad sin sucursal también tiene sucursal_id null: la anterior a la atribución, y la
+        // de un dueño que escanea con "Sin especificar" en el selector del escáner (Escaner.tsx: ''
+        // → null). La fila TOTAL ya se sacó por `es_total`, así que acá null es "sin sucursal".
         celda: (f) => texto(f.sucursal_id === null ? SIN_SUCURSAL : (f.sucursal_nombre ?? SIN_SUCURSAL)),
       },
       { titulo: 'Visitas', ancho: 9, celda: (f) => celdaNumero(f.operaciones, 'Visitas') },
@@ -319,38 +321,33 @@ function textoPeriodo(filtros: FiltrosExcelReportes): string {
   return `${etiqueta}: del ${diaLegible(filtros.desde)} al ${hasta}`;
 }
 
-// El texto de un filtro opcional: su nombre si está puesto; el "todos" si no.
-function textoFiltro(filtrado: boolean, nombre: string | null, todos: string, deCual: string): string {
-  if (!filtrado) return todos;
-  if (nombre === null) throw new Error(`excelReportes: falta el nombre ${deCual}`);
-  return nombre;
-}
-
 // "50 000": el tope con separador de miles fijo (toLocaleString depende del ICU del proceso).
 const TOPE_LEGIBLE = String(TOPE_FILAS).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 
-// El aviso de las hojas cortadas en TOPE_FILAS, en el orden de las hojas; null si ninguna.
+// El aviso de las hojas cortadas en TOPE_FILAS, en el orden de las hojas; null si ninguna. Dice QUÉ
+// HACER, no solo qué pasó: achicar el período siempre sirve; elegir un comercio, solo con "Todo" (con
+// uno ya elegido, mandarlo a elegir un comercio no tendría sentido).
 function avisoTope(datos: DatosExcelReportes): string | null {
-  const cortadas = [
-    [HOJA.clientes, datos.clientes.alcanzoTope],
-    [HOJA.porDia, datos.porDia.alcanzoTope],
+  const hojas: { hoja: string; corto: boolean }[] = [
+    { hoja: HOJA.clientes, corto: datos.clientes.alcanzoTope },
+    { hoja: HOJA.porDia, corto: datos.porDia.alcanzoTope },
     // Las filas de reporte_resumen que se cortan son las de Por sucursal: la fila total la calcula la
     // SQL sobre TODO el alcance, así que los números del Resumen siguen siendo completos.
-    [HOJA.porSucursal, datos.resumen.alcanzoTope],
-    [HOJA.cajeros, datos.cajeros.alcanzoTope],
-  ]
-    .filter(([, corto]) => corto)
-    .map(([nombre]) => nombre);
+    { hoja: HOJA.porSucursal, corto: datos.resumen.alcanzoTope },
+    { hoja: HOJA.cajeros, corto: datos.cajeros.alcanzoTope },
+  ];
+  const cortadas = hojas.filter((h) => h.corto).map((h) => h.hoja);
   if (cortadas.length === 0) return null;
+  const queHacer = datos.filtros.comercio === null ? 'achicá el período o elegí un comercio' : 'achicá el período';
   if (cortadas.length === 1) {
-    return `La hoja ${cortadas[0]} llegó al tope de ${TOPE_LEGIBLE} filas: está incompleta.`;
+    return `La hoja ${cortadas[0]} llegó al tope de ${TOPE_LEGIBLE} filas y está incompleta: ${queHacer}.`;
   }
   const lista = `${cortadas.slice(0, -1).join(', ')} y ${cortadas[cortadas.length - 1]}`;
-  return `Las hojas ${lista} llegaron al tope de ${TOPE_LEGIBLE} filas: están incompletas.`;
+  return `Las hojas ${lista} llegaron al tope de ${TOPE_LEGIBLE} filas y están incompletas: ${queHacer}.`;
 }
 
 function hojaResumen(datos: DatosExcelReportes, total: FilaResumenExcel): HojaExcel {
-  const { filtros, nombres } = datos;
+  const { filtros } = datos;
   const fila = (rotulo: string, valor: Cell): Row => [negrita(rotulo), valor];
   const separador: Row = [null, null];
 
@@ -363,8 +360,9 @@ function hojaResumen(datos: DatosExcelReportes, total: FilaResumenExcel): HojaEx
     // El aviso ARRIBA de todo: es lo primero que el dueño tiene que leer si el archivo está incompleto.
     ...(aviso === null ? [] : [fila('Aviso', texto(aviso)), separador]),
     fila('Comercio', texto(comercio)),
-    fila('Sucursal', texto(textoFiltro(filtros.sucursal !== null, nombres.sucursal, 'Todas', 'de la sucursal filtrada'))),
-    fila('Cajero', texto(textoFiltro(filtros.cajero !== null, nombres.cajero, 'Todos', 'del cajero filtrado'))),
+    // El nombre y el email vienen en los propios filtros: el tipo no deja pasar uno sin ellos.
+    fila('Sucursal', texto(filtros.sucursal?.nombre ?? 'Todas')),
+    fila('Cajero', texto(filtros.cajero?.email ?? 'Todos')),
     fila('Período', texto(textoPeriodo(filtros))),
     separador,
     // De la fila TOTAL, nunca la suma de las sucursales: quien fue a dos (o tiene tarjeta en dos
