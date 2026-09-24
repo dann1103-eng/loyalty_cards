@@ -123,6 +123,17 @@ antes de esas tareas.
   - El `.order()` de `reporte_resumen` mantiene `es_total desc` primero (el aviso de tope supone que la
     fila total entra antes del corte).
   - En el tope: ~5 s de armado + escritura más ~50 páginas de RPC en serie; evaluar `maxDuration`.
+- **3 HECHA** — `40554fa`, `72bdaa4` (+ arreglos de la revisión: el orden antifraude de la hoja Cajeros
+  se restaura EN EL WRAPPER con un comparador puro; guardias sin base para el comercio único y
+  `filtrosRpc`). Huérfanos de pruebas (`test-tanda1-*`, de `primerosPasos.test.ts` + `limpiar()` sin
+  `reglas_puntos`): tarea aparte, ya ofrecida a Daniel.
+- **4b HECHA** — `b5fda51` (+ arreglos: el recorte de chips SOLO en Reportes —el global cortaba los
+  nombres de programa en Marca—, `estadoPorDia` puro con prueba, avisos con contexto). Notas:
+  - **4c:** el wrapper `reporteTopClientes` ya no lo usa nadie (`exportarClientes.ts` llama a la RPC
+    directo): la 4c puede borrar `reporteTopClientes`, `reporteTendencia` y `agregados.ts` con sus
+    pruebas; solo la RPC `reporte_top_clientes` espera a la Tarea 6.
+  - **Tarea 7, además:** un período sin actividad en un comercio que ya operaba ("Sin movimientos", no
+    barras vacías); un email largo a 375 px; un nombre de programa largo en Marca (que no se corte).
 
 ## Tarea 1a — Migración 0040: SQL y tipos
 
