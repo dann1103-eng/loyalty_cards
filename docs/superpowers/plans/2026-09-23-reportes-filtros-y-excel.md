@@ -83,6 +83,20 @@ Daniel. Hasta tener la respuesta se puede avanzar con las Tareas 1a, 1b, 3 y 4a 
 de las dos); la Tarea 2 depende de (a) y la 5 de (b). Si Daniel dice que no a alguna, se ajusta la spec
 antes de esas tareas.
 
+## Registro (controlador)
+
+- **1a HECHA** — `d674969` + `9fc8520` (comentarios de la revisión). Revisión: lógica aprobada.
+- **1b HECHA** — `fe185c0`, `f5c87a0`, `a74e9fc`. PGlite 0.5.8 (Postgres 18.3), 0001–0039 del disco sin
+  parches + la 0040 byte-idéntica; 34 casos; **110 mutaciones: 102 caen, 8 equivalentes documentadas en
+  la 0040**. El preámbulo imita los permisos por defecto de Supabase (`alter default privileges`) y
+  pgcrypto en `extensions`. Revisión: "la 0040 se puede aplicar tal como está". El controlador reprodujo
+  "sin el filtro de sucursal en canjes" y "sin `authenticated` en un revoke": caen.
+- **1c HECHA** — `0e6fa02` + `e715fde`. Probada contra un PostgREST falso (4 escenarios). `authenticated`
+  no se puede chequear por REST sin credenciales: lo garantiza la prueba de PGlite (mutación arriba).
+- **2 HECHA** — `a2ace7e`, `f786f05`, `5c7a2f1`, `4ce64b7`; 144 pruebas; revisión aprobada en la
+  segunda pasada.
+- **0040 pegada a Daniel el 2026-09-23.** Falta su aviso y `verificar-0040`.
+
 ## Tarea 1a — Migración 0040: SQL y tipos
 
 **Spec:** §5 entero, "Definiciones", "Orden de publicación".
