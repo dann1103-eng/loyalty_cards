@@ -108,6 +108,18 @@ antes de esas tareas.
     filtro activo (una línea "Filtrando por …" con un enlace para quitarlo) o el resolver descarta lo que
     los chips no ofrecerían. Con una sola sucursal, "Todas" y esa NO dan lo mismo: la actividad "Sin
     especificar" (`sucursal_id` null) entra en "Todas" y no en la sucursal.
+- **5a HECHA** — `4ed5edc` (dependencias), `329973a` (`excelReportes.ts`), `0a4ffe1` (`fechaExcel` con un
+  formateador por zona: 50 000 filas pasaron de 10,5 s a 0,8 s) + arreglos de la revisión (la firma exige
+  `nombre`/`email` en los filtros). `write-excel-file` 4.1.1, `read-excel-file` 9.3.10; no hace falta
+  `serverExternalPackages` (probado con una ruta temporal). Notas de la revisión para la **5b (la ruta)**:
+  - `try/catch` alrededor del armado y la escritura (con el gate AFUERA), `console.error` del `message`
+    y 500 en texto plano: los `throw` de `armarHojasExcelReportes` son inalcanzables con datos legítimos,
+    pero si uno salta es un bug determinístico y "Probá de nuevo" no alcanza sin el log.
+  - La mutación "Por día con `'auto'`" solo cae con un tramo de más de 62 días ("Desde siempre" con
+    actividad vieja, o un rango de 90).
+  - El `.order()` de `reporte_resumen` mantiene `es_total desc` primero (el aviso de tope supone que la
+    fila total entra antes del corte).
+  - En el tope: ~5 s de armado + escritura más ~50 páginas de RPC en serie; evaluar `maxDuration`.
 
 ## Tarea 1a — Migración 0040: SQL y tipos
 
