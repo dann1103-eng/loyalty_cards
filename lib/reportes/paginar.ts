@@ -48,7 +48,9 @@ export interface PaginaPorOffset<T> {
   offsetEfectivo: number;
 }
 
-function validarTamano(tamano: number): void {
+// Exportada para el modo 'pagina' de reporteClientes (reportes.ts), que pide UNA página sin pasar por
+// estos bucles y tiene que rechazar el mismo tamaño que ellos.
+export function validarTamano(tamano: number): void {
   // Error de programación, no de datos. Con 0 el bucle no avanzaría nunca. Y por encima del max-rows
   // de PostgREST cada página llegaría con 1000 filas: paginarPorRango leería "menos que el tamaño"
   // como la última página y el Excel saldría cortado EN SILENCIO, que es justo el defecto que estos

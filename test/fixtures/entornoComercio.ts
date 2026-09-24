@@ -13,19 +13,67 @@ import type { Database } from '../../lib/supabase/types';
 // tarjetas/sucursales/usuarios_comercio, usuarios_comercio apunta a sucursales Y comercios, y nada
 // tiene ON DELETE CASCADE en este esquema (decisión deliberada del proyecto).
 
+// Una fila de actividad con fecha, sucursal y cajero ELEGIDOS, para las pruebas de los reportes (plan
+// 2026-09-23, Tarea 3). Los caminos de producción (acreditarPuntos, canjearRecompensa) graban
+// created_at = now() y no dejan elegir el día; los reportes con período necesitan justo eso: una
+// visita a las 23:59 de un día concreto, un canje de otra sucursal, un ajuste de otro cajero.
+//
+// `createdAt` es un instante ISO CON su desfase ('2026-03-10T23:59:00-06:00'): así la prueba dice en
+// qué hora LOCAL del comercio cae, sin depender de la zona del proceso.
+//
+// Lo que la base exige y el helper completa (si no, el insert rebota contra un CHECK o un NOT NULL):
+//   - el ajuste y la visita forzada, un `motivo` (CHECK transacciones_puntos_motivo_obligatorio, 0015);
+//   - el canje, `recompensa_id`, `puntos_gastados` y `estado` (0001).
+export type ActividadSembrada =
+  | {
+      clase: 'visita';
+      tarjetaId: string;
+      createdAt: string;
+      sucursalId?: string | null;
+      cajeroId?: string | null;
+      puntos?: number; // por defecto 1
+      tipo?: 'acreditacion' | 'uso' | 'renovacion'; // por defecto 'acreditacion'
+      forzado?: boolean;
+      montoCompra?: number | null;
+    }
+  | {
+      clase: 'ajuste';
+      tarjetaId: string;
+      createdAt: string;
+      sucursalId?: string | null;
+      cajeroId?: string | null;
+      puntos?: number; // por defecto 1
+      motivo?: string;
+    }
+  | {
+      clase: 'canje';
+      tarjetaId: string;
+      createdAt: string;
+      sucursalId?: string | null;
+      cajeroId?: string | null;
+      recompensaId: string;
+      puntosGastados?: number; // por defecto 1
+      estado?: 'completado' | 'cancelado'; // por defecto 'completado'
+    };
+
 export interface EntornoComercio {
   crearComercio(campos?: Partial<Database['public']['Tables']['comercios']['Insert']>): Promise<string>;
   // `opciones` cubre los casos que antes obligaban a un insert directo (y por eso se escapaban de
-  // limpiar()): una tarjeta en un programa que no es el principal, y una tarjeta con created_at
-  // viejo para las pruebas de inactividad.
+  // limpiar()): una tarjeta en un programa que no es el principal, una tarjeta con created_at
+  // viejo para las pruebas de inactividad, y una tarjeta de un cliente que YA existe (`clienteId`:
+  // el mismo cliente con tarjeta en dos comercios, que los reportes cuentan como 1 en la cabecera y
+  // 2 filas en la tabla). Devuelve también el cliente, para poder pasarlo a la segunda tarjeta.
   crearTarjeta(
     comercioId: string,
     puntos?: number,
-    opciones?: { programaId?: string; createdAt?: string },
-  ): Promise<{ id: string; qrToken: string }>;
+    opciones?: { programaId?: string; createdAt?: string; clienteId?: string },
+  ): Promise<{ id: string; qrToken: string; clienteId: string }>;
   crearSucursal(comercioId: string, activa?: boolean): Promise<string>;
   crearCajero(comercioId: string): Promise<string>;
   crearRecompensa(comercioId: string, costo: number): Promise<string>;
+  // Visitas, ajustes y canjes con fecha, sucursal y cajero elegidos (ver ActividadSembrada). Las
+  // tarjetas tienen que ser de este entorno: limpiar() borra el ledger y los canjes por tarjeta.
+  sembrarActividad(filas: ActividadSembrada[]): Promise<void>;
   // El programa principal que crearComercio() crea en automático (migración 0024). Los archivos que
   // no necesitan saberlo (la mayoría) siguen sin tocarlo; los que sí — p. ej. las pruebas de
   // programas.ts — lo usan para armar un segundo programa junto al principal.
@@ -99,23 +147,29 @@ export function crearEntorno(supabase: SupabaseClient<Database>): EntornoComerci
     },
 
     async crearTarjeta(comercioId, puntos = 0, opciones = {}) {
-      // El teléfono es UNIQUE global (0001): se arma con el reloj + azar para que dos pruebas en
-      // paralelo no choquen. Formato canónico +503… como exige normalizarTelefono.
-      const telefono = `+503${String(Date.now()).slice(-8)}${Math.floor(Math.random() * 10000)
-        .toString()
-        .padStart(4, '0')}`;
-      const { data: cliente, error: eC } = await supabase
-        .from('clientes')
-        .insert({ nombre: 'Cliente Prueba', telefono })
-        .select('id')
-        .single();
-      if (eC) throw eC;
-      clientes.push(cliente.id);
+      // Con `clienteId`, la tarjeta es de un cliente que ya existe (y que limpiar() ya borra: o lo
+      // creó este fixture, o cuelga de una tarjeta de un comercio de este entorno).
+      let clienteId = opciones.clienteId;
+      if (!clienteId) {
+        // El teléfono es UNIQUE global (0001): se arma con el reloj + azar para que dos pruebas en
+        // paralelo no choquen. Formato canónico +503… como exige normalizarTelefono.
+        const telefono = `+503${String(Date.now()).slice(-8)}${Math.floor(Math.random() * 10000)
+          .toString()
+          .padStart(4, '0')}`;
+        const { data: cliente, error: eC } = await supabase
+          .from('clientes')
+          .insert({ nombre: 'Cliente Prueba', telefono })
+          .select('id')
+          .single();
+        if (eC) throw eC;
+        clientes.push(cliente.id);
+        clienteId = cliente.id;
+      }
 
       const { data: tarjeta, error: eT } = await supabase
         .from('tarjetas')
         .insert({
-          cliente_id: cliente.id,
+          cliente_id: clienteId,
           comercio_id: comercioId,
           // programaId explícito para las pruebas con más de un programa (un cupón junto al
           // principal, p. ej.); sin él, el principal, que es lo que quiere la mayoría.
@@ -133,7 +187,7 @@ export function crearEntorno(supabase: SupabaseClient<Database>): EntornoComerci
         .single();
       if (eT) throw eT;
       tarjetas.push(tarjeta.id);
-      return { id: tarjeta.id, qrToken: tarjeta.qr_token };
+      return { id: tarjeta.id, qrToken: tarjeta.qr_token, clienteId };
     },
 
     async crearSucursal(comercioId, activa = true) {
@@ -178,6 +232,60 @@ export function crearEntorno(supabase: SupabaseClient<Database>): EntornoComerci
       if (error) throw error;
       recompensas.push(data.id);
       return data.id;
+    },
+
+    async sembrarActividad(filas) {
+      // Un insert por tabla, no uno por fila: una prueba de reportes siembra decenas de filas, y
+      // cada round-trip a la base remota cuesta. OJO: en un insert de varias filas PostgREST usa la
+      // UNIÓN de las claves, y a la fila que no trae una le manda null (no el default de la
+      // columna): un ajuste sin `forzado` rebotaba contra su NOT NULL. Por eso todas las filas del
+      // ledger llevan las MISMAS claves.
+      const ledger: Database['public']['Tables']['transacciones_puntos']['Insert'][] = [];
+      const canjes: Database['public']['Tables']['canjes']['Insert'][] = [];
+      for (const fila of filas) {
+        const comun = {
+          tarjeta_id: fila.tarjetaId,
+          created_at: fila.createdAt,
+          sucursal_id: fila.sucursalId ?? null,
+          cajero_usuario_id: fila.cajeroId ?? null,
+        };
+        if (fila.clase === 'canje') {
+          canjes.push({
+            ...comun,
+            recompensa_id: fila.recompensaId,
+            puntos_gastados: fila.puntosGastados ?? 1,
+            estado: fila.estado ?? 'completado',
+          });
+        } else if (fila.clase === 'ajuste') {
+          ledger.push({
+            ...comun,
+            tipo: 'ajuste',
+            puntos_delta: fila.puntos ?? 1,
+            forzado: false,
+            motivo: fila.motivo ?? 'Ajuste de prueba',
+            monto_compra: null,
+          });
+        } else {
+          const forzado = fila.forzado ?? false;
+          ledger.push({
+            ...comun,
+            tipo: fila.tipo ?? 'acreditacion',
+            puntos_delta: fila.puntos ?? 1,
+            forzado,
+            // El CHECK de la 0015 exige motivo también en una acreditación forzada.
+            motivo: forzado ? 'Forzada de prueba' : null,
+            monto_compra: fila.montoCompra ?? null,
+          });
+        }
+      }
+      if (ledger.length) {
+        const { error } = await supabase.from('transacciones_puntos').insert(ledger);
+        if (error) throw error;
+      }
+      if (canjes.length) {
+        const { error } = await supabase.from('canjes').insert(canjes);
+        if (error) throw error;
+      }
     },
 
     async limpiar() {

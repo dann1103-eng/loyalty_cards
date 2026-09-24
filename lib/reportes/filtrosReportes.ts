@@ -8,10 +8,11 @@ import { esZonaHorariaValida, ZONA_HORARIA_DEFAULT } from '@/lib/comercio/zonasH
 // EXACTAMENTE a estas funciones, en este orden, y las reglas se prueban UNA vez, acá:
 //
 //   const parametros = leerParametrosReportes(searchParams);          // parametrosReportes.ts
-//   const elegido    = comercioAConsultar(comercios, parametros);      // ANTES de cargar nada
-//   const contexto   = await cargarContextoReportes(…, elegido);       // Tarea 3: zonas, tipos,
-//                                                                      //   sucursales y usuarios
-//   const filtros    = resolverFiltrosReportes(comercios, parametros, contexto, new Date());
+//   const cargado    = await cargarContextoReportes(supabase, sesion, parametros);
+//                      // contextoReportes.ts: zonas, tipos, y las sucursales y usuarios del comercio
+//                      // que resuelve comercioAConsultar (la llama ADENTRO, antes de cargar nada)
+//   if (!cargado.ok) → la página muestra un aviso; la ruta del Excel responde 500
+//   const filtros    = resolverFiltrosReportes(comercios, parametros, cargado.contexto, new Date());
 //
 // CONTROL DE SEGURIDAD (spec 2026-07-25 §5 y 2026-09-23 §1): los filtros llegan por querystring —input
 // del cliente—. El comercio DEBE estar entre las membresías owner de la sesión; la sucursal y el cajero
