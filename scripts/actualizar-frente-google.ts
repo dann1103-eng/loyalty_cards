@@ -1,11 +1,12 @@
-// Actualiza en Google Wallet el frente de los pases YA EMITIDOS, en dos fases separadas.
+// Actualiza en Google Wallet el frente de los pases YA EMITIDOS, en fases separadas: `objetos` y
+// `clases` (el frente nuevo, en dos deploys) y `logos` (los logos compuestos de la clase).
 //
 // Por qué hace falta: un objeto de Google se re-escribe solo cuando algo mueve su saldo, y una clase
 // solo cuando alguien se registra, pide su link o el dueño guarda la marca. El frente nuevo (estado
 // arriba, nombre y apellido, "Powered by Cardly" bajo el QR) no llega solo a las tarjetas que nadie
-// toca.
+// toca, y el logo compuesto tampoco llega solo a las clases que nadie toca.
 //
-// Por qué dos fases y en este orden (spec 2026-09-17, "Orden de despliegue"):
+// Por qué objetos y clases son dos fases y en este orden (spec 2026-09-17, "Orden de despliegue"):
 //   1. Deploy A (objetos con los módulos nuevos; clase sin plantilla) → fase `objetos`, repetida hasta
 //      terminar con 0 fallos que no sean estructurales.
 //   2. Deploy B (la plantilla de filas en construirClase) → fase `clases`.
@@ -14,14 +15,20 @@
 // cada registro, cada "Agregar a Google Wallet" y cada guardado de marca le pone la plantilla. Por eso
 // el control es el exit code de la fase objetos, que tiene que dar 0 ANTES del deploy B.
 //
-// Las dos fases mandan lo que arma ESTA COPIA del código (construirObjeto / construirClase), no lo
+// La fase `logos` (spec 2026-09-23, §2 "Google Wallet") no depende de ese orden: re-sincroniza las
+// clases que ya existen para que apunten a /api/comercios/<id>/logo.png y logo-ancho.png en vez de a la
+// URL cruda del logo (lib/google/logosClase.ts). Va después del deploy de esas rutas: antes de tocar
+// ninguna clase, verifica que la base las sirva.
+//
+// Todas las fases mandan lo que arma ESTA COPIA del código (construirObjeto / construirClase), no lo
 // desplegado: cada una se corre desde el commit de su deploy.
 //
 // Uso:
 //   NEXT_PUBLIC_BASE_URL=https://www.cardly-sv.site \
-//     npx tsx --conditions=react-server scripts/actualizar-frente-google.ts <objetos|clases> [--aplicar]
+//     npx tsx --conditions=react-server scripts/actualizar-frente-google.ts <objetos|clases|logos> [--aplicar]
 //
-// Sin `--aplicar` es un ENSAYO: lee la base, cuenta y lista lo que tocaría, y no llama a Google.
+// Sin `--aplicar` es un ENSAYO: lee la base, cuenta y lista lo que tocaría, y no llama a Google (la
+// fase logos sí pide UNA vez la ruta del logo a la base, para informar si ya está desplegada).
 //
 // El override de NEXT_PUBLIC_BASE_URL no es opcional desde una máquina de desarrollo: las imágenes
 // viajan con URL absoluta armada sobre esa variable (lib/google/heroUrl.ts) y, con localhost, Google
@@ -42,13 +49,13 @@ import { syncObjetoTarjeta } from '../lib/google/syncObjeto';
 import { syncClaseComercio } from '../lib/google/syncClase';
 import { syncClasePrograma } from '../lib/google/syncClasePrograma';
 import { construirClase } from '../lib/google/construirRecursos';
-import { esBaseUrlPublica } from '../lib/google/baseUrlPublica';
+import { baseParaImagenesGoogle, esBaseUrlPublica } from '../lib/google/baseUrlPublica';
 
 type Supabase = SupabaseClient<Database>;
-type Fase = 'objetos' | 'clases';
+type Fase = 'objetos' | 'clases' | 'logos';
 
 const USO =
-  'NEXT_PUBLIC_BASE_URL=https://www.cardly-sv.site npx tsx --conditions=react-server scripts/actualizar-frente-google.ts <objetos|clases> [--aplicar]';
+  'NEXT_PUBLIC_BASE_URL=https://www.cardly-sv.site npx tsx --conditions=react-server scripts/actualizar-frente-google.ts <objetos|clases|logos> [--aplicar]';
 
 // Fallos que REINTENTAR NO ARREGLA: dependen de los datos del comercio o del programa, no de Google.
 // Copiados LITERALES de los módulos de sync y comparados por igualdad exacta. Si uno de esos módulos
@@ -305,6 +312,152 @@ async function faseClases(supabase: Supabase, aplicar: boolean): Promise<number>
 }
 
 // ---------------------------------------------------------------------------------------------------
+// Fase logos
+//
+// Re-sincroniza las clases que YA existen para que tomen los logos COMPUESTOS (lib/google/logosClase.ts).
+// Una clase recién los toma cuando algo la re-sincroniza —un registro, un "Agregar a Google Wallet", un
+// guardado de marca—; esta fase se los lleva de una vez a todas, con exactamente las mismas llamadas
+// (syncClaseComercio y syncClasePrograma) que corre producción en cada registro.
+//
+// NO pasa por la guarda de la plantilla de filas (copiaTraePlantillaDeFilas): no depende del deploy B.
+// Desde una copia sin plantilla, el cuerpo de la clase no lleva `classTemplateInfo`, y un `patch` que
+// omite un campo conserva el que la clase ya tenga. Desde una copia que SÍ la trae, la manda, igual que
+// la fase clases: ahí vale el mismo recordatorio de correrla después de la fase objetos.
+//
+// El recorrido es el de faseClases, DUPLICADO a propósito en vez de compartido: la fase clases —la que
+// protege el deploy B— queda exactamente como estaba. Un bucle compartido no se podría dar por probado
+// comparando los ensayos, porque el ensayo termina antes de llegar al bucle.
+
+// Cuánto esperar la respuesta del chequeo previo. La ruta baja el logo del bucket con un tope de 10 s
+// (lib/google/servirLogoClase.ts) y después lo compone; el arranque en frío de la función suma más.
+const TIEMPO_MAXIMO_CHEQUEO_MS = 30_000;
+
+interface ChequeoRutaLogo {
+  url: string | null; // null = no hubo comercio con el que probar
+  problema: string | null; // null = respondió 200 con image/png
+}
+
+// El chequeo previo: ¿la base YA sirve la ruta del logo compuesto? Cada clase que arma esta copia apunta
+// a `${base}/api/comercios/<id>/logo.png?v=…`, y Google descarga esa imagen DENTRO del patch: si la ruta
+// no está desplegada en esa base, rechaza el patch ENTERO con `400 Image cannot be loaded`, y las N
+// clases fallarían una por una. Se prueba UNA vez, antes de tocar ninguna.
+//
+// La muestra es el primer comercio con clase Y con logo: sin logo la ruta responde 404 aunque esté
+// desplegada (y la clase de ese comercio es un fallo estructural de todos modos), y abortaría la fase
+// por nada.
+async function chequearRutaLogo(supabase: Supabase, base: string): Promise<ChequeoRutaLogo> {
+  const { data, error } = await supabase
+    .from('comercios')
+    .select('id')
+    .not('google_class_id', 'is', null)
+    .not('logo_url', 'is', null)
+    .order('id')
+    .limit(1);
+  if (error) throw new Error(error.message);
+  const muestra = data?.[0];
+  if (!muestra) {
+    return { url: null, problema: 'no hay ningún comercio con clase y con logo con el que probar la ruta' };
+  }
+
+  const url = `${base}/api/comercios/${muestra.id}/logo.png`;
+  try {
+    // `redirect: 'manual'`: la ruta nunca redirige (servirLogoClase.ts), así que una redirección quiere
+    // decir que esa URL la está respondiendo otra cosa.
+    const res = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(TIEMPO_MAXIMO_CHEQUEO_MS) });
+    await res.body?.cancel();
+    const tipo = res.headers.get('content-type');
+    if (res.status === 200 && tipo?.split(';')[0].trim().toLowerCase() === 'image/png') {
+      return { url, problema: null };
+    }
+    return { url, problema: `respondió ${res.status} con content-type ${JSON.stringify(tipo)}` };
+  } catch (e) {
+    return { url, problema: `no respondió: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+async function faseLogos(supabase: Supabase, aplicar: boolean): Promise<number> {
+  console.log('Esta fase re-sincroniza las clases que YA existen para que apunten a los logos compuestos');
+  console.log('(/api/comercios/<id>/logo.png y logo-ancho.png). Manda la clase que arma ESTA copia del');
+  console.log('código: corrila desde el commit de los logos compuestos o uno posterior. No pasa por la');
+  console.log('guarda de la plantilla de filas: si esta copia no la trae, el patch conserva la que haya.\n');
+
+  // main ya abortó si NEXT_PUBLIC_BASE_URL no es pública, así que acá la base existe. Es la MISMA (sin
+  // barra final) sobre la que logosDeClase arma las URLs de los logos.
+  const base = baseParaImagenesGoogle();
+  if (!base) throw new Error('NEXT_PUBLIC_BASE_URL no es una base pública: main tendría que haber abortado antes.');
+
+  const grupos = porNombre(await leerClases(supabase));
+  const clasesComercio = grupos.filter(([, g]) => g.claseComercio).length;
+  const clasesPrograma = grupos.reduce((n, [, g]) => n + g.programas.length, 0);
+  console.log(`Comercios: ${grupos.length}`);
+  console.log(`Clases de comercio (comercios con google_class_id): ${clasesComercio}`);
+  console.log(`Clases de programa (programas con google_class_id): ${clasesPrograma}`);
+
+  const chequeo = await chequearRutaLogo(supabase, base);
+  if (chequeo.problema === null) {
+    console.log(`\nChequeo previo: GET ${chequeo.url} → 200 image/png. Las rutas de logo responden.`);
+  } else {
+    const detalle = chequeo.url ? `GET ${chequeo.url} ${chequeo.problema}.` : `${chequeo.problema}.`;
+    const cabecera = chequeo.url
+      ? `las rutas de logo no están desplegadas en ${base}`
+      : `no se pudo verificar que las rutas de logo estén desplegadas en ${base}`;
+    if (aplicar) {
+      console.error(`\nABORTADO: ${cabecera}; no se tocó ninguna clase.`);
+      console.error(`Chequeo previo: ${detalle}`);
+      console.error('Sin esas rutas, Google rechazaría el patch de cada clase con `400 Image cannot be loaded`.');
+      console.error('Esperá a que termine el deploy (o revisá NEXT_PUBLIC_BASE_URL) y repetí.');
+      return 1;
+    }
+    console.log(`\nChequeo previo: ${detalle}`);
+    console.log(`ADVERTENCIA: ${cabecera}. Con --aplicar, el script abortaría acá sin tocar ninguna clase.`);
+  }
+
+  if (!aplicar) {
+    console.log('');
+    for (const [id, g] of grupos) {
+      const partes = [
+        ...(g.claseComercio ? ['clase del comercio'] : []),
+        ...(g.programas.length > 0 ? [`${g.programas.length} clase(s) de programa`] : []),
+      ];
+      console.log(`  ${g.nombre} (${id}): ${partes.join(' + ')}`);
+    }
+    return terminarEnsayo();
+  }
+
+  const resultados: Resultado[] = [];
+  for (const [comercioId, g] of grupos) {
+    console.log(`\n${g.nombre} (${comercioId})`);
+    const delComercio: Resultado[] = [];
+    if (g.claseComercio) {
+      delComercio.push({
+        comercio: g.nombre,
+        recurso: 'clase del comercio',
+        error: await intentar(() => syncClaseComercio(supabase, comercioId)),
+      });
+    }
+    for (const p of g.programas) {
+      delComercio.push({
+        comercio: g.nombre,
+        recurso: `clase del programa "${p.nombre}" (${p.id})`,
+        error: await intentar(async () => {
+          const res = await syncClasePrograma(supabase, comercioId, p.id);
+          // Mismo control que en faseClases: `ok` con classId null es "este programa no tiene clase
+          // propia; no se hizo nada". Imposible para un programa leído con google_class_id: si aparece,
+          // la clase NO se tocó y no se cuenta como actualizada.
+          if (res.ok && res.classId === null) {
+            return { ok: false, error: 'syncClasePrograma no tocó la clase: respondió que el programa no tiene clase propia.' };
+          }
+          return res;
+        }),
+      });
+    }
+    imprimirResumenComercio(delComercio);
+    resultados.push(...delComercio);
+  }
+  return resumir('logos', resultados);
+}
+
+// ---------------------------------------------------------------------------------------------------
 
 // Imprime el resumen final y devuelve el exit code: 1 si hubo algún fallo que no sea estructural.
 function resumir(fase: Fase, resultados: Resultado[]): number {
@@ -323,7 +476,7 @@ function resumir(fase: Fase, resultados: Resultado[]): number {
     console.error(
       fase === 'objetos'
         ? `\nEXIT 1: ${reintentables.length} fallo(s) no estructurales. NO hagas el deploy B hasta que esta fase termine sin ellos.`
-        : `\nEXIT 1: ${reintentables.length} fallo(s) no estructurales. Repetí la fase clases.`,
+        : `\nEXIT 1: ${reintentables.length} fallo(s) no estructurales. Repetí la fase ${fase}.`,
     );
     return 1;
   }
@@ -340,7 +493,7 @@ async function main(): Promise<number> {
   const aplicar = resto.length === 1 && resto[0] === '--aplicar';
   // Cualquier argumento de más o mal escrito es error, no ensayo: `--aplicr` no tiene que pasar por un
   // ensayo exitoso y hacer creer que se aplicó.
-  if ((fase !== 'objetos' && fase !== 'clases') || (resto.length > 0 && !aplicar)) {
+  if ((fase !== 'objetos' && fase !== 'clases' && fase !== 'logos') || (resto.length > 0 && !aplicar)) {
     console.error('Uso:');
     console.error(`  ${USO}`);
     console.error('Sin --aplicar es un ensayo: lee la base, cuenta lo que tocaría y no llama a Google.');
@@ -364,7 +517,9 @@ async function main(): Promise<number> {
   console.log(`Base de las imágenes: ${base}\n`);
 
   const supabase = createServiceClient();
-  return fase === 'objetos' ? faseObjetos(supabase, aplicar) : faseClases(supabase, aplicar);
+  if (fase === 'objetos') return faseObjetos(supabase, aplicar);
+  if (fase === 'clases') return faseClases(supabase, aplicar);
+  return faseLogos(supabase, aplicar);
 }
 
 main()
