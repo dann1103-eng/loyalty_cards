@@ -180,8 +180,8 @@ casos del logo ancho, un solo lugar para las URLs, `?v=`, degradación sin base 
 
 **Archivos:**
 - Crear: `lib/google/logosClase.ts` (o dentro de `heroUrl.ts` si queda más coherente con
-  `heroUrlDeClase`) — `medidasLogo(url)` (descarga con timeout ~2 s, sharp, caché en memoria SOLO de las
-  exitosas), `esLogoAncho(medidas)` (proporción ≥ 1.6), la versión (`?v=`) y `logosDeClase(comercioId,
+  `heroUrlDeClase`) — `medidasLogo(url)` (descarga con timeout ~2 s, sharp, caché en memoria de los
+  éxitos, y de los fallos solo 30 s; una medición en curso se reusa), `esLogoAncho(medidas)` (proporción ≥ 1.6), la versión (`?v=`) y `logosDeClase(comercioId,
   programaId, marca, medidas)` PURA → `{ programLogo: url, wideProgramLogo: url | null | undefined }`
   (`undefined` = omitir la clave).
 - Crear: su prueba.
@@ -221,8 +221,8 @@ casos del logo ancho, un solo lugar para las URLs, `?v=`, degradación sin base 
   que salga la clase del COMERCIO con un programa con logo propio, la sync de la clase del programa tiene
   que FALLAR: `insertClaseMock.mockRejectedValueOnce(...)` — el comercio del fixture ya tiene clase y el
   único insert es el del programa. El caso "programa sin clase propia" no sirve: ahí los dos logos son el
-  mismo y la mutación no se atrapa); de `medidasLogo` (caché: la segunda llamada no descarga; un fallo no
-  se cachea; timeout → null), de `componerLogo` (medidas de salida 660×660 y 1280×400; un logo 3:1 entra
+  mismo y la mutación no se atrapa); de `medidasLogo` (caché: la segunda llamada no descarga; un fallo se
+  recuerda solo 30 s; dos pedidos simultáneos hacen una descarga; timeout → null), de `componerLogo` (medidas de salida 660×660 y 1280×400; un logo 3:1 entra
   entero en el área segura) y de las rutas (PNG y medidas; 404 sin logo y programa ajeno; con una
   composición forzada a fallar, sirve el original). En las pruebas de rutas, `fetch` se stubea para
   devolver un PNG hecho con sharp (`franja.png/route.test.ts` ~8 mockea el componedor; acá hace falta
@@ -231,7 +231,9 @@ casos del logo ancho, un solo lugar para las URLs, `?v=`, degradación sin base 
 - [ ] **Paso 3: mutaciones:** omitir `wideProgramLogo` en vez de `null` para un logo no ancho (cae);
   un spread por verdad en `construirClase` (cae la de `null` en la clase y la del `requestBody`); usar un
   chequeo de presencia en vez de `esBaseUrlPublica` (cae el caso localhost);
-  cachear también los fallos (cae la de "un fallo no se cachea"); `linkGuardar` usando el logo del
+  recordar los fallos para siempre (cae la de "pasados 30 s vuelve a intentar"); sin la ventana de 30 s
+  (cae la de "un fallo se recuerda 30 s"); sin deduplicar (cae la de las llamadas simultáneas);
+  `linkGuardar` usando el logo del
   programa para la clase del comercio (cae la rama); la ruta respondiendo 500 cuando falla la
   composición (cae la del original); umbral de ancho mal (p. ej. 1.2: cae un 4:3 que no debe ser ancho).
 - [ ] **Paso 4:** commit.

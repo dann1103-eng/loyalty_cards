@@ -139,8 +139,11 @@ calientes — `syncClaseComercio` corre en CADA registro de cliente (`app/api/re
 - `medidasLogo(url)` descarga el logo con un timeout corto (~2 s) y lee ancho/alto con sharp, con una
   **caché en memoria por URL** (la URL del logo ya trae `?v=<timestamp>` del bucket, así que una URL
   dada siempre mide lo mismo; la caché es por instancia del servidor y está bien que se pierda). Se
-  cachean SOLO las mediciones exitosas: un `null` por timeout (p. ej. un arranque en frío justo
-  después de subir el logo) no puede dejar el logo ancho apagado hasta que reinicie la instancia.
+  cachean los éxitos, y los fallos solo 30 s: un `null` por timeout (p. ej. un arranque en frío justo
+  después de subir el logo) no puede dejar el logo ancho apagado hasta que reinicie la instancia, pero
+  tampoco conviene que, con el bucket lento, cada camino vuelva a esperar el tope entero. Una medición
+  en curso para la misma URL se reusa en vez de descargar de nuevo (`linkGuardar` mide el mismo logo dos
+  veces seguidas).
 - Sin base URL PÚBLICA no se mide nada (no hay rutas compuestas; se degrada a la URL cruda). "Pública" es
   `esBaseUrlPublica` (`lib/google/baseUrlPublica.ts`), no solo "que exista": en desarrollo
   `NEXT_PUBLIC_BASE_URL` es `http://localhost:3000`, y Google rechaza el patch ENTERO (`400 Image cannot be
