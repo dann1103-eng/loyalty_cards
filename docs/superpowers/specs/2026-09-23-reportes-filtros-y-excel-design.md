@@ -21,7 +21,7 @@ opciones):
    columna, 50 por página, que reemplaza el top 5; hojas Resumen / Clientes / Por día / Por sucursal /
    Cajeros; números como números; **en pantalla "Visitas"**, en el código "operaciones".
 
-**Dos cambios respecto de lo aprobado, a confirmar por Daniel al revisar esta spec:**
+**Dos cambios respecto de lo aprobado — CONFIRMADOS por Daniel el 2026-09-23:**
 - **"Desde siempre" como preset más, y 30 días por defecto.** Hoy la cabecera y las cartas muestran el
   histórico; sin este preset esa vista desaparecería.
 - **Librería `write-excel-file` en lugar de `exceljs`.** El resumen aprobado decía "exceljs, que está

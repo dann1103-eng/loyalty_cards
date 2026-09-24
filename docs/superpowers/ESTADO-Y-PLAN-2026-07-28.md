@@ -1368,10 +1368,11 @@ verificación en `plans/2026-09-23-wallet-dispositivo-y-logos.md`.
 **Pendiente de Daniel:** mirar en un Android real el pase de Pulso Café (el logo entero dentro del círculo) y
 el registro desde un iPhone (solo Apple Wallet + el link).
 
-### Entrega 2 — Reportes con filtros, tabla de clientes y Excel: spec y plan listos, SIN implementar
+### Entrega 2 — Reportes con filtros, tabla de clientes y Excel: EN IMPLEMENTACIÓN
 
 Spec `specs/2026-09-23-reportes-filtros-y-excel-design.md` (dos revisiones contra el código), plan
-`plans/2026-09-23-reportes-filtros-y-excel.md`. Lleva **migración 0040** (cuatro funciones de reporte nuevas
-con el alcance como `uuid[]`, dos índices; no toca ninguna función existente). **A confirmar por Daniel:**
-el preset "Desde siempre" con 30 días por defecto, y `write-excel-file` en lugar de `exceljs` (la premisa
-"exceljs está mantenida" resultó falsa: última versión de 2023).
+`plans/2026-09-23-reportes-filtros-y-excel.md` (una revisión; el registro por tarea vive ahí). Lleva
+**migración 0040** (cuatro funciones de reporte nuevas con el alcance como `uuid[]`, dos índices; no toca
+ninguna función existente), que se prueba en PGlite antes de pasársela a Daniel. Confirmado por Daniel
+(2026-09-23): "Desde siempre" como preset con 30 días por defecto, y `write-excel-file` en lugar de
+`exceljs` (la premisa "exceljs está mantenida" resultó falsa: última versión de 2023).

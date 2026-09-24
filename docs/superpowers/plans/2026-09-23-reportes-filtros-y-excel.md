@@ -73,7 +73,9 @@ cambian). Es seguro porque nada publicado llama a esas funciones hasta la Tarea 
 
 ---
 
-## Paso 0 — Confirmaciones de Daniel (compuerta)
+## Paso 0 — Confirmaciones de Daniel (compuerta) — HECHO
+
+**2026-09-23:** Daniel confirmó las dos: "30 días + Desde siempre" y `write-excel-file`.
 
 La spec ("Dos cambios respecto de lo aprobado") pide confirmar: (a) "Desde siempre" como preset más, con
 30 días por defecto; (b) `write-excel-file` en lugar de `exceljs`. El controlador se lo pregunta a
