@@ -1,6 +1,7 @@
 # Reportes con filtros, tabla de clientes y Excel
 
-**Fecha:** 2026-09-23 · **Estado:** diseño aprobado por Daniel en líneas generales (2026-09-23, "Aprobado,
+**Fecha:** 2026-09-23 · **Estado:** IMPLEMENTADA (2026-09-24; la 0040 aplicada y verificada; el registro
+por tarea vive en el plan). Diseño aprobado por Daniel en líneas generales (2026-09-23, "Aprobado,
 en ese orden"); esta spec lo baja a detalle y pasó dos revisiones contra el código (23 + 8
 hallazgos, incorporados). Segunda de dos entregas pedidas tras los onboardings del 2026-09-22/23 (la primera:
 `2026-09-23-wallet-dispositivo-y-logos-design.md`). **Lleva migración 0040** (funciones de reporte
@@ -214,7 +215,8 @@ del CSV.
     repetiría filas.
   - Las demás funciones (resumen, por día, cajeros) se paginan con `.range()` más un `.order(...)`
     explícito, hasta recibir menos de 1000.
-  - El bucle es un helper PURO, `paginarTodo(llamar, tamano)`, probado con una función falsa que acota
+  - El bucle es un helper PURO (quedó como dos: `paginarPorOffset` y `paginarPorRango`, en
+    `lib/reportes/paginar.ts`), probado con una función falsa que acota
     como la SQL: total 0, total igual al tamaño de página, total igual al doble. Mutación: volver a
     cortar con "< tamaño".
   - **Tope de seguridad: 50 000 filas por hoja**; si se alcanza, la hoja Resumen lo dice. (Con los
@@ -377,13 +379,14 @@ comercio y se repiten en cada una de sus tarjetas, así que sumar la columna dup
 - **Rutas:** el Excel se lee con `read-excel-file` (9.x: `readSheet(buf, 'Clientes')`, o la función
   por defecto para todas las hojas; `trim: false` donde se compare texto exacto): hojas, encabezados,
   tipos (número, `Date`, string) y valores. `read-excel-file` devuelve solo valores: el formato
-  `$#,##0.00` y la fila fija se verifican abriendo el zip con `fflate` (ya viene con `write-excel-file`)
+  `$#,##0.00` y la fila fija se verifican abriendo el zip con `jszip` (ya es devDependency; no se importa
+  `fflate`, que es transitiva)
   y buscando el formato en `xl/styles.xml` y `state="frozen"` en la hoja; la negrita y los anchos, en el
   navegador. El gate va mockeado como en `cartel/descargar/route.test.ts`, pero el mock devuelve
   también `comercios` y `nombre`, con DOS comercios para la prueba "un comercio ajeno en `?comercio=`
   cae a Todo" (con uno solo, cae a ese comercio). "Una RPC que falla da 500" se prueba mockeando la
   función de `lib` que la envuelve (contra la base real no se puede provocar).
-- **`paginarTodo`** (pura): total 0, total = tamaño de página, total = el doble; y que nunca use
+- **`paginarPorOffset` / `paginarPorRango`** (puras): total 0, total = tamaño de página, total = el doble; y que nunca use
   `.range()` sobre `reporte_clientes` (se prueba el llamador con un falso que acota como la SQL).
 - **Navegador (controlador):** filtros y tabla a 375 px y en escritorio, sin scroll horizontal de la
   página; el Excel abierto en una hoja real.

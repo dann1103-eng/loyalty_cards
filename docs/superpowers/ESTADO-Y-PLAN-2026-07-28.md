@@ -1368,11 +1368,49 @@ verificación en `plans/2026-09-23-wallet-dispositivo-y-logos.md`.
 **Pendiente de Daniel:** mirar en un Android real el pase de Pulso Café (el logo entero dentro del círculo) y
 el registro desde un iPhone (solo Apple Wallet + el link).
 
-### Entrega 2 — Reportes con filtros, tabla de clientes y Excel: EN IMPLEMENTACIÓN
+### Entrega 2 — Reportes con filtros, tabla de clientes y Excel (2026-09-24)
 
-Spec `specs/2026-09-23-reportes-filtros-y-excel-design.md` (dos revisiones contra el código), plan
-`plans/2026-09-23-reportes-filtros-y-excel.md` (una revisión; el registro por tarea vive ahí). Lleva
-**migración 0040** (cuatro funciones de reporte nuevas con el alcance como `uuid[]`, dos índices; no toca
-ninguna función existente), que se prueba en PGlite antes de pasársela a Daniel. Confirmado por Daniel
-(2026-09-23): "Desde siempre" como preset con 30 días por defecto, y `write-excel-file` en lugar de
-`exceljs` (la premisa "exceljs está mantenida" resultó falsa: última versión de 2023).
+Spec `specs/2026-09-23-reportes-filtros-y-excel-design.md`, plan `plans/2026-09-23-reportes-filtros-y-excel.md`
+(el "Registro" del plan tiene cada tarea, sus commits, revisiones y mutaciones). Confirmado por Daniel: "Desde
+siempre" como preset con 30 días por defecto, y `write-excel-file` en lugar de `exceljs`.
+
+**Migración 0040 — APLICADA por Daniel el 2026-09-24 y verificada** (`scripts/verificar-0040.ts`: 20 de 20
+comparaciones contra las funciones viejas en los 5 demos; `anon` sin permiso). Cuatro funciones nuevas
+(`reporte_resumen`, `reporte_por_dia`, `reporte_clientes`, `reporte_cajeros_alcance`) con el alcance como
+`uuid[]`, más dos índices; no toca ninguna función existente. Antes de pasársela se corrió y se mutó en
+PGlite con las 0001–0039 reales (`lib/reportes/sql0040.pglite.test.ts`: 110 mutaciones, 102 caen, 8
+equivalentes documentadas). **La 0040 no se edita más: un arreglo va en una 0041.**
+
+**Lo que entró:**
+- Reportes filtra TODO por período (Hoy, Ayer, 7 días, 30 días, Este mes, Desde siempre, Personalizado),
+  comercio, sucursal y cajero ("Vos" para el dueño). Un dueño con un solo comercio lo tiene elegido de
+  entrada. Cabecera Visitas/Premios/Clientes; "Por día" o "Por mes" (más de 62 días); cartas por sucursal;
+  tabla de clientes ordenable por columna y paginada de a 50 (en lugar del top 5), con la columna Cliente
+  fija en el teléfono.
+- "Descargar Excel" en Reportes: hojas Resumen, Clientes, Por día, Por sucursal y Cajeros (orden
+  antifraude), con los mismos filtros; números, montos en $ y fechas reales.
+- La lista de Clientes también en `.xlsx`, y cuatro defectos del CSV arreglados (se cortaba en 1000
+  tarjetas y en 1000 visitas; un error dejaba visitas en 0; "Cliente desde" en UTC). Ahora falla con 500
+  antes que exportar datos falsos.
+- "Operaciones" pasa a decir "Visitas" en Reportes, cajeros y el panel.
+
+**Verificado en el navegador** con el dueño de Café Aurora y una membresía temporal en Dulce Nube (ya
+quitada): la vista "Todo", el filtro por comercio, el orden, Personalizado, 375 px sin scroll horizontal, y
+las cuatro descargas (el Excel leído por dentro).
+
+**Falta probar en producción (con los demos no se pudo):** la paginación de la tabla (ningún demo pasa de 50
+clientes), el filtro de cajero (los demos no tienen cajeros), y abrir un `.xlsx` en Excel o Sheets (negrita y
+anchos). **Volver atrás:** `git revert` de los commits de la entrega; la 0040 se queda (es aditiva).
+
+**Pendientes para después:**
+- La pantalla de Clientes no pagina (se corta en 1000) y cae a valores por defecto si falla una lectura.
+- Pruebas que dejan comercios huérfanos `test-tanda1-*` (tarea aparte ofrecida a Daniel).
+- Retirar `reporte_sucursales`, `reporte_tendencia`, `reporte_top_clientes` y el índice `canjes_tarjeta_idx`
+  (redundante con el nuevo): esa migración rompe `lib/comercio/limites.test.ts` y los scripts
+  `verificar-0033`, `snapshot-reportes` y `verificar-0040`, que hay que adaptar en el mismo cambio.
+- El CTE `primera` de `reporte_por_dia` lee toda la historia del alcance (versión acotada con `exists`,
+  cambiable en una 0041 sin tocar la firma).
+- "Hoy" puede correrse un día cuando "Todo" mezcla comercios de zonas horarias distintas.
+- El "Clientes" del panel (solo visitas) puede no coincidir con el de Reportes (visita o premio).
+- El admin de FM sigue diciendo "Operaciones".
+- Next.js 16.2.10 tiene avisos de seguridad corregidos en 16.2.11+ (tarea aparte ofrecida a Daniel).

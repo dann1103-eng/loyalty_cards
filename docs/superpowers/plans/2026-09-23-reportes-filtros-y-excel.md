@@ -135,13 +135,13 @@ antes de esas tareas.
   - **Tarea 7, además:** un período sin actividad en un comercio que ya operaba ("Sin movimientos", no
     barras vacías); un email largo a 375 px; un nombre de programa largo en Marca (que no se corte).
 - **4c HECHA** — `26aafd0` (tabla, `formatearTelefono` nuevo, código viejo borrado: `reporteTopClientes`,
-  `reporteTendencia`, `agregados.ts`). En revisión.
+  `reporteTendencia`, `agregados.ts`). Revisión cerrada (ver "Arreglos de revisión cerrados").
 - **5b HECHA** — `f069212` (+ arreglos: probar sucursal/cajero ajenos descartados, `maxDuration = 60`,
   fixture sin espejo del tipo).
 - **6 HECHA** — `3553135` (+ arreglos: programas/niveles que fallan hacen fallar la exportación; el
   export pide `reporte_clientes` ordenado por nombre para que una visita durante la exportación no
   saque a un cliente).
-- **Pendiente tras 5b y 6 (una tarea chica):** `TIPO_XLSX` compartido en `excelReportes.ts` (las pruebas
+- **HECHO en `8912bdf` — tras 5b y 6 (una tarea chica):** `TIPO_XLSX` compartido en `excelReportes.ts` (las pruebas
   conservan el literal) y un helper de nombre de archivo compartido por las dos rutas con
   `normalize('NFD')` (hoy "Panadería La Peña" → `panader-a-la-pe-a`); la hoja Clientes del Excel de
   Reportes tiene la misma carrera de paginación (pedir por nombre y ordenar por visitas en JS, sin
