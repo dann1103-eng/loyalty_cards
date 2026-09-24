@@ -286,7 +286,8 @@ el conglomerado), `p_desde date`, `p_hasta date` (null = sin ese borde), `p_sucu
    p_hasta]`, donde la "primera actividad" se busca SIN el borde inferior del período y CON los filtros
    de sucursal y cajero (con "Desde siempre" y un cajero elegido, la serie arranca en el primer día de
    ese cajero); cada fila se cuenta en el día local de SU comercio. **Contrato de las filas:** cero filas
-   si y solo si el alcance filtrado no tuvo actividad hasta `p_hasta` (o `p_hasta` es null); un período
+   si y solo si el alcance filtrado no tuvo actividad hasta `p_hasta`, o `p_hasta` es null, o
+   `p_desde > p_hasta` (la app los da vuelta antes de llamar); un período
    sin actividad en un alcance que ya operaba devuelve el tramo con filas en CERO. Por eso "sin
    actividad en el período" se decide con la fila total de `reporte_resumen`, nunca con
    `filas.length === 0`. Se pide con `.order('periodo')`.
