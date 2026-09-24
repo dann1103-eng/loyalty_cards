@@ -17,10 +17,13 @@ import { fechaExcel, diaExcel, FORMATO_DIA_EXCEL, FORMATO_FECHA_HORA_EXCEL } fro
 //   [ 2026, 9, 22, 22, 30 ]`; con el proceso en America/El_Salvador (la PC de Daniel), la misma con
 //   `expected [ 2026, 9, 22, 21, 30 ]…`, y "Europe/Madrid… cruza al día siguiente" con `expected
 //   [ 2026, 9, 23, 16, 30 ] to deeply equal [ 2026, 9, 24, +0, 30 ]`.
-// - (2026-09-23, Tarea 5) El formateador cacheado con UNA clave para todas las zonas (el de la primera
-//   zona pedida sirve a las demás): caen las cuatro de Madrid, entre ellas "…el día del atraso de hora"
-//   con `expected [ 2026, 10, 24, 19, 30 ] to deeply equal [ 2026, 10, 25, 2, 30 ]` (y 5 de
-//   excelReportes.test.ts, que mezcla Bogotá y Madrid en una misma hoja).
+// - (Tarea 5, re-corrida el 2026-09-24 tras la revisión) El formateador cacheado con UNA clave para
+//   todas las zonas (el de la primera zona pedida sirve a las demás). Lo atrapa la prueba
+//   AUTOCONTENIDA "cada zona con SU formateador…" corrida SOLA (`-t "cada zona con SU formateador"`):
+//   `expected [ 2026, 9, 23, 17, 30 ] to deeply equal [ 2026, 9, 24, +0, 30 ]` (Madrid con el
+//   formateador de Bogotá). Las cuatro viejas de Madrid solo caían por el ORDEN del archivo: corridas
+//   solas (`-t "Europe/Madrid"`) la mutación SOBREVIVE (4 passed), porque la primera zona que se pide
+//   es la suya. Con el archivo entero caen 5 (las cuatro de Madrid y la autocontenida).
 
 const tzOriginal = process.env.TZ;
 const zonaOriginal = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -67,6 +70,17 @@ describe('fechaExcel', () => {
     expect(componentesUtc(fechaExcel(new Date('2026-10-25T01:30:00Z'), 'Europe/Madrid'))).toEqual([
       2026, 10, 25, 2, 30,
     ]);
+  });
+
+  it('cada zona con SU formateador: Bogotá, Madrid y Bogotá otra vez, en una misma prueba', () => {
+    // fechaExcel guarda un formateador por zona. Autocontenida a propósito: si el caché le sirviera a
+    // una zona el formateador de otra, al menos una de las tres llamadas daría la hora de la otra
+    // zona, corra esta prueba sola (`-t`) o después de cualquier otra.
+    const instante = new Date('2026-09-23T22:30:00Z');
+    // 17:30 del 23 en Bogotá (UTC−5); 00:30 del 24 en Madrid (CEST, UTC+2).
+    expect(componentesUtc(fechaExcel(instante, 'America/Bogota'))).toEqual([2026, 9, 23, 17, 30]);
+    expect(componentesUtc(fechaExcel(instante, 'Europe/Madrid'))).toEqual([2026, 9, 24, 0, 30]);
+    expect(componentesUtc(fechaExcel(instante, 'America/Bogota'))).toEqual([2026, 9, 23, 17, 30]);
   });
 
   it('acepta el texto timestamptz de PostgREST (con microsegundos y offset)', () => {

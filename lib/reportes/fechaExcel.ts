@@ -17,9 +17,11 @@ export const FORMATO_FECHA_HORA_EXCEL = 'dd/mm/yyyy hh:mm';
 // UN formateador por zona, creado la primera vez que se lo pide y reusado después. El Excel llama a
 // fechaExcel una vez por fila, y construir un Intl.DateTimeFormat es lo caro: medido el 2026-09-23 con
 // 50 000 filas (el tope por hoja), 9,6 s creando uno por llamada contra 0,4 s reusándolo. El resultado
-// es el mismo: la zona va explícita en el formateador, que no depende de la del proceso. Una zona
-// inválida lanza RangeError al construirlo, así que nunca queda guardada. Las claves son zonas (una
-// lista cerrada, zonasHorarias.ts): el Map no crece sin límite.
+// es el mismo: la zona va explícita en el formateador, que no depende de la del proceso. Solo se guarda
+// una zona que Intl aceptó (una inválida lanza RangeError al construir el formateador, antes del `set`);
+// quienes llaman pasan zonas de la lista cerrada de zonasHorarias.ts (resolverFiltrosReportes las
+// valida), así que en la práctica el Map tiene unas pocas entradas. Esta función NO valida contra esa
+// lista: acepta cualquier zona que Intl conozca.
 const formateadores = new Map<string, Intl.DateTimeFormat>();
 
 function formateadorDe(zonaHoraria: string): Intl.DateTimeFormat {
