@@ -23,30 +23,8 @@ export function sumarTendencias(series: FilaTendencia[][]): FilaTendencia[] {
   return [...porDia.values()].sort((a, b) => a.dia.localeCompare(b.dia));
 }
 
-export interface ComercioOwner {
-  comercioId: string;
-  nombre: string;
-}
-
-// CONTROL DE SEGURIDAD (tabla §5 del spec): los filtros llegan por querystring — input del cliente.
-// El comercio DEBE estar entre las membresías owner de la sesión; la sucursal DEBE pertenecer al
-// comercio filtrado. Lo que no valida cae a "Todo"/"todas" — nunca llega un id ajeno a un RPC.
-// Puro a propósito: la página no puede testearse, esta función sí (ver MUTATION-TESTING en el
-// .test.ts). Una sucursal sin comercio filtrado se ignora: no hay contra qué verificar pertenencia.
-// Genérica sobre la sucursal en vez de exigir SucursalListada completa: lo único que esta función
-// toca es `id`. Pedir el tipo entero acoplaba una función de filtrado de querystring a la forma de
-// la fila de la BD — cada columna nueva en sucursales (el geopush de la 0016, por ejemplo) obligaba
-// a rellenar campos irrelevantes en sus pruebas.
-export function resolverFiltrosReportes<S extends { id: string }>(
-  comerciosOwner: ComercioOwner[],
-  sucursalesDelComercio: S[],
-  params: { comercio?: string; sucursal?: string },
-): { comercio: ComercioOwner | null; sucursal: S | null } {
-  const comercio = comerciosOwner.find((c) => c.comercioId === params.comercio) ?? null;
-  if (!comercio) return { comercio: null, sucursal: null };
-  const sucursal = sucursalesDelComercio.find((s) => s.id === params.sucursal) ?? null;
-  return { comercio, sucursal };
-}
+// (resolverFiltrosReportes y ComercioOwner vivían acá; desde la entrega de Reportes con filtros
+// —2026-09-23— están en filtrosReportes.ts, con período, cajero, orden y página.)
 
 export type TopClienteConComercio = FilaTopCliente & { comercio_id: string; comercio_nombre: string };
 

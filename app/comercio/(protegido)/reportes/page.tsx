@@ -8,7 +8,9 @@ import {
   reporteTopClientes,
   type FilaReporteSucursal,
 } from '@/lib/reportes/reportes';
-import { sumarTendencias, fusionarTopClientes, resolverFiltrosReportes } from '@/lib/reportes/agregados';
+import { sumarTendencias, fusionarTopClientes } from '@/lib/reportes/agregados';
+import { comercioAConsultar } from '@/lib/reportes/filtrosReportes';
+import { leerParametrosReportes } from '@/lib/reportes/parametrosReportes';
 import { listarProgramas } from '@/lib/comercio/programas';
 import { describirCosto } from '@/lib/tarjetas/unidadPrograma';
 
@@ -60,29 +62,27 @@ function CartaSucursal({ fila, esPrincipal }: { fila: FilaReporteSucursal; esPri
 export default async function PaginaReportes({
   searchParams,
 }: {
-  searchParams: Promise<{ comercio?: string; sucursal?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   // Gate del dueño. La vista es el CONGLOMERADO de sus comercios owner (plan 2026-07-25 §4.7) e
-  // IGNORA el switcher del header. Los filtros vienen del querystring (input del cliente): los
-  // valida resolverFiltrosReportes (puro, con mutation-tests) ANTES de correr cualquier RPC —
-  // ?comercio contra la lista owner, ?sucursal por pertenencia al comercio filtrado. Un id ajeno o
-  // inválido cae a "Todo"/"todas".
+  // IGNORA el switcher del header. Los filtros vienen del querystring (input del cliente) y se
+  // validan ANTES de correr cualquier RPC — ?comercio contra la lista owner, ?sucursal por
+  // pertenencia al comercio resuelto. Un id ajeno, inválido o repetido cae a "Todo"/"todas".
   const { comercios } = await verifyComercioOwner();
-  const params = await searchParams;
+  const parametros = leerParametrosReportes(await searchParams);
   const supabase = createServiceClient();
 
-  // Sucursales del comercio del querystring: solo se cargan si ese id es de un comercio SUYO (así
-  // un id ajeno ni siquiera dispara la consulta). Activas e inactivas: el histórico de una sucursal
-  // apagada sigue siendo consultable.
-  const esComercioPropio = comercios.some((c) => c.comercioId === params.comercio);
-  const sucursalesDelComercio = esComercioPropio
-    ? (await listarSucursales(supabase, params.comercio!)) ?? []
+  // INTERINO hasta la Tarea 4b del plan 2026-09-23, que pasa esta página a cargarContextoReportes +
+  // resolverFiltrosReportes (lib/reportes/filtrosReportes.ts). Mientras tanto: comercioAConsultar
+  // resuelve el comercio ANTES de cargar sus sucursales, con la regla "un solo comercio = elegido"
+  // (el prechequeo que había acá miraba solo ?comercio, y un dueño con un comercio nunca cargaba
+  // sus sucursales). La sucursal se busca en la lista de ESE comercio: un id ajeno no está en ella y
+  // cae a "todas". Activas e inactivas: el histórico de una sucursal apagada sigue siendo consultable.
+  const comercioFiltrado = comercioAConsultar(comercios, parametros);
+  const sucursalesDelComercio = comercioFiltrado
+    ? ((await listarSucursales(supabase, comercioFiltrado.comercioId)) ?? [])
     : [];
-  const { comercio: comercioFiltrado, sucursal: sucursalFiltrada } = resolverFiltrosReportes(
-    comercios,
-    sucursalesDelComercio,
-    params,
-  );
+  const sucursalFiltrada = sucursalesDelComercio.find((s) => s.id === parametros.sucursal) ?? null;
 
   const alcance = comercioFiltrado ? [comercioFiltrado] : comercios;
   // Todo en paralelo: 3 RPC por comercio del alcance + UNA sola consulta para las principales de

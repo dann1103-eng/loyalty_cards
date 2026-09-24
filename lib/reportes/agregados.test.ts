@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sumarTendencias, fusionarTopClientes, resolverFiltrosReportes } from './agregados';
+import { sumarTendencias, fusionarTopClientes } from './agregados';
 
 // MUTATION-TESTING: el contrato son dos cosas — sumar día a día entre series y devolverlas en orden
 // ascendente por día. La mutación interesante es la tercera: sin la copia `{ ...fila }`, el Map se
@@ -34,59 +34,7 @@ describe('sumarTendencias', () => {
   });
 });
 
-// MUTATION-TESTING: resolverFiltrosReportes es el candado de la fila "Filtros de reportes validados
-// contra membresías" (tabla §5 del spec). Vive acá, en una función pura, JUSTAMENTE para poder
-// mutarlo — validado inline en la página no habría forma de testearlo (el repo no testea páginas).
-describe('resolverFiltrosReportes', () => {
-  const comercios = [
-    { comercioId: 'c-mio', nombre: 'Mío' },
-    { comercioId: 'c-otro-mio', nombre: 'Otro mío' },
-  ];
-  const sucursales = [
-    { id: 's-1', nombre: 'Principal', activa: true, esPrincipal: true },
-    { id: 's-2', nombre: 'Centro', activa: true, esPrincipal: false },
-  ];
-
-  it('sin params: alcance = todos los comercios owner, sin sucursal', () => {
-    expect(resolverFiltrosReportes(comercios, sucursales, {})).toEqual({
-      comercio: null,
-      sucursal: null,
-    });
-  });
-
-  it('comercio propio: se acepta', () => {
-    expect(resolverFiltrosReportes(comercios, sucursales, { comercio: 'c-mio' })).toEqual({
-      comercio: comercios[0],
-      sucursal: null,
-    });
-  });
-
-  it('comercio AJENO (no está en sus membresías): cae a Todo', () => {
-    expect(resolverFiltrosReportes(comercios, sucursales, { comercio: 'c-ajeno' })).toEqual({
-      comercio: null,
-      sucursal: null,
-    });
-  });
-
-  it('sucursal ajena al comercio filtrado: cae a "todas" sin tumbar el filtro de comercio', () => {
-    expect(
-      resolverFiltrosReportes(comercios, sucursales, { comercio: 'c-mio', sucursal: 's-de-otro' }),
-    ).toEqual({ comercio: comercios[0], sucursal: null });
-  });
-
-  it('sucursal válida del comercio filtrado: se acepta', () => {
-    expect(
-      resolverFiltrosReportes(comercios, sucursales, { comercio: 'c-mio', sucursal: 's-2' }),
-    ).toEqual({ comercio: comercios[0], sucursal: sucursales[1] });
-  });
-
-  it('sucursal SIN comercio filtrado: se ignora (no hay a qué comercio pertenecer)', () => {
-    expect(resolverFiltrosReportes(comercios, sucursales, { sucursal: 's-1' })).toEqual({
-      comercio: null,
-      sucursal: null,
-    });
-  });
-});
+// (Las pruebas de resolverFiltrosReportes se mudaron con la función a filtrosReportes.test.ts.)
 
 // MUTATION-TESTING: el orden es el contrato (visitas desc, puntos como desempate — el MISMO
 // criterio que la SQL de reporte_top_clientes). Mutación a atrapar: invertir el sort.
