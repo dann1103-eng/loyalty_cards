@@ -14,7 +14,9 @@ export const runtime = 'nodejs';
 //
 // Esta ruta NO puede fallar para un comercio con logo: si la composición falla sirve el logo original,
 // porque Google rechaza el patch ENTERO de la clase si no puede bajar su programLogo (el porqué largo,
-// en lib/google/servirLogoClase.ts).
+// en lib/google/servirLogoClase.ts). La única excepción es un bucket que no responde: 502, y NUNCA una
+// redirección al logo crudo, porque Google lo cachearía bajo esta URL versionada y el logo recortado
+// quedaría puesto hasta el próximo cambio de logo o de color; con el 502 el próximo sync reintenta.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ comercioId: string }> },
