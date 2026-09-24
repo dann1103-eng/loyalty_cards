@@ -90,10 +90,37 @@ export function botonesWallet({
   };
 }
 
+// La billetera cuyo botón ve el cliente DE ENTRADA en la pantalla de éxito, para que el subtítulo
+// de arriba ("Agrégala a ___ y …", `promesaTarjetaLista` en lib/tarjetas/textosPorTipo.ts) nombre
+// ESE botón. 'ambas' = los dos a la vista (computadora con Google disponible).
+//
+// El tipo vive acá y no en textosPorTipo porque es un dato de los botones, no del texto: la
+// dependencia va en una sola dirección (textosPorTipo importa este tipo; este módulo no importa nada).
+export type BilleteraDeEntrada = 'apple' | 'google' | 'ambas';
+
+// POR QUÉ EXISTE (Tarea 6b del plan Wallet/logos): hasta el 2026-09-23 el subtítulo decía "tu Apple
+// Wallet" en todas las plataformas, encima de un Android que solo veía "Agregar a Google Wallet".
+//
+// Sale de `botonesWallet` y NO de la plataforma a secas: un Android sin Google disponible ve el
+// botón de Apple (ver la rama 'android' de arriba) y tiene que leer "Apple Wallet", no "Google".
+// Con `mostrarOtro: false` fijo porque el subtítulo nombra lo que se ve de entrada: no cambia si el
+// cliente toca "¿Tienes otro teléfono?" (ese link es un escape por si la detección falló, no un
+// cambio de billetera).
+export function billeteraDeEntrada({
+  plataforma,
+  googleDisponible,
+}: Omit<BotonesWalletEntrada, 'mostrarOtro'>): BilleteraDeEntrada {
+  const { apple, google } = botonesWallet({ plataforma, googleDisponible, mostrarOtro: false });
+  if (apple && google) return 'ambas';
+  // Sin ninguno de los dos no se llega: Apple no depende de nada, así que siempre que Google no
+  // está a la vista, Apple sí (las tres ramas de `botonesWallet`).
+  return google ? 'google' : 'apple';
+}
+
 // La frase de la pantalla de registro ("Directo en tu ___, sin apps y sin plásticos.") ANTES de que
 // el cliente sepa qué botón va a ver: prometerle "tu Apple Wallet" a alguien de Android es una
-// promesa que ese botón no cumple. Tuteo — la lee el CLIENTE FINAL (regla de
-// lib/tarjetas/textosPorTipo.ts ~75-79).
+// promesa que ese botón no cumple. Tuteo — la lee el CLIENTE FINAL (regla "OJO CON EL TRATO" de
+// lib/tarjetas/textosPorTipo.ts).
 export function fraseWalletDelFormulario(plataforma: Plataforma): string {
   if (plataforma === 'ios') return 'Directo en tu Apple Wallet';
   if (plataforma === 'android') return 'Directo en tu Google Wallet';

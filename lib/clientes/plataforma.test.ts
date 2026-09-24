@@ -35,8 +35,25 @@
 //   es justo el estado que alcanza el portal en la Tarea 2 al cambiar de una tarjeta con Google
 //   (con el link ya tocado) a una sin Google: sin este `&&`, `BotonesWallet.tsx` recibiría
 //   `resultado.google: true` con `urlGoogle: null`.
+//
+// Tarea 6b (`billeteraDeEntrada`, corridas y revertidas a mano el 2026-09-23; mismo criterio: lo
+// que VITEST imprimió):
+// - (a) `if (plataforma === 'android') return 'google';` al principio de la función (la billetera
+//   sale de la plataforma a secas y no de `botonesWallet`) → cae 1 prueba: "android SIN Google
+//   disponible: "apple" — es el único botón que ve, no el de su plataforma", con
+//   `Expected: "apple"` / `Received: "google"`.
+// - (c) `mostrarOtro: true` en vez de `false` en la llamada a `botonesWallet` → caen 2 pruebas:
+//   "ios con Google disponible: "apple" (el de Google está detrás del link)", con
+//   `Expected: "apple"` / `Received: "ambas"`, y "android con Google disponible: "google" (el de
+//   Apple está detrás del link)", con `Expected: "google"` / `Received: "ambas"`.
+// - (b), la frase de Google que vuelve a decir "Apple Wallet", vive en textosPorTipo.test.ts.
 import { describe, it, expect } from 'vitest';
-import { detectarPlataforma, botonesWallet, fraseWalletDelFormulario } from './plataforma';
+import {
+  detectarPlataforma,
+  botonesWallet,
+  billeteraDeEntrada,
+  fraseWalletDelFormulario,
+} from './plataforma';
 
 describe('detectarPlataforma', () => {
   it('Safari en iPhone (iOS 17) da "ios"', () => {
@@ -245,6 +262,38 @@ describe('botonesWallet', () => {
       link: false,
       notaSafari: true,
     });
+  });
+});
+
+// Tarea 6b: la billetera que nombra el subtítulo de "Tu tarjeta está lista". La tabla es 3×2 y no
+// 3×2×2 porque la función NO recibe `mostrarOtro`: el subtítulo nombra lo que el cliente ve DE
+// ENTRADA y no cambia si después toca "¿Tienes otro teléfono?".
+describe('billeteraDeEntrada', () => {
+  it('ios con Google disponible: "apple" (el de Google está detrás del link)', () => {
+    expect(billeteraDeEntrada({ plataforma: 'ios', googleDisponible: true })).toBe('apple');
+  });
+
+  it('ios sin Google disponible: "apple"', () => {
+    expect(billeteraDeEntrada({ plataforma: 'ios', googleDisponible: false })).toBe('apple');
+  });
+
+  it('android con Google disponible: "google" (el de Apple está detrás del link)', () => {
+    expect(billeteraDeEntrada({ plataforma: 'android', googleDisponible: true })).toBe('google');
+  });
+
+  it('android SIN Google disponible: "apple" — es el único botón que ve, no el de su plataforma', () => {
+    // El caso por el que la función sale de `botonesWallet` y no de la plataforma a secas: un
+    // comercio sin logo (o una sincronización de la clase que falló en ese momento) deja al cliente
+    // de Android con el botón de Apple, y el subtítulo tiene que nombrar ESE botón.
+    expect(billeteraDeEntrada({ plataforma: 'android', googleDisponible: false })).toBe('apple');
+  });
+
+  it('"otra" con Google disponible: "ambas" (los dos botones de una)', () => {
+    expect(billeteraDeEntrada({ plataforma: 'otra', googleDisponible: true })).toBe('ambas');
+  });
+
+  it('"otra" sin Google disponible: "apple"', () => {
+    expect(billeteraDeEntrada({ plataforma: 'otra', googleDisponible: false })).toBe('apple');
   });
 });
 

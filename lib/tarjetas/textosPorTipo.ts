@@ -1,3 +1,4 @@
+import type { BilleteraDeEntrada } from '../clientes/plataforma';
 import { tipoOPuntos, TIPOS } from './tipos';
 
 // Los textos de interfaz que CAMBIAN según el tipo de tarjeta, en una tabla por concepto.
@@ -65,18 +66,20 @@ const ATAJO_REGLAS: Record<string, string> = {
 // distintos, y un solo texto para los dos quedaría mal en alguno:
 //   - PROMESA_REGISTRO va ANTES de registrarse: es el motivo para dejar su teléfono. Habla en
 //     futuro y tiene que responder "¿y yo qué gano?".
-//   - PROMESA_TARJETA_LISTA va DESPUÉS, junto al botón de Apple Wallet: la tarjeta ya existe y lo
+//   - COLA_TARJETA_LISTA va DESPUÉS, encima de los botones de Wallet: la tarjeta ya existe y lo
 //     único que falta es guardarla. Prometer otra vez el beneficio ahí sobra; lo que hace falta es
-//     decirle qué tiene ahora en el teléfono.
+//     decirle qué tiene ahora en el teléfono. Guarda solo la COLA por tipo: la billetera que se
+//     nombra adelante la pone `promesaTarjetaLista` (ver su comentario, abajo).
 // Ninguna de las dos interpola el nombre del comercio: la pantalla ya lo tiene en el título y en
 // la tarjeta de muestra, y una frase con el nombre adentro se rompe con un comercio de nombre
 // largo.
 
-// OJO CON EL TRATO: estas dos tablas y solo estas dos van en TUTEO ("Regístrate", "Agrégala").
-// El resto del módulo vosea, igual que todo el panel del dueño. No es un descuido: las pantallas
-// que ve el CLIENTE FINAL (registro y portal) tutean desde siempre, y el usuario lo confirmó
-// como decisión el 2026-09-08. Mezclar los dos registros en la misma pantalla se nota y queda
-// mal, así que si algún día se unifica hay que cambiar la pantalla entera, no una frase suelta.
+// OJO CON EL TRATO: estas dos tablas (y FRASE_BILLETERA, que completa la segunda) van en TUTEO
+// ("Regístrate", "Agrégala", "tu teléfono"), y solo ellas. El resto del módulo vosea, igual que
+// todo el panel del dueño. No es un descuido: las pantallas que ve el CLIENTE FINAL (registro y
+// portal) tutean desde siempre, y el usuario lo confirmó como decisión el 2026-09-08. Mezclar los
+// dos registros en la misma pantalla se nota y queda mal, así que si algún día se unifica hay que
+// cambiar la pantalla entera, no una frase suelta.
 const PROMESA_REGISTRO: Record<string, string> = {
   puntos: 'Regístrate una vez y suma puntos en cada visita.',
   sellos: 'Regístrate una vez y junta tus sellos en cada visita.',
@@ -88,15 +91,29 @@ const PROMESA_REGISTRO: Record<string, string> = {
   descuento: 'Regístrate una vez y gana tu descuento por lo que compras.',
 };
 
-const PROMESA_TARJETA_LISTA: Record<string, string> = {
-  puntos: 'Agrégala a tu Apple Wallet y empieza a sumar puntos hoy.',
-  sellos: 'Agrégala a tu Apple Wallet y empieza a juntar tus sellos hoy.',
-  prepago: 'Agrégala a tu Apple Wallet y mira tus visitas cuando quieras.',
-  gift_card: 'Agrégala a tu Apple Wallet y mira tu saldo cuando quieras.',
-  cashback: 'Agrégala a tu Apple Wallet y mira tu saldo cuando quieras.',
-  cupon: 'Agrégala a tu Apple Wallet y muestra tu cupón cuando lo uses.',
-  membresia: 'Agrégala a tu Apple Wallet y muéstrala cada vez que vengas.',
-  descuento: 'Agrégala a tu Apple Wallet y muéstrala en cada compra.',
+// Lo que va después de "Agrégala a <billetera> y …". Tiene que leerse bien detrás de las TRES
+// billeteras de FRASE_BILLETERA ("tu Apple Wallet", "tu Google Wallet", "la billetera de tu
+// teléfono"): por eso ninguna cola nombra una marca.
+const COLA_TARJETA_LISTA: Record<string, string> = {
+  puntos: 'empieza a sumar puntos hoy.',
+  sellos: 'empieza a juntar tus sellos hoy.',
+  prepago: 'mira tus visitas cuando quieras.',
+  gift_card: 'mira tu saldo cuando quieras.',
+  cashback: 'mira tu saldo cuando quieras.',
+  cupon: 'muestra tu cupón cuando lo uses.',
+  membresia: 'muéstrala cada vez que vengas.',
+  descuento: 'muéstrala en cada compra.',
+};
+
+// La billetera que nombra el subtítulo, según el botón que el cliente ve DE ENTRADA
+// (`billeteraDeEntrada`, lib/clientes/plataforma.ts). Con los dos botones a la vista no se elige
+// una marca: "la billetera de tu teléfono", la misma frase que usa el formulario en 'otra'
+// (`fraseWalletDelFormulario`). `Record` sobre el tipo de la billetera, no sobre string: una
+// billetera nueva sin frase no compila.
+const FRASE_BILLETERA: Record<BilleteraDeEntrada, string> = {
+  apple: 'tu Apple Wallet',
+  google: 'tu Google Wallet',
+  ambas: 'la billetera de tu teléfono',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -154,8 +171,13 @@ export function promesaRegistro(tipoTarjeta: string): string {
   return textoDe(PROMESA_REGISTRO, tipoTarjeta);
 }
 
-export function promesaTarjetaLista(tipoTarjeta: string): string {
-  return textoDe(PROMESA_TARJETA_LISTA, tipoTarjeta);
+// La billetera es OBLIGATORIA y sin valor por defecto, a propósito. Hasta el 2026-09-23 esta función
+// recibía solo el tipo y cada frase decía "tu Apple Wallet" cableado: un cliente de Android lo leía
+// encima del único botón que veía, el de Google (Tarea 6b del plan Wallet/logos). La firma no podía
+// expresar el caso, así que se le arregló la FIRMA; un default reinstalaría la trampa para el
+// próximo llamador que no sepa qué botón se dibuja.
+export function promesaTarjetaLista(tipoTarjeta: string, billetera: BilleteraDeEntrada): string {
+  return `Agrégala a ${FRASE_BILLETERA[billetera]} y ${textoDe(COLA_TARJETA_LISTA, tipoTarjeta)}`;
 }
 
 export function placeholderInactividad(tipoTarjeta: string): string {

@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore, type FormEvent } from 'react';
 import { PAISES, PAIS_DEFAULT, buscarPaisPorClave } from '@/lib/clientes/paises';
-import { fraseWalletDelFormulario, type Plataforma } from '@/lib/clientes/plataforma';
+import { billeteraDeEntrada, fraseWalletDelFormulario, type Plataforma } from '@/lib/clientes/plataforma';
 import { frentePase } from '@/lib/tarjetas/frentePase';
 import { promesaRegistro, promesaTarjetaLista, rotuloTarjeta } from '@/lib/tarjetas/textosPorTipo';
 import BotonesWallet from '@/app/_ui/BotonesWallet';
@@ -228,8 +228,17 @@ export default function RegistroCliente({
           </h1>
           {/* La tarjeta YA existe: acá no se vuelve a prometer el beneficio, se dice qué acaba de
               quedar en el teléfono. No interpola el nombre del comercio a propósito —— ya está en la
-              tarjeta de muestra de abajo, y un nombre largo rompía la frase. */}
-          <p className="lede reveal d2">{promesaTarjetaLista(tipoTarjeta)}</p>
+              tarjeta de muestra de abajo, y un nombre largo rompía la frase.
+              Nombra la billetera del botón que <BotonesWallet> dibuja DE ENTRADA (Tarea 6b): el
+              `googleDisponible` es el mismo booleano que decide su `urlGoogle`, y no depende del
+              link "¿Tienes otro teléfono?" —— ese estado vive dentro de BotonesWallet y el subtítulo
+              no cambia al tocarlo. */}
+          <p className="lede reveal d2">
+            {promesaTarjetaLista(
+              tipoTarjeta,
+              billeteraDeEntrada({ plataforma, googleDisponible: googleWalletDisponible }),
+            )}
+          </p>
           <div className="panel reveal d3" style={{ background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, marginTop: 26 }}>
             <VistaTarjeta
               nombreComercio={nombreComercio}
