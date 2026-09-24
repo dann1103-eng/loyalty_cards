@@ -186,6 +186,11 @@ describe('generarLinkGuardar', () => {
   //   (d) El color de fondo de la clase con `marca.colorFondo` fijo, sin la rama `claseDelPrograma` →
   //       FALLA "clase del COMERCIO: hexBackgroundColor es el del COMERCIO…" con `expected '#c86400' to be
   //       '#0a141e'` (el color del programa en la clase del negocio).
+  //   (e) Sin el filtro del null del JWT (`logos` en vez de `logosJwt` en construirClase) → FALLA
+  //       "clase del COMERCIO: el logo del comercio…" con `expected true to be false`: el logo cuadrado
+  //       volvía a viajar con `wideProgramLogo: null` dentro del JWT.
+  // (a) y la del logo crudo de syncClase.test.ts se volvieron a correr tras (e): caen igual, con los
+  // mismos mensajes.
   describe('logos y color de fondo de la clase embebida', () => {
     type ClaseJwt = {
       id: string;
@@ -223,9 +228,9 @@ describe('generarLinkGuardar', () => {
       expect(clase.programLogo.sourceUri.uri).toMatch(
         new RegExp(`^https://www\\.cardly-sv\\.site/api/comercios/${t.comercioId}/logo\\.png\\?v=[0-9a-f]{12}$`),
       );
-      // Medido y no ancho: el null viaja también dentro del JWT (borra un logo ancho viejo).
-      expect('wideProgramLogo' in clase).toBe(true);
-      expect(clase.wideProgramLogo).toBeNull();
+      // Medido y NO ancho: dentro del JWT la clave se OMITE, no viaja con null (ver linkGuardar.ts: el
+      // null por JWT no se puede verificar antes de publicar; el borrado lo hacen los syncs por REST).
+      expect('wideProgramLogo' in clase).toBe(false);
 
       await syncClaseComercio(supabase, t.comercioId);
       const delSync = patchClaseMock.mock.calls.at(-1)![0].requestBody;

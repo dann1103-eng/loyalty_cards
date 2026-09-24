@@ -137,6 +137,17 @@ export async function generarLinkGuardar(
       })
     : await resolverLogosClase(tarjeta.comercio_id, null, { logoUrl: logoComercio, colorFondo: cm.color_fondo });
 
+  // En el JWT el logo ancho NUNCA viaja en null: si el logo se midió y no es ancho, la clave se OMITE
+  // (la URL de un logo ancho y la clave ausente de una medición fallida pasan igual). El null por REST
+  // de syncClase/syncClasePrograma se verifica contra la API real antes de publicar; el del JWT, en
+  // cambio, recién lo procesa Google cuando alguien toca "Agregar a Google Wallet" con su cuenta, y no
+  // hay forma de probarlo antes. Si Google lo rechazara, ese botón se rompería para la mayoría de los
+  // comercios, que tienen logo cuadrado. Omitirlo no cuesta nada: para una clase NUEVA "ausente" es lo
+  // mismo que null, y en una existente el borrado ya lo hacen los syncs por REST (el guardado de marca
+  // llama a syncClaseComercio). El filtro vive ACÁ y no en construirClase, que los syncs comparten.
+  const { wideProgramLogo, ...logosSinAncho } = logos;
+  const logosJwt = wideProgramLogo === null ? logosSinAncho : logos;
+
   const clase = construirClase(classId, {
     nombre: cm.nombre,
     // El color de fondo (hexBackgroundColor), con la MISMA rama que los logos y la portada: con la clase
@@ -144,7 +155,7 @@ export async function generarLinkGuardar(
     // sincronizar le teñía, vía el upsert del JWT, la clase del NEGOCIO —la de todas sus tarjetas— con
     // su propio color.
     colorFondo: claseDelPrograma ? marca.colorFondo : cm.color_fondo,
-    logos,
+    logos: logosJwt,
     // La portada tiene que ser la de ESTA clase: con la del comercio, la marca del comercio; con la
     // del programa, la efectiva. Con `marca` en los dos casos, un programa con branding propio que NO
     // llega a tener clase propia (necesitaClasePropia solo mira color de fondo, logo y foto) le

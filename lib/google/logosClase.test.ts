@@ -7,8 +7,8 @@ import { esLogoAncho, versionLogoClase, logosDeClase, resolverLogosClase } from 
 //   (a) OMITIR la clave en vez de mandar null para un logo medido no ancho, en logosDeClase:
 //       `if (!esLogoAncho(medidas)) return { programLogo };` → FALLA "medido y NO ancho →
 //       wideProgramLogo PRESENTE con null (borra uno anterior)" con `expected false to be true`. Caen
-//       también, con el mismo mensaje, las pruebas del null en syncClase, syncClasePrograma y
-//       linkGuardar (4 en total).
+//       también, con el mismo mensaje, las pruebas del null en syncClase y syncClasePrograma (3 en
+//       total; vuelta a correr después de que linkGuardar dejó de mandar el null dentro del JWT).
 //   (b) Chequeo de PRESENCIA en vez de esBaseUrlPublica, en baseParaImagenesGoogle (baseUrlPublica.ts):
 //       `if (!base) return null;` → FALLAN "con la base de desarrollo (http://localhost:3000) → el logo
 //       crudo y sin logo ancho, nunca localhost" (`expected { …(2) } to deeply equal { Object

@@ -65,8 +65,8 @@ describe('construirClase', () => {
 // que usan los demás opcionales de construirClase,
 //   `...(comercio.logos.wideProgramLogo ? { wideProgramLogo: { sourceUri: { uri: … } } } : {})`
 // → FALLA "con null: la clave VIAJA, con null (borra un logo ancho anterior)" con `expected false to be
-// true`, y con el mismo mensaje las del requestBody en syncClase y syncClasePrograma y la del JWT en
-// linkGuardar (4 en total).
+// true`, y con el mismo mensaje las del requestBody en syncClase y syncClasePrograma (3 en total;
+// vuelta a correr después de que linkGuardar dejó de mandar el null dentro del JWT).
 describe('construirClase — wideProgramLogo', () => {
   const base = { nombre: 'Pulso', colorFondo: null, heroUrl: null, ubicaciones: [] };
 
@@ -83,7 +83,8 @@ describe('construirClase — wideProgramLogo', () => {
     const clase = construirClase('123.comercio_abc', { ...base, logos: { programLogo: LOGO, wideProgramLogo: null } });
     expect('wideProgramLogo' in clase).toBe(true);
     expect(clase.wideProgramLogo).toBeNull();
-    // Y sobrevive la serialización (es lo que llega a Google, por REST o dentro del JWT).
+    // Y sobrevive la serialización: es lo que llega a Google por REST. (Dentro del JWT, linkGuardar
+    // omite la clave en vez de mandar el null: ver el porqué allá.)
     expect(JSON.parse(JSON.stringify(clase))).toHaveProperty('wideProgramLogo', null);
   });
 
