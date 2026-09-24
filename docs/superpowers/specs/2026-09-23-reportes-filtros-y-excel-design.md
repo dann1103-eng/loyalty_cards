@@ -98,7 +98,7 @@ parámetro inválido, o repetido (llega como arreglo), cae a su valor por defect
 | Parámetro | Valores | Por defecto |
 |---|---|---|
 | `periodo` | `hoy`, `ayer`, `7d`, `30d`, `mes`, `todo`, `rango` | `30d` |
-| `desde`, `hasta` | `YYYY-MM-DD`, solo con `periodo=rango`, de `2000-01-01` en adelante; invertidos se dan vuelta | ver abajo |
+| `desde`, `hasta` | `YYYY-MM-DD`, solo con `periodo=rango`, de `2000-01-01` a HOY (un `hasta` futuro se lee como hoy: `reporte_por_dia` genera la serie día por día); invertidos se dan vuelta | ver abajo |
 | `comercio` | id de un comercio SUYO | todos ("Todo") |
 | `sucursal` | id de una sucursal de ese comercio (activa o no) | todas |
 | `cajero` | id de un `usuarios_comercio` de ese comercio (cajero o dueño, activo o no) | todos |
@@ -283,19 +283,28 @@ el conglomerado), `p_desde date`, `p_hasta date` (null = sin ese borde), `p_sucu
    `p_agrupar` = `'dia'` | `'mes'` | `'auto'` (`auto`: día si el tramo recortado tiene hasta 62 días,
    mes si no). **`p_hasta` es obligatorio** (con null, cero filas): la app siempre lo manda (con "todo"
    y con un rango sin `hasta`, manda hoy). Tramo: `[max(p_desde, primera actividad del alcance),
-   p_hasta]`; cada fila se cuenta en el día local de SU comercio. Sin actividad, cero filas. Se pide
-   con `.order('periodo')`.
+   p_hasta]`, donde la "primera actividad" se busca SIN el borde inferior del período y CON los filtros
+   de sucursal y cajero (con "Desde siempre" y un cajero elegido, la serie arranca en el primer día de
+   ese cajero); cada fila se cuenta en el día local de SU comercio. **Contrato de las filas:** cero filas
+   si y solo si el alcance filtrado no tuvo actividad hasta `p_hasta` (o `p_hasta` es null); un período
+   sin actividad en un alcance que ya operaba devuelve el tramo con filas en CERO. Por eso "sin
+   actividad en el período" se decide con la fila total de `reporte_resumen`, nunca con
+   `filas.length === 0`. Se pide con `.order('periodo')`.
 3. **`reporte_clientes(..., p_orden text, p_desc boolean, p_limite integer, p_offset integer)`** →
    `comercio_id, cliente_id, nombre, apellido, telefono, operaciones, puntos_otorgados, canjes,
    ultima_actividad timestamptz, total bigint, offset_efectivo integer`. Agrega en una subconsulta y
    ordena afuera (un `order by case …` no puede usar el alias de un agregado). `p_orden` se valida
    contra una lista cerrada DENTRO de la SQL (`case`); un valor fuera de la lista ordena por visitas.
-   `p_limite` se acota a [1, 1000]. `total` = filas antes de paginar (un CTE que cuenta). El offset se
-   acota, en aritmética ENTERA, con
-   `least(greatest(p_offset, 0), greatest(((total - 1) / p_limite) * p_limite, 0))`; con `floor()` o
-   numérico, total 0 daría −limite y Postgres lanza "OFFSET must not be negative". Con total 0 la
-   función devuelve cero filas, y gracias al acotado "cero filas" significa exactamente "total 0" (la
-   app no puede leer `total` de una respuesta vacía). Prueba: un comercio sin actividad con `pagina=5`.
+   `p_limite` se acota a [1, 1000] (null → 50). `total` = filas antes de paginar (un CTE que cuenta).
+   El offset se acota con
+   `least(greatest(p_offset, 0), greatest(((total - 1) / limite) * limite, 0))`, sobre el límite YA
+   acotado (con `p_limite` crudo, 0 o null dividirían por cero). La división es ENTERA para alinear a
+   múltiplo de página: con numérico, 312 filas de a 50 darían 311 en vez de 300. El `greatest` de
+   afuera evita el negativo con total 0 y límite 1. (`floor()` sería equivalente a la división entera:
+   no es una mutación que se pueda tirar.) Con total 0 la función devuelve cero filas, y gracias al
+   acotado "cero filas" significa exactamente "total 0" (la app no puede leer `total` de una respuesta
+   vacía). Pruebas: un comercio sin actividad con `pagina=5`; total 0 con límite 1; 312 de a 50 con la
+   página 999 → `offset_efectivo` 300.
 4. **`reporte_cajeros_alcance(...)`** → las columnas de `reporte_cajeros` más `comercio_id`, con los
    cuatro filtros y la definición única de Clientes; Correcciones y Forzadas salen de la clase
    `'ajuste'` y de `forzado` del CTE `actividad` (monto vendido: `sum(monto_compra)` de las visitas de

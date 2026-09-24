@@ -141,8 +141,11 @@ antes de esas tareas.
 - [ ] **Paso 4 — mutaciones, sobre el `.sql` del disco** (se rompe la línea, se corre, se ve caer, se
   restaura): cada filtro en la rama de CANJES por separado; `>=`/`>` y el `+1` del borde; `lim` con la
   zona de un solo comercio; el `filter` del bruto; `grouping()` contra "ids null"; "un ajuste cuenta
-  como visita"; "Clientes cuenta ajustes"; el desempate; el offset con `floor()`/numérico (tiene que
-  lanzar con total 0); el borde 62/63 de `auto`; el acotado de `p_limite`; el `case` de `p_orden`.
+  como visita"; "Clientes cuenta ajustes"; el desempate; el offset con división NUMÉRICA (312 de a 50
+  con la página 999 tiene que dar 300, no 311) y sin el `greatest` de afuera (total 0 con límite 1
+  tiene que dar cero filas sin error) — `floor()` es EQUIVALENTE a la división entera, no se corre;
+  el borde 62/63 de `auto`; el acotado de `p_limite`; el `case` de `p_orden`. Más la lista de "cosas a
+  confirmar ejecutando" de la revisión de la 1a (anotada abajo, en "Resultado de la revisión de 1a").
 - [ ] **Paso 5:** commit. **Recién ahora**, con las revisiones de 1a y 1b aprobadas, el controlador pega
   la 0040 en el chat para Daniel.
 - **Si PGlite no sirve:** las mutaciones de SQL quedan declaradas como NO corridas, con una tabla "línea
@@ -152,6 +155,32 @@ antes de esas tareas.
   PostgREST, el tope de filas (`max-rows`), `.range()` por fuera del resultado, tipos del JSON,
   `PGRST203`. **Collation:** PGlite puede ordenar distinto que Supabase con acentos y mayúsculas; en
   PGlite no se asierta el orden por nombre con esos casos.
+
+**Resultado de la revisión de 1a (`d674969`) — lo que la 1b tiene que EJECUTAR para confirmar:**
+1. Resumen con entrada vacía: exactamente una fila, `es_total`, ids null, todo en 0.
+2. Resumen con actividad "sin sucursal": la fila total y `(comercio, null)` se distinguen solo por
+   `es_total`; mutarlo a "ids null" tiene que caer.
+3. `limit (select …) offset (select …)` sobre el CTE compila y pagina.
+4. Total 0 con `p_limite = 1` y `p_offset` 0 y 250: cero filas, sin error (mata quitar el `greatest` de
+   afuera).
+5. 312 de a 50 (o 7 de a 3) con la página 999: `offset_efectivo` = 300 (o 6) (mata la división numérica).
+6. `total`/`offset_efectivo` iguales en todas las filas; `p_limite` 0 → 1, 5000 → 1000, null → 50;
+   `p_desc` null usa la dirección inicial de cada columna.
+7. Orden por nombre en las dos direcciones con apellido null al final; el mismo cliente en dos
+   comercios con la métrica empatada desempata por `comercio_id`; páginas 1 y 2 sin repetidos.
+8. Clientes distintos del total del resumen con el mismo cliente en dos comercios = 1.
+9. `primera`: un ajuste viejo no estira la serie; activo antes del período pero no en él → N filas en
+   cero; nunca activo → cero filas; primera actividad después de `p_hasta` → cero filas; `p_hasta` null →
+   cero filas.
+10. `auto` sobre el tramo recortado: `p_desde` hace 100 días y primera actividad hace 62 → por día; 63 →
+    por mes; `p_agrupar` `'xyz'` o null → `auto`.
+11. Por mes con dos zonas: 23:30 locales del último día del mes cuenta en ese mes para cada comercio.
+12. Nombre y orden de las columnas de `reporte_cajeros_alcance` contra los tipos TS.
+13. La transacción completa, con los roles del preámbulo, llega al `commit` con `check_function_bodies`
+    activo.
+Menores de esa revisión que quedan para después: `primera` lee toda la historia del alcance (versión
+acotada con `exists`, cambiable en una 0041 sin tocar la firma); `canjes_tarjeta_idx` queda redundante
+con el índice compuesto nuevo (retirarlo con las funciones viejas).
 
 ## Tarea 1c — `verificar-0040` y la aplicación
 
@@ -167,7 +196,9 @@ antes de esas tareas.
     (NUNCA el total nuevo contra la suma vieja: quien fue a dos sucursales da falsos rojos);
   - `reporte_cajeros_alcance` contra `reporte_cajeros` (fechas null): todo igual salvo Clientes;
   - `reporte_clientes` contra `reporte_top_clientes`: visitas y acumulado por cliente;
-  - `reporte_por_dia('dia')` de los últimos 14 días contra `reporte_tendencia(14)`.
+  - `reporte_por_dia('dia')` de los últimos 14 días contra `reporte_tendencia(14)`, DÍA POR DÍA,
+    contando como 0 los días que falten (por el recorte de `primera`, un demo nuevo o sin actividad
+    devuelve menos filas que la serie vieja, que siempre trae 14).
   Imprime un resumen y sale ≠ 0 si algo no cierra.
 - [ ] **Paso 3:** `tsc`, commit. **Controlador:** pega la 0040 (Tarea 1b, paso 5), espera el aviso de
   Daniel, corre el script, anota el resultado acá. En rojo → 0041, no editar la 0040.
