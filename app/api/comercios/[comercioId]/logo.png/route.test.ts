@@ -19,6 +19,9 @@ import { crearEntorno } from '../../../../../test/fixtures/entornoComercio';
 //       logo-ancho.png, igual).
 //   (d) 404 en vez de 502 cuando el bucket no responde → FALLA "si el bucket no responde → 502" con
 //       `expected 404 to be 502`.
+//   (e) Volver a reenviar los bytes crudos con su tipo de origen cuando sharp no puede convertirlos
+//       (`status: 200`, `'Content-Type': tipo ?? 'application/octet-stream'`) → FALLA "si el "logo" es
+//       HTML (sharp no lo compone ni lo convierte) → 502, nunca text/html" con `expected 200 to be 502`.
 const componerMock = vi.fn();
 vi.mock('@/lib/google/componerLogo', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/lib/google/componerLogo')>();
@@ -154,6 +157,22 @@ describe('GET /api/comercios/[comercioId]/logo.png', () => {
     expect(res.headers.get('content-type')).toBe('image/png');
     const meta = await sharp(await cuerpo(res)).metadata();
     expect([meta.format, meta.width, meta.height]).toEqual(['png', 300, 100]);
+  }, 30_000);
+
+  // La URL del logo la puede escribir cualquiera con acceso al admin de FM: si apuntara a una página,
+  // reenviar sus bytes con el tipo de origen serviría `text/html` desde NUESTRO dominio. Y lo que sharp
+  // no lee, Google tampoco: el reenvío no salvaba ningún patch.
+  it('si el "logo" es HTML (sharp no lo compone ni lo convierte) → 502, nunca text/html', async () => {
+    bucket.set('https://ejemplo.com/no-es-un-logo', {
+      bytes: Buffer.from('<html><body><script>alert(1)</script></body></html>'),
+      tipo: 'text/html',
+    });
+    const comercioId = await entorno.crearComercio({ logo_url: 'https://ejemplo.com/no-es-un-logo' });
+
+    const res = await pedir(comercioId);
+
+    expect(res.status).toBe(502);
+    expect(res.headers.get('content-type') ?? '').not.toContain('text/html');
   }, 30_000);
 
   // Sin bytes no hay nada que servir. 502 (pasajero), no 404, y nunca una redirección al logo crudo:

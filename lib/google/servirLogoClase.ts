@@ -16,7 +16,8 @@ import { bajarLogo } from './logoRemoto';
 // fallaría la sincronización de la clase, y con ella Google Wallet para cada registro nuevo del
 // comercio y el link de "Agregar a Google Wallet". Por eso, si componer falla, se sirve el logo ORIGINAL
 // (convertido a PNG si hace falta): se ve como se veía antes de esta ruta, pero la clase se sincroniza.
-// 404 solo cuando de verdad no hay nada que servir: comercio sin logo o programa que no es suyo.
+// 404 solo cuando de verdad no hay nada que servir: comercio sin logo o programa que no es suyo. 502
+// cuando el bucket no responde o cuando el "logo" no es una imagen que sharp pueda leer.
 
 // Mismas columnas y misma resolución de marca que franja.png: `?programa=` elige la marca EFECTIVA de
 // ese programa (logo y color propios o heredados), la misma que usa syncClasePrograma para armar la URL.
@@ -29,23 +30,25 @@ const TIEMPO_MAXIMO_DESCARGA_MS = 10_000;
 
 export type ComponerLogo = (logo: Buffer, marca: { colorFondo: string | null }) => Promise<Buffer>;
 
-function png(bytes: Buffer, tipo = 'image/png'): NextResponse {
+function png(bytes: Buffer): NextResponse {
   return new NextResponse(new Uint8Array(bytes), {
     status: 200,
-    headers: { 'Content-Type': tipo, 'Cache-Control': 'no-store' },
+    headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' },
   });
 }
 
 // El respaldo: el logo tal como está en el bucket. Google pide PNG o JPEG, y el bucket acepta además
-// WebP (imagenComercio.ts): se convierte a PNG si no lo es. Si ni eso se puede, van los bytes crudos
-// con su tipo — una imagen que quizás Google sí sepa leer es mejor que un error seguro.
-async function logoOriginal(bytes: Buffer, tipo: string | null): Promise<NextResponse> {
+// WebP (imagenComercio.ts): se convierte a PNG si no lo es. Si sharp tampoco puede convertirlo, 502 y
+// NUNCA los bytes crudos con su tipo de origen: la URL del logo la puede escribir cualquiera con acceso
+// al admin de FM, y si apuntara a una página serviríamos `text/html` desde nuestro propio dominio. Y el
+// reenvío tampoco salvaba nada: lo que sharp no lee, Google tampoco, así que el patch caería igual.
+async function logoOriginal(bytes: Buffer): Promise<NextResponse> {
   try {
     const { format } = await sharp(bytes).metadata();
     return png(format === 'png' ? bytes : await sharp(bytes).png().toBuffer());
   } catch (error) {
-    console.warn('[google] no se pudo convertir el logo a PNG; va tal cual:', error);
-    return png(bytes, tipo ?? 'application/octet-stream');
+    console.error('[google] el logo no es una imagen que sharp pueda leer; no hay nada que servir:', error);
+    return NextResponse.json({ error: 'El logo no es una imagen legible' }, { status: 502 });
   }
 }
 
@@ -120,6 +123,6 @@ export async function servirLogoClase(
     return png(await componer(logo.bytes, { colorFondo: marca.colorFondo }));
   } catch (error) {
     console.error('[google] no se pudo componer el logo de la clase; se sirve el original:', error);
-    return logoOriginal(logo.bytes, logo.tipo);
+    return logoOriginal(logo.bytes);
   }
 }
