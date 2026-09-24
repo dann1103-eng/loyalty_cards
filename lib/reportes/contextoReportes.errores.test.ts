@@ -32,6 +32,11 @@ import type { UsuarioDelComercio } from '../comercio/cajeros';
 // contexto: { …(5) } } to deeply equal { ok: true, contexto: { …(5) } }`, y listarUsuariosDelComercio
 // con el comercioId en lugar del authUserId, con `expected "vi.fn()" to be called with arguments: [
 // Anything, …(2) ]`.
+// Después de la revisión: el cargador con el prechequeo viejo (`sesion.comercios.find((c) =>
+// c.comercioId === parametros.comercio) ?? null` en vez de comercioAConsultar) cae acá, sin base, en
+// "un dueño con UN solo comercio y sin ?comercio…" con `expected { ok: true, contexto: { …(5) } } to
+// deeply equal { ok: true, contexto: { …(5) } }` (sin listas y comercioDeLasListas null). Antes solo lo
+// atrapaba la prueba contra la base.
 
 vi.mock('../comercio/sucursales', () => ({ listarSucursales: vi.fn() }));
 vi.mock('../comercio/cajeros', () => ({ listarUsuariosDelComercio: vi.fn() }));
@@ -134,6 +139,25 @@ describe('cargarContextoReportes: los errores se propagan', () => {
       ok: false,
       error: 'No se pudieron leer las zonas horarias de los comercios.',
     });
+  });
+
+  it('un dueño con UN solo comercio y sin ?comercio: ese es el elegido, y sus listas se cargan', async () => {
+    // La regla "un solo comercio = elegido" (comercioAConsultar). El prechequeo viejo de la página
+    // miraba solo ?comercio: con parámetros vacíos no cargaba nada, y el ?sucursal= de este dueño no
+    // habría filtrado nunca.
+    const unSolo: SesionReportes = { ...sesion, comercios: [{ comercioId: CAFE, nombre: 'Café' }] };
+    expect(await cargarContextoReportes(zonasSanas(), unSolo, {})).toEqual({
+      ok: true,
+      contexto: {
+        zonaComercioActivo: 'America/El_Salvador',
+        datosComercios: [{ comercioId: CAFE, zonaHoraria: 'America/El_Salvador', tipoPrincipal: 'sellos' }],
+        comercioDeLasListas: CAFE,
+        sucursales: [sucursal],
+        usuarios: [usuario],
+      },
+    });
+    expect(listarSucursales).toHaveBeenCalledWith(expect.anything(), CAFE);
+    expect(listarUsuariosDelComercio).toHaveBeenCalledWith(expect.anything(), CAFE, sesion.authUserId);
   });
 
   it('con "Todo" no hay listas que leer: vacías sin preguntar (y sin error)', async () => {

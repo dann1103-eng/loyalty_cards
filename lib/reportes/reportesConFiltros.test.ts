@@ -74,6 +74,17 @@ import { resolverFiltrosReportes } from './filtrosReportes';
 //   con el comercioId en lugar del authUserId tira "un comercio único…" con `expected Map{ …(2) } to
 //   deeply equal Map{ …(2) }` (nadie es "Vos").
 // Las mutaciones de "?? []" en las listas del cargador están en contextoReportes.errores.test.ts.
+//
+// Después de la revisión (2026-09-24, mismas reglas):
+// - Orden antifraude de la hoja Cajeros. Con c1 (el sospechoso) creado DESPUÉS que c2, el orden por
+//   email y el de sospecha no coinciden. Sin el `sort(ordenReporteCajeros)` del wrapper (el orden de
+//   paginar, que es el que devolvía antes de la revisión): cae "con tamaño de página 2: las 3 filas en
+//   2 llamadas, el SOSPECHOSO primero…" con `expected [ …(3) ] to deeply equal [ …(3) ]` ([c2, c1, null]
+//   contra [c1, c2, null]). Sin la clave de sospecha en el comparador cae la misma, con el mismo
+//   mensaje (y la prueba pura). Sin el null al final NO cae acá (ver reportes.puras.test.ts).
+// - La guardia de `clienteId` del fixture (su `if` vuelto `if (false)`): cae "rechaza el cliente de
+//   OTRO entorno…" con `promise resolved "{ …(3) }" instead of rejecting`.
+// - El prechequeo viejo ahora cae también SIN base, en contextoReportes.errores.test.ts.
 
 const supabase = createServiceClient();
 
@@ -117,8 +128,11 @@ beforeAll(async () => {
   spa = await escenario.crearComercio({ nombre: 'Spa Reportes', zona_horaria: 'America/Bogota' });
   s1 = await escenario.crearSucursal(cafe);
   s2 = await escenario.crearSucursal(cafe);
-  c1 = await escenario.crearCajero(cafe);
+  // c2 ANTES que c1, a propósito: el email del fixture lleva Date.now(), así que el de c1 (el
+  // sospechoso: una forzada y un ajuste) queda DESPUÉS por email. La hoja Cajeros tiene que ponerlo
+  // primero igual (orden antifraude), y así la prueba distingue ese orden del de paginar.
   c2 = await escenario.crearCajero(cafe);
+  c1 = await escenario.crearCajero(cafe);
   const premio = await escenario.crearRecompensa(cafe, 1);
   t = [];
   for (let i = 0; i < 5; i++) t.push(await escenario.crearTarjeta(cafe));
@@ -461,14 +475,20 @@ describe('reporteClientes', () => {
 });
 
 describe('reporteCajerosAlcance', () => {
-  it('con tamaño de página 2: las 3 filas en 2 llamadas; "Sin registrar" al final', async () => {
+  it('con tamaño de página 2: las 3 filas en 2 llamadas, el SOSPECHOSO primero y "Sin registrar" al final', async () => {
     const llamadas = espiarRpc();
     const resultado = await reporteCajerosAlcance(supabase, filtros(), { tamanoPagina: 2 });
 
     expect(llamadas('reporte_cajeros_alcance')).toHaveLength(2);
     const filas = resultado!.filas;
     expect(filas).toHaveLength(3);
-    expect(filas[2].cajero_usuario_id).toBeNull();
+    // La premisa: por email, c2 va antes que c1 (se creó antes; son minúsculas, dígitos y guiones, así
+    // que acá no hay collation que discutir). Si no, la prueba no distinguiría los dos órdenes.
+    const emailDe = (id: string) => filas.find((f) => f.cajero_usuario_id === id)?.cajero_email ?? '';
+    expect(emailDe(c2) < emailDe(c1)).toBe(true);
+    // Orden antifraude (0040): c1 (una forzada + un ajuste) antes que c2 (ninguna), aunque por email
+    // fuera al revés; "Sin registrar" al final.
+    expect(filas.map((f) => f.cajero_usuario_id)).toEqual([c1, c2, null]);
     expect(filas[2].cajero_email).toBeNull();
     expect(filas.every((f) => f.comercio_id === cafe)).toBe(true);
 
@@ -679,5 +699,28 @@ describe('cargarContextoReportes', () => {
       ok: false,
       error: 'No se pudieron leer las zonas horarias de los comercios.',
     });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// El fixture: `clienteId` solo de ESTE entorno
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('entornoComercio.crearTarjeta con clienteId', () => {
+  const otro = crearEntorno(supabase);
+  afterEach(async () => {
+    await otro.limpiar();
+  });
+
+  it('rechaza el cliente de OTRO entorno antes de insertar (su limpiar() intentaría borrarlo)', async () => {
+    const comercio = await otro.crearComercio();
+    // t[0] es del escenario, no de `otro`.
+    await expect(otro.crearTarjeta(comercio, 0, { clienteId: t[0].clienteId })).rejects.toThrow(
+      `[test] crearTarjeta: el cliente ${t[0].clienteId} no es de este entorno — usá uno que devolvió su crearTarjeta().`,
+    );
+    // Y no quedó ninguna tarjeta a medias en ese comercio.
+    const { data, error } = await supabase.from('tarjetas').select('id').eq('comercio_id', comercio);
+    expect(error).toBeNull();
+    expect(data).toEqual([]);
   });
 });

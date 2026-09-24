@@ -62,7 +62,8 @@ export interface EntornoComercio {
   // limpiar()): una tarjeta en un programa que no es el principal, una tarjeta con created_at
   // viejo para las pruebas de inactividad, y una tarjeta de un cliente que YA existe (`clienteId`:
   // el mismo cliente con tarjeta en dos comercios, que los reportes cuentan como 1 en la cabecera y
-  // 2 filas en la tabla). Devuelve también el cliente, para poder pasarlo a la segunda tarjeta.
+  // 2 filas en la tabla). Devuelve también el cliente, para poder pasarlo a la segunda tarjeta. El
+  // `clienteId` tiene que ser de un cliente que creó ESTE entorno: si no, lanza.
   crearTarjeta(
     comercioId: string,
     puntos?: number,
@@ -147,8 +148,15 @@ export function crearEntorno(supabase: SupabaseClient<Database>): EntornoComerci
     },
 
     async crearTarjeta(comercioId, puntos = 0, opciones = {}) {
-      // Con `clienteId`, la tarjeta es de un cliente que ya existe (y que limpiar() ya borra: o lo
-      // creó este fixture, o cuelga de una tarjeta de un comercio de este entorno).
+      // Con `clienteId`, la tarjeta es de un cliente que ya existe, y tiene que ser uno que creó ESTE
+      // entorno. limpiar() borra a todo cliente que cuelgue de las tarjetas de sus comercios: con el
+      // cliente de otro entorno (o uno real de la base) intentaría borrarlo, y hoy solo lo frenaría la
+      // FK de sus otras tarjetas, de casualidad. Se rechaza ANTES de insertar nada.
+      if (opciones.clienteId !== undefined && !clientes.includes(opciones.clienteId)) {
+        throw new Error(
+          `[test] crearTarjeta: el cliente ${opciones.clienteId} no es de este entorno — usá uno que devolvió su crearTarjeta().`,
+        );
+      }
       let clienteId = opciones.clienteId;
       if (!clienteId) {
         // El teléfono es UNIQUE global (0001): se arma con el reloj + azar para que dos pruebas en

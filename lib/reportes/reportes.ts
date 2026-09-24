@@ -162,20 +162,24 @@ export async function reportePorDia(
   }, opciones.tamanoPagina ?? MAXIMO_POR_PAGINA);
 }
 
-// La hoja "Cajeros" del Excel, TODAS las filas.
+// La hoja "Cajeros" del Excel, TODAS las filas, en el orden ANTIFRAUDE de la SQL (ordenReporteCajeros).
 //
-// Orden: por comercio y, dentro, por email, con "Sin registrar" (cajero null, y por eso email null) al
-// final. NO es el de la SQL, que pone primero a quien tiene más forzadas + correcciones: PostgREST no
-// ordena por una suma, y paginar exige un orden explícito. Es total: la fila es única por
-// (comercio_id, cajero_usuario_id), y el email es null solo en la fila sin cajero (email es NOT NULL
-// en usuarios_comercio).
+// Dos órdenes, a propósito:
+//   - para PAGINAR, el `.order()` de PostgREST: por comercio, email y cajero_usuario_id (nulls al
+//     final). Es total —la fila es única por (comercio_id, cajero_usuario_id)—, que es lo único que
+//     paginar exige. No puede ser el de la SQL: PostgREST no ordena por una suma (forzadas + ajustes).
+//   - para DEVOLVER, el de la SQL (0040, reporte_cajeros_alcance), restaurado acá con un `sort`
+//     después de juntar las páginas: dentro de cada comercio, primero quien tiene más forzadas +
+//     correcciones. Es el orden que pone arriba al sospechoso, y paginar no puede romperlo.
+// Con `alcanzoTope` solo se reordena lo que entró: las filas que quedaron afuera las eligió el orden
+// de paginar (por email), no el de sospecha. (Con los pilotos, órdenes de magnitud por debajo del tope.)
 export async function reporteCajerosAlcance(
   supabase: SupabaseClient<Database>,
   filtros: FiltrosRpcReportes,
   opciones: OpcionesPaginado = {},
 ): Promise<Paginado<FilaReporteCajeroAlcance> | null> {
   const argumentos = argumentosComunes(filtros);
-  return paginarPorRango(async (inicio, fin) => {
+  const resultado = await paginarPorRango(async (inicio, fin) => {
     const { data, error } = await supabase
       .rpc('reporte_cajeros_alcance', argumentos)
       .order('comercio_id', { ascending: true })
@@ -188,6 +192,42 @@ export async function reporteCajerosAlcance(
     }
     return data ?? [];
   }, opciones.tamanoPagina ?? MAXIMO_POR_PAGINA);
+  if (resultado === null) return null;
+  // Array.prototype.sort es estable (ES2019): lo que el comparador empata conserva el orden de paginar.
+  resultado.filas.sort(ordenReporteCajeros);
+  return resultado;
+}
+
+// El orden de reporte_cajeros_alcance (0040): `comercio_id, (cajero_usuario_id is null), forzadas +
+// ajustes desc, email, cajero_usuario_id`. Dentro de cada comercio, el grupo "Sin registrar" (cajero
+// null) va AL FINAL aunque tenga más forzadas que nadie: no es una persona a quien pedirle cuentas; y
+// entre los cajeros, primero el que más se salteó límites o corrigió (las dos señales de la pantalla
+// de cajeros, 0033).
+//
+// Comparador PURO, para `sort`. Los textos se comparan por unidad de código (`<`), NO con
+// localeCompare: da lo mismo en cualquier máquina. Para los ids (uuid en minúscula, hex y guiones en
+// posiciones fijas) coincide con el orden de Postgres. Para el email es solo un DESEMPATE entre
+// cajeros igual de sospechosos, y puede diferir de la collation de la base con mayúsculas, acentos o
+// puntuación (la base ordena con la suya); no cambia quién va primero por sospecha.
+export function ordenReporteCajeros(
+  a: Pick<FilaReporteCajeroAlcance, 'comercio_id' | 'cajero_usuario_id' | 'cajero_email' | 'forzadas' | 'ajustes'>,
+  b: Pick<FilaReporteCajeroAlcance, 'comercio_id' | 'cajero_usuario_id' | 'cajero_email' | 'forzadas' | 'ajustes'>,
+): number {
+  return (
+    compararTexto(a.comercio_id, b.comercio_id) ||
+    Number(a.cajero_usuario_id === null) - Number(b.cajero_usuario_id === null) ||
+    b.forzadas + b.ajustes - (a.forzadas + a.ajustes) ||
+    compararTexto(a.cajero_email, b.cajero_email) ||
+    compararTexto(a.cajero_usuario_id, b.cajero_usuario_id)
+  );
+}
+
+// Ascendente por unidad de código, con null al final (como `asc` en Postgres).
+function compararTexto(a: string | null, b: string | null): number {
+  if (a === b) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return a < b ? -1 : 1;
 }
 
 // Los dos modos de reporteClientes.
