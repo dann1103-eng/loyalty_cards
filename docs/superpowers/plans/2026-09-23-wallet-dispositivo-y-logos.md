@@ -332,6 +332,19 @@ plan B no hace falta. El `null` dentro del JWT NO se probó y ya no viaja: `link
   1.4 : 1: NO lleva logo ancho, la cabecera sigue siendo círculo + nombre.)
 - [ ] Actualizar el ESTADO (sección 2026-09-23) y la memoria.
 
+**Resultado (2026-09-23, controlador):**
+- Suite completa 172 archivos / 2207 pruebas en verde, `tsc` y `npm run lint` limpios. Push
+  `e197b8a..48c2e62`; deploy de Vercel `success`.
+- Producción: `logo.png` de Pulso Café 660×660 PNG, `logo-ancho.png` 1280×400 PNG, comercio inexistente
+  404; apex y `www` responden 200 directo (sin redirect).
+- `/api/tarjetas/<id>/google-wallet` de una tarjeta de Café Aurora redirige a `pay.google.com/gp/v/save/…`;
+  la clase del JWT lleva `programLogo` a la ruta compuesta con `?v=` y NO trae `wideProgramLogo`.
+- Fase `logos` (`eb88176`, bucle duplicado a propósito para no tocar la fase `clases`): ensayo y
+  `--aplicar` con chequeo previo de la ruta → **11 de 11 clases de comercio, 0 fallos** (0 clases de
+  programa). Leídas de vuelta: Pulso Café, Die Oma y Barbería El Puerto apuntan al logo compuesto,
+  siguen `approved`, sin logo ancho (ninguno de esos logos es apaisado). Push `48c2e62..eb88176`.
+- Pendiente de Daniel: Android real con el pase de Pulso Café.
+
 ## Nota: convivencia con el deploy B
 `claude/plantilla-filas-google` (`a2dba8e`, sin publicar) también cambia `construirClase`. Al integrarla
 después de este plan, resolver el conflicto conservando los logos resueltos Y la plantilla (spec,

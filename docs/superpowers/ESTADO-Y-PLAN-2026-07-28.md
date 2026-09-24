@@ -1342,3 +1342,36 @@ escribe: migración primero, deploy después, siempre.
 4. Confirmar las decisiones 6 y 7 de la spec (el dueño puede autorizar bajo el mínimo — y esa autorización
    también saltea las perillas antifraude, como cualquier autorización —; la regla aplica también a
    "Agregar cliente").
+
+## 2026-09-23 (noche) — Wallet según el teléfono y logos sin recorte (PUBLICADO); Reportes + Excel (spec y plan)
+
+Pedido de Daniel tras los onboardings: botón de Wallet según el teléfono, logo recortado (cartel y círculo de
+Google), más filtros en Reportes y exportar a Excel. Se partió en dos entregas.
+
+### Entrega 1 — Wallet y logos: EN PRODUCCIÓN (`e197b8a..eb88176`, sin migración)
+
+Spec `specs/2026-09-23-wallet-dispositivo-y-logos-design.md`; registro por tarea y resultados de cada
+verificación en `plans/2026-09-23-wallet-dispositivo-y-logos.md`.
+- **Registro y portal:** detección por user agent en el servidor (`lib/clientes/plataforma.ts`). iPhone ve solo
+  Apple Wallet, Android solo Google Wallet, con "¿Tienes otro teléfono?" que revela el otro; computadora, los
+  dos. El texto del formulario y el subtítulo de éxito nombran la billetera que se ve (`billeteraDeEntrada`).
+  El iPhone no se pudo emular: queda cubierto por las pruebas puras.
+- **Cartel y tarjeta de muestra:** el logo se dibuja entero (`meet`, caja con la proporción del logo); en
+  foto, anclado a la esquina.
+- **Google:** el `programLogo` es un cuadrado de 660×660 compuesto (`/api/comercios/<id>/logo.png`, el logo
+  en el 70 % central, fondo del color de la tarjeta) para que el círculo no lo corte; los logos de 1.6:1 o
+  más anchos suman `wideProgramLogo` (`logo-ancho.png`). Verificado contra la API real que un `patch` con
+  `wideProgramLogo: null` lo BORRA; en el JWT esa clave nunca viaja en null (se omite). Las 11 clases
+  existentes se re-sincronizaron con la fase `logos` del script (11/11, 0 fallos).
+- **Dato:** el logo de Pulso Café es 420×301 (1.4:1): NO lleva logo ancho; su arreglo es el cuadrado compuesto.
+
+**Pendiente de Daniel:** mirar en un Android real el pase de Pulso Café (el logo entero dentro del círculo) y
+el registro desde un iPhone (solo Apple Wallet + el link).
+
+### Entrega 2 — Reportes con filtros, tabla de clientes y Excel: spec y plan listos, SIN implementar
+
+Spec `specs/2026-09-23-reportes-filtros-y-excel-design.md` (dos revisiones contra el código), plan
+`plans/2026-09-23-reportes-filtros-y-excel.md`. Lleva **migración 0040** (cuatro funciones de reporte nuevas
+con el alcance como `uuid[]`, dos índices; no toca ninguna función existente). **A confirmar por Daniel:**
+el preset "Desde siempre" con 30 días por defecto, y `write-excel-file` en lugar de `exceljs` (la premisa
+"exceljs está mantenida" resultó falsa: última versión de 2023).

@@ -251,8 +251,10 @@ el conglomerado), `p_desde date`, `p_hasta date` (null = sin ese borde), `p_sucu
 - Un CTE `actividad` = `union all` del ledger y de los canjes YA FILTRADOS (alcance, período, sucursal,
   cajero: los cuatro filtros escritos en las DOS ramas), con una columna `clase`:
   - `'visita'`: fila del ledger con `tipo in ('acreditacion','uso','renovacion')`;
-  - `'ajuste'`: fila del ledger con `tipo = 'ajuste'` (la usa solo `reporte_cajeros_alcance`, para
-    Correcciones);
+  - `'ajuste'`: fila del ledger con `tipo = 'ajuste'`. Entra SOLO en `reporte_cajeros_alcance` (para
+    Correcciones); en las otras tres funciones el CTE los excluye desde el `WHERE` — si no, un cliente
+    con solo ajustes tendría fila, un ajuste movería `ultima_actividad`, una sucursal con solo ajustes
+    aparecería en el resumen y un ajuste viejo estiraría el tramo de "Por día";
   - `'canje'`: fila de `canjes`;
   y las columnas `comercio_id`, `sucursal_id`, `cajero_usuario_id`, `cliente_id`, `puntos_delta`,
   `tipo`, `forzado` (false en los canjes), `monto_compra`, `created_at`. Todo se agrega desde ahí con
@@ -342,6 +344,11 @@ comercio y se repiten en cada una de sus tarjetas, así que sumar la columna dup
   - Presets en una zona: cerca de la medianoche local, y en `Europe/Madrid` el día del cambio de hora.
   - Las fechas del Excel: `Date.UTC` con el reloj local, probado desde una zona de proceso distinta.
   - La unidad del acumulado por tipo (centavos → dólares, sin contador → vacío).
+- **Dónde corre cada prueba de la SQL** (decidido en el plan): la lógica de la SQL y sus mutaciones, en
+  PGlite (Postgres en proceso, con las migraciones 0001–0040 leídas del disco), ANTES de pegarle la
+  migración a Daniel; contra Supabase, lo que PGlite no ve (PostgREST: nombres de argumentos, tope de
+  filas, `.range()`, tipos del JSON). Si PGlite no sirve, todo contra Supabase y las mutaciones de SQL
+  declaradas como no corridas.
 - **RPC contra la base** (como `lib/reportes/reportes.test.ts`). El fixture (`test/fixtures/entornoComercio.ts`)
   suma un helper para sembrar visitas y canjes con `created_at`, sucursal y cajero elegidos, y la
   opción `clienteId` en `crearTarjeta` (hoy no se puede tener el mismo cliente en dos comercios).
