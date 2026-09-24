@@ -180,6 +180,7 @@ describe('urlReportes', () => {
     const ctx = {
       zonaComercioActivo: 'America/Bogota',
       datosComercios: [{ comercioId: 'c-cafe', zonaHoraria: 'America/Bogota', tipoPrincipal: 'puntos' }],
+      comercioDeLasListas: 'c-cafe',
       sucursales: [{ id: 's-norte' }],
       usuarios: [{ id: 'u-caja' }],
     };

@@ -12,12 +12,17 @@ import { paginarPorOffset, paginarPorRango, TOPE_FILAS, type PaginaPorOffset } f
 // - paginarPorOffset cortando con "< tamaño" (sin el chequeo de offsetEfectivo y con `if
 //   (pagina.filas.length < tamano) break` en lugar del corte por total): caen "total igual al tamaño
 //   de página" con `expected 50000 to be 2`, "total igual al DOBLE del tamaño" con `expected 50000 to
-//   be 4` y "si la SQL devuelve otra página que la pedida" con `expected 50000 to be 2`: repite la
-//   última página hasta el tope.
+//   be 4`, "si la SQL devuelve otra página que la pedida" con `expected 50000 to be 2` y "exactamente
+//   50000 filas" con `expected true to be false`: repite la última página hasta el tope.
 // - Solo sin el chequeo de offsetEfectivo (el corte por total queda): cae "si la SQL devuelve otra
 //   página que la pedida…" con `expected 4 to be 2`.
-// - paginarPorOffset sin el tope: cae "corta en 50000 filas y lo avisa" con `expected 60000 to be
-//   50000`. paginarPorRango sin el tope: la suya, con el mismo mensaje.
+// - Sin el tope (la línea `if (filas.length > TOPE_FILAS) return …` borrada), en cada bucle: caen
+//   "50000 + 1 filas: corta en 50000 y lo avisa" y "muchas más filas…" con `expected false to be true`.
+// - El tope con `>=` en vez de `>` (avisar al LLEGAR a 50 000, no al pasarse): en cada bucle caen
+//   "exactamente 50000 filas: todas, sin aviso de tope" con `expected true to be false` y "muchas más
+//   filas: corta y no sigue pidiendo" con `expected 50 to be 51`.
+// - Sin el máximo de 1000 en validarTamano: caen las dos "un tamaño mayor que el max-rows de PostgREST
+//   (1000)…" con `promise resolved "{ filas: [ +0, 1, 2 ], …(1) }" instead of rejecting`.
 // - paginarPorRango cortando solo con la página vacía (`pagina.length === 0`): cae "no múltiplo:
 //   corta en la página corta" con `expected 4 to be 3` (una llamada de más).
 
@@ -103,20 +108,56 @@ describe('paginarPorOffset (reporte_clientes)', () => {
     expect(await paginarPorOffset(llamar, 2)).toBeNull();
   });
 
-  it(`corta en ${TOPE_FILAS} filas y lo avisa`, async () => {
+  it('el contrato de la página VACÍA: { filas: [], total: 0, offsetEfectivo: offset } corta sin error', async () => {
+    // De una respuesta sin filas no se pueden leer `total` ni `offset_efectivo` (vienen en cada fila):
+    // el llamador (el wrapper de la Tarea 3) devuelve total 0 y el offset que pidió.
+    const pedidos: number[] = [];
+    const llamar = async (offset: number): Promise<PaginaPorOffset<number>> => {
+      pedidos.push(offset);
+      return { filas: [], total: 0, offsetEfectivo: offset };
+    };
+    expect(await paginarPorOffset(llamar, 2)).toEqual({ filas: [], alcanzoTope: false });
+    expect(pedidos).toEqual([0]);
+  });
+
+  // `alcanzoTope` dice "se cortó algo", no "se llegó justo al número": con 50 000 filas exactas no
+  // falta nada, y la hoja Resumen no debe avisar que puede faltar. Saberlo cuesta a lo sumo una
+  // llamada más.
+  it(`exactamente ${TOPE_FILAS} filas: todas, sin aviso de tope`, async () => {
     expect(TOPE_FILAS).toBe(50_000);
-    const falso = clientesFalso(60_000);
+    const falso = clientesFalso(50_000);
     const resultado = await paginarPorOffset(falso.llamar, 1000);
+    expect(resultado?.alcanzoTope).toBe(false);
+    expect(resultado?.filas.length).toBe(50_000);
+    expect(falso.pedidos.length).toBe(50); // el total dice que no hay más: no pide la 51
+  });
+
+  it(`${TOPE_FILAS} + 1 filas: corta en ${TOPE_FILAS} y lo avisa`, async () => {
+    const falso = clientesFalso(50_001);
+    const resultado = await paginarPorOffset(falso.llamar, 1000);
+    expect(resultado?.alcanzoTope).toBe(true);
     expect(resultado?.filas.length).toBe(50_000);
     expect(resultado?.filas[49_999]).toBe(49_999);
+  });
+
+  it('muchas más filas: corta y no sigue pidiendo', async () => {
+    const falso = clientesFalso(60_000);
+    const resultado = await paginarPorOffset(falso.llamar, 1000);
     expect(resultado?.alcanzoTope).toBe(true);
-    expect(falso.pedidos.length).toBe(50); // no sigue pidiendo después del tope
+    expect(resultado?.filas.length).toBe(50_000);
+    expect(falso.pedidos.length).toBe(51); // la 51 es la que demuestra que hay más
   });
 
   it('un tamaño que no es un entero positivo es un error de programación', async () => {
     const falso = clientesFalso(3);
     await expect(paginarPorOffset(falso.llamar, 0)).rejects.toThrow('tamaño de página inválido: 0');
     await expect(paginarPorOffset(falso.llamar, 1.5)).rejects.toThrow('tamaño de página inválido: 1.5');
+  });
+
+  it('un tamaño mayor que el max-rows de PostgREST (1000) es un error, no un corte silencioso', async () => {
+    const falso = clientesFalso(3);
+    await expect(paginarPorOffset(falso.llamar, 1001)).rejects.toThrow('tamaño de página inválido: 1001');
+    expect(falso.pedidos).toEqual([]);
   });
 });
 
@@ -152,16 +193,42 @@ describe('paginarPorRango (las demás funciones, con .range())', () => {
     expect(await paginarPorRango(llamar, 2)).toBeNull();
   });
 
-  it(`corta en ${TOPE_FILAS} filas y lo avisa`, async () => {
+  it(`exactamente ${TOPE_FILAS} filas: todas, sin aviso de tope`, async () => {
+    const falso = rangoFalso(50_000);
+    const resultado = await paginarPorRango(falso.llamar, 1000);
+    expect(resultado?.alcanzoTope).toBe(false);
+    expect(resultado?.filas.length).toBe(50_000);
+    expect(falso.pedidos.length).toBe(51); // la 51 viene vacía: recién ahí se sabe que no hay más
+  });
+
+  it(`${TOPE_FILAS} + 1 filas: corta en ${TOPE_FILAS} y lo avisa`, async () => {
+    const falso = rangoFalso(50_001);
+    const resultado = await paginarPorRango(falso.llamar, 1000);
+    expect(resultado?.alcanzoTope).toBe(true);
+    expect(resultado?.filas.length).toBe(50_000);
+  });
+
+  it('muchas más filas: corta y no sigue pidiendo', async () => {
     const falso = rangoFalso(60_000);
     const resultado = await paginarPorRango(falso.llamar, 1000);
-    expect(resultado?.filas.length).toBe(50_000);
     expect(resultado?.alcanzoTope).toBe(true);
-    expect(falso.pedidos.length).toBe(50);
+    expect(resultado?.filas.length).toBe(50_000);
+    expect(falso.pedidos.length).toBe(51);
   });
 
   it('un tamaño que no es un entero positivo es un error de programación', async () => {
     const falso = rangoFalso(3);
     await expect(paginarPorRango(falso.llamar, -1)).rejects.toThrow('tamaño de página inválido: -1');
+  });
+
+  // PostgREST corta cada respuesta en 1000 (max-rows) SIN avisar: con un tamaño de 2000, la primera
+  // página llegaría con 1000 filas, "< tamaño" la leería como la última y el Excel saldría cortado en
+  // silencio. Es justo el defecto que esta entrega arregla.
+  it('un tamaño mayor que el max-rows de PostgREST (1000) es un error, no un corte silencioso', async () => {
+    const falso = rangoFalso(3);
+    await expect(paginarPorRango(falso.llamar, 2000)).rejects.toThrow('tamaño de página inválido: 2000');
+    expect(falso.pedidos).toEqual([]);
+    // 1000 sí vale.
+    expect(await paginarPorRango(falso.llamar, 1000)).toEqual({ filas: [0, 1, 2], alcanzoTope: false });
   });
 });
