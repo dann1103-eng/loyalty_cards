@@ -151,6 +151,56 @@ export async function listarCajeros(
   }));
 }
 
+// Un usuario del comercio, para el filtro de cajero de Reportes.
+export interface UsuarioDelComercio {
+  // El id de usuarios_comercio: el que guardan transacciones_puntos.cajero_usuario_id y
+  // canjes.cajero_usuario_id, y el que viaja en `?cajero=`.
+  id: string;
+  email: string;
+  rol: string; // 'owner' | 'cajero' (CHECK de la 0001)
+  activo: boolean;
+  // Si es la cuenta que está mirando la pantalla: su chip dice "Vos" y no su email.
+  esVos: boolean;
+}
+
+// TODOS los usuarios de UN comercio —cajeros y dueños, activos e inactivos—, por email, para el filtro
+// de cajero de Reportes (spec 2026-09-23 §1). listarCajeros NO sirve para esto, y no se le agregan
+// parámetros para que sirva: filtra activo=true (un cajero dado de baja operó, y su historial es
+// justo lo que el dueño puede querer revisar) y excluye al dueño (que también atiende, y sus visitas
+// quedan a su nombre). Su filtro es el correcto para la pantalla de cajeros, que lista a quién se
+// puede dar de baja.
+//
+// `authUserIdQueMira` es el authUserId que devuelve verifyComercioOwner: la fila con esa cuenta es
+// "Vos". Se compara la CUENTA y no el rol: un comercio puede tener más de un owner, y el socio no es
+// "Vos".
+//
+// Scopeada por comercio_id, que tiene que venir de comercioAConsultar (un comercio SUYO), nunca de la
+// URL cruda. Devuelve null ante un error de BD (distinto de [] = "no hay usuarios"), como
+// listarCajeros: la pantalla no puede leer un fallo como "este comercio no tiene cajeros".
+export async function listarUsuariosDelComercio(
+  supabase: SupabaseClient<Database>,
+  comercioId: string,
+  authUserIdQueMira: string,
+): Promise<UsuarioDelComercio[] | null> {
+  const { data, error } = await supabase
+    .from('usuarios_comercio')
+    .select('id, email, rol, activo, auth_user_id')
+    .eq('comercio_id', comercioId)
+    .order('email');
+
+  if (error) {
+    console.error('[comercio] falló la consulta de usuarios del comercio:', error.message);
+    return null;
+  }
+  return (data ?? []).map((f) => ({
+    id: f.id,
+    email: f.email,
+    rol: f.rol,
+    activo: f.activo,
+    esVos: f.auth_user_id === authUserIdQueMira,
+  }));
+}
+
 // Da de baja a un cajero con SOFT-delete —update({activo:false}), NUNCA .delete()—: la cuenta de Auth
 // y la fila usuarios_comercio siguen existiendo, pero la fila queda inactiva → pierde la membresía →
 // pierde el acceso (membresiasDeUsuario y listarCajeros filtran activo=true). Espeja el soft-delete de
