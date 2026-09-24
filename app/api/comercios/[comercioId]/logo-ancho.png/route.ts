@@ -13,9 +13,10 @@ export const runtime = 'nodejs';
 //
 // Tampoco puede fallar para un comercio con logo: Google rechaza el patch ENTERO de la clase si no
 // puede bajar una de sus imágenes, así que si la composición falla se sirve el logo original (ver
-// lib/google/servirLogoClase.ts). Si el bucket no responde: 502, NUNCA una redirección al logo crudo,
-// porque Google la cachearía bajo esta URL versionada; con el 502 el próximo sync reintenta. Un "logo"
-// que ni sharp puede leer también es 502: sus bytes nunca se reenvían tal cual.
+// lib/google/servirLogoClase.ts). 404 solo si algo no existe (el comercio, su logo, el programa). Si el
+// bucket no responde: 502, NUNCA una redirección al logo crudo, porque Google la cachearía bajo esta URL
+// versionada; con el 502 el próximo sync reintenta. Un error al leer la base y un "logo" que ni sharp
+// puede leer también son 502 (sus bytes nunca se reenvían tal cual).
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ comercioId: string }> },

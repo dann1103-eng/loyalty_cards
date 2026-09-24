@@ -16,8 +16,9 @@ import { bajarLogo } from './logoRemoto';
 // fallaría la sincronización de la clase, y con ella Google Wallet para cada registro nuevo del
 // comercio y el link de "Agregar a Google Wallet". Por eso, si componer falla, se sirve el logo ORIGINAL
 // (convertido a PNG si hace falta): se ve como se veía antes de esta ruta, pero la clase se sincroniza.
-// 404 solo cuando de verdad no hay nada que servir: comercio sin logo o programa que no es suyo. 502
-// cuando el bucket no responde o cuando el "logo" no es una imagen que sharp pueda leer.
+// 404 solo cuando algo NO EXISTE: el comercio, su logo, o el programa (ajeno o inexistente). 502 cuando
+// el problema es pasajero o de los bytes: un error al leer la base, un bucket que no responde, o un
+// "logo" que no es una imagen que sharp pueda leer.
 
 // Mismas columnas y misma resolución de marca que franja.png: `?programa=` elige la marca EFECTIVA de
 // ese programa (logo y color propios o heredados), la misma que usa syncClasePrograma para armar la URL.
@@ -60,7 +61,7 @@ export async function servirLogoClase(
   const programaId = request.nextUrl.searchParams.get('programa');
   const supabase = createServiceClient();
 
-  const [{ data: c }, { data: programa }] = await Promise.all([
+  const [consultaComercio, consultaPrograma] = await Promise.all([
     supabase.from('comercios').select(COLUMNAS_MARCA).eq('id', comercioId).maybeSingle(),
     programaId
       ? supabase
@@ -70,9 +71,22 @@ export async function servirLogoClase(
           // Scope por comercio: un programa ajeno o inexistente es 404, no "el comercio a secas".
           .eq('comercio_id', comercioId)
           .maybeSingle()
-      : Promise.resolve({ data: null }),
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
+  // Un error de lectura NO es "no existe": es pasajero, como el bucket que no responde. 502, y el
+  // próximo sync de la clase reintenta. Leído como 404 diría que el comercio o el programa no existen,
+  // y 404 queda para eso (sin comercio, sin logo, programa ajeno).
+  if (consultaComercio.error || consultaPrograma.error) {
+    console.error(
+      '[google] no se pudo leer la marca para el logo de la clase:',
+      consultaComercio.error ?? consultaPrograma.error,
+    );
+    return NextResponse.json({ error: 'No se pudo leer la marca' }, { status: 502 });
+  }
+
+  const c = consultaComercio.data;
+  const programa = consultaPrograma.data;
   if (!c || (programaId && !programa)) {
     return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
   }
