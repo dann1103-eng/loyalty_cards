@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import sharp from 'sharp';
 import { createServiceClient } from '../../supabase/server';
 import type { Database } from '../../supabase/types';
 import { crearEntorno } from '../../../test/fixtures/entornoComercio';
@@ -212,6 +213,38 @@ describe('resolverDatosCartel', () => {
     // no resolver referencias externas y la imagen desaparecería en silencio del PNG/PDF.
     expect(r!.datos.logoDataUri).toBe(LOGO_ESPERADO);
     expect(r!.datos.fotoDataUri).toBe(FOTO_ESPERADA);
+  });
+
+  // El resto de este archivo prueba el RECORRIDO real (bajarImagen → sharp → medidasLogo), no la
+  // función pura de cajaLogo.ts (esa la cubre cajaLogo.test.ts). CLAUDE.md lo advierte: una prueba
+  // que solo inyecta `medidasLogo` a mano (como hacen las de plantillas.test.ts) no protege que
+  // resolverDatosCartel de verdad mida el logo y lo pase — con `medidasLogo: null` a mano en el
+  // `return` de resolverDatosCartel.ts, esas pruebas de plantillas seguirían verdes. Por eso acá se
+  // sube un PNG de verdad (30×10, hecho con sharp, igual que la foto de arriba) y se pide sharp de
+  // vuelta a través de TODO el camino de producción.
+  it('mide el logo con sharp y lo pasa en medidasLogo (recorrido real, no inyectado)', async () => {
+    const png = await sharp({
+      create: { width: 30, height: 10, channels: 4, background: { r: 10, g: 20, b: 30, alpha: 1 } },
+    })
+      .png()
+      .toBuffer();
+    // `data:` con base64 de verdad (y no el atajo percent-encoded de LOGO_ORIGEN, que no es un PNG
+    // decodificable): bajarImagen hace `fetch` seguido de `sharp(bytes).metadata()`, y esos bytes
+    // tienen que ser un PNG real para que la medición no caiga al `catch` y devuelva null.
+    const logoUrl = `data:image/png;base64,${png.toString('base64')}`;
+    const { comercioId, programaId } = await armarComercio({ logo_url: logoUrl });
+
+    const r = await resolverDatosCartel(supabase, comercioId, programaId);
+
+    expect(r!.datos.medidasLogo).toEqual({ ancho: 30, alto: 10 });
+  });
+
+  it('sin logo, medidasLogo es null (no hay nada que medir)', async () => {
+    const { comercioId, programaId } = await armarComercio({ logo_url: null });
+
+    const r = await resolverDatosCartel(supabase, comercioId, programaId);
+
+    expect(r!.datos.medidasLogo).toBeNull();
   });
 
   it('si la imagen no se puede descargar, sigue adelante sin ella (best-effort)', async () => {

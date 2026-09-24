@@ -82,6 +82,23 @@ const pngMagentaDataUri = (lado = 120) => pngDeUnColor({ r: 255, g: 0, b: 255 },
 // el que se miden los textos.
 const pngCianDataUri = (lado = 120) => pngDeUnColor({ r: 0, g: 255, b: 255 }, lado);
 
+// Un PNG RECTANGULAR de un solo color — a diferencia de `pngDeUnColor`, que siempre es cuadrado.
+// Hace falta un logo con proporción real (no solo `medidasLogo` declarado a mano) para que el
+// rasterizador de verdad tenga que decidir entre "meet" y "slice": el PNG mismo lleva la proporción
+// en sus bytes.
+async function pngRectDeUnColor(
+  color: { r: number; g: number; b: number },
+  ancho: number,
+  alto: number,
+): Promise<string> {
+  const png = await sharp({
+    create: { width: ancho, height: alto, channels: 4, background: { ...color, alpha: 1 } },
+  })
+    .png()
+    .toBuffer();
+  return `data:image/png;base64,${png.toString('base64')}`;
+}
+
 // Píxeles de gris INTERMEDIO (ni blanco ni negro): el rastro que deja el desenfoque. En un cartel
 // nítido los únicos grises intermedios son el antialias del borde de cada módulo del QR y de las
 // letras; en un raster chico AMPLIADO, cada borde se reparte entre varios píxeles y la cuenta se
@@ -192,6 +209,61 @@ describe('rasterizarCartelPng', () => {
   it('sin logo, el PNG no tiene NI UN píxel magenta (el contador discrimina de verdad)', async () => {
     const png = await rasterizarCartelPng(await construirCartelSvg(DATOS, 'sticker'), 'sticker');
     expect(await contarMagenta(png)).toBe(0);
+  });
+
+  // Sugerencia de la revisión del commit 4a1403f: las pruebas de arriba miden el TEXTO del SVG
+  // (`preserveAspectRatio="xMidYMid meet"`), no lo que de verdad sale en los píxeles — el mismo
+  // riesgo que motivó todo este archivo (§ "El riesgo que motivó esta tarea", más arriba). Esta usa
+  // un PNG rectangular DE VERDAD (3:1, no solo `medidasLogo` declarado) en la caja SIEMPRE CUADRADA
+  // de `split × sticker` (plantillas.ts, `anchoMaximo = lado`): con "meet" el color deja franjas
+  // vacías arriba y abajo (~1/3 del alto de la caja); con "slice" (el bug original) llenaría la caja
+  // ENTERA.
+  it('un logo 3:1 en la caja CUADRADA de split × sticker sale con "meet" en el PNG real: el color no llena toda la caja', async () => {
+    const datos: DatosCartel = {
+      ...DATOS,
+      plantilla: 'split',
+      logoDataUri: await pngRectDeUnColor({ r: 255, g: 0, b: 255 }, 300, 100),
+      medidasLogo: { ancho: 300, alto: 100 },
+    };
+    const svg = await construirCartelSvg(datos, 'sticker');
+    const png = await rasterizarCartelPng(svg, 'sticker');
+
+    // Misma aritmética que plantillaSplit × sticker (h = viewBox.alto del sticker, ambos 400):
+    // altoFranja = h*0.34, logoLado = altoFranja*0.42, x = w*0.08, caja centrada en
+    // altoFranja/2 (así que y = altoFranja/2 - logoLado/2) — y la MISMA escala px/unidad que usa
+    // rasterizarCartelPng (px del formato sobre su viewBox).
+    const { viewBox, px } = DIMENSIONES_CARTEL.sticker;
+    const escala = px.ancho / viewBox.ancho;
+    const altoFranja = viewBox.alto * 0.34;
+    const logoLado = altoFranja * 0.42;
+    const cajaXPx = Math.round(viewBox.ancho * 0.08 * escala);
+    const cajaYPx = Math.round((altoFranja / 2 - logoLado / 2) * escala);
+    const cajaLadoPx = Math.round(logoLado * escala);
+
+    const { data, info } = await sharp(png)
+      .extract({ left: cajaXPx, top: cajaYPx, width: cajaLadoPx, height: cajaLadoPx })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    let filasConMagenta = 0;
+    for (let fila = 0; fila < info.height; fila++) {
+      for (let col = 0; col < info.width; col++) {
+        const i = (fila * info.width + col) * info.channels;
+        if (esMagenta(data[i], data[i + 1], data[i + 2])) {
+          filasConMagenta += 1;
+          break;
+        }
+      }
+    }
+    const fraccion = filasConMagenta / info.height;
+
+    expect(
+      fraccion,
+      `el color del logo ocupa ${(fraccion * 100).toFixed(0)}% del alto de la caja cuadrada — con "meet" debería ser ~1/3, con "slice" ~100%`,
+    ).toBeLessThan(0.6);
+    // Y el control: CON color de verdad, no una caja vacía por un recorte mal calculado.
+    expect(fraccion).toBeGreaterThan(0.15);
   });
 
   // El otro `<image href>` de plantillas.ts: la foto de fondo de la plantilla "foto". Mismo riesgo,

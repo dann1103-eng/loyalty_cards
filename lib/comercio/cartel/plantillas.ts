@@ -57,21 +57,43 @@ function tarjetaBlancaConQr(qrSvg: string, x: number, y: number, lado: number): 
 // de siempre (lado×lado) — es la referencia que usan las seis plantillas para no mover nada de lo
 // que va debajo o al lado del logo — y `anchoMaximo` es el tope de ancho que cada combinación le
 // permite a la caja (cajaLogo.ts), leído de su propia geometría para que nunca se salga del lienzo.
+//
+// `anclaje` decide DÓNDE queda fijo el cuadrado viejo mientras la caja crece en ancho:
+//   · 'centro' (centrado, split × mostrador, split × sticker): el cuadrado viejo estaba CENTRADO en
+//     su sitio, así que la caja nueva reparte su ancho por igual a los dos lados de ese mismo centro.
+//   · 'inicio' (foto): el cuadrado viejo estaba anclado por su ESQUINA izquierda (no centrado), así
+//     que la caja nueva crece solo hacia la derecha y `x` no se mueve nunca. Centrar ahí (como en las
+//     otras plantillas) fue el bug que encontró la revisión del commit 4a1403f (2026-09-23): con la
+//     caja centrada en el punto medio de un cuadrado que ya estaba pegado al borde, un logo ancho
+//     real (Pulso CAFÉ, ~3:1) se salía por la izquierda y quedaba con la caja tocando x=0.
 function logoSvg(
   datos: DatosCartel,
   x: number,
   y: number,
   lado: number,
   anchoMaximo: number,
+  anclaje: 'centro' | 'inicio',
   dibujarTexto: DibujarTexto,
 ): string {
   if (datos.logoDataUri) {
     const caja = cajaLogo(lado, anchoMaximo, datos.medidasLogo);
+    if (anclaje === 'inicio') {
+      // `xMinYMid`: alinea la imagen contra el borde IZQUIERDO de la caja. Con la fórmula de
+      // cajaLogo.ts la caja nunca queda más ancha que la proporción natural del logo, así que en la
+      // práctica nunca sobra aire horizontal dentro de la caja para que esto se note — pero expresa
+      // la intención real (el logo cuelga de su esquina, no de su centro) en vez de depender de una
+      // coincidencia aritmética que un cajaLogo.ts distinto podría romper en silencio.
+      return `<image href="${datos.logoDataUri}" x="${x}" y="${y}" width="${caja.ancho}" height="${caja.alto}" preserveAspectRatio="xMinYMid meet"/>`;
+    }
     // La caja se CENTRA donde iba el cuadrado de siempre (spec: "sin mover el nombre, el QR ni nada
     // debajo"). En Y no hace falta nada: `caja.alto` es siempre `lado`, así que `y` no cambia. En X,
-    // el cuadrado viejo tenía su centro en `x + lado / 2`; la caja nueva reparte su ancho por igual
-    // a los dos lados de ESE mismo centro, así que un logo ancho crece hacia afuera sin correrse.
-    const cajaX = x + lado / 2 - caja.ancho / 2;
+    // `(lado - caja.ancho) / 2` y NO `lado / 2 - caja.ancho / 2`: cuando la caja no cambió de tamaño
+    // (`caja.ancho === lado`, el caso de siempre: logo cuadrado, circular o sin logo) la resta da
+    // CERO exacto por construcción (a - a === 0 siempre en punto flotante, sin importar el redondeo
+    // de `lado`) y `cajaX` sale IDÉNTICO a `x` — con la forma vieja, sumar y restar `lado / 2` por
+    // separado podía dejar un residuo de redondeo (medido: 23.999999999999996 en vez de 24 en
+    // "foto", con `lado = 56.00000000000001`).
+    const cajaX = x + (lado - caja.ancho) / 2;
     return `<image href="${datos.logoDataUri}" x="${cajaX}" y="${y}" width="${caja.ancho}" height="${caja.alto}" preserveAspectRatio="xMidYMid meet"/>`;
   }
   const inicial = datos.nombreComercio.trim().charAt(0).toUpperCase() || '?';
@@ -101,10 +123,12 @@ async function plantillaCentrado(
 
   const logoLado = w * 0.18;
   const logoY = h * 0.1;
-  // La caja centrada en `cx` puede crecer hasta el 60% del ancho del lienzo (240 sobre 400) sin
-  // clamparse ni para el logo 3:1 de las pruebas (216): deja siempre un margen visible a los dos
-  // lados, incluso en el caso límite. `w` es el mismo tanto en sticker como en mostrador (el ANCHO
-  // del viewBox es fijo, ver DIMENSIONES_CARTEL), así que el tope es el mismo en los dos formatos.
+  // El 60% del ancho del lienzo (240 sobre 400) es una decisión de DISEÑO, no una medida sacada del
+  // caso de prueba: deja un margen mínimo de 80 unidades a cada lado (400 × 0.2 = 80; en el sticker
+  // de 10×10cm son 20mm de aire — un margen de impresión razonable) incluso en el caso más ancho
+  // posible, porque la caja está centrada en `cx` y acotada a este máximo. `w` es el mismo tanto en
+  // sticker como en mostrador (el ANCHO del viewBox es fijo, ver DIMENSIONES_CARTEL), así que el
+  // tope es el mismo en los dos formatos.
   const anchoMaximoLogo = w * 0.6;
   const nombreY = logoY + logoLado + h * 0.045;
   const qrY = nombreY + h * 0.06;
@@ -131,7 +155,7 @@ async function plantillaCentrado(
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">
   <rect width="${w}" height="${h}" fill="${datos.colorFondo}"/>
   ${dibujarFranjas(datos.elementos, w, h)}
-  ${logoSvg(datos, cx - logoLado / 2, logoY, logoLado, anchoMaximoLogo, dibujarTexto)}
+  ${logoSvg(datos, cx - logoLado / 2, logoY, logoLado, anchoMaximoLogo, 'centro', dibujarTexto)}
   ${dibujarTexto({ texto: datos.nombreComercio, x: cx, y: nombreY, tamano: h * 0.032, peso: 700, anclaje: 'centro', color: datos.colorTexto })}
   ${tarjetaBlancaConQr(qrSvg, qrX, qrY, qrLado)}
   ${dibujarTexto({ texto: datos.textoCta, x: cx, y: ctaY, tamano: h * 0.026, peso: 600, anclaje: 'centro', color: datos.colorLabel })}
@@ -152,12 +176,14 @@ async function plantillaSplit(
   if (formato === 'mostrador') {
     const anchoFranja = w * 0.32;
     const logoLado = anchoFranja * 0.5;
-    // La caja está centrada en la mitad de la franja (anchoFranja / 2): el mismo valor sirve de
-    // tope porque es EXACTAMENTE la distancia al borde más cercano (izquierdo Y derecho de la
-    // franja, ya que el centro cae a la mitad). Más que eso y la caja se saldría de la franja de
-    // color hacia la mitad blanca — es el caso que motivó esta tarea: sin acotar, un logo 3:1 acá
-    // (lado × 3 = 192) queda centrado en 64 y su x da -32, fuera del lienzo por la izquierda.
-    const anchoMaximoLogo = anchoFranja;
+    // La tarea nació de un logo real recortado (Pulso CAFÉ, ~3:1); el caso de x=-32 (sin acotar en
+    // absoluto: un 3:1 aquí pide lado × 3 = 192 y, centrado en 64, deja x = 64 - 96 = -32) fue lo que
+    // hizo evidente que hacía falta un TOPE en primer lugar. Un primer tope de `anchoFranja` entero
+    // arregla el desborde pero deja otro problema (revisión del commit 4a1403f, 2026-09-23): esa
+    // misma caja terminaba tocando el borde del papel (x=0) Y el límite con la mitad blanca
+    // (x=anchoFranja) a la vez. El 80% dentro de la franja le deja un margen de (anchoFranja × 0.2)/2
+    // a cada lado del bloque de color, incluso en el caso más ancho posible.
+    const anchoMaximoLogo = anchoFranja * 0.8;
     const qrLado = (w - anchoFranja) * 0.55;
     // Centrado en la mitad DERECHA (a la derecha de la franja), midiendo la tarjeta completa.
     const qrX = anchoFranja + (w - anchoFranja - ladoTarjetaQr(qrLado)) / 2;
@@ -169,7 +195,7 @@ async function plantillaSplit(
   <rect width="${w}" height="${h}" fill="#ffffff"/>
   <rect width="${anchoFranja}" height="${h}" fill="${datos.colorFondo}"/>
   ${dibujarFranjas(datos.elementos, w, h)}
-  ${logoSvg(datos, anchoFranja / 2 - logoLado / 2, h * 0.08, logoLado, anchoMaximoLogo, dibujarTexto)}
+  ${logoSvg(datos, anchoFranja / 2 - logoLado / 2, h * 0.08, logoLado, anchoMaximoLogo, 'centro', dibujarTexto)}
   ${dibujarTexto({ texto: datos.nombreComercio, x: anchoFranja / 2, y: h * 0.08 + logoLado + h * 0.04, tamano: h * 0.028, peso: 700, anclaje: 'centro', color: datos.colorTexto })}
   ${tarjetaBlancaConQr(qrSvg, qrX, qrY, qrLado)}
   ${dibujarTexto({ texto: datos.textoCta, x: centroDerecha, y: qrY + qrLado * 1.24 + h * 0.05, tamano: h * 0.024, peso: 600, anclaje: 'centro', color: datos.colorLabel })}
@@ -182,11 +208,12 @@ async function plantillaSplit(
   // franja lateral (validado con el usuario en el companion de brainstorming).
   const altoFranja = h * 0.34;
   const logoLado = altoFranja * 0.42;
-  // Acá el nombre va a la DERECHA del logo (`x: w * 0.08 + logoLado + w * 0.04` más abajo) y no
-  // tiene ajuste de ancho propio: agrandar la caja lo empujaría fuera del lienzo. Por eso la caja
-  // NUNCA crece más allá del cuadrado de hoy — `anchoMaximo = lado` (spec: "la caja SIGUE CUADRADA
-  // en split × sticker"). Un logo angosto (1:3) igual se angosta: lo único que este tope prohíbe es
-  // CRECER, no encogerse.
+  // Acá el nombre va a la DERECHA del logo, en una X FIJA (`x: w * 0.08 + logoLado + w * 0.04` más
+  // abajo, calculada con el `logoLado` de SIEMPRE) y sin ajuste de ancho propio: agrandar la caja no
+  // "empuja" el nombre a ningún lado — se le METERÍA ENCIMA, porque el nombre no sabe que el logo
+  // creció y no se corre solo. Por eso la caja NUNCA crece más allá del cuadrado de hoy —
+  // `anchoMaximo = lado` (spec: "la caja SIGUE CUADRADA en split × sticker"). Un logo angosto (1:3)
+  // igual se angosta: lo único que este tope prohíbe es CRECER, no encogerse.
   const anchoMaximoLogo = logoLado;
   const qrLado = w * 0.42;
   const qrX = w / 2 - ladoTarjetaQr(qrLado) / 2;
@@ -197,7 +224,7 @@ async function plantillaSplit(
   <rect width="${w}" height="${h}" fill="#ffffff"/>
   <rect width="${w}" height="${altoFranja}" fill="${datos.colorFondo}"/>
   ${dibujarFranjas(datos.elementos, w, h)}
-  ${logoSvg(datos, w * 0.08, altoFranja / 2 - logoLado / 2, logoLado, anchoMaximoLogo, dibujarTexto)}
+  ${logoSvg(datos, w * 0.08, altoFranja / 2 - logoLado / 2, logoLado, anchoMaximoLogo, 'centro', dibujarTexto)}
   ${dibujarTexto({ texto: datos.nombreComercio, x: w * 0.08 + logoLado + w * 0.04, y: altoFranja / 2 + logoLado * 0.13, tamano: h * 0.032, peso: 700, anclaje: 'inicio', color: datos.colorTexto })}
   ${tarjetaBlancaConQr(qrSvg, qrX, qrY, qrLado)}
   ${dibujarTexto({ texto: datos.textoCta, x: w / 2, y: qrY + qrLado * 1.24 + h * 0.045, tamano: h * 0.026, peso: 600, anclaje: 'centro', color: datos.colorLabel })}
@@ -234,15 +261,19 @@ async function plantillaFoto(
   const h = dim.viewBox.alto;
 
   const logoLado = w * 0.14;
-  // El logo va anclado por su esquina (`x: w * 0.06`, más abajo), no centrado, así que su centro
-  // cae en `w * 0.06 + logoLado / 2`. Ese centro es el que no se mueve al crecer la caja (spec:
-  // "centrada donde hoy va el cuadrado"), y el margen izquierdo (w * 0.06) es también el borde MÁS
-  // CERCANO: si la caja creciera más de 2 veces esa distancia al centro, se saldría del lienzo por
-  // la izquierda antes que por la derecha (a la derecha sobra lienzo de sobra). El máximo espeja ese
-  // margen hacia el otro lado en vez de fijarlo a mano, así que si algún día cambia el 0.06 o el
-  // 0.14 el tope se recalcula solo.
-  const centroLogoX = w * 0.06 + logoLado / 2;
-  const anchoMaximoLogo = 2 * Math.min(centroLogoX, w - centroLogoX);
+  // El logo va anclado por su ESQUINA izquierda (`x: w * 0.06`, más abajo; `logoSvg` con
+  // `anclaje: 'inicio'`), no centrado: `x` queda FIJO siempre y la caja crece solo hacia la derecha.
+  // (Primera versión de esta tarea: centraba la caja igual que las otras plantillas, en el punto
+  // medio del cuadrado viejo — que está cerca del borde izquierdo —, y un logo 3:1 real quedaba con
+  // la caja pegada a x=0. Revisión del commit 4a1403f, 2026-09-23.)
+  //
+  // Como `x` no se mueve, el único riesgo de desborde es por la DERECHA, y en esa franja horizontal
+  // (de `h * 0.06` a `h * 0.06 + logoLado`) no hay nada más dibujado — la tarjeta blanca del QR
+  // arranca mucho más abajo (`tarjetaY`, cerca del pie del cartel) — así que hay lugar de sobra: el
+  // 50% del ancho del lienzo deja min. 0.44 × w de margen a la derecha (176 sobre 400) y ya ni
+  // siquiera acota el logo 3:1 de las pruebas (pide 168, contra el tope viejo de 104 que sí lo
+  // recortaba y lo dejaba pegado casi al borde izquierdo).
+  const anchoMaximoLogo = w * 0.5;
   const qrLado = w * 0.42;
   const tarjetaAncho = w * 0.8;
   const tarjetaAlto = qrLado * 1.5;
@@ -265,7 +296,7 @@ async function plantillaFoto(
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">
   ${fondo}
   ${dibujarFranjas(datos.elementos, w, h)}
-  ${logoSvg(datos, w * 0.06, h * 0.06, logoLado, anchoMaximoLogo, dibujarTexto)}
+  ${logoSvg(datos, w * 0.06, h * 0.06, logoLado, anchoMaximoLogo, 'inicio', dibujarTexto)}
   <rect x="${tarjetaX}" y="${tarjetaY}" width="${tarjetaAncho}" height="${tarjetaAlto}" rx="${tarjetaAncho * 0.04}" fill="#ffffff"/>
   <g transform="translate(${qrX}, ${qrY})">${qrSvg}</g>
   ${dibujarTexto({ texto: datos.textoCta, x: w / 2, y: qrY + qrLado * 1.22, tamano: h * 0.026, peso: 600, anclaje: 'centro', color: '#1c1917' })}

@@ -13,32 +13,40 @@ import type { DatosCartel } from './tipos';
 // Best-effort: si falla, el cartel se arma igual sin esa imagen (spec §7) — una imagen faltante no
 // puede tumbar la descarga entera de un cartel.
 //
-// Devuelve además las MEDIDAS en píxeles, que es lo único que le falta a plantillas.ts para aplicar
-// el encuadre: la medición vive acá (servidor) y no en plantillas.ts porque esa es pura y la importa
-// el navegador para la vista previa — sharp no puede entrar ahí.
-async function bajarImagen(url: string | null): Promise<{ dataUri: string; medidas: Medidas | null } | null> {
+// Devuelve además las MEDIDAS en píxeles: a la FOTO le hacen falta para aplicar su encuadre
+// (rectanguloVisible, con el foco que eligió el dueño), y al LOGO para la caja que respeta su
+// proporción real en vez de recortarlo cuadrado (cajaLogo.ts, Tarea 3, 2026-09-23). La medición vive
+// ACÁ (servidor) y no en plantillas.ts porque esa es pura y la importa el navegador para la vista
+// previa — sharp no puede entrar ahí. `etiqueta` es solo para que un warning de abajo diga de CUÁL
+// de las dos imágenes se trata — con dos llamadas (logo y foto) fallando por separado, "una imagen
+// del cartel" a secas no alcanza para diagnosticar cuál.
+async function bajarImagen(
+  url: string | null,
+  etiqueta: 'logo' | 'foto',
+): Promise<{ dataUri: string; medidas: Medidas | null } | null> {
   if (!url) return null;
   try {
     const respuesta = await fetch(url);
     if (!respuesta.ok) return null;
     const tipo = respuesta.headers.get('content-type') ?? 'image/webp';
     const bytes = Buffer.from(await respuesta.arrayBuffer());
-    return { dataUri: `data:${tipo};base64,${bytes.toString('base64')}`, medidas: await medirImagen(bytes) };
+    return { dataUri: `data:${tipo};base64,${bytes.toString('base64')}`, medidas: await medirImagen(bytes, etiqueta) };
   } catch (error) {
-    console.warn('[comercio] no se pudo convertir una imagen del cartel a data URI:', error);
+    console.warn(`[comercio] no se pudo convertir el ${etiqueta} del cartel a data URI:`, error);
     return null;
   }
 }
 
-// Best-effort aparte del fetch: una foto que sharp no sabe leer NO puede tumbar el cartel, solo
-// pierde el encuadre y vuelve al recorte centrado de siempre. Por eso su propio try/catch.
-async function medirImagen(bytes: Buffer): Promise<Medidas | null> {
+// Best-effort aparte del fetch: una imagen que sharp no sabe leer NO puede tumbar el cartel — la
+// FOTO pierde el encuadre (vuelve al recorte centrado de siempre) y el LOGO pierde su proporción
+// (vuelve a la caja cuadrada de siempre). Por eso su propio try/catch.
+async function medirImagen(bytes: Buffer, etiqueta: 'logo' | 'foto'): Promise<Medidas | null> {
   try {
     const { width, height } = await sharp(bytes).metadata();
     if (!width || !height) return null;
     return { ancho: width, alto: height };
   } catch (error) {
-    console.warn('[comercio] no se pudieron medir las dimensiones de la foto del cartel:', error);
+    console.warn(`[comercio] no se pudieron medir las dimensiones del ${etiqueta} del cartel:`, error);
     return null;
   }
 }
@@ -175,8 +183,8 @@ export async function resolverDatosCartel(
   // un logo horizontal se dibuje entero en vez de recortado. El encuadre (`encuadreFoto`) sigue sin
   // tocar al logo — es exclusivo de la foto de fondo de la plantilla "foto".
   const [logo, foto] = await Promise.all([
-    bajarImagen(combinados.logoUrl),
-    bajarImagen(combinados.fotoUrl),
+    bajarImagen(combinados.logoUrl, 'logo'),
+    bajarImagen(combinados.fotoUrl, 'foto'),
   ]);
 
   return {

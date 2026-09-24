@@ -22,7 +22,7 @@ describe('cajaLogo', () => {
   });
 
   it('logo 3:1, el ancho se acota al máximo cuando lo excede', () => {
-    // 72 × 3 = 216 > 128: se acota a 128, el máximo que le da split × mostrador.
+    // lado × proporción = 64 × 3 = 192 > 128 (el máximo de este caso): se acota a 128.
     expect(cajaLogo(64, 128, { ancho: 300, alto: 100 })).toEqual({ ancho: 128, alto: 64 });
   });
 
