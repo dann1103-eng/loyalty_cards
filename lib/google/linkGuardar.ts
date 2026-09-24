@@ -139,7 +139,11 @@ export async function generarLinkGuardar(
 
   const clase = construirClase(classId, {
     nombre: cm.nombre,
-    colorFondo: marca.colorFondo,
+    // El color de fondo (hexBackgroundColor), con la MISMA rama que los logos y la portada: con la clase
+    // del comercio, el del comercio. Con `marca` fijo, un programa de marca propia cuya clase no se pudo
+    // sincronizar le teñía, vía el upsert del JWT, la clase del NEGOCIO —la de todas sus tarjetas— con
+    // su propio color.
+    colorFondo: claseDelPrograma ? marca.colorFondo : cm.color_fondo,
     logos,
     // La portada tiene que ser la de ESTA clase: con la del comercio, la marca del comercio; con la
     // del programa, la efectiva. Con `marca` en los dos casos, un programa con branding propio que NO

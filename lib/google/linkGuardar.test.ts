@@ -183,11 +183,15 @@ describe('generarLinkGuardar', () => {
   //       lleva `?programa=` y no pasa el `toMatch`.
   //   (c) La rama del programa sin su id (`resolverLogosClase(tarjeta.comercio_id, null, …)`) → FALLA
   //       "clase del PROGRAMA (su sync anduvo)…" en el `toMatch` del `?programa=`.
-  describe('logos en la clase embebida', () => {
+  //   (d) El color de fondo de la clase con `marca.colorFondo` fijo, sin la rama `claseDelPrograma` →
+  //       FALLA "clase del COMERCIO: hexBackgroundColor es el del COMERCIO…" con `expected '#c86400' to be
+  //       '#0a141e'` (el color del programa en la clase del negocio).
+  describe('logos y color de fondo de la clase embebida', () => {
     type ClaseJwt = {
       id: string;
       programLogo: { sourceUri: { uri: string } };
       wideProgramLogo?: { sourceUri: { uri: string } } | null;
+      hexBackgroundColor?: string;
     };
     async function claseDelJwt(tarjetaId: string): Promise<ClaseJwt> {
       const url = await generarLinkGuardar(supabase, tarjetaId);
@@ -226,6 +230,27 @@ describe('generarLinkGuardar', () => {
       await syncClaseComercio(supabase, t.comercioId);
       const delSync = patchClaseMock.mock.calls.at(-1)![0].requestBody;
       expect(clase.programLogo.sourceUri.uri).toBe(delSync.programLogo.sourceUri.uri);
+    });
+
+    // El mismo error que el de los logos, con el color: si la clase del COMERCIO viajara con el color
+    // del PROGRAMA, Google se lo pondría (upsert por id) a TODAS las tarjetas del negocio. Mismo
+    // escenario: programa con marca propia de otro color y su sync rechazada.
+    it('clase del COMERCIO: hexBackgroundColor es el del COMERCIO aunque el programa tenga otro color — el MISMO que escribe syncClaseComercio', async () => {
+      const t = await crearTarjeta({});
+      await supabase.from('comercios').update({ color_fondo: 'rgb(10, 20, 30)' }).eq('id', t.comercioId);
+      await supabase
+        .from('programas_tarjeta')
+        .update({ branding_propio: true, color_fondo: 'rgb(200, 100, 0)' })
+        .eq('id', t.programaId);
+      insertClaseMock.mockRejectedValueOnce(new Error('Google caído'));
+
+      const clase = await claseDelJwt(t.tarjetaId);
+
+      expect(clase.id).toBe('issuer-test.comercio_x');
+      expect(clase.hexBackgroundColor).toBe('#0a141e');
+
+      await syncClaseComercio(supabase, t.comercioId);
+      expect(clase.hexBackgroundColor).toBe(patchClaseMock.mock.calls.at(-1)![0].requestBody.hexBackgroundColor);
     });
 
     it('clase del PROGRAMA (su sync anduvo): los logos compuestos de ese programa, con ?programa=', async () => {
