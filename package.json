@@ -38,6 +38,7 @@
     "sharp": "^0.34.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@playwright/test": "^1.61.1",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
