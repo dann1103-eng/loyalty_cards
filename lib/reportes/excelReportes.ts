@@ -142,7 +142,8 @@ function celdaDolares(valor: number | string, columna: string): Cell {
 // El teléfono va como TEXTO (conserva el +503) con formato "@": sin él, Excel "ayuda" y reinterpreta
 // una cadena de dígitos como número. Un texto que empieza con "=" es un string en .xlsx (en
 // write-excel-file solo es fórmula un valor con type 'Formula'): no hace falta el apóstrofo del CSV.
-function celdaTelefono(valor: string): Cell {
+// Exportada: la lista de clientes en .xlsx (lib/comercio/exportarClientes.ts) usa la MISMA celda.
+export function celdaTelefono(valor: string): Cell {
   return { value: valor, type: String, format: '@' };
 }
 
@@ -187,13 +188,16 @@ function celdaUnidad(tipo: string, bruto: number): Cell {
 
 // Cada columna junta su encabezado, su ancho y su celda: no hay forma de que un encabezado quede
 // corrido respecto de sus datos.
-interface Columna<F> {
+//
+// Exportadas (con celdaTelefono) para la lista de clientes en .xlsx: encabezados en negrita y la
+// primera fila fija son la misma regla en los dos archivos, y así viven en un solo lugar.
+export interface Columna<F> {
   titulo: string;
   ancho: number;
   celda: (fila: F) => Cell;
 }
 
-function hojaTabular<F>(nombre: string, columnas: Columna<F>[], filas: F[]): HojaExcel {
+export function hojaTabular<F>(nombre: string, columnas: Columna<F>[], filas: F[]): HojaExcel {
   return {
     sheet: nombre,
     data: [columnas.map((c) => negrita(c.titulo)), ...filas.map((f): Row => columnas.map((c) => c.celda(f)))],

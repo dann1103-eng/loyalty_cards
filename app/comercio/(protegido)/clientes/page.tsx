@@ -106,20 +106,25 @@ export default async function PaginaClientes({
           {/* Solo al dueño: la ruta tiene gate de owner y exportar la base del negocio no es tarea
               del cajero.
 
-              Va con <a download> y NO con <Link>: el destino no es una página sino un Route Handler
+              Van con <a download> y NO con <Link>: el destino no es una página sino un Route Handler
               que devuelve un archivo, y Link haría navegación del router contra una respuesta que
               no es RSC. El atributo `download` es además lo que le dice a la regla de lint de Next
-              que esto es una descarga y no un enlace interno mal hecho. */}
+              que esto es una descarga y no un enlace interno mal hecho.
+
+              Las dos bajan la MISMA lista (una fila por tarjeta); el Excel trae Visitas como número y
+              "Cliente desde" como fecha, listas para ordenar y filtrar (spec 2026-09-23 §6). En una
+              fila propia que se parte en dos a 375 px, en vez de pegarse al botón de agregar. */}
           {rol === 'owner' && (
-            <a
-              className="btn-borde"
-              style={{ marginTop: 10 }}
-              href="/comercio/clientes/exportar"
-              download
-            >
-              <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">download</span>
-              Descargar mis clientes (CSV)
-            </a>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>
+              <a className="btn-borde" href="/comercio/clientes/exportar" download>
+                <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">download</span>
+                Descargar mis clientes (CSV)
+              </a>
+              <a className="btn-borde" href="/comercio/clientes/exportar?formato=xlsx" download>
+                <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">download</span>
+                Descargar mis clientes (Excel)
+              </a>
+            </div>
           )}
         </div>
         <Link className="admin-fila-slug" href="/comercio/panel">← Volver</Link>
