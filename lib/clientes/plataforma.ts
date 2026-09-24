@@ -103,9 +103,10 @@ export type BilleteraDeEntrada = 'apple' | 'google' | 'ambas';
 //
 // Sale de `botonesWallet` y NO de la plataforma a secas: un Android sin Google disponible ve el
 // botón de Apple (ver la rama 'android' de arriba) y tiene que leer "Apple Wallet", no "Google".
-// Con `mostrarOtro: false` fijo porque el subtítulo nombra lo que se ve de entrada: no cambia si el
-// cliente toca "¿Tienes otro teléfono?" (ese link es un escape por si la detección falló, no un
-// cambio de billetera).
+// Con `mostrarOtro: false` fijo porque la spec pide nombrar lo que se ve DE ENTRADA, y el estado del
+// link "¿Tienes otro teléfono?" vive dentro de BotonesWallet: el subtítulo no cambia al tocarlo.
+// Queda aceptado que, si la detección falló y el cliente toca el link, el subtítulo siga nombrando la
+// billetera detectada encima de los dos botones.
 export function billeteraDeEntrada({
   plataforma,
   googleDisponible,

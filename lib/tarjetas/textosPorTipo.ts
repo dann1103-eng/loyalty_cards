@@ -74,9 +74,10 @@ const ATAJO_REGLAS: Record<string, string> = {
 // la tarjeta de muestra, y una frase con el nombre adentro se rompe con un comercio de nombre
 // largo.
 
-// OJO CON EL TRATO: estas dos tablas (y FRASE_BILLETERA, que completa la segunda) van en TUTEO
-// ("Regístrate", "Agrégala", "tu teléfono"), y solo ellas. El resto del módulo vosea, igual que
-// todo el panel del dueño. No es un descuido: las pantallas que ve el CLIENTE FINAL (registro y
+// OJO CON EL TRATO: estas dos tablas, FRASE_BILLETERA y la plantilla "Agrégala a … y …" de
+// promesaTarjetaLista van en TUTEO ("Regístrate", "Agrégala", "tu teléfono"), y solo ellas —— el
+// imperativo "Agrégala" ya no vive en ninguna tabla, sino en esa plantilla. El resto del módulo
+// vosea, igual que todo el panel del dueño. No es un descuido: las pantallas que ve el CLIENTE FINAL (registro y
 // portal) tutean desde siempre, y el usuario lo confirmó como decisión el 2026-09-08. Mezclar los
 // dos registros en la misma pantalla se nota y queda mal, así que si algún día se unifica hay que
 // cambiar la pantalla entera, no una frase suelta.
