@@ -1,8 +1,8 @@
 # Reportes con filtros, tabla de clientes y Excel
 
 **Fecha:** 2026-09-23 · **Estado:** diseño aprobado por Daniel en líneas generales (2026-09-23, "Aprobado,
-en ese orden"); esta spec lo baja a detalle y pasó una revisión contra el código (23 hallazgos,
-incorporados). Segunda de dos entregas pedidas tras los onboardings del 2026-09-22/23 (la primera:
+en ese orden"); esta spec lo baja a detalle y pasó dos revisiones contra el código (23 + 8
+hallazgos, incorporados). Segunda de dos entregas pedidas tras los onboardings del 2026-09-22/23 (la primera:
 `2026-09-23-wallet-dispositivo-y-logos-design.md`). **Lleva migración 0040** (funciones de reporte
 nuevas + dos índices), que Daniel aplica a mano ANTES del deploy.
 
@@ -74,13 +74,16 @@ tarjeta, así que en cashback y gift card son CENTAVOS, y en cupón, membresía 
 siempre 0. Por eso:
 - pantalla: `describirCosto(tipo del programa principal DE ESE comercio, valor)`, como hoy; vacío en los
   tipos sin contador;
-- Excel: en centavos se escribe `valor / 100` con formato `$#,##0.00`; en puntos y sellos el número
-  entero; en los tipos sin contador la celda va vacía; y una columna **Unidad** ("puntos", "sellos",
-  "$") al lado.
+- Excel: en centavos se escribe `valor / 100` con formato `$#,##0.00`; en puntos, sellos y prepago el
+  número entero; en los tipos sin contador la celda va vacía; y una columna **Unidad** ("puntos",
+  "sellos", "visitas prepagadas", "$") al lado. En prepago dice "visitas prepagadas" y no "visitas":
+  al lado de la columna Visitas, que es otra cosa, confundiría.
 - Un comercio con programas de tipos distintos suma unidades mezcladas en su acumulado: se escribe con
   el tipo del principal, como hoy (fuera de alcance).
-- Con 2 o más comercios de UNIDADES distintas en el alcance, la columna Acumulado no se puede ordenar
-  (su encabezado no es un enlace): ordenar centavos contra sellos no significa nada.
+- **Acumulado no se puede ordenar** (su encabezado no es un enlace) cuando el alcance mezcla UNIDADES
+  (ordenar centavos contra sellos no significa nada) o cuando su único tipo no tiene contador (la
+  columna va vacía). Un `orden=acumulado` guardado en una URL cae a `visitas` DENTRO de
+  `resolverFiltrosReportes`, que para eso recibe la unidad de cada comercio del alcance.
 
 **Rótulo:** "Operaciones" pasa a decir **"Visitas"** donde lo lee el dueño: Reportes, la pantalla de
 cajeros, el panel y el Excel (decisión de Daniel). La cuenta es la misma de la 0033; el subtítulo que
@@ -140,10 +143,12 @@ Todo respeta TODOS los filtros; ya no se esconden bloques al elegir sucursal.
 1. **Cabecera:** Visitas, Premios y Clientes del alcance y el período. Clientes es la cuenta DISTINTA
    del alcance (no la suma de las sucursales, que duplicaría a quien fue a dos).
 2. **Por día:** las barras de hoy (`.pista`). La SQL recorta la serie a
-   `[max(desde, primera actividad del alcance), min(hasta, hoy local)]` (sin actividad, vacía) y, en
+   `[max(desde, primera actividad del alcance), hasta]` (la app siempre manda `hasta`; sin actividad,
+   vacía) y, en
    modo `auto`, agrupa **por mes** si ese tramo pasa de 62 días; el título dice "Por día" o "Por mes".
 3. **Por sucursal:** las cartas de hoy (Clientes, Visitas, Premios), bajo el nombre del comercio si hay
-   2 o más, con período y cajero aplicados. Con una sucursal elegida, solo esa.
+   2 o más, con período y cajero aplicados. Con una sucursal elegida, solo esa; si no tuvo actividad
+   con esos filtros, un estado vacío ("Sin actividad en <sucursal> en este período"), no un hueco.
 4. **Clientes** (§3), en lugar del top 5.
 5. **"Descargar Excel"** (§4) como `<a download>` (como el del CSV, nunca `<Link>`: el prefetch correría
    la ruta en cada vista). "Ver actividad por cajero" queda como hoy (comercio activo, su propio
@@ -160,8 +165,8 @@ Todo respeta TODOS los filtros; ya no se esconden bloques al elegir sucursal.
   - El conteo dice "312 clientes" con un comercio y "312 filas (cliente por comercio)" con varios: una
     persona con tarjeta en dos comercios es 1 en la cabecera y 2 filas acá.
 - **Orden:** tocar un encabezado ordena por esa columna (`orden` = `visitas` | `acumulado` | `premios` |
-  `ultima` | `nombre`); tocar la activa invierte (`dir` = `desc` | `asc`). Dirección inicial por
-  columna: `nombre` ascendente, el resto descendente. Desempate: `nombre` → `apellido` (nulls al final)
+  `ultima` | `nombre`); tocar la activa invierte (`dir` = `desc` | `asc`); ordenar vuelve a
+  `pagina=1`. Dirección inicial por columna: `nombre` ascendente, el resto descendente. Desempate: `nombre` → `apellido` (nulls al final)
   → `cliente_id` → `comercio_id`; en las demás columnas, directo `cliente_id` → `comercio_id`. Estable
   entre páginas: ni repite ni saltea. El orden por nombre usa la collation de la base (`nombre`
   mayúsculas y acentos como vengan); la prueba fija el caso. El encabezado activo lleva `aria-sort`.
@@ -196,18 +201,36 @@ del CSV.
   la librería lo escribe como número de serie y Excel muestra esa hora. Formato `dd/mm/yyyy` (Día) o
   `dd/mm/yyyy hh:mm`. La prueba lee la celda y asierta `getUTCHours()`/`getUTCDate()`, y corre igual en
   cualquier zona.
-- **El teléfono va como texto** (conserva el `+503`). En `.xlsx` un texto que empieza con `=` es un
-  string, no una fórmula; no hace falta el apóstrofo del CSV. Prueba que lo fije.
-- **Sin el tope de 1000 filas:** TODA llamada que alimenta el Excel pagina de a 1000 (`.range()`) hasta
-  recibir menos de 1000. **Tope de seguridad: 50 000 filas por hoja**; si se alcanza, la hoja Resumen lo
-  dice. (Con los pilotos, órdenes de magnitud por debajo.)
+- **El teléfono va como texto** (conserva el `+503`), con `format: '@'` para que Excel no lo
+  reinterprete como número. En `.xlsx` un texto que empieza con `=` es un string, no una fórmula (en
+  `write-excel-file` solo lo es un valor con `type: 'Formula'`); no hace falta el apóstrofo del CSV.
+  Prueba que lo fije.
+- **Sin el tope de 1000 filas**, con dos mecanismos que NO se mezclan:
+  - `reporte_clientes` se pagina SOLO con su `p_offset` (de a 1000) y el bucle corta cuando
+    `offset_efectivo !== p_offset` o `p_offset + filas >= total`. **Nunca `.range()` sobre esa
+    función**: PostgREST aplicaría el limit/offset POR FUERA del resultado (que ya viene con 1000 o
+    menos) y la segunda página saldría vacía; y cortar con "recibí menos de 1000" tampoco sirve, porque
+    con un total múltiplo exacto de 1000 el offset acotado devuelve la última página otra vez y el bucle
+    repetiría filas.
+  - Las demás funciones (resumen, por día, cajeros) se paginan con `.range()` más un `.order(...)`
+    explícito, hasta recibir menos de 1000.
+  - El bucle es un helper PURO, `paginarTodo(llamar, tamano)`, probado con una función falsa que acota
+    como la SQL: total 0, total igual al tamaño de página, total igual al doble. Mutación: volver a
+    cortar con "< tamaño".
+  - **Tope de seguridad: 50 000 filas por hoja**; si se alcanza, la hoja Resumen lo dice. (Con los
+    pilotos, órdenes de magnitud por debajo.)
 - **Nunca un archivo con ceros por un error.** Las funciones de `lib` nuevas devuelven `null` ante un
   error (como `reporteCajeros`), y la ruta responde 500 en texto plano ("No se pudo generar el Excel.
   Probá de nuevo."). Con `<a download>`, el navegador marca la descarga como fallida; no le muestra al
   dueño un JSON crudo.
 - **Librería:** `write-excel-file` (ver "Dos cambios"); `read-excel-file` solo en las pruebas. Antes de
   instalar, `npm view` de las dos; después, `npm audit`: algo alto o crítico frena y se consulta. Si el
-  build de Next (Turbopack) protesta, `serverExternalPackages` en `next.config.ts`.
+  build de Next (Turbopack) protesta, `serverExternalPackages` en `next.config.ts`. Datos verificados
+  en su README (2026-09-23): se importa de `write-excel-file/node` (el paquete no tiene export raíz) y
+  el archivo sale con `.toBuffer()`; varias hojas = arreglo de `{ data, sheet, columns,
+  stickyRowsCount }`; negrita con `fontWeight: 'bold'` por celda; anchos con `columns[].width`; una
+  celda `Date` EXIGE `format`; `null` = celda vacía; las fechas se convierten con base UTC (su propio
+  ejemplo usa `Date.UTC`).
 
 ## 5. Base de datos: migración 0040
 
@@ -225,32 +248,56 @@ el conglomerado), `p_desde date`, `p_hasta date` (null = sin ese borde), `p_sucu
 - Un CTE `lim(comercio_id, ts_desde, ts_hasta)` con los bordes convertidos a `timestamptz` en la zona de
   CADA comercio, y la actividad filtrada por `created_at >= ts_desde and created_at < ts_hasta` contra
   ESE comercio. Nunca `(created_at at time zone z)::date` en el `WHERE` (no usa índice).
-- Un CTE `actividad` = `union all` de visitas y canjes YA FILTRADOS (alcance, período, sucursal, cajero:
-  los cuatro filtros escritos en las DOS ramas), con una columna `clase` ('visita' | 'canje'),
-  `comercio_id`, `sucursal_id`, `cajero_usuario_id`, `cliente_id`, `puntos_delta`, `tipo`,
-  `monto_compra`, `created_at`. Todo se agrega desde ahí con `filter (where clase = …)`. Es la única
-  forma de contar bien "clientes con visita O canje".
+- Un CTE `actividad` = `union all` del ledger y de los canjes YA FILTRADOS (alcance, período, sucursal,
+  cajero: los cuatro filtros escritos en las DOS ramas), con una columna `clase`:
+  - `'visita'`: fila del ledger con `tipo in ('acreditacion','uso','renovacion')`;
+  - `'ajuste'`: fila del ledger con `tipo = 'ajuste'` (la usa solo `reporte_cajeros_alcance`, para
+    Correcciones);
+  - `'canje'`: fila de `canjes`;
+  y las columnas `comercio_id`, `sucursal_id`, `cajero_usuario_id`, `cliente_id`, `puntos_delta`,
+  `tipo`, `forzado` (false en los canjes), `monto_compra`, `created_at`. Todo se agrega desde ahí con
+  `filter`:
+  - Visitas = `count(*) filter (where clase = 'visita')`;
+  - Acumulado = `sum(puntos_delta) filter (where clase = 'visita' and tipo = 'acreditacion')`;
+  - Premios = `count(*) filter (where clase = 'canje')`;
+  - Clientes = `count(distinct cliente_id) filter (where clase in ('visita','canje'))`: un ajuste NO
+    hace cliente;
+  - Correcciones = `count(*) filter (where clase = 'ajuste')`; Forzadas = `count(*) filter (where
+    forzado)`.
+  Es la única forma de contar bien "clientes con visita O canje". Mutación obligatoria: "un ajuste
+  cuenta como visita" tiene que tirar una prueba.
+- Las sumas llevan `coalesce(…, 0)`, y los nombres (sucursal, cliente, email) se unen DESPUÉS de
+  agregar, en la consulta de afuera.
 
 1. **`reporte_resumen(...)`** → `comercio_id, sucursal_id, sucursal_nombre, sucursal_activa,
    operaciones, puntos_otorgados, canjes, clientes_unicos, es_total boolean`, con
-   `group by grouping sets ((comercio_id, sucursal_id), ())`. `es_total` sale de
-   `grouping(comercio_id, sucursal_id)`, NUNCA de que los ids sean null: la fila de actividad "sin
-   sucursal" también tiene `sucursal_id` null. El `clientes_unicos` de la fila total es la cuenta
-   distinta del alcance entero.
+   `group by grouping sets ((comercio_id, sucursal_id), ())`. `es_total` =
+   `grouping(comercio_id, sucursal_id) = 3` (es un entero, no un booleano), NUNCA "los ids son null": la
+   fila de actividad "sin sucursal" también tiene `sucursal_id` null. El `clientes_unicos` de la fila
+   total es la cuenta distinta del alcance entero (una persona con tarjeta en dos comercios cuenta 1).
+   Con el alcance sin actividad, el conjunto `()` devuelve IGUAL una fila total, con ceros (por el
+   `coalesce`): la pantalla decide "sin actividad" ignorando la fila total, no por "cero filas".
 2. **`reporte_por_dia(..., p_agrupar text)`** → `periodo date, operaciones, canjes, es_mes boolean`.
    `p_agrupar` = `'dia'` | `'mes'` | `'auto'` (`auto`: día si el tramo recortado tiene hasta 62 días,
-   mes si no). Tramo: `[max(p_desde, primera actividad), min(p_hasta, hoy local)]`; con varias zonas,
-   cada fila se cuenta en el día local de SU comercio y "hoy" es el máximo de los "hoy" locales. Sin
-   actividad, cero filas.
+   mes si no). **`p_hasta` es obligatorio** (con null, cero filas): la app siempre lo manda (con "todo"
+   y con un rango sin `hasta`, manda hoy). Tramo: `[max(p_desde, primera actividad del alcance),
+   p_hasta]`; cada fila se cuenta en el día local de SU comercio. Sin actividad, cero filas. Se pide
+   con `.order('periodo')`.
 3. **`reporte_clientes(..., p_orden text, p_desc boolean, p_limite integer, p_offset integer)`** →
    `comercio_id, cliente_id, nombre, apellido, telefono, operaciones, puntos_otorgados, canjes,
    ultima_actividad timestamptz, total bigint, offset_efectivo integer`. Agrega en una subconsulta y
    ordena afuera (un `order by case …` no puede usar el alias de un agregado). `p_orden` se valida
    contra una lista cerrada DENTRO de la SQL (`case`); un valor fuera de la lista ordena por visitas.
-   `p_limite` se acota a [1, 1000]. `offset_efectivo` = `p_offset` acotado a la última página existente
-   (con un CTE que cuenta antes de paginar); `total` = filas antes de paginar.
+   `p_limite` se acota a [1, 1000]. `total` = filas antes de paginar (un CTE que cuenta). El offset se
+   acota, en aritmética ENTERA, con
+   `least(greatest(p_offset, 0), greatest(((total - 1) / p_limite) * p_limite, 0))`; con `floor()` o
+   numérico, total 0 daría −limite y Postgres lanza "OFFSET must not be negative". Con total 0 la
+   función devuelve cero filas, y gracias al acotado "cero filas" significa exactamente "total 0" (la
+   app no puede leer `total` de una respuesta vacía). Prueba: un comercio sin actividad con `pagina=5`.
 4. **`reporte_cajeros_alcance(...)`** → las columnas de `reporte_cajeros` más `comercio_id`, con los
-   cuatro filtros y la definición única de Clientes. La vieja `reporte_cajeros` queda intacta para su
+   cuatro filtros y la definición única de Clientes; Correcciones y Forzadas salen de la clase
+   `'ajuste'` y de `forzado` del CTE `actividad` (monto vendido: `sum(monto_compra)` de las visitas de
+   `tipo = 'acreditacion'`, como en la 0033). La vieja `reporte_cajeros` queda intacta para su
    pantalla: sin `drop`, sin sobrecargas ambiguas (con `create or replace` y un parámetro más, Postgres
    crearía una segunda función y la llamada con 3 argumentos daría `PGRST203`; la 0015:101-104 ya lo
    documenta).
@@ -310,11 +357,17 @@ comercio y se repiten en cada una de sus tarjetas, así que sumar la columna dup
   - **Mutation-testing obligatorio**, en particular cada filtro en la rama de CANJES por separado (cada
     filtro se escribe dos veces), el borde (`>=`/`>`, el `+1`), el `filter` del bruto, `grouping()`
     contra "ids null", y el desempate.
-- **Rutas:** el Excel se lee con `read-excel-file` en la prueba: hojas, encabezados, tipos (número,
-  fecha, texto) y valores. El gate va mockeado como en `cartel/descargar/route.test.ts`, pero el mock
-  devuelve también `comercios` y `nombre`. Un comercio ajeno en `?comercio=` cae a "Todo". "Una RPC que
-  falla da 500" se prueba mockeando la función de `lib` que la envuelve (contra la base real no se
-  puede provocar).
+- **Rutas:** el Excel se lee con `read-excel-file` (9.x: `readSheet(buf, 'Clientes')`, o la función
+  por defecto para todas las hojas; `trim: false` donde se compare texto exacto): hojas, encabezados,
+  tipos (número, `Date`, string) y valores. `read-excel-file` devuelve solo valores: el formato
+  `$#,##0.00` y la fila fija se verifican abriendo el zip con `fflate` (ya viene con `write-excel-file`)
+  y buscando el formato en `xl/styles.xml` y `state="frozen"` en la hoja; la negrita y los anchos, en el
+  navegador. El gate va mockeado como en `cartel/descargar/route.test.ts`, pero el mock devuelve
+  también `comercios` y `nombre`, con DOS comercios para la prueba "un comercio ajeno en `?comercio=`
+  cae a Todo" (con uno solo, cae a ese comercio). "Una RPC que falla da 500" se prueba mockeando la
+  función de `lib` que la envuelve (contra la base real no se puede provocar).
+- **`paginarTodo`** (pura): total 0, total = tamaño de página, total = el doble; y que nunca use
+  `.range()` sobre `reporte_clientes` (se prueba el llamador con un falso que acota como la SQL).
 - **Navegador (controlador):** filtros y tabla a 375 px y en escritorio, sin scroll horizontal de la
   página; el Excel abierto en una hoja real.
 
@@ -333,4 +386,8 @@ comercio y se repiten en cada una de sus tarjetas, así que sumar la columna dup
 - "Visitas" como días distintos: sigue siendo la cuenta de operaciones (0033).
 - Unidades mezcladas dentro de un comercio con programas de tipos distintos.
 - El panel de FM (`reporte_fm_comercios`).
+- Los números del PANEL del comercio: siguen con `reporte_sucursales` (solo cambia el rótulo a
+  "Visitas"), así que su "Clientes" (solo visitas) puede diferir del de Reportes "Desde siempre" para la
+  misma sucursal. Pasarlo a `reporte_resumen` es natural en la migración que retire las funciones
+  viejas.
 - Reportes para el cajero (sigue siendo solo del dueño).
