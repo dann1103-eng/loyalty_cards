@@ -2,6 +2,7 @@ import { urlReportes, type FiltrosParaUrl } from './urlReportes';
 import type { ComercioOwner, DatosComercioResueltos, OrdenClientes } from './filtrosReportes';
 import { PERIODOS, ETIQUETA_PERIODO } from './rangoFechas';
 import { fechaExcel } from './fechaExcel';
+import { TAMANO_PAGINA_CLIENTES, offsetDePagina } from './paginar';
 import { describirCosto } from '@/lib/tarjetas/unidadPrograma';
 import { nombreCompleto } from '@/lib/clientes/nombreCompleto';
 import { formatearTelefono } from '@/lib/clientes/formatearTelefono';
@@ -17,14 +18,9 @@ import { formatearTelefono } from '@/lib/clientes/formatearTelefono';
 // Paginación de la tabla de clientes (spec §3)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Filas por página de la tabla. Es el `p_limite` que la pantalla le manda a reporte_clientes: las dos
-// cuentas de abajo (página → offset y offset → página) usan ESTE número, así que no pueden desalinearse.
-export const TAMANO_PAGINA_CLIENTES = 50;
-
-// El `p_offset` que se le pide a reporte_clientes para la página de la URL (1 = la primera).
-export function offsetDePagina(pagina: number): number {
-  return (pagina - 1) * TAMANO_PAGINA_CLIENTES;
-}
+// Filas por página y la cuenta página → offset viven en paginar.ts (las usa también el wrapper que pide
+// la página); se reexportan acá porque son parte de lo que la pantalla necesita saber.
+export { TAMANO_PAGINA_CLIENTES, offsetDePagina };
 
 export interface PaginacionClientes {
   // La página que se está MOSTRANDO (1 = la primera), que puede no ser la que pidió la URL.

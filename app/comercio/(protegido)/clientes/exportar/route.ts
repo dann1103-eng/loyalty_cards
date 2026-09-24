@@ -7,6 +7,12 @@ import { etiquetaDeArchivo } from '@/lib/reportes/etiquetaArchivo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// Ahora pagina las tarjetas (de a 1000) y las visitas (reporte_clientes, de a 1000, cada página vuelve a
+// correr la función entera en la base): con un comercio grande son varias vueltas en serie. 60 s, el
+// mismo límite que el Excel de Reportes (reportes/exportar/route.ts): válido en Vercel Hobby con Fluid
+// compute y sin él. Si se excede, la plataforma corta con un 504: una descarga fallida, nunca un archivo
+// a medias.
+export const maxDuration = 60;
 
 // Descarga de la base de clientes del comercio: el CSV de siempre y, con `?formato=xlsx`, la misma
 // lista como .xlsx (plan 2026-09-23, Tarea 6; spec §6). Las mismas filas y columnas en los dos

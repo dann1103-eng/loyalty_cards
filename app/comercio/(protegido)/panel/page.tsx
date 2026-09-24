@@ -33,7 +33,7 @@ function atajosPara(tipoTarjeta: string) {
     { href: '/comercio/sucursales', icono: 'store', tono: 'menta', titulo: 'Sucursales', sub: 'Locales que comparten tu tarjeta' },
     { href: '/comercio/cajeros', icono: 'badge', tono: 'acento', titulo: 'Cajeros', sub: 'Cuentas del personal por sucursal' },
     { href: '/comercio/clientes', icono: 'group', tono: 'neutro', titulo: 'Directorio de clientes', sub: 'Quiénes tienen tu tarjeta' },
-    { href: '/comercio/reportes', icono: 'insights', tono: 'menta', titulo: 'Reportes', sub: 'Actividad por sucursal y clientes frecuentes' },
+    { href: '/comercio/reportes', icono: 'insights', tono: 'menta', titulo: 'Reportes', sub: 'Visitas, premios y clientes por período, en Excel' },
   ];
 }
 

@@ -27,6 +27,17 @@ export const TOPE_FILAS = 50_000;
 // El `max-rows` de PostgREST en Supabase: ninguna respuesta trae más filas, pida lo que pida.
 export const MAXIMO_POR_PAGINA = 1000;
 
+// Filas por página de la tabla de clientes de Reportes (spec §3). Vive en la capa de paginación y no en
+// la de pantalla porque la usan las DOS puntas: el wrapper que pide la página (reportes.ts,
+// reporteClientes) y la pantalla que convierte el offset en "Página X de Y" (pantallaReportes.ts). Con
+// un solo número y una sola cuenta, las dos no pueden desalinearse.
+export const TAMANO_PAGINA_CLIENTES = 50;
+
+// El `p_offset` de la página `pagina` (1 = la primera) con páginas de `tamano` filas.
+export function offsetDePagina(pagina: number, tamano: number = TAMANO_PAGINA_CLIENTES): number {
+  return (pagina - 1) * tamano;
+}
+
 export interface Paginado<T> {
   filas: T[];
   // true = había MÁS de TOPE_FILAS y se cortó ahí: falta información, y la hoja Resumen lo dice. Con

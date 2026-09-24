@@ -6,10 +6,11 @@ import {
   paginarPorRango,
   validarTamano,
   MAXIMO_POR_PAGINA,
+  TAMANO_PAGINA_CLIENTES,
+  offsetDePagina,
   type Paginado,
   type PaginaPorOffset,
 } from './paginar';
-import { TAMANO_PAGINA_CLIENTES } from './pantallaReportes';
 
 // Capa de datos de reportes/BI (Fase 10). Wrappers tipados sobre las funciones SQL de reporte
 // (SECURITY INVOKER, execute solo para service_role). Cada función es `returns table(...)`, así que
@@ -321,7 +322,7 @@ export async function reporteClientes(
   validarTamano(tamano);
   // La página 1 es el offset 0. Una página más allá del final no se corrige acá (no se sabe el
   // total): la SQL acota el offset y devuelve la última.
-  return pedirPaginaClientes(supabase, filtros, modo.orden, modo.dir === 'desc', tamano, (modo.pagina - 1) * tamano);
+  return pedirPaginaClientes(supabase, filtros, modo.orden, modo.dir === 'desc', tamano, offsetDePagina(modo.pagina, tamano));
 }
 
 // UNA página de reporte_clientes, la única puerta a esa función.
