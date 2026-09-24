@@ -411,3 +411,8 @@ export function armarHojasExcelReportes(datos: DatosExcelReportes): HojaExcel[] 
 export async function escribirXlsx(hojas: HojaExcel[]): Promise<Buffer> {
   return writeXlsxFile(hojas).toBuffer();
 }
+
+// El Content-Type de lo que escribe escribirXlsx, para las dos rutas que lo devuelven: el Excel de
+// Reportes y la lista de clientes con ?formato=xlsx. Sus pruebas lo comparan con el LITERAL, no con
+// esta constante: una prueba que importa el valor de producción no ve si está mal escrito.
+export const TIPO_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

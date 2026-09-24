@@ -1,10 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { ordenReporteCajeros, filtrosRpc, type FilaReporteCajeroAlcance } from './reportes';
+import {
+  ordenReporteCajeros,
+  filtrosRpc,
+  clientesPorVisitas,
+  type FilaReporteCajeroAlcance,
+  type FilaReporteCliente,
+} from './reportes';
 import { resolverFiltrosReportes, type ContextoReportes } from './filtrosReportes';
 
-// Las dos piezas PURAS de reportes.ts, sin base: el orden antifraude de la hoja Cajeros y el paso de
-// los filtros resueltos a los argumentos de las RPC. Lo que necesita PostgREST está en
-// reportesConFiltros.test.ts.
+// Las piezas PURAS de reportes.ts, sin base: el orden antifraude de la hoja Cajeros, la hoja Clientes
+// del Excel (sin repetidos y por visitas) y el paso de los filtros resueltos a los argumentos de las
+// RPC. Lo que necesita PostgREST está en reportesConFiltros.test.ts.
 //
 // MUTATION-TESTING (corridas el 2026-09-24, una por vez y restauradas; con el mensaje que se vio caer):
 // - ordenReporteCajeros sin la clave de sospecha (la línea `b.forzadas + b.ajustes - …` borrada): cae
@@ -17,6 +23,18 @@ import { resolverFiltrosReportes, type ContextoReportes } from './filtrosReporte
 //   que nadie, a propósito; en el escenario de la base no tiene ninguna y quedaría última igual.
 // - filtrosRpc cruzando sucursal y cajero: cae "con 'Desde siempre'…" con `expected { comercioIds: [
 //   'cafe' ], …(4) } to deeply equal { comercioIds: [ 'cafe' ], …(4) }`.
+// - clientesPorVisitas sin quitar repetidos (la línea `if (vistas.has(clave)) return false;` borrada):
+//   cae "la fila repetida en un corte de página…" con `expected [ { …(4) }, { …(4) }, { …(4) }, …(1) ]
+//   to deeply equal [ { …(4) }, { …(4) }, { …(4) } ]` (Beto dos veces, con 4 y con 3). También la de la
+//   ruta del Excel (reportes/exportar/route.test.ts).
+// - clientesPorVisitas sin el orden por visitas (un comparador que empata siempre: queda el de la
+//   lectura, por nombre): caen las 3; en "por visitas desc…", Ana (1 visita) queda primera y Dora (5),
+//   última. También 2 de la ruta del Excel.
+// - Sin el desempate por cliente_id: cae "por visitas desc…": entre los de 2 visitas quedan Beto en A,
+//   Carla y Beto en B (ordena solo el comercio_id). Sin el desempate por comercio_id: la misma, con Beto
+//   en B antes que Beto en A (el orden de llegada). El mensaje de las dos es el opaco `expected [ { …(4)
+//   }, { …(4) }, { …(4) }, …(2) ] to deeply equal [ { …(4) }, { …(4) }, { …(4) }, …(2) ]`; el diff de
+//   vitest muestra qué fila se movió.
 
 type FilaOrden = Pick<FilaReporteCajeroAlcance, 'comercio_id' | 'cajero_usuario_id' | 'cajero_email' | 'forzadas' | 'ajustes'>;
 
@@ -65,6 +83,61 @@ describe('ordenReporteCajeros (el orden de reporte_cajeros_alcance, 0040)', () =
     const dos = fila(A, 'caja@ejemplo.test', 1, 1, '00000000-0000-4000-8000-000000000002');
     expect([dos, uno].sort(ordenReporteCajeros)).toEqual([uno, dos]);
     expect(ordenReporteCajeros(uno, uno)).toBe(0);
+  });
+});
+
+describe('clientesPorVisitas (la hoja Clientes del Excel: leída por nombre, sin repetidos y por visitas)', () => {
+  type FilaCliente = Pick<FilaReporteCliente, 'comercio_id' | 'cliente_id' | 'nombre' | 'operaciones'>;
+
+  const COM_A = 'aaaaaaaa-0000-4000-8000-000000000000';
+  const COM_B = 'bbbbbbbb-0000-4000-8000-000000000000';
+  const CLI_1 = '00000000-0000-4000-8000-000000000001';
+  const CLI_2 = '00000000-0000-4000-8000-000000000002';
+  const CLI_3 = '00000000-0000-4000-8000-000000000003';
+  const CLI_4 = '00000000-0000-4000-8000-000000000004';
+
+  function fila(comercio: string, cliente: string, nombre: string, operaciones: number): FilaCliente {
+    return { comercio_id: comercio, cliente_id: cliente, nombre, operaciones };
+  }
+
+  it('la fila repetida en un corte de página sale UNA vez, con la PRIMERA lectura', () => {
+    // Como llegan de reporteClientes por nombre, de a 2: un cliente nuevo entre la página 1 y la 2
+    // corrió las filas, y Beto (el último de la 1) volvió como el primero de la 2, ya con una visita más.
+    const leidas: FilaCliente[] = [
+      fila(COM_A, CLI_2, 'Ana', 1),
+      fila(COM_A, CLI_1, 'Beto', 3),
+      fila(COM_A, CLI_1, 'Beto', 4),
+      fila(COM_A, CLI_3, 'Carla', 2),
+    ];
+    expect(clientesPorVisitas(leidas)).toEqual([
+      fila(COM_A, CLI_1, 'Beto', 3),
+      fila(COM_A, CLI_3, 'Carla', 2),
+      fila(COM_A, CLI_2, 'Ana', 1),
+    ]);
+  });
+
+  it('el mismo cliente en DOS comercios no es un repetido: son dos filas', () => {
+    const leidas: FilaCliente[] = [fila(COM_B, CLI_1, 'Beto', 1), fila(COM_A, CLI_1, 'Beto', 2)];
+    expect(clientesPorVisitas(leidas)).toEqual([fila(COM_A, CLI_1, 'Beto', 2), fila(COM_B, CLI_1, 'Beto', 1)]);
+  });
+
+  it('por visitas desc; con las visitas empatadas, cliente_id y después comercio_id (spec §3)', () => {
+    // En el orden de la lectura (por nombre), que no coincide con ninguno de los tres criterios: Beto
+    // en B llega antes que Beto en A, y los dos antes que Carla, que tiene un cliente_id mayor.
+    const leidas: FilaCliente[] = [
+      fila(COM_A, CLI_3, 'Ana', 1),
+      fila(COM_B, CLI_1, 'Beto', 2),
+      fila(COM_A, CLI_1, 'Beto', 2),
+      fila(COM_A, CLI_2, 'Carla', 2),
+      fila(COM_A, CLI_4, 'Dora', 5),
+    ];
+    expect(clientesPorVisitas(leidas)).toEqual([
+      fila(COM_A, CLI_4, 'Dora', 5),
+      fila(COM_A, CLI_1, 'Beto', 2),
+      fila(COM_B, CLI_1, 'Beto', 2),
+      fila(COM_A, CLI_2, 'Carla', 2),
+      fila(COM_A, CLI_3, 'Ana', 1),
+    ]);
   });
 });
 

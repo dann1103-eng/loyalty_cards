@@ -10,8 +10,10 @@ import {
   reportePorDia,
   reporteClientes,
   reporteCajerosAlcance,
+  clientesPorVisitas,
 } from '@/lib/reportes/reportes';
-import { armarHojasExcelReportes, escribirXlsx } from '@/lib/reportes/excelReportes';
+import { armarHojasExcelReportes, escribirXlsx, TIPO_XLSX } from '@/lib/reportes/excelReportes';
+import { etiquetaDeArchivo } from '@/lib/reportes/etiquetaArchivo';
 
 // write-excel-file escribe el zip con APIs de Node (Buffer): runtime de Node, no Edge.
 export const runtime = 'nodejs';
@@ -32,7 +34,7 @@ export const maxDuration = 60;
 // El flujo es el de la cabecera de lib/reportes/contextoReportes.ts, el MISMO que la página, para que
 // el archivo filtre igual que lo que el dueño está viendo:
 //   gate → leerParametrosReportes → cargarContextoReportes → resolverFiltrosReportes → filtrosRpc →
-//   las cuatro lecturas → armarHojasExcelReportes → escribirXlsx.
+//   las cuatro lecturas → clientesPorVisitas → armarHojasExcelReportes → escribirXlsx.
 // Los ids de la URL (input del cliente) se validan en resolverFiltrosReportes ANTES de correr ninguna
 // RPC: un comercio que no es del dueño cae a "Todo"; una sucursal o un cajero de otro comercio, a
 // "todas" y "todos". A las RPC llega solo lo que devolvió filtrosRpc, NUNCA un id de `parametros`.
@@ -43,7 +45,6 @@ export const maxDuration = 60;
 // dueño un .xlsx que parece cierto, o un JSON crudo. El log lleva el motivo: los throw del armado son
 // bugs determinísticos, y "Probá de nuevo" sin el log no le sirve a nadie para arreglarlos.
 
-const TIPO_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const MENSAJE_ERROR = 'No se pudo generar el Excel. Probá de nuevo.';
 
 export async function GET(request: NextRequest) {
@@ -69,8 +70,11 @@ export async function GET(request: NextRequest) {
       // SIEMPRE 'dia', nunca 'auto': la hoja se llama "Por día", y con 'auto' un tramo de más de 62
       // días llegaría agrupado por mes (el armado lo rechaza, pero el archivo no saldría).
       reportePorDia(supabase, rpc, 'dia'),
-      // TODOS los clientes, por visitas desc: el Excel no lleva orden, dirección ni página.
-      reporteClientes(supabase, rpc, { modo: 'todas' }),
+      // TODOS los clientes (el Excel no lleva orden, dirección ni página), pedidos por NOMBRE aunque la
+      // hoja va por visitas: paginando por visitas, un cliente que recibe una visita mientras se
+      // exporta sube a una página ya leída y queda AFUERA de la hoja. Por nombre, lo peor es una fila
+      // repetida en un corte de página; clientesPorVisitas la quita y ordena por visitas desc, abajo.
+      reporteClientes(supabase, rpc, { modo: 'todas', orden: 'nombre' }),
       // Ya viene en el orden antifraude (el wrapper lo restaura después de paginar).
       reporteCajerosAlcance(supabase, rpc),
     ]);
@@ -88,7 +92,14 @@ export async function GET(request: NextRequest) {
       return responderError(`falló la lectura de ${fallidas.join(', ')}`);
     }
 
-    const hojas = armarHojasExcelReportes({ filtros, generado: new Date(), resumen, porDia, clientes, cajeros });
+    const hojas = armarHojasExcelReportes({
+      filtros,
+      generado: new Date(),
+      resumen,
+      porDia,
+      clientes: { filas: clientesPorVisitas(clientes.filas), alcanzoTope: clientes.alcanzoTope },
+      cajeros,
+    });
     const xlsx = await escribirXlsx(hojas);
 
     return new Response(new Uint8Array(xlsx), {
@@ -116,15 +127,10 @@ function responderError(motivo: unknown): Response {
 }
 
 // reportes-<comercio o "todos">-<desde o "desde-siempre">_<hasta>.xlsx (spec §4). Las fechas vienen del
-// resolver (AAAA-MM-DD validadas); el comercio es el de los filtros RESUELTOS, nunca el id de la URL.
+// resolver (AAAA-MM-DD validadas); el comercio es el de los filtros RESUELTOS, nunca el id de la URL, y
+// va por etiquetaDeArchivo (lo escribió el dueño y termina en una cabecera HTTP), igual que en la lista
+// de clientes.
 function nombreArchivo(filtros: FiltrosReportesCargados): string {
-  const comercio = filtros.comercio ? sanearNombre(filtros.comercio.nombre) : 'todos';
+  const comercio = filtros.comercio ? etiquetaDeArchivo(filtros.comercio.nombre) : 'todos';
   return `reportes-${comercio}-${filtros.desde ?? 'desde-siempre'}_${filtros.hasta}.xlsx`;
-}
-
-// El nombre del comercio lo escribió el dueño y termina en una cabecera HTTP: comillas o un salto de
-// línea partirían el Content-Disposition, y un carácter fuera de Latin-1 la vuelve inválida (500). Mismo
-// saneo que el CSV de clientes (clientes/exportar/route.ts): solo letras ASCII y dígitos, con guiones.
-function sanearNombre(nombre: string): string {
-  return nombre.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'comercio';
 }

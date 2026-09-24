@@ -2,7 +2,8 @@ import type { NextRequest } from 'next/server';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { filasParaExportar, generarCsv, hojaClientesExcel, BOM_UTF8 } from '@/lib/comercio/exportarClientes';
-import { escribirXlsx } from '@/lib/reportes/excelReportes';
+import { escribirXlsx, TIPO_XLSX } from '@/lib/reportes/excelReportes';
+import { etiquetaDeArchivo } from '@/lib/reportes/etiquetaArchivo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,7 +25,6 @@ export const dynamic = 'force-dynamic';
 // al armar el archivo, 500 en texto plano. Con <a download>, el navegador marca la descarga como
 // fallida; no le guarda al dueño un .xlsx vacío, un CSV con las visitas en 0 ni un saldo en otra unidad.
 
-const TIPO_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const ERROR_EXPORTACION = 'No se pudo generar la exportación. Probá de nuevo.';
 
 // ?formato=xlsx → el .xlsx. Cualquier otra cosa (sin formato, uno desconocido o uno REPETIDO) → el CSV
@@ -47,9 +47,9 @@ export async function GET(request: NextRequest) {
 
   const formato = formatoPedido(request.nextUrl.searchParams);
 
-  // El nombre del comercio va en el archivo pero saneado: es texto que escribió el dueño y termina
-  // en una cabecera HTTP. Sin esto, un nombre con comillas o salto de línea podría partir el header.
-  const etiqueta = nombre.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'comercio';
+  // El nombre del comercio va en el archivo pero saneado (etiquetaDeArchivo, el mismo del Excel de
+  // Reportes): es texto que escribió el dueño y termina en una cabecera HTTP.
+  const etiqueta = etiquetaDeArchivo(nombre);
 
   try {
     const supabase = createServiceClient();

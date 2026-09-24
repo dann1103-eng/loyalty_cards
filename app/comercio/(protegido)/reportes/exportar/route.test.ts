@@ -54,12 +54,27 @@ import { cargarContextoReportes } from '@/lib/reportes/contextoReportes';
 //   AJENO…" con `expected [ [ …(3) ] ] to deeply equal [ [ …(3) ] ]` (llegan los dos ids en vez de
 //   null). Sin esa aserción de argumentos cae IGUAL, por el archivo, con `expected [ +0, +0, +0 ] to
 //   deeply equal [ 3, 1, 2 ]`: el Excel en ceros bajo un Resumen que dice "Todas" y "Todos".
-// - El nombre del comercio sin sanear: caen 3; "un comercio elegido…" con `expected 'attachment;
-//   filename="reportes-Café E…' to be 'attachment; filename="reportes-caf-ex…'`, el de comillas y salto
+// - El nombre del comercio sin sanear (re-corrida el 2026-09-24 con etiquetaDeArchivo): caen 4; "un
+//   comercio elegido…" con `expected 'attachment; filename="reportes-Café E…' to be 'attachment;
+//   filename="reportes-cafe-e…'`, "Panadería La Peña" con `expected 'attachment;
+//   filename="reportes-Panade…' to be 'attachment; filename="reportes-panade…'`, el de comillas y salto
 //   de línea con `TypeError { "message": "Headers.append: \"…\" is an invalid header value." }` en el log
 //   y el de ☕ con `Cannot convert argument to a ByteString because the character at index 31 has a
 //   value of 9749 which is greater than 255.` (sin sanear, esos dos nombres ni siquiera llegan a una
 //   cabecera: la ruta da 500).
+// - El saneo de antes (la regex sin normalize('NFD'), en vez de etiquetaDeArchivo): caen 3, "un comercio
+//   elegido…" con `expected 'attachment; filename="reportes-caf-ex…' to be 'attachment;
+//   filename="reportes-cafe-e…'`, y las de "Café \"El Sol\"…" y "Panadería La Peña" (que sale
+//   `panader-a-la-pe-a`).
+// - La hoja Clientes pedida por visitas (`{ modo: 'todas' }`, sin `orden: 'nombre'`): cae "un comercio
+//   elegido…" con `expected [ { filtros: { …(5) }, …(1) } ] to deeply equal [ { filtros: { …(5) }, …(1) }
+//   ]` (el diff: falta `"orden": "nombre"`). Es la única que lo ve: la carrera (una visita durante la
+//   paginación) no se reproduce acá, y la hoja sale igual de ordenada.
+// - Sin clientesPorVisitas (la hoja con las filas tal como se leyeron): caen 2, "un comercio elegido…"
+//   con `expected [ [ 'Abel', 1, 3, '$', +0 ], …(1) ] to deeply equal [ [ 'Zoila', 2, 17.5, '$', 1 ], …(1)
+//   ]` y "una fila repetida en un corte de página…" con `expected [ [ 'Abel', 1 ], [ 'Zoila', 2 ], …(1) ]
+//   to deeply equal [ [ 'Zoila', 2 ], [ 'Abel', 1 ] ]`. Las mutaciones de adentro de clientesPorVisitas
+//   (sin quitar repetidos, sin ordenar) caen acá y en lib/reportes/reportes.puras.test.ts.
 // Extras:
 // - El fail-soft viejo (una lectura en null reemplazada por ceros: fila total en 0 y listas vacías):
 //   caen las 4 "… devuelve null …" con `expected 200 to be 500`.
@@ -144,8 +159,8 @@ vi.mock('@/lib/reportes/contextoReportes', async (importOriginal) => {
 //
 //   tarjeta   comercio  actividad (2026)
 //   ta        café      visita 05/01 10:00 en S1/C1 (1250 ¢) · visita 20/03 12:00 en S1/C1 (500 ¢)
-//                       · premio 20/03 12:30 en S1/C1
-//   tb        café      visita 10/02 09:00 sin sucursal ni cajero (300 ¢)
+//                       · premio 20/03 12:30 en S1/C1                          (cliente "Zoila")
+//   tb        café      visita 10/02 09:00 sin sucursal ni cajero (300 ¢)      (cliente "Abel")
 //   tSpa      spa       visita 15/03 10:00 de Bogotá (el MISMO cliente que ta)
 //   tAjeno    ajeno     dos visitas en febrero
 //
@@ -186,6 +201,16 @@ beforeAll(async () => {
   const tb = await escenario.crearTarjeta(cafe);
   const tSpa = await escenario.crearTarjeta(spa, 0, { clienteId: ta.clienteId });
   const tAjeno = await escenario.crearTarjeta(ajeno);
+  // Nombres al revés de las visitas: por nombre va primero Abel (1 visita), por visitas Zoila (2). Con
+  // el "Cliente Prueba" del fixture en los dos, la hoja saldría en el orden de sus cliente_id, que es
+  // azar, y no se vería si se ordena por visitas o se deja el de la lectura (por nombre).
+  for (const [clienteId, nombre] of [
+    [ta.clienteId, 'Zoila'],
+    [tb.clienteId, 'Abel'],
+  ]) {
+    const { error: eNombre } = await supabase.from('clientes').update({ nombre }).eq('id', clienteId);
+    if (eNombre) throw eNombre;
+  }
 
   await escenario.sembrarActividad([
     { clase: 'visita', tarjetaId: ta.id, createdAt: '2026-01-05T10:00:00-06:00', sucursalId: s1, cajeroId: c1, puntos: 1250 },
@@ -302,13 +327,14 @@ describe('GET /comercio/reportes/exportar: el archivo', () => {
     // Sin el attachment, el navegador intentaría abrirlo; el nombre lleva el comercio saneado y el
     // período.
     expect(r.headers.get('Content-Disposition')).toBe(
-      'attachment; filename="reportes-caf-excel-2026-01-01_2026-03-31.xlsx"',
+      'attachment; filename="reportes-cafe-excel-2026-01-01_2026-03-31.xlsx"',
     );
     // Un Excel cacheado mostraría los números viejos la próxima vez.
     expect(r.headers.get('Cache-Control')).toBe('no-store');
 
     // Las lecturas: el alcance y el período RESUELTOS, "Por día" con 'dia' (nunca 'auto') y los
-    // clientes TODOS (sin orden ni página).
+    // clientes TODOS (sin página), pedidos por NOMBRE: por visitas, uno que recibe una visita durante
+    // la exportación sube a una página ya leída y falta en la hoja.
     const esperados: FiltrosRpcReportes = {
       comercioIds: [cafe],
       desde: '2026-01-01',
@@ -318,7 +344,7 @@ describe('GET /comercio/reportes/exportar: el archivo', () => {
     };
     expect(llamadas(reporteResumen)).toEqual([{ filtros: esperados, extra: undefined }]);
     expect(llamadas(reportePorDia)).toEqual([{ filtros: esperados, extra: 'dia' }]);
-    expect(llamadas(reporteClientes)).toEqual([{ filtros: esperados, extra: { modo: 'todas' } }]);
+    expect(llamadas(reporteClientes)).toEqual([{ filtros: esperados, extra: { modo: 'todas', orden: 'nombre' } }]);
     expect(llamadas(reporteCajerosAlcance)).toEqual([{ filtros: esperados, extra: undefined }]);
 
     const buffer = await libro(r);
@@ -363,9 +389,10 @@ describe('GET /comercio/reportes/exportar: el archivo', () => {
       'Premios',
       'Última actividad',
     ]);
-    expect(clientes.slice(1).map((f) => [f[3], f[4], f[5], f[6]])).toEqual([
-      [2, 17.5, '$', 1],
-      [1, 3, '$', 0],
+    // Por visitas desc, aunque se leyeron por nombre (Abel antes que Zoila).
+    expect(clientes.slice(1).map((f) => [f[0], f[3], f[4], f[5], f[6]])).toEqual([
+      ['Zoila', 2, 17.5, '$', 1],
+      ['Abel', 1, 3, '$', 0],
     ]);
     expect(clientes[1][2]).toMatch(/^\+503\d+$/);
 
@@ -493,8 +520,10 @@ describe('GET /comercio/reportes/exportar: el archivo', () => {
 
   it.each([
     // Comillas, barra y un salto de línea: sin sanear, parten la cabecera (o la vuelven inválida).
-    ['Café "El Sol" / Centro\r\nX', 'reportes-caf-el-sol-centro-x-2026-01-01_2026-03-31.xlsx'],
-    // Nada que sobreviva al saneo: el respaldo del CSV de clientes.
+    ['Café "El Sol" / Centro\r\nX', 'reportes-cafe-el-sol-centro-x-2026-01-01_2026-03-31.xlsx'],
+    // Los acentos y la ñ conservan su letra (etiquetaDeArchivo): no "panader-a-la-pe-a".
+    ['Panadería La Peña', 'reportes-panaderia-la-pena-2026-01-01_2026-03-31.xlsx'],
+    // Nada que sobreviva al saneo: el respaldo, el mismo de la lista de clientes.
     ['☕ ☕', 'reportes-comercio-2026-01-01_2026-03-31.xlsx'],
   ])('el nombre del comercio (%j) va saneado en el nombre del archivo', async (nombreComercio, archivo) => {
     gate.comercios = [
@@ -509,6 +538,44 @@ describe('GET /comercio/reportes/exportar: el archivo', () => {
     // Adentro del archivo el nombre va tal cual: una celda no es una cabecera HTTP.
     const r0 = await readSheet(await libro(r), 'Resumen', { trim: false });
     expect(resumen(r0, 'Comercio')).toBe(nombreComercio);
+  });
+
+  it('una fila repetida en un corte de página sale UNA vez en la hoja Clientes, y la hoja va por visitas', async () => {
+    // Lo que devolvería reporteClientes por nombre si un cliente nuevo corrió las filas entre dos
+    // páginas: Zoila, la última de una página, vuelve como la primera de la siguiente (ya con una visita
+    // más). Los ids de cliente son inventados: el armado no los busca en la base.
+    const fila = (clienteId: string, nombre: string, operaciones: number) => ({
+      comercio_id: cafe,
+      cliente_id: clienteId,
+      nombre,
+      apellido: null,
+      telefono: '+50370000000',
+      operaciones,
+      puntos_otorgados: 0,
+      canjes: 0,
+      ultima_actividad: '2026-03-20T18:00:00+00:00',
+      total: 3,
+      offset_efectivo: 0,
+    });
+    vi.mocked(reporteClientes).mockResolvedValueOnce({
+      filas: [
+        fila('00000000-0000-4000-8000-000000000002', 'Abel', 1),
+        fila('00000000-0000-4000-8000-000000000001', 'Zoila', 2),
+        fila('00000000-0000-4000-8000-000000000001', 'Zoila', 3),
+      ],
+      alcanzoTope: false,
+    });
+
+    const r = await descargar(`${TRIMESTRE}&comercio=${cafe}`);
+
+    expect(errores.mock.calls).toEqual([]);
+    expect(r.status).toBe(200);
+    const clientes = await readSheet(await libro(r), 'Clientes', { trim: false });
+    // Zoila una vez, con la PRIMERA lectura (2 visitas), y antes que Abel.
+    expect(clientes.slice(1).map((f) => [f[0], f[3]])).toEqual([
+      ['Zoila', 2],
+      ['Abel', 1],
+    ]);
   });
 });
 

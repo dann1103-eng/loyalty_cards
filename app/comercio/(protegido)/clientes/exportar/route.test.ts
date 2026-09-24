@@ -32,6 +32,10 @@ import { crearEntorno } from '@/test/fixtures/entornoComercio';
 // - El catch que relanza: cae "si armar el .xlsx LANZA…" con `Error: write-excel-file reventó
 //   (simulado)`. El catch sin el mensaje en el log: la misma, con `expected "error" to be called with
 //   arguments: [ …(2) ]`.
+// - El saneo de antes en vez de etiquetaDeArchivo (la regex sin normalize('NFD'), corrida el
+//   2026-09-24): caen 3, las del CSV, el .xlsx y el formato desconocido, con Expected
+//   `attachment; filename="clientes-panaderia-la-pena.csv"` y Received
+//   `attachment; filename="clientes-panader-a-la-pe-a.csv"` (y el .xlsx igual).
 
 const { sesion, fallas } = vi.hoisted(() => ({
   sesion: { comercioId: '', nombre: '' },
@@ -66,7 +70,8 @@ const ENCABEZADOS = [
 const TIPO_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 // Un comercio en Bogotá con UNA tarjeta nacida a las 23:30 del 10 de marzo (04:30 del 11 en UTC) y
-// tres visitas. El gate queda apuntando a él, con un nombre que se sanea a "tienda-prueba".
+// tres visitas. El gate queda apuntando a él, con un nombre con acento y ñ que se sanea a
+// "panaderia-la-pena" (etiquetaDeArchivo; con el saneo de antes, "panader-a-la-pe-a").
 async function armarComercio(): Promise<{ telefono: string }> {
   const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos', zona_horaria: 'America/Bogota' });
   const { id, clienteId } = await entorno.crearTarjeta(comercioId, 4, { createdAt: '2026-03-10T23:30:00-05:00' });
@@ -76,7 +81,7 @@ async function armarComercio(): Promise<{ telefono: string }> {
   const { data, error } = await supabase.from('clientes').select('telefono').eq('id', clienteId).single();
   if (error) throw error;
   sesion.comercioId = comercioId;
-  sesion.nombre = 'Tienda Prueba';
+  sesion.nombre = 'Panadería La Peña';
   return { telefono: data.telefono };
 }
 
@@ -131,7 +136,7 @@ describe('GET /comercio/clientes/exportar', () => {
 
     expect(r.status).toBe(200);
     expect(r.headers.get('Content-Type')).toBe('text/csv; charset=utf-8');
-    expect(r.headers.get('Content-Disposition')).toBe('attachment; filename="clientes-tienda-prueba.csv"');
+    expect(r.headers.get('Content-Disposition')).toBe('attachment; filename="clientes-panaderia-la-pena.csv"');
     expect(r.headers.get('Cache-Control')).toBe('no-store');
     // Por BYTES y no con r.text(): la decodificación UTF-8 del Body se come el BOM, y la prueba no lo
     // vería faltar.
@@ -158,7 +163,7 @@ describe('GET /comercio/clientes/exportar', () => {
 
     expect(r.status).toBe(200);
     expect(r.headers.get('Content-Type')).toBe(TIPO_XLSX);
-    expect(r.headers.get('Content-Disposition')).toBe('attachment; filename="clientes-tienda-prueba.xlsx"');
+    expect(r.headers.get('Content-Disposition')).toBe('attachment; filename="clientes-panaderia-la-pena.xlsx"');
     expect(r.headers.get('Cache-Control')).toBe('no-store');
 
     const buffer = Buffer.from(await r.arrayBuffer());
@@ -203,7 +208,7 @@ describe('GET /comercio/clientes/exportar', () => {
       const r = await descargar(consulta);
       expect(r.status, consulta).toBe(200);
       expect(r.headers.get('Content-Type'), consulta).toBe('text/csv; charset=utf-8');
-      expect(r.headers.get('Content-Disposition'), consulta).toBe('attachment; filename="clientes-tienda-prueba.csv"');
+      expect(r.headers.get('Content-Disposition'), consulta).toBe('attachment; filename="clientes-panaderia-la-pena.csv"');
     }
   });
 

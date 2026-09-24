@@ -222,6 +222,36 @@ export function ordenReporteCajeros(
   );
 }
 
+// La hoja Clientes del Excel de Reportes, a partir de reporteClientes en modo 'todas' pedido por
+// NOMBRE (la ruta lo pide así por la carrera de ModoTodasClientes): sin repetidos y con el orden que
+// la SQL le daría con p_orden 'visitas' (spec §4: la hoja va por visitas desc).
+//   - Sin repetidos por (comercio_id, cliente_id), la clave de la fila en la 0040: un cliente nuevo
+//     durante la paginación corre las filas una posición, y la última de una página vuelve como la
+//     primera de la siguiente. Se queda la PRIMERA lectura.
+//   - Por visitas desc, con el desempate de la spec §3 para esa columna: cliente_id, después
+//     comercio_id. Es total (es la clave de la fila): el resultado no depende del orden de llegada.
+//     Los ids se comparan con compararTexto, que para uuid en minúscula da el orden de Postgres.
+// Con `alcanzoTope`, lo que quedó afuera lo eligió el orden por NOMBRE, no el de visitas: la hoja no
+// tiene "los 50 000 que más vinieron" sino 50 000 por orden alfabético, reordenados. El Resumen avisa
+// que está incompleta. (Con los pilotos, órdenes de magnitud por debajo del tope.)
+export function clientesPorVisitas<F extends Pick<FilaReporteCliente, 'comercio_id' | 'cliente_id' | 'operaciones'>>(
+  filas: readonly F[],
+): F[] {
+  const vistas = new Set<string>();
+  const unicas = filas.filter((f) => {
+    const clave = `${f.comercio_id} ${f.cliente_id}`;
+    if (vistas.has(clave)) return false;
+    vistas.add(clave);
+    return true;
+  });
+  return unicas.sort(
+    (a, b) =>
+      b.operaciones - a.operaciones ||
+      compararTexto(a.cliente_id, b.cliente_id) ||
+      compararTexto(a.comercio_id, b.comercio_id),
+  );
+}
+
 // Ascendente por unidad de código, con null al final (como `asc` en Postgres).
 function compararTexto(a: string | null, b: string | null): number {
   if (a === b) return 0;
@@ -234,9 +264,9 @@ function compararTexto(a: string | null, b: string | null): number {
 //   - 'pagina': la tabla de la pantalla. UNA llamada, `tamanoPagina` filas (por defecto
 //     TAMANO_PAGINA_CLIENTES, el mismo número con el que paginacionClientes convierte el offset en
 //     "Página X de Y") en la página pedida, con el orden de la URL.
-//   - 'todas': el Excel (y la lista de clientes de la Tarea 6). TODAS las filas, con paginarPorOffset.
-//     Por defecto por visitas desc (spec §4: el Excel no lleva orden/dir/pagina); `orden` elige otra
-//     columna, siempre con su dirección inicial (direccionInicial: nombre A→Z, el resto desc).
+//   - 'todas': el Excel de Reportes y la lista de clientes (Tarea 6). TODAS las filas, con
+//     paginarPorOffset. Por defecto por visitas desc; `orden` elige otra columna, siempre con su
+//     dirección inicial (direccionInicial: nombre A→Z, el resto desc).
 export interface ModoPaginaClientes {
   modo: 'pagina';
   pagina: number; // 1 = la primera; más allá del final, la SQL devuelve la última
@@ -246,11 +276,12 @@ export interface ModoPaginaClientes {
 }
 export interface ModoTodasClientes {
   modo: 'todas';
-  // Por defecto 'visitas' (el Excel de Reportes). Leer TODO paginando con un orden que se mueve con la
-  // actividad tiene una carrera: un cliente de la página 2 o siguientes que recibe una visita MIENTRAS
-  // se pagina sube a una página ya leída y queda afuera. Quien necesita a cada cliente sí o sí (la
-  // lista de clientes, que si no le pone 0 visitas) pide 'nombre' (0040: nombre, apellido, cliente_id):
-  // una visita no mueve a nadie, y un cliente nuevo solo corre las filas una posición (una fila
+  // Por defecto 'visitas'. Leer TODO paginando con un orden que se mueve con la actividad tiene una
+  // carrera: un cliente de la página 2 o siguientes que recibe una visita MIENTRAS se pagina sube a una
+  // página ya leída y queda afuera. Por eso los dos que leen todo piden 'nombre' (0040: nombre,
+  // apellido, cliente_id): la lista de clientes (si no, le pone 0 visitas) y el Excel de Reportes (si
+  // no, falta en la hoja Clientes, que después se reordena por visitas con clientesPorVisitas). Por
+  // nombre, una visita no mueve a nadie, y un cliente nuevo solo corre las filas una posición (una fila
   // repetida en el corte, nunca salteada). Solo un cambio de nombre en ese mismo instante movería a uno.
   orden?: OrdenClientes;
   tamanoPagina?: number;
