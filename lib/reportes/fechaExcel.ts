@@ -14,6 +14,32 @@ import { esFechaValida } from './rangoFechas';
 export const FORMATO_DIA_EXCEL = 'dd/mm/yyyy';
 export const FORMATO_FECHA_HORA_EXCEL = 'dd/mm/yyyy hh:mm';
 
+// UN formateador por zona, creado la primera vez que se lo pide y reusado después. El Excel llama a
+// fechaExcel una vez por fila, y construir un Intl.DateTimeFormat es lo caro: medido el 2026-09-23 con
+// 50 000 filas (el tope por hoja), 9,6 s creando uno por llamada contra 0,4 s reusándolo. El resultado
+// es el mismo: la zona va explícita en el formateador, que no depende de la del proceso. Una zona
+// inválida lanza RangeError al construirlo, así que nunca queda guardada. Las claves son zonas (una
+// lista cerrada, zonasHorarias.ts): el Map no crece sin límite.
+const formateadores = new Map<string, Intl.DateTimeFormat>();
+
+function formateadorDe(zonaHoraria: string): Intl.DateTimeFormat {
+  let formateador = formateadores.get(zonaHoraria);
+  if (!formateador) {
+    // hourCycle h23: con `hour12: false` algunos motores escriben la medianoche como "24".
+    formateador = new Intl.DateTimeFormat('en-US', {
+      timeZone: zonaHoraria,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
+    formateadores.set(zonaHoraria, formateador);
+  }
+  return formateador;
+}
+
 // Un instante (un `timestamptz` de PostgREST, o un Date) → el Date que Excel muestra como la fecha y
 // hora local del comercio en esa zona. Sin segundos: la celda es dd/mm/yyyy hh:mm.
 export function fechaExcel(instante: Date | string, zonaHoraria: string): Date {
@@ -23,16 +49,7 @@ export function fechaExcel(instante: Date | string, zonaHoraria: string): Date {
     // salga un Excel con una fecha que parece cierta.
     throw new Error(`fechaExcel: instante inválido: ${String(instante)}`);
   }
-  // hourCycle h23: con `hour12: false` algunos motores escriben la medianoche como "24".
-  const partes = new Intl.DateTimeFormat('en-US', {
-    timeZone: zonaHoraria,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(fecha);
+  const partes = formateadorDe(zonaHoraria).formatToParts(fecha);
   const parte = (tipo: Intl.DateTimeFormatPartTypes) => Number(partes.find((p) => p.type === tipo)?.value);
   return new Date(Date.UTC(parte('year'), parte('month') - 1, parte('day'), parte('hour'), parte('minute')));
 }

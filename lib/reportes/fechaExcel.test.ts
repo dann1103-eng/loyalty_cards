@@ -17,6 +17,10 @@ import { fechaExcel, diaExcel, FORMATO_DIA_EXCEL, FORMATO_FECHA_HORA_EXCEL } fro
 //   [ 2026, 9, 22, 22, 30 ]`; con el proceso en America/El_Salvador (la PC de Daniel), la misma con
 //   `expected [ 2026, 9, 22, 21, 30 ]…`, y "Europe/Madrid… cruza al día siguiente" con `expected
 //   [ 2026, 9, 23, 16, 30 ] to deeply equal [ 2026, 9, 24, +0, 30 ]`.
+// - (2026-09-23, Tarea 5) El formateador cacheado con UNA clave para todas las zonas (el de la primera
+//   zona pedida sirve a las demás): caen las cuatro de Madrid, entre ellas "…el día del atraso de hora"
+//   con `expected [ 2026, 10, 24, 19, 30 ] to deeply equal [ 2026, 10, 25, 2, 30 ]` (y 5 de
+//   excelReportes.test.ts, que mezcla Bogotá y Madrid en una misma hoja).
 
 const tzOriginal = process.env.TZ;
 const zonaOriginal = Intl.DateTimeFormat().resolvedOptions().timeZone;
