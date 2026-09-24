@@ -196,7 +196,7 @@ export default async function PaginaPanel() {
           <div style={{ display: 'flex', gap: 28 }}>
             {[
               [actividadSucursal.clientes_unicos, 'Clientes'],
-              [actividadSucursal.operaciones, 'Operaciones'],
+              [actividadSucursal.operaciones, 'Visitas'],
               [actividadSucursal.canjes, 'Premios'],
             ].map(([valor, etiqueta]) => (
               <div key={etiqueta}>
