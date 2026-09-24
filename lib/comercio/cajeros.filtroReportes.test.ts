@@ -12,7 +12,7 @@ import { listarUsuariosDelComercio } from './cajeros';
 // …(4) ]`, "'Vos' es por la cuenta que mira…" con `expected [] to deeply equal [ false ]` y "ordenada
 // por email" con `expected [ Array(1) ] to deeply equal [ …(3) ]`.
 //
-// MUTATION-TESTING (corridas el 2026-09-23, 6 de 6 caen; con el mensaje que se vio caer):
+// MUTATION-TESTING (corridas el 2026-09-23, 7 de 7 caen; con el mensaje que se vio caer):
 // - Filtrar `.eq('activo', true)`: caen "trae cajeros activos e INACTIVOS…" con `expected [ …(3) ] to
 //   deeply equal [ …(4) ]` y "ordenada por email" con `expected [ …(2) ] to deeply equal [ …(3) ]`.
 // - Excluir al dueño (`.eq('rol', 'cajero')`): caen tres, "trae cajeros activos e INACTIVOS…" con
@@ -24,7 +24,9 @@ import { listarUsuariosDelComercio } from './cajeros';
 //   equal []`.
 // - "Vos" por rol (`esVos: f.rol === 'owner'`): caen "trae cajeros…" con `expected { …(5) } to deeply
 //   equal { …(5) }` (el socio) y "'Vos' es por la cuenta que mira…" con `expected [ true ] to deeply
-//   equal [ false ]`.
+//   equal [ false ]`. "Vos" por tener cuenta (`esVos: f.auth_user_id !== null`): cae "'Vos' es por la
+//   cuenta que mira…" con `expected [ true ] to deeply equal [ false ]`. Las dos, corridas de nuevo con
+//   la cuenta que mira como `crypto.randomUUID()` (sin crearla en Auth).
 // - Un error de BD como `[]`: cae "un error de la base da null…" con `expected [] to be null`.
 // - Sin `.order('email')`: cae "ordenada por email" con `expected [ …(3) ] to deeply equal [ …(3) ]`.
 
@@ -34,13 +36,18 @@ const entorno = crearEntorno(supabase);
 // las referencia (auth_user_id → auth.users, sin cascade) y limpiar() borra esas filas por comercio_id.
 const cuentasAuth: string[] = [];
 
+// En `finally`: si limpiar() lanza, las cuentas de Auth se intentan borrar igual (si alguna fila todavía
+// las referencia, deleteUser falla y lo loguea; nada queda en silencio).
 afterEach(async () => {
-  await entorno.limpiar();
-  for (const id of cuentasAuth) {
-    const { error } = await supabase.auth.admin.deleteUser(id);
-    if (error) console.error('[test] no se pudo borrar la cuenta de Auth:', error.message);
+  try {
+    await entorno.limpiar();
+  } finally {
+    for (const id of cuentasAuth) {
+      const { error } = await supabase.auth.admin.deleteUser(id);
+      if (error) console.error('[test] no se pudo borrar la cuenta de Auth:', error.message);
+    }
+    cuentasAuth.length = 0;
   }
-  cuentasAuth.length = 0;
 });
 
 function emailUnico(prefijo: string): string {
@@ -103,10 +110,10 @@ describe('listarUsuariosDelComercio', () => {
   it('"Vos" es por la cuenta que mira, no por ser owner: mirando otra cuenta, nadie es "Vos"', async () => {
     const cafe = await entorno.crearComercio();
     const cuenta = await crearCuentaAuth();
-    const otra = await crearCuentaAuth();
     await insertarUsuario({ comercio_id: cafe, email: cuenta.email, rol: 'owner', auth_user_id: cuenta.id });
 
-    const lista = await listarUsuariosDelComercio(supabase, cafe, otra.id);
+    // La cuenta que mira solo se compara, no se inserta en ninguna tabla: no hace falta crearla en Auth.
+    const lista = await listarUsuariosDelComercio(supabase, cafe, crypto.randomUUID());
     expect(lista).not.toBeNull();
     expect(lista!.map((u) => u.esVos)).toEqual([false]);
   });

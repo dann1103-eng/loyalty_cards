@@ -100,7 +100,8 @@ export interface FiltrosTablaClientes extends FiltrosParaUrl {
 }
 
 // En orden de dibujo. Cliente va primera porque es la columna fija a 375 px (spec §3); Comercio, justo
-// después, para que al scrollear de costado se siga viendo de quién es cada fila.
+// después, para que se vea sin scrollear, junto al cliente. (Comercio NO es fija: al scrollear de
+// costado se va de la pantalla como las demás.)
 const COLUMNAS: readonly { clave: ClaveColumnaClientes; titulo: string; orden: OrdenClientes | null }[] = [
   { clave: 'cliente', titulo: 'Cliente', orden: 'nombre' },
   { clave: 'comercio', titulo: 'Comercio', orden: null },
@@ -117,6 +118,9 @@ export function columnasTablaClientes(filtros: FiltrosTablaClientes): ColumnaTab
       // unidad y la tiene: ordenar centavos contra sellos no significa nada, y en los tipos sin
       // contador la columna va vacía (spec, "Unidad del acumulado").
       const ordenable = orden !== null && (orden !== 'acumulado' || filtros.acumuladoOrdenable);
+      // `ordenable &&`: unos filtros con orden=acumulado en un alcance que no lo permite no deben
+      // marcar Acumulado como ordenada (resolverFiltrosReportes ya lo hace caer a visitas; esto es el
+      // resguardo por si llegan filtros armados a mano).
       const activa = ordenable && orden === filtros.orden;
       return {
         clave,

@@ -15,7 +15,7 @@ import { leerParametrosReportes } from './parametrosReportes';
 // Prueba PURA de las reglas de la pantalla de Reportes (spec 2026-09-23 §1, §2 y §3). La página no se
 // prueba (el repo no tiene pruebas de componentes): lo que decide QUÉ se dibuja vive acá.
 //
-// MUTATION-TESTING (corridas el 2026-09-23, 26 de 26 caen; con el mensaje que se vio caer):
+// MUTATION-TESTING (corridas el 2026-09-23, 27 de 27 caen; con el mensaje que se vio caer):
 // Paginación
 // - La página ignorando offset_efectivo (`Math.floor(offsetEfectivo / …) + 1` → `1`): caen cinco,
 //   entre ellas "la página EFECTIVA sale de offset_efectivo…" con `expected { pagina: 1, totalPaginas:
@@ -48,6 +48,9 @@ import { leerParametrosReportes } from './parametrosReportes';
 //   resolverFiltrosReportes…" con `expected '/comercio/reportes?periodo=30d&orden=…' to be null`.
 // - La activa sin mirar filtros.orden (`activa = ordenable`): cae "aria-sort…" con `expected [ [
 //   'cliente', 'descending' ], …(4) ] to deeply equal [ [ 'cliente', 'none' ], …(4) ]`.
+// - La activa sin el resguardo (`activa = orden === filtros.orden`, sin `ordenable &&`): cae
+//   "orden=acumulado en un alcance que no lo permite…" con `expected [ null, 'descending' ] to deeply
+//   equal [ null, 'none' ]`.
 // - aria-sort con las direcciones cruzadas: cae "con los filtros de resolverFiltrosReportes…" con
 //   `expected 'ascending' to be 'descending'` (y "aria-sort…").
 // - El enlace conserva la página (`{ orden, pagina: filtros.pagina }`): caen "los enlaces…" con
@@ -278,6 +281,14 @@ describe('columnasTablaClientes', () => {
     for (const clave of ['cliente', 'visitas', 'premios', 'ultima']) {
       expect(columnas.find((c) => c.clave === clave)!.href).not.toBeNull();
     }
+  });
+
+  it('orden=acumulado en un alcance que no lo permite: Acumulado no se marca como ordenada ni enlaza', () => {
+    // resolverFiltrosReportes nunca devuelve esta combinación (cae a visitas); esto fija el resguardo
+    // para unos filtros armados a mano.
+    const columnas = columnasTablaClientes(filtrosTabla({ orden: 'acumulado', acumuladoOrdenable: false }));
+    const acumulado = columnas.find((c) => c.clave === 'acumulado')!;
+    expect([acumulado.href, acumulado.ariaSort]).toEqual([null, 'none']);
   });
 
   it('con los filtros de resolverFiltrosReportes: Café en puntos y Spa en cashback no ordenan por acumulado', () => {
