@@ -783,21 +783,25 @@ a {
   text-transform: uppercase;
   opacity: 0.66;
 }
+/* El logo TAL CUAL lo subió el comercio (spec 2026-09-23-wallet-dispositivo-y-logos, §2): hasta esa
+   fecha era un círculo blanco de 54 px con `object-fit: cover`, que a un logo ancho como "Pulso CAFÉ"
+   le cortaba los costados. Ahora el alto tope es el mismo y el ancho sigue la proporción del logo
+   (con un techo para que uno muy ancho no se coma la tarjeta), sin recorte y sin la pastilla blanca:
+   esto es la réplica del pase, y Apple dibuja el logo directo sobre el color de la tarjeta. */
 .cardface-logo {
-  width: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 54px;
-  border-radius: var(--radius-pill);
-  background: var(--blanco);
-  display: grid;
-  place-items: center;
-  overflow: hidden;
   margin: 14px auto 0;
-  box-shadow: 0 0 20px rgba(255, 255, 255, 0.18);
 }
 .cardface-logo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  display: block;
+  width: auto;
+  height: auto;
+  max-height: 54px;
+  max-width: min(180px, 100%);
+  object-fit: contain;
 }
 .cardface-name {
   font-family: var(--font-display);
