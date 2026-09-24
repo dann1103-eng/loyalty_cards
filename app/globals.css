@@ -2101,19 +2101,27 @@ details.admin-fila:has(> summary:active) {
   border-radius: var(--radius-pill);
   padding: 6px 12px;
   box-shadow: var(--hundido-1);
-  /* Ancho máximo y puntos suspensivos: el filtro de cajero muestra emails, y uno largo desbordaba la
-     página a 375px (un <a> en línea no se corta). El texto entero va en el `title` del chip. El
-     min(100%, …) es por si el tope fuera más ancho que la fila. */
-  max-width: min(100%, 15rem);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .filtro-chip.activo {
   color: var(--sobre-acento);
   background: var(--acento);
   border-color: var(--acento);
   box-shadow: var(--relieve-1);
+}
+/* Chips que se CORTAN con puntos suspensivos: solo los de Reportes (FiltrosReportes.tsx), donde todo
+   chip que puede cortarse (nombres y emails) lleva el texto entero en `title`; los fijos ("Hoy",
+   "Todas") son cortos. El filtro de cajero muestra emails, y uno largo desbordaba la
+   página a 375px. NO va en .filtro-chip: Marca usa los mismos chips para elegir la tarjeta, sin
+   `title`, y ahí un nombre largo tiene que partirse en dos líneas — cortado, "Tarjeta de sellos Café
+   Central Norte" y "… Sur" se verían iguales, y en un teléfono no hay hover para leer el `title`.
+   Dentro de .filtro-chips (flex) cada chip es un flex item: lo que le permite achicarse por debajo
+   del ancho de su texto es el `overflow: hidden` (con él, su `min-width: auto` vale 0), y el tope lo
+   pone `max-width`. El min(100%, …) es por si 15rem fuera más ancho que la fila. */
+.filtro-chips-recortados > .filtro-chip {
+  max-width: min(100%, 15rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---------- aviso de contexto (qué comercio se está configurando) ----------

@@ -15,6 +15,8 @@ import {
   textoSinActividad,
   etiquetaCajero,
   filtrosInvisibles,
+  estadoPorDia,
+  filtrosEnPantalla,
   type FiltrosTablaClientes,
   type FiltrosConNombres,
 } from './pantallaReportes';
@@ -85,15 +87,17 @@ import { leerParametrosReportes } from './parametrosReportes';
 //   Siempre "Por día": cae el otro con `expected 'Por día' to be 'Por mes'`.
 //
 // MUTATION-TESTING de la Tarea 4b (corridas el 2026-09-24 con un script que aplica una por vez y
-// restaura; 21 de 22 caen, 1 equivalente):
+// restaura; 22 de 22 caen desde la revisión, que agregó la prueba del contrato roto; más las 19 de la
+// revisión, abajo):
 // Barras
 // - El mes sin el `- 1` del índice: caen dos, "por mes: …" con `expected 'oct 2026' to be 'sep 2026'`.
 //   Siempre dd/mm: caen dos, la misma con `expected '01/09' to be 'sep 2026'`.
 // - Sin el piso de 1 en el máximo: cae "todo en cero…" con `expected [ NaN, NaN ] to deeply equal [
 //   +0, +0 ]`.
-// - El máximo solo con visitas: caen dos, "el ancho es visitas + premios…" con `expected [ 150, +0, 50,
-//   100 ] to deeply equal [ 100, +0, 33, 67 ]`. El ancho solo con visitas: caen dos, "un período con
-//   solo premios…" con `expected [ +0, 50 ] to deeply equal [ 100, 50 ]`.
+// - El máximo solo con visitas: caen tres (desde la revisión; dos antes), "el ancho es visitas +
+//   premios…" con `expected [ 150, +0, 50, 100 ] to deeply equal [ 100, +0, 33, 67 ]`. El ancho solo con
+//   visitas: caen tres, "un período con solo premios…" con `expected [ +0, 50 ] to deeply equal [ 100,
+//   50 ]`.
 // - `Math.floor` en vez de `Math.round`: cae "el ancho es…" con `expected [ 100, +0, 33, 66 ] to deeply
 //   equal [ 100, +0, 33, 67 ]`.
 // Cabecera
@@ -104,22 +108,24 @@ import { leerParametrosReportes } from './parametrosReportes';
 // - Ceros en vez de null sin fila total: cae "sin fila total…" con `expected { visitas: +0, premios:
 //   +0, …(1) } to be null`.
 // - huboActividad solo con visitas: cae "con visitas, o con SOLO premios, sí" con `expected false to be
-//   true`. Con `>= 0`: cae "sin visitas ni premios…" con `expected true to be false`.
+//   true`. Con `>= 0`: caen cuatro (desde la revisión; una antes), "sin visitas ni premios…" con
+//   `expected true to be false` y "LA REGLA…" con `expected 'barras' to be 'vacio'`.
 // Por sucursal
 // - Recorriendo el alcance al revés: cae "sin la fila total, agrupadas … en el orden del ALCANCE…".
 // - Bloques vacíos (`suyas.length >= 0`): caen tres, "solo la fila total…" con `expected [ { comercio: {
 //   …(2) }, filas: [] } ] to deeply equal []`. Sin anotar los que no operaron: caen dos, "un comercio
 //   del alcance sin filas…" con `expected [] to deeply equal [ { comercioId: 'c-spa', …(1) } ]`.
-// - EQUIVALENTE (corrida, sigue verde): sacar `!f.es_total` del filtro. La fila total trae comercio_id
-//   null (es la del conjunto `()` de grouping sets, 0040), así que nunca coincide con un comercio del
-//   alcance. Se deja: no depender de ese detalle de la SQL para no dibujar el total como una sucursal.
+// - Sacar `!f.es_total` del filtro: cae "contrato roto: una fila total CON el comercio_id…" con
+//   `expected [ { comercio: { …(2) }, …(1) } ] to deeply equal [ { comercio: { …(2) }, …(1) } ]` (la
+//   fila total entra como una sucursal más). Hasta la revisión era EQUIVALENTE: la 0040 devuelve la fila
+//   total con comercio_id null y nunca coincide; la prueba fija que el bloque no dependa de eso.
 // - "ninguno de tus comercios" con `> 2`: cae "sin sucursal: …" con `expected 'Sin actividad en este
 //   período.' to be 'Sin actividad en ninguno de tus comer…'`. Sin nombrar la sucursal: cae "con una
 //   sucursal elegida…" con `expected 'Sin actividad en este período.' to be 'Sin actividad en Centro en
 //   este perío…'`.
 // Filtros invisibles
-// - Cajero siempre por email: caen dos, "la cuenta que mira dice 'Vos'…" con `expected 'yo@cafe.com' to
-//   be 'Vos'`.
+// - Cajero siempre por email: caen tres (desde la revisión; dos antes), "la cuenta que mira dice
+//   'Vos'…" con `expected 'yo@cafe.com' to be 'Vos'`.
 // - La sucursal sin mirar su fila: caen dos, "con su fila de chips dibujada…" con `expected [ { clave:
 //   'sucursal', …(3) } ] to deeply equal []`. El cajero mirando la fila de SUCURSAL: cae "?cajero=<dueño>
 //   sin cajeros…" con `expected [] to have a length of 1 but got +0`.
@@ -127,6 +133,39 @@ import { leerParametrosReportes } from './parametrosReportes';
 //   '7d', …(6) } to deeply equal { periodo: '7d', …(4) }`. "Quitar" el cajero borrando la sucursal: cae
 //   "?cajero=<dueño> sin cajeros…" con `expected { periodo: '7d', …(4) } to deeply equal { periodo:
 //   '7d', …(4) }`.
+//
+// MUTATION-TESTING de la revisión de la 4b (2026-09-24, el mismo script; 19 de 19 caen):
+// Por día (estadoPorDia: la regla del bloque salió del componente)
+// - EL vacío con `filas.length === 0` en vez de la fila total: caen tres, "LA REGLA: un alcance que ya
+//   operaba…" con `expected 'barras' to be 'vacio'`, "con actividad según el total…" con `expected {
+//   tipo: 'vacio', …(2) } to match object { tipo: 'barras', barras: [] }` y "agrupada por mes…" con
+//   `expected { tipo: 'barras', …(3) } to deeply equal { tipo: 'vacio', …(2) }`.
+// - Sin chequear `totales === null`: cae "si falló CUALQUIERA…" con `TypeError: Cannot read properties
+//   of null (reading 'visitas')`. Sin chequear `filas === null`: la misma, con `TypeError: Cannot read
+//   properties of null (reading 'map')`. (Caen por el choque, no por una aserción: sin el chequeo la
+//   página también reventaría.)
+// - El subtítulo siempre "de cada día": cae "agrupada por mes…" con `expected { tipo: 'vacio', …(2) } to
+//   deeply equal { tipo: 'vacio', …(2) }`.
+// Filtros (filtrosEnPantalla: el `activo` de los chips salió del componente)
+// - Período activo fijo en '30d': cae "período: los siete…" con `expected [ '30d' ] to deeply equal [
+//   '7d' ]`. El href del período sin el período: cae "'Personalizado' lleva las fechas…" con `expected {
+//   periodo: '7d', …(4) } to deeply equal { periodo: 'rango', …(5) }`.
+// - "Todo" nunca activo: cae "comercio: …" con `expected [] to deeply equal [ 'todos' ]`. El comercio
+//   activo invertido (`!==`): la misma, con `expected [ 'c-spa' ] to deeply equal [ 'c-cafe' ]`. La fila
+//   de comercio siempre: cae "comercio: con uno solo…" con `expected [ { clave: 'todos', …(3) }, …(1) ]
+//   to be null`.
+// - "Todas" mirando el cajero (`filtros.cajero === null`): cae "sucursal: …" con `expected [] to deeply
+//   equal [ 'todos' ]` — sigue VERDE sin el caso "cajero elegido y sucursal no", que se agregó por eso.
+//   La sucursal activa comparando el id del cajero: la misma, con `expected [] to deeply equal [
+//   's-norte' ]`. La fila de sucursal siempre: caen dos, "sin su fila de chips…" con `expected [ …(2) ]
+//   to deeply equal [ null, null ]`.
+// - "Todos" siempre activo: cae "cajero: …" con `expected [ 'todos', 'u-yo' ] to deeply equal [ 'u-yo'
+//   ]`; "Todos" mirando la sucursal: la misma, con el mismo mensaje. El cajero activo comparando el id de
+//   la sucursal: `expected [] to deeply equal [ 'u-yo' ]`. El email en vez de "Vos", y el chip sin el
+//   email en `titulo`: la misma, con `expected [ …(3) ] to deeply equal [ …(3) ]`.
+// - El formulario siempre abierto: cae "el formulario de fechas se abre solo con periodo=rango" con
+//   `expected true to be false`. Los invisibles sin cablear (`[]`): cae "sin su fila de chips…" con
+//   `expected [] to deeply equal [ [ 'sucursal', 'Centro' ], …(1) ]`.
 
 const cafe = { comercioId: 'c-cafe', nombre: 'Café' };
 const spa = { comercioId: 'c-spa', nombre: 'Spa' };
@@ -583,6 +622,15 @@ describe('sucursalesPorComercio', () => {
     const { conActividad } = sucursalesPorComercio([total, ajena], [cafe]);
     expect(conActividad).toEqual([]);
   });
+
+  it('contrato roto: una fila total CON el comercio_id de un comercio del alcance tampoco se dibuja como sucursal', () => {
+    // La 0040 la devuelve con comercio_id null (grouping sets `()`), así que hoy nunca coincide. Esto
+    // fija que el bloque no dependa de ese detalle: se excluye por es_total.
+    const totalConComercio = filaResumen({ comercio_id: 'c-cafe', sucursal_id: null, operaciones: 6, es_total: true });
+    const cafeCentro = filaResumen({ comercio_id: 'c-cafe', sucursal_id: 's-centro', operaciones: 6 });
+    const { conActividad } = sucursalesPorComercio([totalConComercio, cafeCentro], [cafe]);
+    expect(conActividad).toEqual([{ comercio: cafe, filas: [cafeCentro] }]);
+  });
 });
 
 describe('textoSinActividad', () => {
@@ -668,5 +716,185 @@ describe('filtrosInvisibles', () => {
   it('los dos invisibles: los dos avisos, sucursal primero (el orden de las filas de chips)', () => {
     const avisos = filtrosInvisibles(sinFilas, filtrosCon({ sucursal: centro, cajero: yo }));
     expect(avisos.map((a) => a.clave)).toEqual(['sucursal', 'cajero']);
+  });
+});
+
+describe('estadoPorDia', () => {
+  const dia = (periodo: string, operaciones: number, canjes: number, es_mes = false) => ({
+    periodo,
+    operaciones,
+    canjes,
+    es_mes,
+  });
+  const sinNada = { visitas: 0, premios: 0, clientes: 0 };
+  const conActividad = { visitas: 3, premios: 1, clientes: 2 };
+
+  it('LA REGLA: un alcance que ya operaba devuelve el tramo con filas en CERO — eso es "vacío", no unas barras vacías', () => {
+    // Contrato de la 0040: "sin actividad en el período" se decide con la fila total del resumen,
+    // NUNCA con filas.length === 0 de reporte_por_dia (que acá trae dos filas).
+    const estado = estadoPorDia([dia('2026-09-22', 0, 0), dia('2026-09-23', 0, 0)], sinNada);
+    expect(estado.tipo).toBe('vacio');
+  });
+
+  it('un alcance que nunca operó (cero filas) y totales en cero: vacío', () => {
+    expect(estadoPorDia([], sinNada).tipo).toBe('vacio');
+  });
+
+  it('con actividad según el total: las barras, aunque la serie llegara vacía (no se inventa un "sin movimientos")', () => {
+    const conFilas = estadoPorDia([dia('2026-09-22', 3, 1)], conActividad);
+    expect(conFilas).toEqual({
+      tipo: 'barras',
+      titulo: 'Por día',
+      subtitulo: 'Visitas / premios de cada día.',
+      barras: [{ clave: '2026-09-22', etiqueta: '22/09', visitas: 3, premios: 1, pct: 100 }],
+    });
+    expect(estadoPorDia([], conActividad)).toMatchObject({ tipo: 'barras', barras: [] });
+  });
+
+  it('si falló CUALQUIERA de las dos lecturas (null): error, nunca ceros', () => {
+    expect(estadoPorDia(null, conActividad).tipo).toBe('error');
+    expect(estadoPorDia([dia('2026-09-22', 3, 1)], null).tipo).toBe('error');
+    expect(estadoPorDia(null, null)).toEqual({
+      tipo: 'error',
+      titulo: 'Por día',
+      subtitulo: 'Visitas / premios de cada día.',
+    });
+  });
+
+  it('agrupada por mes: título y subtítulo lo dicen, también en el estado vacío', () => {
+    const meses = [dia('2026-08-01', 0, 0, true), dia('2026-09-01', 0, 0, true)];
+    expect(estadoPorDia(meses, sinNada)).toEqual({
+      tipo: 'vacio',
+      titulo: 'Por mes',
+      subtitulo: 'Visitas / premios de cada mes.',
+    });
+  });
+});
+
+describe('filtrosEnPantalla', () => {
+  const centro = { id: 's-centro', nombre: 'Centro' };
+  const norte = { id: 's-norte', nombre: 'Norte' };
+  const yo = { id: 'u-yo', email: 'yo@cafe.com', rol: 'owner', esVos: true };
+  const caja = { id: 'u-caja', email: 'caja.de.la.sucursal.norte@cafe.com', rol: 'cajero', esVos: false };
+  const contextoCafe = { comercioDeLasListas: 'c-cafe', sucursales: [centro, norte], usuarios: [caja, yo] };
+  const contextoTodo = { comercioDeLasListas: null, sucursales: [], usuarios: [] };
+  // Café elegido, 7 días, ordenada por premios, página 2.
+  const vista = (extra: Partial<FiltrosConNombres> = {}): FiltrosConNombres => ({
+    periodo: '7d',
+    desde: '2026-09-17',
+    hasta: '2026-09-23',
+    comercio: { comercioId: 'c-cafe' },
+    sucursal: null,
+    cajero: null,
+    orden: 'premios',
+    dir: 'desc',
+    pagina: 2,
+    ...extra,
+  });
+  const activos = (chips: { clave: string; activo: boolean }[] | null) =>
+    (chips ?? []).filter((c) => c.activo).map((c) => c.clave);
+  const href = (chips: { clave: string; href: string }[] | null, clave: string) =>
+    params((chips ?? []).find((c) => c.clave === clave)!.href);
+
+  it('período: los siete en orden con su rótulo, y activo SOLO el de la vista', () => {
+    const { periodo } = filtrosEnPantalla([cafe], vista(), contextoCafe);
+    expect(periodo.map((c) => c.etiqueta)).toEqual([
+      'Hoy',
+      'Ayer',
+      '7 días',
+      '30 días',
+      'Este mes',
+      'Desde siempre',
+      'Personalizado',
+    ]);
+    expect(activos(periodo)).toEqual(['7d']);
+    expect(activos(filtrosEnPantalla([cafe], vista({ periodo: 'todo', desde: null }), contextoCafe).periodo)).toEqual([
+      'todo',
+    ]);
+  });
+
+  it('"Personalizado" lleva las fechas de la vista (el formulario abre precargado); un preset no las lleva', () => {
+    const { periodo } = filtrosEnPantalla([cafe], vista(), contextoCafe);
+    expect(href(periodo, 'rango')).toEqual({
+      periodo: 'rango',
+      desde: '2026-09-17',
+      hasta: '2026-09-23',
+      comercio: 'c-cafe',
+      orden: 'premios',
+      dir: 'desc',
+    });
+    expect(href(periodo, 'hoy')).toEqual({ periodo: 'hoy', comercio: 'c-cafe', orden: 'premios', dir: 'desc' });
+  });
+
+  it('el formulario de fechas se abre solo con periodo=rango', () => {
+    expect(filtrosEnPantalla([cafe], vista(), contextoCafe).formularioRango).toBe(false);
+    expect(filtrosEnPantalla([cafe], vista({ periodo: 'rango' }), contextoCafe).formularioRango).toBe(true);
+  });
+
+  it('comercio: "Todo" y cada comercio, con el nombre en title; activo el elegido; cambiar de comercio borra sucursal y cajero', () => {
+    const { comercio } = filtrosEnPantalla([cafe, spa], vista({ sucursal: centro, cajero: caja }), contextoCafe);
+    expect(comercio!.map((c) => [c.etiqueta, c.titulo])).toEqual([
+      ['Todo', undefined],
+      ['Café', 'Café'],
+      ['Spa', 'Spa'],
+    ]);
+    expect(activos(comercio)).toEqual(['c-cafe']);
+    expect(href(comercio, 'c-spa')).toEqual({ periodo: '7d', comercio: 'c-spa', orden: 'premios', dir: 'desc' });
+    expect(href(comercio, 'todos')).toEqual({ periodo: '7d', orden: 'premios', dir: 'desc' });
+    // Con "Todo" la activa es "Todo".
+    expect(activos(filtrosEnPantalla([cafe, spa], vista({ comercio: null }), contextoTodo).comercio)).toEqual(['todos']);
+  });
+
+  it('comercio: con uno solo, la fila no se dibuja (null)', () => {
+    expect(filtrosEnPantalla([cafe], vista(), contextoCafe).comercio).toBeNull();
+  });
+
+  it('sucursal: "Todas" y cada sucursal; activa la elegida (o "Todas"); el enlace conserva el cajero y vuelve a la página 1', () => {
+    const conNorte = filtrosEnPantalla([cafe], vista({ sucursal: norte, cajero: caja }), contextoCafe).sucursal;
+    expect(conNorte!.map((c) => [c.clave, c.etiqueta, c.titulo])).toEqual([
+      ['todos', 'Todas', undefined],
+      ['s-centro', 'Centro', 'Centro'],
+      ['s-norte', 'Norte', 'Norte'],
+    ]);
+    expect(activos(conNorte)).toEqual(['s-norte']);
+    expect(href(conNorte, 's-centro')).toEqual({
+      periodo: '7d',
+      comercio: 'c-cafe',
+      sucursal: 's-centro',
+      cajero: 'u-caja',
+      orden: 'premios',
+      dir: 'desc',
+    });
+    // Sin sucursal elegida, "Todas" — aunque haya un CAJERO elegido: cada "Todo" mira su propio filtro.
+    expect(activos(filtrosEnPantalla([cafe], vista({ cajero: caja }), contextoCafe).sucursal)).toEqual(['todos']);
+  });
+
+  it('cajero: "Todos", "Vos" para la cuenta que mira y el email para el resto, con el email ENTERO en title', () => {
+    const { cajero } = filtrosEnPantalla([cafe], vista({ cajero: yo }), contextoCafe);
+    expect(cajero!.map((c) => [c.clave, c.etiqueta, c.titulo])).toEqual([
+      ['todos', 'Todos', undefined],
+      ['u-caja', 'caja.de.la.sucursal.norte@cafe.com', 'caja.de.la.sucursal.norte@cafe.com'],
+      ['u-yo', 'Vos', 'yo@cafe.com'],
+    ]);
+    expect(activos(cajero)).toEqual(['u-yo']);
+    expect(href(cajero, 'todos')).toEqual({ periodo: '7d', comercio: 'c-cafe', orden: 'premios', dir: 'desc' });
+    // Sin cajero elegido, "Todos" — aunque haya una SUCURSAL elegida.
+    expect(activos(filtrosEnPantalla([cafe], vista({ sucursal: norte }), contextoCafe).cajero)).toEqual(['todos']);
+  });
+
+  it('sin su fila de chips (una sola sucursal, sin cajeros): null, y el filtro aplicado sale en invisibles', () => {
+    const soloCentro = { comercioDeLasListas: 'c-cafe', sucursales: [centro], usuarios: [yo] };
+    const pantalla = filtrosEnPantalla([cafe], vista({ sucursal: centro, cajero: yo }), soloCentro);
+    expect([pantalla.sucursal, pantalla.cajero]).toEqual([null, null]);
+    expect(pantalla.invisibles.map((a) => [a.clave, a.valor])).toEqual([
+      ['sucursal', 'Centro'],
+      ['cajero', 'Vos'],
+    ]);
+  });
+
+  it('con "Todo" no hay filas de sucursal ni de cajero', () => {
+    const pantalla = filtrosEnPantalla([cafe, spa], vista({ comercio: null }), contextoTodo);
+    expect([pantalla.sucursal, pantalla.cajero]).toEqual([null, null]);
+    expect(pantalla.invisibles).toEqual([]);
   });
 });

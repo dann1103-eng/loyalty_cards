@@ -1,5 +1,5 @@
 import type { FilaReporteResumen } from '@/lib/reportes/reportes';
-import type { FiltrosReportesCargados } from './FiltrosReportes';
+import type { FiltrosReportesCargados } from '@/lib/reportes/contextoReportes';
 import { sucursalesPorComercio, textoSinActividad } from '@/lib/reportes/pantallaReportes';
 import { AvisoBloque } from './AvisoBloque';
 
@@ -29,7 +29,7 @@ export function PorSucursal({
       <h2 className="titulo-seccion" style={{ marginBottom: 10, fontWeight: 400 }}>
         Por sucursal
       </h2>
-      {filas === null ? <AvisoBloque /> : <Contenido filas={filas} filtros={filtros} idsPrincipales={idsPrincipales} varios={varios} />}
+      {filas === null ? <AvisoBloque que="las sucursales" /> :<Contenido filas={filas} filtros={filtros} idsPrincipales={idsPrincipales} varios={varios} />}
     </section>
   );
 }

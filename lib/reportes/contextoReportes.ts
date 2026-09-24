@@ -3,7 +3,12 @@ import type { Database } from '../supabase/types';
 import { listarSucursales, type SucursalListada } from '../comercio/sucursales';
 import { listarUsuariosDelComercio, type UsuarioDelComercio } from '../comercio/cajeros';
 import { listarProgramas } from '../comercio/programas';
-import { comercioAConsultar, type ComercioOwner, type ContextoReportes } from './filtrosReportes';
+import {
+  comercioAConsultar,
+  type ComercioOwner,
+  type ContextoReportes,
+  type FiltrosReportes,
+} from './filtrosReportes';
 import type { ParametrosReportes } from './parametrosReportes';
 
 // El ÚNICO cargador de lo que resolverFiltrosReportes necesita de la base (plan 2026-09-23, Tarea 3).
@@ -38,6 +43,11 @@ import type { ParametrosReportes } from './parametrosReportes';
 // validar una sucursal o un cajero, y no se consulta nada.
 
 export type ContextoReportesCargado = ContextoReportes<SucursalListada, UsuarioDelComercio>;
+
+// Lo que devuelve resolverFiltrosReportes con un contexto de este cargador: la sucursal y el cajero
+// elegidos son filas enteras (nombre, email, esVos), que la pantalla necesita para nombrarlos. Lo usan
+// la página de Reportes y sus componentes, y la ruta del Excel.
+export type FiltrosReportesCargados = FiltrosReportes<SucursalListada, UsuarioDelComercio>;
 
 export type ResultadoContextoReportes =
   | { ok: true; contexto: ContextoReportesCargado }

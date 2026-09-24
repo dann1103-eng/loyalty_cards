@@ -142,7 +142,7 @@ function Cabecera({ totales }: { totales: TotalesResumen | null }) {
   if (totales === null) {
     return (
       <section className="reveal d2" style={{ marginBottom: 26 }}>
-        <AvisoBloque />
+        <AvisoBloque que="los totales" />
       </section>
     );
   }

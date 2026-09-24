@@ -1,40 +1,34 @@
 import type { FilaReportePorDia } from '@/lib/reportes/reportes';
-import { barrasSerie, huboActividad, tituloSerie, type TotalesResumen } from '@/lib/reportes/pantallaReportes';
+import { estadoPorDia, type TotalesResumen } from '@/lib/reportes/pantallaReportes';
 import { AvisoBloque } from './AvisoBloque';
 
 // "Por día" / "Por mes" (spec 2026-09-23 §2): las barras de reporte_por_dia en modo 'auto', que la SQL
-// agrupa por mes cuando el tramo pasa de 62 días. El título lo dice tituloSerie y cada etiqueta,
-// barrasSerie ("sep 2026" o "05/09").
-//
-// ══ EL ESTADO VACÍO SE DECIDE CON LA FILA TOTAL DEL RESUMEN ══
-// NUNCA con `filas.length === 0` (contrato de la 0040): un alcance que ya operaba devuelve el tramo
-// entero con filas en CERO, y uno que nunca operó, cero filas. Por eso este bloque recibe los totales
-// de reporte_resumen, y depende de LAS DOS lecturas: si cualquiera falló (null), muestra el aviso en
-// vez de barras que no se sabe si están vacías de verdad.
+// agrupa por mes cuando el tramo pasa de 62 días. Este componente solo arma el markup: si el bloque
+// muestra un error, el estado vacío o las barras lo decide estadoPorDia (lib/reportes/
+// pantallaReportes.ts), con prueba y mutación, y ahí vive LA regla del bloque: el vacío sale de la fila
+// TOTAL del resumen (`totales`), nunca de `filas.length === 0` (contrato de la 0040).
 export function PorDia({ filas, totales }: { filas: FilaReportePorDia[] | null; totales: TotalesResumen | null }) {
-  const titulo = filas ? tituloSerie(filas) : 'Por día';
-  const porMes = titulo === 'Por mes';
+  const estado = estadoPorDia(filas, totales);
 
   return (
     <section className="panel reveal d3" style={{ marginTop: 0, marginBottom: 24 }}>
       <h2 className="admin-fila-nombre" style={{ fontSize: '1.1rem', marginBottom: 4 }}>
-        {titulo}
+        {estado.titulo}
       </h2>
       <p className="admin-fila-slug" style={{ marginBottom: 16 }}>
-        Visitas / premios de cada {porMes ? 'mes' : 'día'}.
+        {estado.subtitulo}
       </p>
-      {filas === null || totales === null ? (
-        <AvisoBloque />
-      ) : !huboActividad(totales) ? (
+      {estado.tipo === 'error' && <AvisoBloque que="la serie por día" />}
+      {estado.tipo === 'vacio' && (
         <p style={{ color: 'var(--texto-2)', fontSize: '0.9rem' }}>Sin movimientos en este período.</p>
-      ) : (
+      )}
+      {estado.tipo === 'barras' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {barrasSerie(filas).map((barra) => (
+          {estado.barras.map((barra) => (
             <div key={barra.clave} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span
-                className="dato-mono"
-                style={{ width: porMes ? 64 : 46, flexShrink: 0, fontSize: '0.72rem', color: 'var(--texto-2)' }}
-              >
+              {/* Sin ancho fijo: en una serie todas las etiquetas tienen los mismos caracteres
+                  ("05/09", o "sep 2026") y la fuente es mono, así que las barras arrancan alineadas. */}
+              <span className="dato-mono" style={{ minWidth: 46, flexShrink: 0, fontSize: '0.72rem', color: 'var(--texto-2)' }}>
                 {barra.etiqueta}
               </span>
               <div className="pista" style={{ flex: 1 }} aria-hidden="true">

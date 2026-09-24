@@ -1,5 +1,6 @@
 import { urlReportes, type FiltrosParaUrl } from './urlReportes';
 import type { ComercioOwner, OrdenClientes } from './filtrosReportes';
+import { PERIODOS, ETIQUETA_PERIODO } from './rangoFechas';
 
 // Las reglas de QUÉ dibuja la pantalla de Reportes (spec 2026-09-23 §1, §2 y §3). Módulo PURO: el repo
 // no tiene pruebas de componentes, así que toda decisión que no sea puro markup se saca de la página a
@@ -207,12 +208,18 @@ export interface BarraSerie {
   pct: number;
 }
 
+// Lo que se usa de una fila de reporte_por_dia.
+export interface FilaSerie {
+  periodo: string;
+  operaciones: number;
+  canjes: number;
+  es_mes: boolean;
+}
+
 // Cada barra mide visitas + premios contra el período más alto de la serie. El piso de 1 en el
 // máximo es para una serie entera en cero (un alcance que ya operaba y no tuvo nada en el período):
 // barras vacías, no NaN.
-export function barrasSerie(
-  filas: readonly { periodo: string; operaciones: number; canjes: number; es_mes: boolean }[],
-): BarraSerie[] {
+export function barrasSerie(filas: readonly FilaSerie[]): BarraSerie[] {
   const maximo = Math.max(1, ...filas.map((f) => f.operaciones + f.canjes));
   return filas.map((f) => ({
     clave: f.periodo,
@@ -252,6 +259,30 @@ export function totalesDelResumen(
 // nunca operó, cero filas (contrato de la 0040). Un período con solo premios SÍ tuvo actividad.
 export function huboActividad(totales: TotalesResumen): boolean {
   return totales.visitas + totales.premios > 0;
+}
+
+// Lo que dibuja el bloque "Por día" / "Por mes", ya decidido. Título y subtítulo en los tres casos (el
+// encabezado del bloque se ve siempre).
+interface BaseEstadoPorDia {
+  titulo: 'Por día' | 'Por mes';
+  subtitulo: string;
+}
+export type EstadoPorDia =
+  | (BaseEstadoPorDia & { tipo: 'error' })
+  | (BaseEstadoPorDia & { tipo: 'vacio' })
+  | (BaseEstadoPorDia & { tipo: 'barras'; barras: BarraSerie[] });
+
+// ══ LA REGLA DEL BLOQUE: el vacío sale de la fila TOTAL del resumen, nunca de `filas.length` ══
+// Contrato de la 0040: reporte_por_dia devuelve el tramo entero con filas en CERO para un alcance que
+// ya operaba (un "Hoy" sin movimientos trae una fila en cero), y cero filas para uno que nunca operó.
+// Decidir con `filas.length === 0` dibujaría barras vacías en el primer caso. Por eso el bloque
+// depende de LAS DOS lecturas: con cualquiera en null (falló), 'error' — no se sabe si está vacío.
+export function estadoPorDia(filas: readonly FilaSerie[] | null, totales: TotalesResumen | null): EstadoPorDia {
+  const titulo = filas ? tituloSerie(filas) : 'Por día';
+  const subtitulo = `Visitas / premios de cada ${titulo === 'Por mes' ? 'mes' : 'día'}.`;
+  if (filas === null || totales === null) return { tipo: 'error', titulo, subtitulo };
+  if (!huboActividad(totales)) return { tipo: 'vacio', titulo, subtitulo };
+  return { tipo: 'barras', titulo, subtitulo, barras: barrasSerie(filas) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -352,4 +383,115 @@ export function filtrosInvisibles(
     });
   }
   return avisos;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Todo lo que dibujan los filtros (spec §1, "Interfaz")
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ChipFiltro {
+  // La key de React: el período, el id, o 'todos' para "Todo"/"Todas"/"Todos" (los ids son uuid).
+  clave: string;
+  etiqueta: string;
+  href: string;
+  activo: boolean;
+  // El texto entero, para el `title` de los chips que pueden cortarse con puntos suspensivos (nombres
+  // y emails). undefined en los fijos, que son cortos.
+  titulo?: string;
+}
+
+export interface FiltrosEnPantalla {
+  periodo: ChipFiltro[];
+  // null = la fila no se dibuja (filasDeChips).
+  comercio: ChipFiltro[] | null;
+  sucursal: ChipFiltro[] | null;
+  cajero: ChipFiltro[] | null;
+  // El formulario de fechas de "Personalizado": abierto solo con periodo=rango.
+  formularioRango: boolean;
+  // Los filtros aplicados cuya fila no se dibuja (filtrosInvisibles).
+  invisibles: FiltroInvisible[];
+}
+
+// Cada chip de cada fila, con su destino y si es el activo, más el formulario y los avisos. El
+// componente (FiltrosReportes.tsx) solo arma el markup de esto: qué filas, qué chip está activo, a
+// dónde lleva cada uno y qué filtro está aplicado sin verse se decide acá, con prueba.
+//
+// El `activo` compara contra los filtros RESUELTOS, no contra la URL: un id ajeno que se descartó no
+// deja marcado ningún chip, y "Todo"/"Todas"/"Todos" quedan activos. Los chips de sucursal y cajero
+// salen de las listas del contexto solo cuando son del comercio resuelto (lo exige filasDeChips): son
+// exactamente los ids que el resolver acepta.
+export function filtrosEnPantalla(
+  comercios: readonly ComercioOwner[],
+  filtros: FiltrosConNombres,
+  contexto: {
+    comercioDeLasListas: string | null;
+    sucursales: readonly { id: string; nombre: string }[];
+    usuarios: readonly { id: string; email: string; rol: string; esVos: boolean }[];
+  },
+): FiltrosEnPantalla {
+  const filas = filasDeChips(comercios, filtros, contexto);
+  return {
+    // "Personalizado" también es un enlace: urlReportes conserva el desde/hasta de la vista, así el
+    // formulario abre PRECARGADO con el período que se estaba viendo y nunca vacío.
+    periodo: PERIODOS.map((periodo) => ({
+      clave: periodo,
+      etiqueta: ETIQUETA_PERIODO[periodo],
+      href: urlReportes(filtros, { periodo }),
+      activo: filtros.periodo === periodo,
+    })),
+    comercio: filas.comercio
+      ? [
+          {
+            clave: 'todos',
+            etiqueta: 'Todo',
+            href: urlReportes(filtros, { comercio: null }),
+            activo: filtros.comercio === null,
+          },
+          ...comercios.map((c) => ({
+            clave: c.comercioId,
+            etiqueta: c.nombre,
+            titulo: c.nombre,
+            href: urlReportes(filtros, { comercio: c.comercioId }),
+            activo: filtros.comercio?.comercioId === c.comercioId,
+          })),
+        ]
+      : null,
+    sucursal: filas.sucursal
+      ? [
+          {
+            clave: 'todos',
+            etiqueta: 'Todas',
+            href: urlReportes(filtros, { sucursal: null }),
+            activo: filtros.sucursal === null,
+          },
+          ...contexto.sucursales.map((s) => ({
+            clave: s.id,
+            etiqueta: s.nombre,
+            titulo: s.nombre,
+            href: urlReportes(filtros, { sucursal: s.id }),
+            activo: filtros.sucursal?.id === s.id,
+          })),
+        ]
+      : null,
+    cajero: filas.cajero
+      ? [
+          {
+            clave: 'todos',
+            etiqueta: 'Todos',
+            href: urlReportes(filtros, { cajero: null }),
+            activo: filtros.cajero === null,
+          },
+          // El email entero en el title también en el chip "Vos": dice con qué cuenta está atendiendo.
+          ...contexto.usuarios.map((u) => ({
+            clave: u.id,
+            etiqueta: etiquetaCajero(u),
+            titulo: u.email,
+            href: urlReportes(filtros, { cajero: u.id }),
+            activo: filtros.cajero?.id === u.id,
+          })),
+        ]
+      : null,
+    formularioRango: filtros.periodo === 'rango',
+    invisibles: filtrosInvisibles(filas, filtros),
+  };
 }

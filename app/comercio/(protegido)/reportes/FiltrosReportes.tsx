@@ -1,25 +1,21 @@
 import Link from 'next/link';
-import type { ReactNode } from 'react';
-import type { ComercioOwner, FiltrosReportes as FiltrosResueltos } from '@/lib/reportes/filtrosReportes';
-import type { ContextoReportesCargado } from '@/lib/reportes/contextoReportes';
-import type { SucursalListada } from '@/lib/comercio/sucursales';
-import type { UsuarioDelComercio } from '@/lib/comercio/cajeros';
-import { PERIODOS, ETIQUETA_PERIODO, FECHA_MINIMA } from '@/lib/reportes/rangoFechas';
-import { urlReportes, camposOcultosRango, RUTA_REPORTES } from '@/lib/reportes/urlReportes';
-import { filasDeChips, filtrosInvisibles, etiquetaCajero } from '@/lib/reportes/pantallaReportes';
+import type { ComercioOwner } from '@/lib/reportes/filtrosReportes';
+import type { ContextoReportesCargado, FiltrosReportesCargados } from '@/lib/reportes/contextoReportes';
+import { FECHA_MINIMA } from '@/lib/reportes/rangoFechas';
+import { camposOcultosRango, RUTA_REPORTES } from '@/lib/reportes/urlReportes';
+import { filtrosEnPantalla, type ChipFiltro } from '@/lib/reportes/pantallaReportes';
 
 // Los filtros de Reportes (spec 2026-09-23 §1). Server Component y sin JavaScript: todo va por GET, así
 // que la URL ES el reporte (se comparte y se guarda). Filas de chips en este orden: período, comercio,
-// sucursal, cajero. Qué filas se dibujan lo decide filasDeChips, y cada enlace lo arma urlReportes
-// (conserva lo que no cambia; cambiar de comercio borra sucursal y cajero; todo vuelve a la página 1).
-// Acá no se decide nada: solo se lee lo que devuelven esas funciones puras, que tienen su prueba.
+// sucursal, cajero.
+//
+// Este componente solo arma el markup. Qué filas se dibujan, qué chip está activo, a dónde lleva cada
+// uno (urlReportes: conserva lo que no cambia, cambiar de comercio borra sucursal y cajero, todo vuelve
+// a la página 1), cuándo se abre el formulario y qué filtro está aplicado sin verse, lo decide
+// filtrosEnPantalla (lib/reportes/pantallaReportes.ts), que tiene su prueba y sus mutaciones.
 //
 // Recibe los filtros YA RESUELTOS: un id ajeno de la URL ya se descartó y no reaparece en ningún
 // enlace.
-
-// Lo que devuelve resolverFiltrosReportes con el contexto de cargarContextoReportes: la sucursal y el
-// cajero elegidos son filas enteras (nombre, email, esVos), que la pantalla necesita para nombrarlos.
-export type FiltrosReportesCargados = FiltrosResueltos<SucursalListada, UsuarioDelComercio>;
 
 export function FiltrosReportes({
   comercios,
@@ -30,81 +26,19 @@ export function FiltrosReportes({
   filtros: FiltrosReportesCargados;
   contexto: ContextoReportesCargado;
 }) {
-  const filas = filasDeChips(comercios, filtros, contexto);
-  // Un filtro aplicado sin fila de chips (una sola sucursal; un dueño sin cajeros): se dice igual.
-  const invisibles = filtrosInvisibles(filas, filtros);
+  const pantalla = filtrosEnPantalla(comercios, filtros, contexto);
 
   return (
     <section className="reveal d1" style={{ marginBottom: 24 }}>
-      <FilaChips id="filtro-periodo" titulo="Período">
-        {PERIODOS.map((periodo) => (
-          // "Personalizado" también es un enlace: lleva el desde/hasta del período que se está
-          // viendo (urlReportes los conserva), así el formulario de abajo abre PRECARGADO y nunca vacío.
-          <Chip key={periodo} activo={filtros.periodo === periodo} href={urlReportes(filtros, { periodo })}>
-            {ETIQUETA_PERIODO[periodo]}
-          </Chip>
-        ))}
-      </FilaChips>
-      {filtros.periodo === 'rango' && <FormularioRango filtros={filtros} />}
+      <FilaChips id="filtro-periodo" titulo="Período" chips={pantalla.periodo} />
+      {pantalla.formularioRango && <FormularioRango filtros={filtros} />}
+      {pantalla.comercio && <FilaChips id="filtro-comercio" titulo="Comercio" chips={pantalla.comercio} />}
+      {pantalla.sucursal && <FilaChips id="filtro-sucursal" titulo="Sucursal" chips={pantalla.sucursal} />}
+      {pantalla.cajero && <FilaChips id="filtro-cajero" titulo="Cajero" chips={pantalla.cajero} />}
 
-      {filas.comercio && (
-        <FilaChips id="filtro-comercio" titulo="Comercio">
-          <Chip activo={filtros.comercio === null} href={urlReportes(filtros, { comercio: null })}>
-            Todo
-          </Chip>
-          {comercios.map((c) => (
-            <Chip
-              key={c.comercioId}
-              activo={filtros.comercio?.comercioId === c.comercioId}
-              href={urlReportes(filtros, { comercio: c.comercioId })}
-              titulo={c.nombre}
-            >
-              {c.nombre}
-            </Chip>
-          ))}
-        </FilaChips>
-      )}
-
-      {/* filas.sucursal y filas.cajero son true solo si las listas del contexto son del comercio
-          resuelto (filasDeChips lo exige): los ids de estos chips son los que el resolver acepta. */}
-      {filas.sucursal && (
-        <FilaChips id="filtro-sucursal" titulo="Sucursal">
-          <Chip activo={filtros.sucursal === null} href={urlReportes(filtros, { sucursal: null })}>
-            Todas
-          </Chip>
-          {contexto.sucursales.map((s) => (
-            <Chip
-              key={s.id}
-              activo={filtros.sucursal?.id === s.id}
-              href={urlReportes(filtros, { sucursal: s.id })}
-              titulo={s.nombre}
-            >
-              {s.nombre}
-            </Chip>
-          ))}
-        </FilaChips>
-      )}
-
-      {filas.cajero && (
-        <FilaChips id="filtro-cajero" titulo="Cajero">
-          <Chip activo={filtros.cajero === null} href={urlReportes(filtros, { cajero: null })}>
-            Todos
-          </Chip>
-          {contexto.usuarios.map((u) => (
-            // El email entero en el `title`: el chip corta con puntos suspensivos (globals.css).
-            <Chip
-              key={u.id}
-              activo={filtros.cajero?.id === u.id}
-              href={urlReportes(filtros, { cajero: u.id })}
-              titulo={u.email}
-            >
-              {etiquetaCajero(u)}
-            </Chip>
-          ))}
-        </FilaChips>
-      )}
-
-      {invisibles.map((aviso) => (
+      {/* Un filtro aplicado cuya fila no se dibuja (una sola sucursal; un dueño sin cajeros): se dice
+          igual, con un enlace para quitarlo. Nunca un filtro aplicado e invisible. */}
+      {pantalla.invisibles.map((aviso) => (
         <p key={aviso.clave} className="aviso-contexto" style={{ margin: '14px 0 0' }}>
           <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">filter_alt</span>
           <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
@@ -112,6 +46,7 @@ export function FiltrosReportes({
           </span>
           <Link
             href={aviso.hrefQuitar}
+            aria-label={`Quitar el filtro de ${aviso.rotulo}`}
             style={{ marginLeft: 'auto', flexShrink: 0, color: 'var(--acento)', fontWeight: 600 }}
           >
             Quitar
@@ -124,40 +59,29 @@ export function FiltrosReportes({
 
 // Una fila de chips con su rótulo. El rótulo nombra el grupo para los lectores de pantalla
 // (aria-labelledby) y a la vista: con cuatro filas, "Centro" podría ser un comercio o una sucursal.
-function FilaChips({ id, titulo, children }: { id: string; titulo: string; children: ReactNode }) {
+//
+// `filtro-chips-recortados` (globals.css): acá, y solo acá, un chip largo se corta con puntos
+// suspensivos. Todo chip que puede cortarse trae su texto entero en `titulo`.
+function FilaChips({ id, titulo, chips }: { id: string; titulo: string; chips: ChipFiltro[] }) {
   return (
     <div style={{ marginTop: 14 }}>
       <p id={id} className="admin-fila-slug" style={{ marginBottom: 8 }}>
         {titulo}
       </p>
-      <div className="filtro-chips" role="group" aria-labelledby={id}>
-        {children}
+      <div className="filtro-chips filtro-chips-recortados" role="group" aria-labelledby={id}>
+        {chips.map((chip) => (
+          <Link
+            key={chip.clave}
+            className={`filtro-chip${chip.activo ? ' activo' : ''}`}
+            href={chip.href}
+            aria-current={chip.activo ? 'true' : undefined}
+            title={chip.titulo}
+          >
+            {chip.etiqueta}
+          </Link>
+        ))}
       </div>
     </div>
-  );
-}
-
-// `titulo` = el texto entero en el tooltip, para los chips que pueden cortarse (nombres y emails).
-function Chip({
-  href,
-  activo,
-  titulo,
-  children,
-}: {
-  href: string;
-  activo: boolean;
-  titulo?: string;
-  children: ReactNode;
-}) {
-  return (
-    <Link
-      className={`filtro-chip${activo ? ' activo' : ''}`}
-      href={href}
-      aria-current={activo ? 'true' : undefined}
-      title={titulo}
-    >
-      {children}
-    </Link>
   );
 }
 
