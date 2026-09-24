@@ -26,6 +26,7 @@
 //   - supabase/migrations/0037_pagos_wompi.sql (cobros.tipo/plan_destino/wompi_*; tabla pagos_wompi)
 //   - supabase/migrations/0038_cobranza.sql (cuentas_comercio.cobranza/cobranza_desde/cobranza_pospuesta_hasta; las cuentas existentes quedan 'exenta')
 //   - supabase/migrations/0039_monto_minimo_y_resena.sql (comercios.exigir_monto_compra/monto_minimo_compra_centavos/pedir_resena_google/resena_google_url)
+//   - supabase/migrations/0040_reportes_con_filtros.sql (funciones reporte_resumen/reporte_por_dia/reporte_clientes/reporte_cajeros_alcance en Functions; índices; no cambia columnas)
 //   - supabase/migrations/0027_branding_por_programa.sql (branding por programa en programas_tarjeta)
 //   - supabase/migrations/0026_notificaciones_push.sql (tablas difusiones y notificaciones_enviadas; tarjetas.aviso_texto/aviso_hasta/aviso_inactividad_enviado_en; comercios.aviso_inactividad_activo/dias/mensaje)
 //   - supabase/migrations/0025_backfill_programas_principales_faltantes.sql (solo datos, no cambia columnas: programa principal para comercios que la 0024 no alcanzó a cubrir)
@@ -1596,6 +1597,112 @@ export type Database = {
           p_hasta: string | null;
         };
         Returns: {
+          cajero_usuario_id: string | null;
+          cajero_email: string | null;
+          cajero_activo: boolean | null;
+          operaciones: number;
+          puntos_otorgados: number;
+          monto_total: number;
+          forzadas: number;
+          ajustes: number;
+          puntos_ajustados: number;
+          canjes: number;
+          clientes_unicos: number;
+        }[];
+      };
+      // Migración 0040: reportes con filtros. Mismo criterio que las de arriba (`returns table(...)` ⇒
+      // `Returns` es `[]`; bigint → number; date → 'AAAA-MM-DD'; timestamptz → string). Las cuatro
+      // comparten los filtros:
+      //   - p_comercios: el ALCANCE ("Todo" = los ids del dueño, en una sola llamada). Los ids salen del
+      //     gate, nunca del cliente;
+      //   - p_desde/p_hasta: INCLUSIVOS, en la zona de CADA comercio; null = sin ese borde (salvo
+      //     reporte_por_dia, donde p_hasta null = cero filas);
+      //   - p_sucursal_id/p_cajero_id: null = todos.
+      // Clientes = quien tuvo al menos una visita o un premio (no es la definición de reporte_cajeros).
+      //
+      // reporte_resumen: una fila por (comercio, sucursal) y UNA fila total (`es_total`), que tiene
+      // comercio_id y sucursal_id en null. La actividad "sin sucursal" también tiene sucursal_id null:
+      // la fila total se reconoce por `es_total`, nunca por los ids. La fila total sale siempre, con
+      // ceros si no hubo actividad.
+      reporte_resumen: {
+        Args: {
+          p_comercios: string[];
+          p_desde: string | null;
+          p_hasta: string | null;
+          p_sucursal_id: string | null;
+          p_cajero_id: string | null;
+        };
+        Returns: {
+          comercio_id: string | null;
+          sucursal_id: string | null;
+          sucursal_nombre: string | null;
+          sucursal_activa: boolean | null;
+          operaciones: number;
+          puntos_otorgados: number;
+          canjes: number;
+          clientes_unicos: number;
+          es_total: boolean;
+        }[];
+      };
+      // p_agrupar: 'dia' | 'mes' | 'auto' (otro valor = 'auto'). `periodo` es el día, o el día 1 del
+      // mes si `es_mes`.
+      reporte_por_dia: {
+        Args: {
+          p_comercios: string[];
+          p_desde: string | null;
+          p_hasta: string | null;
+          p_sucursal_id: string | null;
+          p_cajero_id: string | null;
+          p_agrupar: string;
+        };
+        Returns: {
+          periodo: string;
+          operaciones: number;
+          canjes: number;
+          es_mes: boolean;
+        }[];
+      };
+      // p_orden: 'visitas' | 'acumulado' | 'premios' | 'ultima' | 'nombre' (otro valor = 'visitas').
+      // Se pagina SOLO con p_offset (nunca `.range()`: iría por fuera de la página que ya devuelve).
+      // `total` = filas antes de paginar; `offset_efectivo` = el offset que se usó de verdad (una
+      // página más allá del final devuelve la última). Cero filas = total 0.
+      reporte_clientes: {
+        Args: {
+          p_comercios: string[];
+          p_desde: string | null;
+          p_hasta: string | null;
+          p_sucursal_id: string | null;
+          p_cajero_id: string | null;
+          p_orden: string;
+          p_desc: boolean;
+          p_limite: number;
+          p_offset: number;
+        };
+        Returns: {
+          comercio_id: string;
+          cliente_id: string;
+          nombre: string;
+          apellido: string | null;
+          telefono: string;
+          operaciones: number;
+          puntos_otorgados: number;
+          canjes: number;
+          ultima_actividad: string;
+          total: number;
+          offset_efectivo: number;
+        }[];
+      };
+      // Las columnas de reporte_cajeros más comercio_id. cajero_usuario_id null = "Sin registrar".
+      reporte_cajeros_alcance: {
+        Args: {
+          p_comercios: string[];
+          p_desde: string | null;
+          p_hasta: string | null;
+          p_sucursal_id: string | null;
+          p_cajero_id: string | null;
+        };
+        Returns: {
+          comercio_id: string;
           cajero_usuario_id: string | null;
           cajero_email: string | null;
           cajero_activo: boolean | null;
