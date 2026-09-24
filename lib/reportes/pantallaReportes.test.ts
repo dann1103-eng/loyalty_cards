@@ -206,6 +206,11 @@ import { leerParametrosReportes } from './parametrosReportes';
 //   equal [ true, true ]`.
 // - El conteo con las filas de la página y no con el total: caen dos, `expected 'Página 7 de 7 · 1
 //   cliente' to be 'Página 7 de 7 · 312 clientes'`.
+// De la revisión (2026-09-24, el mismo script; 2 de 2 caen):
+// - El `dateTime` con el timestamptz crudo: caen tres, "el `dateTime` de <time>…" con `expected
+//   '2026-09-23T20:05:00.123456+00:00' to be '2026-09-23T20:05:00.123Z'`.
+// - toISOString() sin el chequeo de legible: cae "un instante ilegible: celda y `dateTime` vacíos…" con
+//   `RangeError: Invalid time value` (sin el chequeo, la página entera reventaría).
 
 const cafe = { comercioId: 'c-cafe', nombre: 'Café' };
 const spa = { comercioId: 'c-spa', nombre: 'Spa' };
@@ -1016,9 +1021,20 @@ describe('filasTablaClientes', () => {
         acumulado: '8 sellos',
         premios: 1,
         ultima: '23/09 14:05',
-        ultimaInstante: '2026-09-23T20:05:00+00:00',
+        ultimaInstante: '2026-09-23T20:05:00.000Z',
       },
     ]);
+  });
+
+  it('el `dateTime` de <time>: PostgREST manda microsegundos y el HTML admite hasta milisegundos', () => {
+    const [f] = filasTablaClientes([fila({ ultima_actividad: '2026-09-23T20:05:00.123456+00:00' })], filtrosFilas());
+    expect(f.ultimaInstante).toBe('2026-09-23T20:05:00.123Z');
+    expect(f.ultima).toBe('23/09 14:05');
+  });
+
+  it('un instante ilegible: celda y `dateTime` vacíos, sin romper la tabla', () => {
+    const [f] = filasTablaClientes([fila({ ultima_actividad: 'no-es-una-fecha' })], filtrosFilas());
+    expect([f.ultima, f.ultimaInstante]).toEqual(['', '']);
   });
 
   it('el MISMO cliente en dos comercios: dos filas con clave distinta, cada una con la unidad y la zona de su comercio', () => {

@@ -17,6 +17,11 @@ import { PAISES } from './paises';
 //   telefono`): la misma, con `expected '+5071234567' to be '+507 1234567'`.
 // - Sin avanzar entre grupos: caen cuatro, "El Salvador…" con `expected '+503 7777 7777' to be '+503
 //   7777 1234'`.
+// De la revisión (2026-09-24, el mismo script; 4 de 4 caen), todas en "código de área de largo
+// variable…":
+// - Sin mirar `areaVariable`: `expected '+52 99 9123 4567' to be '+52 9991234567'`.
+// - Sin `areaVariable` en México (paises.ts): el mismo mensaje. En Argentina: `expected '+54 35 1123
+//   4567' to be '+54 3511234567'`. En Chile: `expected '+56 3 2212 3456' to be '+56 322123456'`.
 
 describe('formatearTelefono', () => {
   it('El Salvador: el código aparte y el número en dos grupos de cuatro, como el ejemplo "7777 1234"', () => {
@@ -24,9 +29,17 @@ describe('formatearTelefono', () => {
   });
 
   it('cada país con los grupos de SU ejemplo', () => {
-    expect(formatearTelefono('+525512345678')).toBe('+52 55 1234 5678'); // México, "55 1234 5678"
     expect(formatearTelefono('+34612345678')).toBe('+34 612 34 56 78'); // España, "612 34 56 78"
     expect(formatearTelefono('+5016221234')).toBe('+501 622 1234'); // Belice, "622 1234"
+    expect(formatearTelefono('+573001234567')).toBe('+57 300 123 4567'); // Colombia, "300 123 4567"
+  });
+
+  it('código de área de largo variable (México, Argentina, Chile): solo el código de país aparte', () => {
+    // Con el ejemplo, "+52 99 9123 4567" cuando el área es 999 (Mérida): se leería otra área.
+    expect(formatearTelefono('+529991234567')).toBe('+52 9991234567');
+    expect(formatearTelefono('+525512345678')).toBe('+52 5512345678'); // aunque este sí calzaría
+    expect(formatearTelefono('+543511234567')).toBe('+54 3511234567'); // Córdoba, área 351
+    expect(formatearTelefono('+56322123456')).toBe('+56 322123456'); // Valparaíso, área 32
   });
 
   it('el 1 lo comparten EE.UU. y República Dominicana: los dos parten igual', () => {

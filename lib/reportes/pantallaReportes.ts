@@ -192,7 +192,10 @@ export interface FilaTablaClientes {
   acumulado: string; // en la unidad de SU comercio; vacío en los tipos sin contador
   premios: number;
   ultima: string; // "23/09 14:05" en la zona de SU comercio (fechaHoraLocal)
-  ultimaInstante: string; // el timestamptz crudo, para el `dateTime` de <time>
+  // Para el `dateTime` de <time>, en ISO con milisegundos ("2026-09-23T20:05:00.123Z"). No el
+  // timestamptz crudo: PostgREST manda MICROsegundos (".123456+00:00") y la fecha válida de HTML admite
+  // hasta tres decimales. Vacío, como `ultima`, si el instante es ilegible.
+  ultimaInstante: string;
 }
 
 // Lo que hace falta de los filtros (FiltrosReportes es asignable a esto).
@@ -221,6 +224,9 @@ export function filasTablaClientes(
   const anioDelPeriodo = Number(filtros.hasta.slice(0, 4));
   return filas.map((f) => {
     const datos = filtros.datosAlcance.get(f.comercio_id);
+    // El mismo chequeo que fechaHoraLocal: toISOString() LANZA con una fecha inválida.
+    const instante = new Date(f.ultima_actividad);
+    const legible = !Number.isNaN(instante.getTime());
     return {
       clave: `${f.comercio_id}:${f.cliente_id}`,
       cliente: nombreCompleto(f.nombre, f.apellido),
@@ -230,7 +236,7 @@ export function filasTablaClientes(
       acumulado: datos ? describirCosto(datos.tipoPrincipal, f.puntos_otorgados) : '',
       premios: f.canjes,
       ultima: fechaHoraLocal(f.ultima_actividad, datos?.zonaHoraria ?? filtros.zonaHoraria, anioDelPeriodo),
-      ultimaInstante: f.ultima_actividad,
+      ultimaInstante: legible ? instante.toISOString() : '',
     };
   });
 }
@@ -259,9 +265,11 @@ export type EstadoTablaClientes =
 // Qué dibuja el bloque, ya decidido (como estadoPorDia):
 //   - la lectura falló (reporteClientes devolvió null): 'error'. Nunca una tabla vacía, que diría "no
 //     hubo clientes" cuando lo que pasó es que no se pudo leer.
-//   - total 0: 'vacio'. Se decide con la paginación (null sin páginas), no con `filas.length`: es el
-//     mismo criterio que el "Página X de Y", y con ?pagina=5 en un período sin actividad no sale una
-//     tabla con "Página 5 de 0".
+//   - total 0: 'vacio'. Se pregunta a paginacionClientes porque devuelve null EXACTAMENTE con total 0:
+//     el vacío queda decidido por el total que la SQL dice de sí misma, y la rama 'tabla' siempre
+//     tiene una paginación que dibujar (el tipo lo garantiza, sin un `!`). Preguntar por
+//     `filas.length === 0` daría lo mismo mientras se cumpla el contrato (cero filas ⇔ total 0,
+//     paginar.ts), pero dejaría un null posible en la rama de la tabla.
 //   - si no, la tabla. La paginación sale del offset que la SQL dice que DEVOLVIÓ (paginacionClientes),
 //     y Anterior/Siguiente se arman con urlReportes, que conserva los filtros y el orden y solo cambia
 //     la página (la 1 no se escribe en la URL: es el default).

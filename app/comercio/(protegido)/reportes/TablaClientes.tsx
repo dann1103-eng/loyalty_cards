@@ -68,10 +68,13 @@ export function TablaClientes({
               </tbody>
             </table>
           </div>
-          <nav className="tabla-paginas" aria-label="Páginas de la lista de clientes">
+          {/* El pie va fuera del <nav>, y el <nav> solo con algún enlace: con una sola página, un
+              landmark de navegación sin nada adentro le haría al lector de pantalla anunciar un lugar
+              vacío. */}
+          <div className="tabla-paginas">
             <p className="admin-fila-slug">{estado.pie}</p>
             {(estado.hrefAnterior || estado.hrefSiguiente) && (
-              <div className="tabla-paginas-enlaces">
+              <nav className="tabla-paginas-enlaces" aria-label="Páginas de la lista de clientes">
                 {estado.hrefAnterior && (
                   <Link className="btn-borde" href={estado.hrefAnterior} rel="prev">
                     <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">
@@ -88,19 +91,20 @@ export function TablaClientes({
                     </span>
                   </Link>
                 )}
-              </div>
+              </nav>
             )}
-          </nav>
+          </div>
         </>
       )}
     </section>
   );
 }
 
-// Un encabezado de columna. Con `href` es un enlace que ordena (tocar la activa la invierte) y el <th>
-// lleva su aria-sort: 'ascending'/'descending' en la activa, 'none' en las demás que se pueden
-// ordenar. Sin `href` (Comercio; Acumulado con unidades mezcladas o sin contador) es texto y no lleva
-// aria-sort: por esa columna no se ordena.
+// Un encabezado de columna. Con `href` es un enlace que ordena (tocar la activa la invierte). Solo la
+// columna por la que está ordenada la tabla lleva aria-sort ('ascending'/'descending'): ARIA lo quiere
+// en un encabezado a la vez, y 'none' es su valor por defecto, así que en las demás no se escribe. Sin
+// `href` (Comercio; Acumulado con unidades mezcladas o sin contador) es texto: por esa columna no se
+// ordena.
 function Encabezado({ columna }: { columna: ColumnaTablaClientes }) {
   if (columna.href === null) {
     return (
@@ -112,7 +116,11 @@ function Encabezado({ columna }: { columna: ColumnaTablaClientes }) {
   const icono =
     columna.ariaSort === 'ascending' ? 'arrow_upward' : columna.ariaSort === 'descending' ? 'arrow_downward' : 'unfold_more';
   return (
-    <th scope="col" data-columna={columna.clave} aria-sort={columna.ariaSort}>
+    <th
+      scope="col"
+      data-columna={columna.clave}
+      aria-sort={columna.ariaSort === 'none' ? undefined : columna.ariaSort}
+    >
       <Link href={columna.href}>
         {columna.titulo}
         <span className="icono" aria-hidden="true">

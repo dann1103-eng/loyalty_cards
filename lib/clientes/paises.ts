@@ -19,8 +19,15 @@ export interface Pais {
   bandera: string;
   // Cantidades de dígitos válidas para el número nacional (sin el código de país).
   largos: number[];
-  // Ejemplo real de formato local, para el placeholder del campo.
+  // Ejemplo real de formato local. Es el placeholder del campo Y, desde la tabla de clientes de
+  // Reportes, cómo se agrupa el número al MOSTRARLO (formatearTelefono): "7777 1234" quiere decir
+  // "4 y 4". Cambiarlo cambia cómo se lee cada teléfono de ese país en el panel.
   ejemplo: string;
+  // El número nacional empieza con un código de área de largo VARIABLE: México (55 o 999), Argentina
+  // (11 o 351), los fijos de Chile (2 o 32). El `ejemplo` muestra UNO de esos largos, y agrupar con él
+  // a los demás sugeriría un área equivocada ("+52 99 9123 4567" cuando el área es 999). En estos
+  // países formatearTelefono separa solo el código de país.
+  areaVariable?: true;
 }
 
 export const PAISES: readonly Pais[] = [
@@ -31,13 +38,13 @@ export const PAISES: readonly Pais[] = [
   { clave: 'CR', codigo: '506', nombre: 'Costa Rica', bandera: '🇨🇷', largos: [8], ejemplo: '8888 1234' },
   { clave: 'PA', codigo: '507', nombre: 'Panamá', bandera: '🇵🇦', largos: [7, 8], ejemplo: '6666 1234' },
   { clave: 'BZ', codigo: '501', nombre: 'Belice', bandera: '🇧🇿', largos: [7], ejemplo: '622 1234' },
-  { clave: 'MX', codigo: '52', nombre: 'México', bandera: '🇲🇽', largos: [10], ejemplo: '55 1234 5678' },
+  { clave: 'MX', codigo: '52', nombre: 'México', bandera: '🇲🇽', largos: [10], ejemplo: '55 1234 5678', areaVariable: true },
   { clave: 'CO', codigo: '57', nombre: 'Colombia', bandera: '🇨🇴', largos: [10], ejemplo: '300 123 4567' },
   { clave: 'PE', codigo: '51', nombre: 'Perú', bandera: '🇵🇪', largos: [9], ejemplo: '912 345 678' },
   { clave: 'EC', codigo: '593', nombre: 'Ecuador', bandera: '🇪🇨', largos: [9], ejemplo: '99 123 4567' },
   { clave: 'DO', codigo: '1', nombre: 'República Dominicana', bandera: '🇩🇴', largos: [10], ejemplo: '809 123 4567' },
-  { clave: 'CL', codigo: '56', nombre: 'Chile', bandera: '🇨🇱', largos: [9], ejemplo: '9 1234 5678' },
-  { clave: 'AR', codigo: '54', nombre: 'Argentina', bandera: '🇦🇷', largos: [10], ejemplo: '11 1234 5678' },
+  { clave: 'CL', codigo: '56', nombre: 'Chile', bandera: '🇨🇱', largos: [9], ejemplo: '9 1234 5678', areaVariable: true },
+  { clave: 'AR', codigo: '54', nombre: 'Argentina', bandera: '🇦🇷', largos: [10], ejemplo: '11 1234 5678', areaVariable: true },
   { clave: 'US', codigo: '1', nombre: 'Estados Unidos', bandera: '🇺🇸', largos: [10], ejemplo: '305 123 4567' },
   { clave: 'ES', codigo: '34', nombre: 'España', bandera: '🇪🇸', largos: [9], ejemplo: '612 34 56 78' },
 ] as const;

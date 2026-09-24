@@ -2134,6 +2134,13 @@ details.admin-fila:has(> summary:active) {
    `collapse`, el borde de una celda sticky no viaja con ella. */
 .tabla-marco {
   overflow-x: auto;
+  /* Sin esto, la columna fija TAPA el foco (WCAG 2.2, 2.4.11): al llegar con Tab a un encabezado que
+     quedó debajo de Cliente (marco scrolleado a 230px: Visitas entera bajo Cliente; Shift+Tab desde
+     "Anterior": 42px de Premios), el navegador no scrollea, porque para él el enlace ya está a la
+     vista. El scroll-padding le dice que los primeros 10rem del marco no cuentan como visibles, y
+     trae el encabezado enfocado a la derecha de Cliente. Tiene que ser el MISMO número que el ancho
+     de la columna fija (abajo). */
+  scroll-padding-inline-start: 10rem;
   background: var(--superficie-1);
   border: 1px solid var(--borde-relieve);
   border-radius: var(--radius);
@@ -2174,6 +2181,11 @@ details.admin-fila:has(> summary:active) {
   min-height: 44px;
   padding: 0 14px;
 }
+/* El contorno de foco ADENTRO del enlace: afuera (el offset de 2px de la regla global) el overflow del
+   marco le come el lado de arriba, y la columna fija el lado izquierdo del encabezado de al lado. */
+.tabla-clientes thead th > a:focus-visible {
+  outline-offset: -3px;
+}
 .tabla-clientes thead th > a .icono {
   font-size: 14px;
   color: var(--texto-3);
@@ -2197,6 +2209,15 @@ details.admin-fila:has(> summary:active) {
   position: sticky;
   left: 0;
   z-index: 1;
+  /* Ancho CONOCIDO, igual al scroll-padding de .tabla-marco: con un ancho que dependiera del nombre
+     más largo de la página, el scroll-padding no sabría cuánto tapa la columna. Hacen falta los DOS:
+     cuando la tabla no entra y queda en su ancho mínimo (a 375px), Chrome le da a cada columna su
+     mínimo de contenido e ignora el `width` (medido: 141px con `width: 10rem` solo, 160 con
+     `min-width`); el `width` evita que en escritorio le toque espacio de sobra. Con box-sizing
+     border-box (el global) los 10rem incluyen el padding: quedan ~132px para el teléfono, que no parte
+     renglón; "+52 9991234567" o "+503 7777 1234" entran de sobra. El nombre sí parte renglón. */
+  width: 10rem;
+  min-width: 10rem;
   background: var(--superficie-1);
   text-align: left;
   white-space: normal;
@@ -2206,9 +2227,9 @@ details.admin-fila:has(> summary:active) {
 .tabla-clientes thead [data-columna="cliente"] > a {
   justify-content: flex-start;
 }
-/* El nombre parte renglón (un nombre largo no ensancha la columna fija más de la cuenta); el teléfono,
-   nunca: "+503 7777 1234" partido en dos se lee como dos números. El teléfono le da a la columna su
-   ancho mínimo. */
+/* El nombre parte renglón, también a mitad de una palabra larga: su ancho mínimo no puede pasar de los
+   10rem de la columna fija, o la columna crecería y el scroll-padding de .tabla-marco dejaría de
+   coincidir. El teléfono, nunca: "+503 7777 1234" partido en dos se lee como dos números. */
 .tabla-clientes [data-columna="cliente"] .admin-fila-nombre {
   font-size: 0.92rem;
   overflow-wrap: anywhere;
