@@ -28,30 +28,38 @@ import { cargarContextoReportes } from '@/lib/reportes/contextoReportes';
 // corre, salvo la prueba de "Desde siempre", que compara contra el `hasta` que dice el nombre del
 // archivo.
 //
-// ROJO DE PARTIDA (2026-09-24, con la ruta como stub que respondía 501 "TODO Tarea 5b"): caen las 14,
-// las del archivo con `expected 501 to be 200`, las de error con `expected 501 to be 500` y la del gate
-// con `promise resolved "Response { status: 501, … }" instead of rejecting`.
+// ROJO DE PARTIDA (2026-09-24, con la ruta como stub que respondía 501 "TODO Tarea 5b"): caen las 14
+// de entonces, las del archivo con `expected 501 to be 200`, las de error con `expected 501 to be 500` y
+// la del gate con `promise resolved "Response { status: 501, … }" instead of rejecting`.
 //
-// MUTATION-TESTING (corridas el 2026-09-24, una por vez y restauradas; con el mensaje que se vio caer).
-// En las del camino feliz lo primero que se asierta es que console.error quedó vacío: el mensaje que se
-// ve es el motivo REAL por el que la ruta falló.
-// - "Por día" pedido con 'auto': caen las 6 del archivo, por ejemplo "un comercio elegido…" con
-//   `expected [ [ …(2) ] ] to deeply equal []` y el log `excelReportes: la hoja Por día recibió filas
-//   agrupadas por mes`. Cae por la SQL, no solo por el argumento: los tramos pasan de 62 días (del 05/01
-//   al 31/03 son 86; "Desde siempre", del 05/01 a hoy) y la 0040 los agrupó por mes. (Detrás, la aserción
-//   del argumento 'dia'.)
+// MUTATION-TESTING (re-corridas TODAS el 2026-09-24 sobre el código de la revisión —15 pruebas, el
+// error entero en el log—, una por vez y restauradas; con el mensaje que se vio caer). En las del camino
+// feliz lo primero que se asierta es que console.error quedó vacío: el mensaje que se ve es el motivo
+// REAL por el que la ruta falló.
+// - "Por día" pedido con 'auto': caen las 7 del archivo, por ejemplo "un comercio elegido…" con
+//   `expected [ [ …(2) ] ] to deeply equal []` y en el log `Error { "message": "excelReportes: la hoja
+//   Por día recibió filas agrupadas por mes" }`. Cae por la SQL, no solo por el argumento: los tramos
+//   pasan de 62 días (del 05/01 al 31/03 son 86; "Desde siempre", del 05/01 a hoy) y la 0040 los agrupó
+//   por mes. (Detrás, la aserción del argumento 'dia'.)
 // - El error respondido como un Excel vacío (responderError devolviendo un .xlsx con status 200): caen
 //   las 7 de error con `expected 200 to be 500`.
 // - El gate DENTRO del try: cae "el gate que redirige…" con `promise resolved "Response { status: 500, …
 //   }" instead of rejecting` (el catch se comió el NEXT_REDIRECT y lo volvió un 500).
 // - El `?comercio=` crudo a las RPC (`comercioIds: parametros.comercio ? [parametros.comercio] : …`):
-//   cae "un comercio AJENO…" con `expected [ [ …(2) ] ] to deeply equal []` y el log `excelReportes:
-//   una fila es de un comercio fuera del alcance: <el id del ajeno>` (sus filas llegaron al armado).
+//   cae "un comercio AJENO…" con `expected [ [ …(2) ] ] to deeply equal []` y en el log `Error {
+//   "message": "excelReportes: una fila es de un comercio fuera del alcance: <el id del ajeno>" }` (sus
+//   filas llegaron al armado).
+// - La sucursal y el cajero crudos a las RPC (`{ ...filtrosRpc(filtros), sucursalId: parametros.sucursal
+//   ?? null, cajeroId: parametros.cajero ?? null }`): cae "una sucursal de OTRO comercio y un cajero
+//   AJENO…" con `expected [ [ …(3) ] ] to deeply equal [ [ …(3) ] ]` (llegan los dos ids en vez de
+//   null). Sin esa aserción de argumentos cae IGUAL, por el archivo, con `expected [ +0, +0, +0 ] to
+//   deeply equal [ 3, 1, 2 ]`: el Excel en ceros bajo un Resumen que dice "Todas" y "Todos".
 // - El nombre del comercio sin sanear: caen 3; "un comercio elegido…" con `expected 'attachment;
 //   filename="reportes-Café E…' to be 'attachment; filename="reportes-caf-ex…'`, el de comillas y salto
-//   de línea con el log `Headers.append: "…" is an invalid header value.` y el de ☕ con `Cannot convert
-//   argument to a ByteString because the character at index 31 has a value of 9749 which is greater
-//   than 255.` (sin sanear, esos dos nombres ni siquiera llegan a una cabecera: la ruta da 500).
+//   de línea con `TypeError { "message": "Headers.append: \"…\" is an invalid header value." }` en el log
+//   y el de ☕ con `Cannot convert argument to a ByteString because the character at index 31 has a
+//   value of 9749 which is greater than 255.` (sin sanear, esos dos nombres ni siquiera llegan a una
+//   cabecera: la ruta da 500).
 // Extras:
 // - El fail-soft viejo (una lectura en null reemplazada por ceros: fila total en 0 y listas vacías):
 //   caen las 4 "… devuelve null …" con `expected 200 to be 500`.
@@ -59,9 +67,18 @@ import { cargarContextoReportes } from '@/lib/reportes/contextoReportes';
 //   cae "el ARMADO que lanza…" con `Error: excelReportes: la hoja Por día recibió filas agrupadas por
 //   mes` (el GET rechaza en vez de responder 500).
 // - `generado: new Date(0)`: cae "un comercio elegido…" con `expected 0 to be greater than or equal to
-//   1790254560000`.
+//   1790256900000`.
 // - El `{ ok: false }` del cargador tragado (resolviendo con un contexto vacío): cae "el cargador
 //   devuelve { ok: false }…" con `expected 200 to be 500`.
+// - Solo el `message` en el log (`responderError(error instanceof Error ? error.message : …)`): caen 2,
+//   "una lectura que LANZA…" con `expected 'se cortó la conexión' to be Error: se cortó la conexión` y
+//   "el ARMADO que lanza…" con `expected 'excelReportes: la hoja Por día recibi…' to be an instance of
+//   Error`.
+// - Un cargador que leyera la columna LEGADA `comercios.tipo_tarjeta` en vez del programa principal
+//   (inyectado por el mock de contextoReportes, que no se toca): cae "un comercio elegido…" con
+//   `expected [ [ 2, 1750, 'sellos', 1 ], …(1) ] to deeply equal [ [ 2, 17.5, '$', 1 ], …(1) ]`. Con el
+//   fixture de antes (el tipo igual en las dos tablas) esa MISMA mutación pasaba las 15: era la
+//   prueba decorativa de CLAUDE.md.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mocks
@@ -117,6 +134,14 @@ vi.mock('@/lib/reportes/contextoReportes', async (importOriginal) => {
 // Café Excel (El Salvador, CASHBACK: el acumulado son centavos) y Spa Excel (Bogotá, puntos) son del
 // dueño; Ajeno Excel NO (no está en el gate), y tiene actividad en el mismo período.
 //
+// El cashback del café está SOLO en su programa principal: la columna legada `comercios.tipo_tarjeta`
+// se pisa con 'sellos' después de crearlo. crearComercio escribe el tipo en las dos tablas, y con las
+// dos iguales el "$" de la hoja no distinguiría si el cargador lee el programa (lo que configura el
+// dueño) o la columna vieja (CLAUDE.md, "un fixture que espeja una columna legada…").
+//
+// Para los ids ajenos en la URL: una sucursal del SPA (del dueño, pero de otro comercio que el elegido)
+// y un cajero del comercio AJENO.
+//
 //   tarjeta   comercio  actividad (2026)
 //   ta        café      visita 05/01 10:00 en S1/C1 (1250 ¢) · visita 20/03 12:00 en S1/C1 (500 ¢)
 //                       · premio 20/03 12:30 en S1/C1
@@ -135,6 +160,8 @@ let spa = '';
 let ajeno = '';
 let s1 = '';
 let c1 = '';
+let sucursalDelSpa = '';
+let cajeroDelAjeno = '';
 
 const CAFE_NOMBRE = 'Café Excel';
 const SPA_NOMBRE = 'Spa Excel';
@@ -144,10 +171,16 @@ const MENSAJE_500 = 'No se pudo generar el Excel. Probá de nuevo.';
 
 beforeAll(async () => {
   cafe = await escenario.crearComercio({ nombre: CAFE_NOMBRE, tipo_tarjeta: 'cashback' }); // America/El_Salvador
+  // La columna legada, DISTINTA del programa principal (ver arriba; mismo patrón que
+  // lib/tarjetas/tiposFuncionales.test.ts).
+  const { error: eLegado } = await supabase.from('comercios').update({ tipo_tarjeta: 'sellos' }).eq('id', cafe);
+  if (eLegado) throw eLegado;
   spa = await escenario.crearComercio({ nombre: SPA_NOMBRE, zona_horaria: 'America/Bogota' });
   ajeno = await escenario.crearComercio({ nombre: 'Ajeno Excel' });
   s1 = await escenario.crearSucursal(cafe);
   c1 = await escenario.crearCajero(cafe);
+  sucursalDelSpa = await escenario.crearSucursal(spa);
+  cajeroDelAjeno = await escenario.crearCajero(ajeno);
   const premio = await escenario.crearRecompensa(cafe, 1);
   const ta = await escenario.crearTarjeta(cafe);
   const tb = await escenario.crearTarjeta(cafe);
@@ -241,6 +274,13 @@ async function esperarError(r: Response) {
   expect(await r.text()).toBe(MENSAJE_500);
 }
 
+// Lo que la ruta registró junto a su prefijo: el motivo (un texto) o lo que atrapó.
+function errorRegistrado(): unknown {
+  const llamada = errores.mock.calls.find((c) => c[0] === '[reportes] no se pudo generar el Excel:');
+  if (!llamada) throw new Error('la ruta no registró el error con su prefijo');
+  return llamada[1];
+}
+
 const hoyEn = (zona: string) =>
   new Intl.DateTimeFormat('en-CA', { timeZone: zona, year: 'numeric', month: '2-digit', day: '2-digit' }).format(
     new Date(),
@@ -298,8 +338,20 @@ describe('GET /comercio/reportes/exportar: el archivo', () => {
     expect(generado).toBeGreaterThanOrEqual(Math.floor(antes / 60_000) * 60_000);
     expect(generado).toBeLessThanOrEqual(Date.now());
 
-    // Clientes: sin columna Comercio (uno solo en el alcance); el acumulado del cashback en DÓLARES —
-    // el tipo sale del programa principal que leyó el cargador, no de un fixture.
+    // Clientes: sin columna Comercio (uno solo en el alcance); el acumulado del cashback en DÓLARES.
+    // La premisa que hace valer el "$": el programa principal dice cashback y la columna legada del
+    // comercio, sellos. Leyendo la columna vieja saldría 1750 "sellos".
+    const { data: legado, error: eLegado } = await supabase.from('comercios').select('tipo_tarjeta').eq('id', cafe).single();
+    expect(eLegado).toBeNull();
+    expect(legado?.tipo_tarjeta).toBe('sellos');
+    const { data: principal, error: ePrincipal } = await supabase
+      .from('programas_tarjeta')
+      .select('tipo_tarjeta')
+      .eq('comercio_id', cafe)
+      .eq('es_principal', true)
+      .single();
+    expect(ePrincipal).toBeNull();
+    expect(principal?.tipo_tarjeta).toBe('cashback');
     const clientes = await readSheet(buffer, 'Clientes', { trim: false });
     expect(clientes[0]).toEqual([
       'Nombre',
@@ -418,6 +470,27 @@ describe('GET /comercio/reportes/exportar: el archivo', () => {
     expect([resumen(r0, 'Visitas'), resumen(r0, 'Premios'), resumen(r0, 'Clientes')]).toEqual([2, 1, 1]);
   });
 
+  it('una sucursal de OTRO comercio y un cajero AJENO se descartan: el archivo es el del café entero', async () => {
+    // La sucursal es del spa (del dueño, pero no del comercio elegido) y el cajero, de un comercio que
+    // no es suyo. Pasados crudos a las RPC no filtrarían nada ajeno (la SQL acota por p_comercios),
+    // pero el archivo saldría en CEROS mientras el Resumen dice "Todas" y "Todos": un reporte falso.
+    const r = await descargar(`${TRIMESTRE}&comercio=${cafe}&sucursal=${sucursalDelSpa}&cajero=${cajeroDelAjeno}`);
+
+    expect(errores.mock.calls).toEqual([]);
+    expect(r.status).toBe(200);
+    for (const falso of [reporteResumen, reportePorDia, reporteClientes, reporteCajerosAlcance]) {
+      expect(llamadas(falso).map((l) => [l.filtros.comercioIds, l.filtros.sucursalId, l.filtros.cajeroId])).toEqual([
+        [[cafe], null, null],
+      ]);
+    }
+    const r0 = await readSheet(await libro(r), 'Resumen', { trim: false });
+    expect(resumen(r0, 'Comercio')).toBe(CAFE_NOMBRE);
+    expect(resumen(r0, 'Sucursal')).toBe('Todas');
+    expect(resumen(r0, 'Cajero')).toBe('Todos');
+    // Las del café entero, como sin filtros: 3 visitas, 1 premio, 2 clientes.
+    expect([resumen(r0, 'Visitas'), resumen(r0, 'Premios'), resumen(r0, 'Clientes')]).toEqual([3, 1, 2]);
+  });
+
   it.each([
     // Comillas, barra y un salto de línea: sin sanear, parten la cabecera (o la vuelven inválida).
     ['Café "El Sol" / Centro\r\nX', 'reportes-caf-el-sol-centro-x-2026-01-01_2026-03-31.xlsx'],
@@ -478,25 +551,28 @@ describe('GET /comercio/reportes/exportar: los errores', () => {
     }
   });
 
-  it('una lectura que LANZA → 500, con el mensaje en el log', async () => {
-    vi.mocked(reporteCajerosAlcance).mockRejectedValueOnce(new Error('se cortó la conexión'));
+  it('una lectura que LANZA → 500, con el error ENTERO en el log', async () => {
+    const error = new Error('se cortó la conexión');
+    vi.mocked(reporteCajerosAlcance).mockRejectedValueOnce(error);
 
     await esperarError(await descargar(`${TRIMESTRE}&comercio=${cafe}`));
-    expect(errores).toHaveBeenCalledWith('[reportes] no se pudo generar el Excel:', 'se cortó la conexión');
+    // El mismo objeto, con su stack; no solo el texto.
+    expect(errorRegistrado()).toBe(error);
   });
 
-  it('el ARMADO que lanza (filas por mes en "Por día") → 500, con el mensaje en el log', async () => {
-    // Un bug determinístico: "Probá de nuevo" no alcanza sin el log (nota de la revisión de la 5a).
+  it('el ARMADO que lanza (filas por mes en "Por día") → 500, con el error y su stack en el log', async () => {
+    // Un bug determinístico: "Probá de nuevo" no alcanza sin el log (nota de la revisión de la 5a), y
+    // el stack dice en qué línea del armado está.
     vi.mocked(reportePorDia).mockResolvedValueOnce({
       filas: [{ periodo: '2026-01-01', operaciones: 3, canjes: 1, es_mes: true }],
       alcanzoTope: false,
     });
 
     await esperarError(await descargar(`${TRIMESTRE}&comercio=${cafe}`));
-    expect(errores).toHaveBeenCalledWith(
-      '[reportes] no se pudo generar el Excel:',
-      'excelReportes: la hoja Por día recibió filas agrupadas por mes',
-    );
+    const error = errorRegistrado();
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('excelReportes: la hoja Por día recibió filas agrupadas por mes');
+    expect((error as Error).stack).toMatch(/excelReportes\.ts:\d+/);
   });
 
   it('el gate que redirige NO se atrapa: el NEXT_REDIRECT sale de la ruta, y no se lee nada', async () => {

@@ -16,6 +16,12 @@ import { armarHojasExcelReportes, escribirXlsx } from '@/lib/reportes/excelRepor
 // write-excel-file escribe el zip con APIs de Node (Buffer): runtime de Node, no Edge.
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// El peor caso es el tope de 50 000 filas por hoja: unas 50 páginas de reporte_clientes EN SERIE (se
+// pagina con p_offset, y cada página vuelve a correr la función entera en la base), más las de las
+// otras tres lecturas, más unos 5 s de armado y escritura (medido en la 5a). 60 s es un límite válido
+// en Vercel Hobby con Fluid compute y sin él. Si se excede, la plataforma corta con un 504: el dueño ve
+// una descarga fallida, nunca un archivo a medias que parezca completo.
+export const maxDuration = 60;
 
 // El Excel de Reportes (spec 2026-09-23 §4): los mismos filtros que la pantalla, en cinco hojas.
 //
@@ -27,9 +33,9 @@ export const dynamic = 'force-dynamic';
 // el archivo filtre igual que lo que el dueño está viendo:
 //   gate → leerParametrosReportes → cargarContextoReportes → resolverFiltrosReportes → filtrosRpc →
 //   las cuatro lecturas → armarHojasExcelReportes → escribirXlsx.
-// Los ids de la URL (input del cliente) se validan en resolverFiltrosReportes ANTES de leer nada: un
-// comercio que no es del dueño cae a "Todo"; una sucursal o un cajero de otro comercio, a "todas" y
-// "todos". A las RPC llega solo lo que devolvió filtrosRpc.
+// Los ids de la URL (input del cliente) se validan en resolverFiltrosReportes ANTES de correr ninguna
+// RPC: un comercio que no es del dueño cae a "Todo"; una sucursal o un cajero de otro comercio, a
+// "todas" y "todos". A las RPC llega solo lo que devolvió filtrosRpc, NUNCA un id de `parametros`.
 //
 // NUNCA UN ARCHIVO CON CEROS POR UN ERROR. Cualquier cosa que falle —el cargador con { ok: false },
 // una lectura con null, algo que lanza en las lecturas, el armado o la escritura— responde 500 en
@@ -51,7 +57,8 @@ export async function GET(request: NextRequest) {
 
     const cargado = await cargarContextoReportes(supabase, sesion, parametros);
     // Sin el contexto no se puede validar la sucursal ni el cajero de la URL: resolver con listas
-    // vacías los descartaría EN SILENCIO y el Excel saldría sin filtrar como si lo estuviera.
+    // vacías los descartaría EN SILENCIO: el dueño que pidió UNA sucursal recibiría los números de
+    // todas, con el Resumen diciendo "Todas", sin enterarse de que no es lo que pidió.
     if (!cargado.ok) return responderError(cargado.error);
 
     const filtros = resolverFiltrosReportes(sesion.comercios, parametros, cargado.contexto, new Date());
@@ -93,11 +100,14 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    return responderError(error instanceof Error ? error.message : String(error));
+    // El error ENTERO y no su message: un throw del armado es un bug determinístico, y el stack dice
+    // dónde está.
+    return responderError(error);
   }
 }
 
-function responderError(motivo: string): Response {
+// `motivo`: un texto (el cargador o las lecturas que fallaron) o lo que se atrapó.
+function responderError(motivo: unknown): Response {
   console.error('[reportes] no se pudo generar el Excel:', motivo);
   return new Response(MENSAJE_ERROR, {
     status: 500,
