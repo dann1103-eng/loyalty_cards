@@ -96,6 +96,18 @@ antes de esas tareas.
 - **2 HECHA** — `a2ace7e`, `f786f05`, `5c7a2f1`, `4ce64b7`; 144 pruebas; revisión aprobada en la
   segunda pasada.
 - **0040 pegada a Daniel el 2026-09-23.** Falta su aviso y `verificar-0040`.
+- **4a HECHA** — `e92c765`, `c68786d`, `d182b3f` (+ menores de la revisión). Revisión aprobada. Dos cosas
+  que la revisión dejó para después:
+  - **Para la Tarea 3:** `ContextoReportes.usuarios` (y `sucursales`) no aceptan `null`. Si el cargador
+    convierte en `[]` el `null` de `listarUsuariosDelComercio` / `listarSucursales`, el resolver descarta
+    en SILENCIO el `?cajero=`/`?sucursal=` de la URL y la pantalla muestra números sin filtrar sin
+    avisar. El cargador tiene que propagar el error (la pantalla muestra un aviso; el Excel responde 500),
+    nunca `?? []`.
+  - **Para la 4b:** un filtro puede quedar aplicado sin verse (`?sucursal=` con una sola sucursal, o
+    `?cajero=<dueño>` sin cajeros: `filasDeChips` no dibuja esas filas). La pantalla muestra igual el
+    filtro activo (una línea "Filtrando por …" con un enlace para quitarlo) o el resolver descarta lo que
+    los chips no ofrecerían. Con una sola sucursal, "Todas" y esa NO dan lo mismo: la actividad "Sin
+    especificar" (`sucursal_id` null) entra en "Todas" y no en la sucursal.
 
 ## Tarea 1a — Migración 0040: SQL y tipos
 
