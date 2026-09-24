@@ -51,6 +51,11 @@ pasan `plataforma` a `RegistroCliente`.
 - El texto del formulario "Directo en tu Apple Wallet" pasa a depender de la plataforma: "Directo en
   tu Apple Wallet" (ios), "Directo en tu Google Wallet" (android), "Directo en la billetera de tu
   teléfono" (otra). Todo en tuteo.
+- (Agregado tras la Tarea 6.) El subtítulo de la pantalla de éxito ("Agrégala a tu Apple Wallet y …",
+  `promesaTarjetaLista`) también: nombra la billetera del botón que se ve DE ENTRADA — solo Google → "tu
+  Google Wallet", solo Apple → "tu Apple Wallet", los dos → "la billetera de tu teléfono". Sale de
+  `botonesWallet` (no de la plataforma a secas): un Android sin Google disponible ve el botón de Apple y
+  tiene que leer "Apple Wallet".
 
 ### Portal `/mi-tarjeta`
 `app/mi-tarjeta/page.tsx` lee el user agent y pasa `plataforma` a `PortalCliente`. Donde hoy dice
@@ -121,16 +126,21 @@ crearla o parcharla y rechaza el patch ENTERO con `400 Image cannot be loaded` s
 (`scripts/actualizar-frente-google.ts:26-29`). A diferencia de `heroImage` (opcional, donde
 `franja.png` responde 404 sin problema), `programLogo` es obligatorio: si la ruta fallara, fallaría la
 sincronización de la clase, y con ella Google Wallet para cada registro nuevo de ese comercio y el
-link de guardado. Por eso, si componer la imagen falla, la ruta sirve los bytes del logo original
-(convertidos a PNG si hace falta); solo responde 404 si el comercio no tiene logo o el programa no es
-suyo. Lo mismo `logo-ancho.png`.
+link de guardado. Por eso, si componer la imagen falla, la ruta sirve el logo original convertido a PNG;
+solo responde 404 si algo no existe (el comercio, su logo, o un programa ajeno). Lo mismo
+`logo-ancho.png`. (Revisión de la Tarea 5: si sharp tampoco puede convertir el original, o si falla la
+lectura de la base, responde 502 y NUNCA reenvía los bytes crudos con su tipo de origen — una URL de
+logo que apuntara a HTML serviría `text/html` desde nuestro dominio, y lo que sharp no lee Google
+tampoco.)
 
 **`wideProgramLogo` (solo logos apaisados):** si el logo es ancho (proporción ≥ 1.6 : 1), la clase suma
 el logo ancho, servido por `.../logo-ancho.png/route.ts`: PNG de 1280×400 con fondo transparente y el
 logo con `fit: 'contain'`, alineado a la izquierda y centrado en alto. Según Google, en Android el logo
 ancho reemplaza la cabecera por defecto (círculo + nombre del emisor) por el logo completo — para un
-logo que ya contiene el nombre (Pulso) es justo lo que se quiere. El `programLogo` se sigue mandando
-(es obligatorio y Google lo usa en la lista de tarjetas).
+logo que ya contiene el nombre es justo lo que se quiere. El `programLogo` se sigue mandando
+(es obligatorio y Google lo usa en la lista de tarjetas). (Medido en la Tarea 6: el logo de Pulso Café
+es 420×301, 1.4 : 1, sin margen — NO es ancho. Su arreglo es el cuadrado compuesto: entero dentro del
+círculo, con las esquinas a 284 px del centro contra un radio de 330.)
 
 **Cómo se decide si es ancho:** hacen falta las medidas del logo. La clase se sincroniza en caminos
 calientes — `syncClaseComercio` corre en CADA registro de cliente (`app/api/registro/route.ts:85`) y

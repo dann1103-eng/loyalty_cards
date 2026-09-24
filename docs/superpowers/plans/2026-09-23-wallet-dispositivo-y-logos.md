@@ -259,6 +259,30 @@ casos del logo ancho, un solo lugar para las URLs, `?v=`, degradación sin base 
 - [ ] `GET /api/comercios/<id>/logo.png` y `logo-ancho.png` de ese comercio: medidas y aspecto.
 - [ ] Portal `/mi-tarjeta` con el UA Android: el botón de Google.
 
+**Resultado parcial (2026-09-23, controlador):**
+- Android: el formulario dice "Directo en tu Google Wallet"; tras registrar, solo "Agregar a Google
+  Wallet" + "¿Tienes otro teléfono?", que revela Apple y le pasa el foco; sin nota de Safari. Escritorio:
+  "Directo en la billetera de tu teléfono"; los dos botones + la nota; sin link. Re-registrar el mismo
+  teléfono NO duplicó la tarjeta.
+- **Hueco de la spec encontrado:** el subtítulo de la pantalla de éxito (`promesaTarjetaLista`,
+  `lib/tarjetas/textosPorTipo.ts`) dice "Agrégala a tu Apple Wallet…" en TODAS las plataformas. Se
+  arregla en la Tarea 6b.
+- Cartel: las seis combinaciones dibujadas con `construirCartelSvg` y el logo real de Pulso Café
+  (rasterizadas con sharp, sin tocar al piloto): logo entero en todas; en foto, anclado arriba a la izq.
+- Tarjeta de muestra (midiendo en el DOM con la imagen cambiada): un 10:1 queda en 180×18, un cuadrado
+  en 54×54, los dos dentro de la tarjeta, `object-fit: contain`.
+- Portal `/mi-tarjeta` con UA Android: solo "Agregar a Google Wallet" (`/api/tarjetas/<id>/google-wallet`)
+  + el link.
+- El logo de Pulso Café mide 420×301 (1.4 : 1) sin margen: NO es ancho. Compuesto en el cuadrado queda
+  entero dentro del círculo.
+
+## Tarea 6b — El subtítulo de la pantalla de éxito según el botón visible
+
+Hallado en la Tarea 6. `promesaTarjetaLista(tipo)` no puede expresar la plataforma (la firma no la
+recibe): se le arregla la FIRMA (regla del proyecto), no el cuerpo. La billetera sale de lo que
+`botonesWallet` muestra de entrada (sin el link tocado): solo Google → "tu Google Wallet"; solo Apple →
+"tu Apple Wallet"; los dos → "la billetera de tu teléfono". Tuteo. Prueba pura con mutación.
+
 ---
 
 ## Tarea 7 — Verificar el `null` del logo ancho contra la API real (controlador)
@@ -279,6 +303,13 @@ casos del logo ancho, un solo lugar para las URLs, `?v=`, degradación sin base 
   logos no anchos; documentar el arreglo manual del cambio ancho → cuadrado) ANTES de publicar, con su
   prueba ajustada.
 
+**Resultado (2026-09-23, controlador):** hecho sobre la clase de `barberia-el-puerto-demo` con un script
+en el scratchpad de la sesión (no en `scripts/`, para no ensuciar el `git status` del implementador).
+Patch con URL → `get` la muestra; patch con `wideProgramLogo: null` → **aceptado, y el `get` ya no trae
+el campo** (borrado). La clase quedó IDÉNTICA al respaldo tomado antes (comparación clave por clave). El
+plan B no hace falta. El `null` dentro del JWT NO se probó y ya no viaja: `linkGuardar` omite la clave
+(`0381e2b`).
+
 ---
 
 ## Tarea 8 — Publicar y re-sincronizar las clases
@@ -292,12 +323,13 @@ casos del logo ancho, un solo lugar para las URLs, `?v=`, degradación sin base 
   su guarda `copiaTraePlantillaDeFilas`, que protege el deploy B). Commit, y correrla primero en ensayo y
   después con `--aplicar` (con `NEXT_PUBLIC_BASE_URL=https://www.cardly-sv.site`). Anotar el resumen
   (0 fallos esperados).
-- [ ] Después del deploy, tocar "Agregar a Google Wallet" para una tarjeta de un comercio demo con logo
-  CUADRADO: el JWT embebe la clase con `wideProgramLogo: null`, que la Tarea 7 (REST) no probó. El
-  riesgo es bajo (`balance` ya viaja con `null` dentro del JWT), pero si Google lo rechazara el botón se
-  rompería para la mayoría de los comercios.
+- [ ] Después del deploy, pedir el link de "Agregar a Google Wallet" de una tarjeta de un comercio demo
+  (`/api/tarjetas/<id>/google-wallet` debe redirigir a `pay.google.com/gp/v/save/…`) y decodificar el JWT:
+  la clase embebida lleva `programLogo` a `/api/comercios/<id>/logo.png?v=…` y, con logo cuadrado, NO
+  trae la clave `wideProgramLogo` (desde `0381e2b` el JWT nunca lleva ese `null`).
 - [ ] Pushear también el commit de la fase `logos` (se hace después del primer push).
-- [ ] Daniel: Android real con el pase de Pulso Café (y la cabecera con el logo ancho).
+- [ ] Daniel: Android real con el pase de Pulso Café — el logo entero dentro del círculo. (Su logo es
+  1.4 : 1: NO lleva logo ancho, la cabecera sigue siendo círculo + nombre.)
 - [ ] Actualizar el ESTADO (sección 2026-09-23) y la memoria.
 
 ## Nota: convivencia con el deploy B
