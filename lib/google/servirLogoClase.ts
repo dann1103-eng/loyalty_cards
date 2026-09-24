@@ -25,8 +25,11 @@ import { bajarLogo } from './logoRemoto';
 const COLUMNAS_MARCA =
   'color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja';
 
-// Más holgado que el tope de la MEDICIÓN (logoRemoto.ts, 2 s): acá no hay un cliente esperando, es
-// Google el que descarga, y cortar antes solo convertiría un bucket lento en un patch rechazado.
+// Más holgado que el tope de la MEDICIÓN (logoRemoto.ts, 2 s), y no porque nadie espere: Google baja
+// esta imagen DENTRO del patch de la clase, y el registro de un cliente espera ese patch. Las razones
+// son otras dos. Google cachea por URL, así que esta ruta se pide UNA vez por versión del logo, no en
+// cada sync. Y antes de estas rutas Google bajaba el logo directo del bucket, con la misma lentitud:
+// cortar antes no le ahorra espera a nadie, solo convierte un bucket lento en un patch rechazado.
 const TIEMPO_MAXIMO_DESCARGA_MS = 10_000;
 
 export type ComponerLogo = (logo: Buffer, marca: { colorFondo: string | null }) => Promise<Buffer>;
@@ -133,6 +136,11 @@ export async function servirLogoClase(
     return NextResponse.json({ error: 'No se pudo bajar el logo' }, { status: 502 });
   }
 
+  // El respaldo tiene un COSTO: si la composición falla por algo pasajero (un OOM de sharp, por
+  // ejemplo), Google cachea el ORIGINAL —el que su círculo recorta— bajo esta URL versionada, y ahí se
+  // queda aunque la próxima composición anduviera: la URL no cambia hasta que cambien el logo o el
+  // color. No hay reintento. La salida es subir VERSION_COMPOSICION_LOGO (logosClase.ts), que cambia la
+  // URL de todas las clases, y volver a sincronizarlas.
   try {
     return png(await componer(logo.bytes, { colorFondo: marca.colorFondo }));
   } catch (error) {
