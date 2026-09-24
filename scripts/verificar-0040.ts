@@ -9,6 +9,8 @@
 //      devuelven exactamente las columnas que declara lib/supabase/types.ts.
 //   2. La llave ANÓNIMA no puede ejecutarlas (patrón de verificar-0035): viaja en el bundle del
 //      navegador, y sin los `revoke` cualquiera leería por REST los reportes de cualquier comercio.
+//      `authenticated` NO se puede mirar por REST sin una credencial: el paso 2 de main() explica por
+//      qué, y qué cubre (y qué no) la prueba de PGlite a la que remite el resumen final.
 //   3. Para cada comercio demo (slug '%-demo'), las nuevas contra las VIEJAS de la 0033, sin fechas
 //      ni filtros (salvo "Por día", que va con los últimos 14 días):
 //      - reporte_resumen contra reporte_sucursales, fila por fila (sucursal, incluida "sin
@@ -470,6 +472,25 @@ async function main() {
   // 2. La llave anónima NO puede ejecutarlas. Se aserta el error EXACTO: una llave inválida, un fallo
   // de red o un "permission denied for table" también son errores, y ninguno prueba que el `revoke`
   // de la FUNCIÓN esté puesto.
+  //
+  // `authenticated` NO se chequea acá, y no por olvido: en Supabase cada función nueva de `public`
+  // nace con execute explícito para anon Y para authenticated (default privileges), y la 0040 revoca
+  // los dos, pero por REST no hay forma de solo lectura de mirarlo:
+  //   - Llamar COMO authenticated exige un JWT con ese rol: iniciar sesión (una contraseña, que no se
+  //     pide ni se escribe), crear un usuario (signInAnonymously también inserta en auth.users: ya no
+  //     es solo lectura), o firmar uno con el secreto JWT del proyecto (ningún código de este repo lo
+  //     usa, y sería fabricar una credencial).
+  //   - Leer los privilegios en vez de llamar: has_function_privilege, routine_privileges y
+  //     pg_proc.proacl viven fuera de `public`, que es lo único que PostgREST expone, y ninguna RPC
+  //     existente los devuelve (has_function_privilege solo aparece en la prueba de PGlite). Crear una
+  //     sería DDL.
+  // Por eso el resumen final remite a lib/reportes/sql0040.pglite.test.ts. OJO con lo que esa prueba
+  // cubre: su preámbulo crea los roles SIN los default privileges de Supabase, así que allá
+  // authenticated solo tenía execute a través de PUBLIC, y su `authenticated: false` sigue verde
+  // aunque `authenticated` faltara en el revoke (se vio en una sesión de PGlite: con los default
+  // privileges de Supabase y el revoke sin authenticated, has_function_privilege da true; con el
+  // preámbulo de la prueba, false). Lo que hoy lo garantiza es que los cuatro revoke de la 0040 nombran
+  // a authenticated.
   console.log('\n2. La llave anónima');
   for (const f of NUEVAS) {
     const r = await llamadas[f](anon);
@@ -508,6 +529,8 @@ async function main() {
   const totalComparaciones = porComercio.length * COMPARACIONES.length;
   const totalFallidas = porComercio.reduce((s, c) => s + c.fallidas.length, 0);
   console.log(`Total: ${totalComparaciones - totalFallidas} de ${totalComparaciones} comparaciones cerraron.`);
+  // Ver el paso 2: por qué no se chequea por REST, y qué cubre de verdad esa prueba.
+  console.log('authenticated: no verificable por REST; confirmado en PGlite (lib/reportes/sql0040.pglite.test.ts)');
 
   if (fallas > 0) {
     return terminarConFalla(`\n${fallas} verificación(es) fallaron. La 0040 NO se edita: el arreglo va en una 0041.`);
