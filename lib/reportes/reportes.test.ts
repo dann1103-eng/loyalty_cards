@@ -2,12 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createServiceClient } from '../supabase/server';
 import { acreditarPuntos } from '../comercio/acreditar';
 import { canjearRecompensa } from '../comercio/canje';
-import {
-  reporteSucursales,
-  reporteTopClientes,
-  reporteTendencia,
-  reporteFmComercios,
-} from './reportes';
+import { reporteSucursales, reporteFmComercios } from './reportes';
 
 const supabase = createServiceClient();
 const comerciosDePrueba: string[] = [];
@@ -264,52 +259,8 @@ describe('reporteSucursales', () => {
   });
 });
 
-describe('reporteTopClientes', () => {
-  it('ordena por visitas y desempata por puntos, respetando el límite', async () => {
-    const comercioId = await crearComercio();
-    const t1 = await crearTarjeta(comercioId, 0);
-    const t2 = await crearTarjeta(comercioId, 0);
-    const t3 = await crearTarjeta(comercioId, 0);
-    // t1: 3 visitas / 30 pts. t2: 2 visitas / 20 pts. t3: 1 visita / 5 pts.
-    for (const d of [10, 10, 10]) expect((await acreditarPuntos(supabase, comercioId, t1, d)).ok).toBe(true);
-    for (const d of [10, 10]) expect((await acreditarPuntos(supabase, comercioId, t2, d)).ok).toBe(true);
-    expect((await acreditarPuntos(supabase, comercioId, t3, 5)).ok).toBe(true);
-
-    const top = await reporteTopClientes(supabase, comercioId, 2);
-
-    // El límite recorta a los 2 primeros; t3 queda fuera.
-    expect(top).toHaveLength(2);
-    expect(top[0].visitas).toBe(3);
-    expect(top[0].puntos_totales).toBe(30);
-    expect(top[1].visitas).toBe(2);
-    expect(top[1].puntos_totales).toBe(20);
-  });
-});
-
-describe('reporteTendencia', () => {
-  it('devuelve una serie de N días que suma la actividad sembrada (con días en 0)', async () => {
-    const comercioId = await crearComercio();
-    const t1 = await crearTarjeta(comercioId, 0);
-    const recompensa = await crearRecompensa(comercioId, 3);
-    // Dos acreditaciones y un canje hoy (created_at por defecto = now()).
-    expect((await acreditarPuntos(supabase, comercioId, t1, 5)).ok).toBe(true);
-    expect((await acreditarPuntos(supabase, comercioId, t1, 5)).ok).toBe(true);
-    expect((await canjearRecompensa(supabase, comercioId, t1, recompensa)).ok).toBe(true);
-
-    const dias = 7;
-    const serie = await reporteTendencia(supabase, comercioId, dias);
-
-    // La serie cubre exactamente N días, ordenada, e incluye días en 0 (zero-fill).
-    expect(serie).toHaveLength(dias);
-    const totalAcred = serie.reduce((s, r) => s + r.operaciones, 0);
-    const totalCanjes = serie.reduce((s, r) => s + r.canjes, 0);
-    expect(totalAcred).toBe(2);
-    expect(totalCanjes).toBe(1);
-    // El último día de la serie es hoy y concentra la actividad recién sembrada.
-    expect(serie[serie.length - 1].operaciones).toBe(2);
-    expect(serie[serie.length - 1].canjes).toBe(1);
-  });
-});
+// (reporteTopClientes y reporteTendencia se retiraron con la Tarea 4c del plan 2026-09-23: Reportes
+// usa las funciones de la 0040, probadas en reportesConFiltros.test.ts y sql0040.pglite.test.ts.)
 
 describe('reporteFmComercios', () => {
   it('agrega por comercio con su cuenta, clientes y movimientos', async () => {

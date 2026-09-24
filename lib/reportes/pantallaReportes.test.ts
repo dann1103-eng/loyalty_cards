@@ -17,8 +17,14 @@ import {
   filtrosInvisibles,
   estadoPorDia,
   filtrosEnPantalla,
+  fechaHoraLocal,
+  filasTablaClientes,
+  estadoTablaClientes,
   type FiltrosTablaClientes,
   type FiltrosConNombres,
+  type FiltrosFilasClientes,
+  type FiltrosBloqueClientes,
+  type FilaClienteReporte,
 } from './pantallaReportes';
 import { resolverFiltrosReportes } from './filtrosReportes';
 import { leerParametrosReportes } from './parametrosReportes';
@@ -166,6 +172,40 @@ import { leerParametrosReportes } from './parametrosReportes';
 // - El formulario siempre abierto: cae "el formulario de fechas se abre solo con periodo=rango" con
 //   `expected true to be false`. Los invisibles sin cablear (`[]`): cae "sin su fila de chips…" con
 //   `expected [] to deeply equal [ [ 'sucursal', 'Centro' ], …(1) ]`.
+//
+// MUTATION-TESTING de la Tarea 4c (corridas el 2026-09-24 con un script que aplica una por vez y
+// restaura; 18 de 18 caen):
+// Hora local (fechaHoraLocal)
+// - Sin fechaExcel (componentes UTC del instante): caen once, "la hora de pared del COMERCIO: El
+//   Salvador" con `expected '23/09 20:05' to be '23/09 14:05'`.
+// - Con el reloj del PROCESO (getHours y compañía): caen cuatro, "Bogotá (UTC−5)…" con `expected '23/09
+//   21:30' to be '23/09 22:30'`. Las de El Salvador SIGUEN VERDES en la PC de Daniel (UTC−6): por eso
+//   están Bogotá y Madrid.
+// - Nunca el año: caen tres, "otro año que el del final del período…" con `expected '15/11 12:00' to be
+//   '15/11/2025 12:00'`. El año del instante en UTC: cae "el año también es el LOCAL…" con `expected
+//   '31/12 21:00' to be '31/12/2025 21:00'`.
+// - Sin el resguardo del instante ilegible: cae "un instante ilegible…" con `Error: fechaExcel: instante
+//   inválido: no-es-una-fecha`. El mes sin el `+ 1`: caen once, `expected '23/08 14:05' to be '23/09
+//   14:05'`.
+// Filas (filasTablaClientes)
+// - Acumulado siempre en puntos: caen tres, "un tipo sin contador (cupón)…" con `expected '0 puntos' to
+//   be ''`. Con el respaldo 'puntos' para un comercio fuera del alcance: cae "contrato roto…" con
+//   `expected [ '', '8 puntos', '23/09 15:05' ] to deeply equal [ '', '', '23/09 15:05' ]`.
+// - La hora en la zona de la vista y no la del comercio: cae "el MISMO cliente en dos comercios…" con
+//   `expected [ …(2) ] to deeply equal [ …(2) ]` (el Spa en Bogotá sale 14:05 y no 15:05).
+// - La clave solo con el cliente: caen dos, "una fila…" con `expected [ { clave: 'cl-ana', …(8) } ] to
+//   deeply equal [ { clave: 'c-cafe:cl-ana', …(8) } ]`. Sin apellido y teléfono crudo: cae "una fila…"
+//   cada una. Sin el año del período (`anioDelPeriodo = 0`): caen cuatro, "contrato roto…" con
+//   `expected [ '', '', '23/09/2026 15:05' ] to deeply equal [ '', '', '23/09 15:05' ]`.
+// Bloque (estadoTablaClientes)
+// - Un error mostrado como vacío: cae "la lectura falló (null)…" con `expected { tipo: 'vacio' } to
+//   deeply equal { tipo: 'error' }`.
+// - Anterior con la página de la URL (`filtros.pagina - 1`): caen dos, "una página del medio…" con
+//   `expected '998' to be undefined`. Anterior sin el orden de la vista: caen dos, `expected undefined to
+//   be 'premios'`. Sin Siguiente: cae "una página del medio…" con `expected [ true, false ] to deeply
+//   equal [ true, true ]`.
+// - El conteo con las filas de la página y no con el total: caen dos, `expected 'Página 7 de 7 · 1
+//   cliente' to be 'Página 7 de 7 · 312 clientes'`.
 
 const cafe = { comercioId: 'c-cafe', nombre: 'Café' };
 const spa = { comercioId: 'c-spa', nombre: 'Spa' };
@@ -896,5 +936,201 @@ describe('filtrosEnPantalla', () => {
     const pantalla = filtrosEnPantalla([cafe, spa], vista({ comercio: null }), contextoTodo);
     expect([pantalla.sucursal, pantalla.cajero]).toEqual([null, null]);
     expect(pantalla.invisibles).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// La tabla de clientes (Tarea 4c): la hora local, las filas y el bloque entero
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('fechaHoraLocal', () => {
+  // Toda prueba de fechas usa además una zona que NO es la de la PC de Daniel (UTC−6 = El Salvador):
+  // con El Salvador sola, un código que lea el reloj del PROCESO pasa acá y falla en Vercel (UTC).
+  it('la hora de pared del COMERCIO: El Salvador (UTC−6)', () => {
+    expect(fechaHoraLocal('2026-09-23T20:05:00Z', 'America/El_Salvador', 2026)).toBe('23/09 14:05');
+  });
+
+  it('Bogotá (UTC−5): las 22:30 del 23 en Bogotá son la madrugada del 24 en UTC', () => {
+    expect(fechaHoraLocal('2026-09-24T03:30:00Z', 'America/Bogota', 2026)).toBe('23/09 22:30');
+  });
+
+  it('Madrid en verano (UTC+2): la medianoche se escribe 00, no 24', () => {
+    expect(fechaHoraLocal('2026-07-01T22:30:00Z', 'Europe/Madrid', 2026)).toBe('02/07 00:30');
+  });
+
+  it('acepta el timestamptz como lo devuelve PostgREST (+00:00)', () => {
+    expect(fechaHoraLocal('2026-09-23T20:05:00+00:00', 'America/El_Salvador', 2026)).toBe('23/09 14:05');
+  });
+
+  it('otro año que el del final del período lleva el año ("Desde siempre" con actividad vieja)', () => {
+    expect(fechaHoraLocal('2025-11-15T18:00:00Z', 'America/El_Salvador', 2026)).toBe('15/11/2025 12:00');
+  });
+
+  it('el año también es el LOCAL: las 21:00 del 31/12 en El Salvador ya son 2026 en UTC', () => {
+    expect(fechaHoraLocal('2026-01-01T03:00:00Z', 'America/El_Salvador', 2026)).toBe('31/12/2025 21:00');
+    expect(fechaHoraLocal('2026-01-01T03:00:00Z', 'America/El_Salvador', 2025)).toBe('31/12 21:00');
+  });
+
+  it('un instante ilegible deja la celda vacía: ni una fecha inventada ni la página rota', () => {
+    expect(fechaHoraLocal('no-es-una-fecha', 'America/El_Salvador', 2026)).toBe('');
+  });
+});
+
+describe('filasTablaClientes', () => {
+  // Café en sellos (El Salvador) y Spa en cashback (Bogotá): dos unidades y dos zonas en el alcance.
+  function filtrosFilas(extra: Partial<FiltrosFilasClientes> = {}): FiltrosFilasClientes {
+    return {
+      alcance: [cafe, spa],
+      datosAlcance: new Map([
+        ['c-cafe', { zonaHoraria: 'America/El_Salvador', tipoPrincipal: 'sellos' }],
+        ['c-spa', { zonaHoraria: 'America/Bogota', tipoPrincipal: 'cashback' }],
+      ]),
+      zonaHoraria: 'America/El_Salvador',
+      hasta: '2026-09-23',
+      ...extra,
+    };
+  }
+  function fila(extra: Partial<FilaClienteReporte> = {}): FilaClienteReporte {
+    return {
+      comercio_id: 'c-cafe',
+      cliente_id: 'cl-ana',
+      nombre: 'Ana',
+      apellido: 'Rivera',
+      telefono: '+50377771234',
+      operaciones: 5,
+      puntos_otorgados: 8,
+      canjes: 1,
+      ultima_actividad: '2026-09-23T20:05:00+00:00',
+      ...extra,
+    };
+  }
+
+  it('una fila: nombre y apellido, teléfono partido, acumulado en la unidad de SU comercio y hora local', () => {
+    expect(filasTablaClientes([fila()], filtrosFilas())).toEqual([
+      {
+        clave: 'c-cafe:cl-ana',
+        cliente: 'Ana Rivera',
+        telefono: '+503 7777 1234',
+        comercio: 'Café',
+        visitas: 5,
+        acumulado: '8 sellos',
+        premios: 1,
+        ultima: '23/09 14:05',
+        ultimaInstante: '2026-09-23T20:05:00+00:00',
+      },
+    ]);
+  });
+
+  it('el MISMO cliente en dos comercios: dos filas con clave distinta, cada una con la unidad y la zona de su comercio', () => {
+    const filas = filasTablaClientes([fila(), fila({ comercio_id: 'c-spa', puntos_otorgados: 1250 })], filtrosFilas());
+    expect(filas.map((f) => [f.clave, f.comercio, f.acumulado, f.ultima])).toEqual([
+      ['c-cafe:cl-ana', 'Café', '8 sellos', '23/09 14:05'],
+      // Cashback: el contador son CENTAVOS ($12.50, no "1250 puntos"); y Bogotá es UTC−5.
+      ['c-spa:cl-ana', 'Spa', '$12.50', '23/09 15:05'],
+    ]);
+  });
+
+  it('sin apellido (clientes de antes de la 0036): el nombre solo', () => {
+    expect(filasTablaClientes([fila({ apellido: null })], filtrosFilas())[0].cliente).toBe('Ana');
+  });
+
+  it('un tipo sin contador (cupón): Acumulado vacío, no "0 puntos"', () => {
+    const cupon = filtrosFilas({
+      datosAlcance: new Map([['c-cafe', { zonaHoraria: 'America/El_Salvador', tipoPrincipal: 'cupon' }]]),
+    });
+    expect(filasTablaClientes([fila({ puntos_otorgados: 0 })], cupon)[0].acumulado).toBe('');
+  });
+
+  it('"Desde siempre": una última actividad del año anterior al del período lleva el año', () => {
+    const [vieja] = filasTablaClientes([fila({ ultima_actividad: '2025-11-15T18:00:00+00:00' })], filtrosFilas());
+    expect(vieja.ultima).toBe('15/11/2025 12:00');
+  });
+
+  it('contrato roto (una fila de un comercio fuera del alcance): sin unidad ni nombre inventados, hora en la zona de la vista', () => {
+    const [ajena] = filasTablaClientes([fila({ comercio_id: 'c-otro' })], filtrosFilas({ zonaHoraria: 'America/Bogota' }));
+    expect([ajena.comercio, ajena.acumulado, ajena.ultima]).toEqual(['', '', '23/09 15:05']);
+  });
+});
+
+describe('estadoTablaClientes', () => {
+  // Café elegido, ordenada por premios asc, con sucursal y cajero: lo que Anterior/Siguiente conservan.
+  function filtrosBloque(extra: Partial<FiltrosBloqueClientes> = {}): FiltrosBloqueClientes {
+    return {
+      periodo: '7d',
+      desde: '2026-09-17',
+      hasta: '2026-09-23',
+      zonaHoraria: 'America/El_Salvador',
+      comercio: { comercioId: 'c-cafe' },
+      sucursal: { id: 's-norte' },
+      cajero: { id: 'u-caja' },
+      orden: 'premios',
+      dir: 'asc',
+      pagina: 999,
+      acumuladoOrdenable: true,
+      alcance: [cafe],
+      datosAlcance: new Map([['c-cafe', { zonaHoraria: 'America/El_Salvador', tipoPrincipal: 'puntos' }]]),
+      ...extra,
+    };
+  }
+  const unaFila: FilaClienteReporte = {
+    comercio_id: 'c-cafe',
+    cliente_id: 'cl-ana',
+    nombre: 'Ana',
+    apellido: null,
+    telefono: '+50377771234',
+    operaciones: 3,
+    puntos_otorgados: 30,
+    canjes: 2,
+    ultima_actividad: '2026-09-23T20:05:00+00:00',
+  };
+
+  it('la lectura falló (null): error, nunca una tabla vacía que parezca "sin clientes"', () => {
+    expect(estadoTablaClientes(null, filtrosBloque())).toEqual({ tipo: 'error' });
+  });
+
+  it('total 0: vacío, aunque la URL pidiera la página 5 (el wrapper devuelve el offset pedido)', () => {
+    expect(estadoTablaClientes({ filas: [], total: 0, offsetEfectivo: offsetDePagina(5) }, filtrosBloque())).toEqual({
+      tipo: 'vacio',
+    });
+  });
+
+  it('?pagina=999 que la SQL acotó a la última: "Página 7 de 7", Anterior a la 6 con filtros y orden, sin Siguiente', () => {
+    const estado = estadoTablaClientes({ filas: [unaFila], total: 312, offsetEfectivo: 300 }, filtrosBloque());
+    if (estado.tipo !== 'tabla') throw new Error(`se esperaba la tabla y salió ${estado.tipo}`);
+    expect(estado.pie).toBe('Página 7 de 7 · 312 clientes');
+    expect(params(estado.hrefAnterior!)).toEqual({
+      periodo: '7d',
+      comercio: 'c-cafe',
+      sucursal: 's-norte',
+      cajero: 'u-caja',
+      orden: 'premios',
+      dir: 'asc',
+      pagina: '6',
+    });
+    expect(estado.hrefSiguiente).toBeNull();
+    // Las columnas y las filas son las de columnasTablaClientes y filasTablaClientes.
+    expect(estado.columnas.map((c) => c.clave)).toEqual(['cliente', 'visitas', 'acumulado', 'premios', 'ultima']);
+    expect(estado.filas.map((f) => [f.cliente, f.acumulado, f.ultima])).toEqual([['Ana', '30 puntos', '23/09 14:05']]);
+  });
+
+  it('una página del medio: Anterior a la 1 (sin `pagina`: es el default) y Siguiente a la 3', () => {
+    const estado = estadoTablaClientes({ filas: [unaFila], total: 312, offsetEfectivo: 50 }, filtrosBloque());
+    if (estado.tipo !== 'tabla') throw new Error(`se esperaba la tabla y salió ${estado.tipo}`);
+    expect(estado.pie).toBe('Página 2 de 7 · 312 clientes');
+    expect([estado.hrefAnterior, estado.hrefSiguiente].map((href) => href !== null)).toEqual([true, true]);
+    expect(params(estado.hrefAnterior!).pagina).toBeUndefined();
+    expect(params(estado.hrefAnterior!).orden).toBe('premios');
+    expect(params(estado.hrefSiguiente!)).toMatchObject({ orden: 'premios', dir: 'asc', sucursal: 's-norte', pagina: '3' });
+  });
+
+  it('con dos o más comercios: columna Comercio y el conteo en filas (cliente por comercio)', () => {
+    const estado = estadoTablaClientes(
+      { filas: [unaFila], total: 1, offsetEfectivo: 0 },
+      filtrosBloque({ comercio: null, sucursal: null, cajero: null, alcance: [cafe, spa] }),
+    );
+    if (estado.tipo !== 'tabla') throw new Error(`se esperaba la tabla y salió ${estado.tipo}`);
+    expect(estado.pie).toBe('Página 1 de 1 · 1 fila (cliente por comercio)');
+    expect(estado.columnas.map((c) => c.clave)).toContain('comercio');
+    expect([estado.hrefAnterior, estado.hrefSiguiente]).toEqual([null, null]);
   });
 });

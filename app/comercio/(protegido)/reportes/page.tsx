@@ -5,12 +5,13 @@ import { idsSucursalesPrincipales } from '@/lib/comercio/sucursales';
 import { leerParametrosReportes } from '@/lib/reportes/parametrosReportes';
 import { cargarContextoReportes } from '@/lib/reportes/contextoReportes';
 import { resolverFiltrosReportes } from '@/lib/reportes/filtrosReportes';
-import { filtrosRpc, reporteResumen, reportePorDia } from '@/lib/reportes/reportes';
+import { filtrosRpc, reporteClientes, reporteResumen, reportePorDia } from '@/lib/reportes/reportes';
 import { urlExcelReportes } from '@/lib/reportes/urlReportes';
 import { totalesDelResumen, type TotalesResumen } from '@/lib/reportes/pantallaReportes';
 import { FiltrosReportes } from './FiltrosReportes';
 import { PorDia } from './PorDia';
 import { PorSucursal } from './PorSucursal';
+import { TablaClientes } from './TablaClientes';
 import { AvisoBloque } from './AvisoBloque';
 
 export const dynamic = 'force-dynamic';
@@ -58,11 +59,13 @@ export default async function PaginaReportes({
   const rpc = filtrosRpc(filtros);
 
   // En paralelo: el resumen (cabecera y cartas por sucursal), la serie en modo 'auto' (por día, o por
-  // mes si el tramo pasa de 62 días) y las principales del alcance para la etiqueta "Principal"
+  // mes si el tramo pasa de 62 días), la página de clientes que pide la URL (con su orden; más allá del
+  // final, la SQL devuelve la última) y las principales del alcance para la etiqueta "Principal"
   // (reporte_resumen no trae es_principal; si esa consulta falla, la etiqueta no sale: es cosmética).
-  const [resumen, porDia, idsPrincipales] = await Promise.all([
+  const [resumen, porDia, clientes, idsPrincipales] = await Promise.all([
     reporteResumen(supabase, rpc),
     reportePorDia(supabase, rpc, 'auto'),
+    reporteClientes(supabase, rpc, { modo: 'pagina', pagina: filtros.pagina, orden: filtros.orden, dir: filtros.dir }),
     idsSucursalesPrincipales(
       supabase,
       filtros.alcance.map((c) => c.comercioId),
@@ -88,8 +91,7 @@ export default async function PaginaReportes({
 
       <PorSucursal filas={resumen?.filas ?? null} filtros={filtros} idsPrincipales={idsPrincipales} />
 
-      {/* TODO(4c): la tabla de clientes (TablaClientes.tsx, spec §3) va acá, en lugar del top 5 que
-          había. Hasta la 4c este bloque no se dibuja; la rama no se publica a medias. */}
+      <TablaClientes pagina={clientes} filtros={filtros} />
     </main>
   );
 }

@@ -1,6 +1,10 @@
 import { urlReportes, type FiltrosParaUrl } from './urlReportes';
-import type { ComercioOwner, OrdenClientes } from './filtrosReportes';
+import type { ComercioOwner, DatosComercioResueltos, OrdenClientes } from './filtrosReportes';
 import { PERIODOS, ETIQUETA_PERIODO } from './rangoFechas';
+import { fechaExcel } from './fechaExcel';
+import { describirCosto } from '@/lib/tarjetas/unidadPrograma';
+import { nombreCompleto } from '@/lib/clientes/nombreCompleto';
+import { formatearTelefono } from '@/lib/clientes/formatearTelefono';
 
 // Las reglas de QUÉ dibuja la pantalla de Reportes (spec 2026-09-23 §1, §2 y §3). Módulo PURO: el repo
 // no tiene pruebas de componentes, así que toda decisión que no sea puro markup se saca de la página a
@@ -133,6 +137,149 @@ export function columnasTablaClientes(filtros: FiltrosTablaClientes): ColumnaTab
       };
     },
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filas de la tabla de clientes (spec §3, "Unidad del acumulado")
+// ─────────────────────────────────────────────────────────────────────────────
+
+// "23/09 14:05": la fecha y la hora de pared del COMERCIO en `zonaHoraria`, para "Última actividad".
+// Con un año distinto de `anioDelPeriodo` (el del final del período que se mira), "15/11/2025 12:00":
+// con "Desde siempre" la última actividad de un cliente puede ser del año pasado, y "15/11" a secas
+// no dice de cuál.
+//
+// Los componentes salen de fechaExcel (Intl con la zona explícita, un formateador por zona): NUNCA
+// de getHours() y compañía, que leen el reloj del PROCESO — UTC en Vercel, UTC−6 en la PC de Daniel —
+// y la misma fila diría una hora distinta según dónde se dibujó. El año también es el local: las 21:00
+// del 31/12 en El Salvador ya son 2026 en UTC.
+//
+// Un instante ilegible (la SQL nunca lo manda: `ultima_actividad` es un timestamptz no nulo) deja la
+// celda vacía. fechaExcel lanza, a propósito, para que el Excel no salga con una fecha inventada;
+// acá una fila rara no puede tumbar la página de Reportes entera.
+export function fechaHoraLocal(instante: string, zonaHoraria: string, anioDelPeriodo: number): string {
+  if (Number.isNaN(new Date(instante).getTime())) return '';
+  const local = fechaExcel(instante, zonaHoraria);
+  const dos = (n: number) => String(n).padStart(2, '0');
+  const anio = local.getUTCFullYear();
+  const dia = `${dos(local.getUTCDate())}/${dos(local.getUTCMonth() + 1)}`;
+  const hora = `${dos(local.getUTCHours())}:${dos(local.getUTCMinutes())}`;
+  return anio === anioDelPeriodo ? `${dia} ${hora}` : `${dia}/${anio} ${hora}`;
+}
+
+// Lo que se usa de una fila de reporte_clientes (FilaReporteCliente es asignable a esto).
+export interface FilaClienteReporte {
+  comercio_id: string;
+  cliente_id: string;
+  nombre: string;
+  apellido: string | null;
+  telefono: string;
+  operaciones: number;
+  puntos_otorgados: number;
+  canjes: number;
+  ultima_actividad: string;
+}
+
+// Una fila de la tabla, ya en texto. El componente solo la pone en celdas.
+export interface FilaTablaClientes {
+  // La key de React. Una fila es un (comercio, cliente): la misma persona con tarjeta en dos comercios
+  // es DOS filas, así que el cliente_id solo repetiría la key. Va el id del comercio y no su nombre:
+  // comercios.nombre no es único (0001) y dos homónimos del mismo dueño chocarían.
+  clave: string;
+  cliente: string; // nombre y apellido (nombreCompleto)
+  telefono: string; // partido para leerlo (formatearTelefono)
+  comercio: string; // el nombre; solo se muestra con dos o más comercios (columnasTablaClientes)
+  visitas: number;
+  acumulado: string; // en la unidad de SU comercio; vacío en los tipos sin contador
+  premios: number;
+  ultima: string; // "23/09 14:05" en la zona de SU comercio (fechaHoraLocal)
+  ultimaInstante: string; // el timestamptz crudo, para el `dateTime` de <time>
+}
+
+// Lo que hace falta de los filtros (FiltrosReportes es asignable a esto).
+export interface FiltrosFilasClientes {
+  alcance: readonly ComercioOwner[];
+  // Zona y tipo YA RESUELTOS de cada comercio del alcance (resolverFiltrosReportes).
+  datosAlcance: ReadonlyMap<string, DatosComercioResueltos>;
+  zonaHoraria: string; // la de la vista: la de los presets
+  hasta: string; // AAAA-MM-DD: su año decide si "Última actividad" lleva el año
+}
+
+// Con "Todo" la tabla mezcla comercios, y cada fila se dice con los datos de SU comercio:
+//   - el Acumulado con describirCosto(tipo principal de ESE comercio): "8 sellos", "$12.50" (cashback y
+//     gift card cuentan CENTAVOS) o vacío (cupón, membresía, descuento: sin contador). Escrito con la
+//     unidad de otro comercio, 1250 centavos se leerían "1250 puntos".
+//   - la Última actividad en la zona de ESE comercio: con uno en Bogotá y otro en El Salvador, el mismo
+//     instante son dos horas de pared distintas.
+// Una fila de un comercio que no está en el alcance (contrato roto: p_comercios ES el alcance) no se
+// descarta —el conteo de abajo dejaría de cerrar—, pero tampoco se le inventa nada: sin nombre, sin
+// acumulado (el 'puntos' de respaldo sería una unidad inventada) y con la hora en la zona de la vista.
+export function filasTablaClientes(
+  filas: readonly FilaClienteReporte[],
+  filtros: FiltrosFilasClientes,
+): FilaTablaClientes[] {
+  const nombres = new Map(filtros.alcance.map((c) => [c.comercioId, c.nombre] as const));
+  const anioDelPeriodo = Number(filtros.hasta.slice(0, 4));
+  return filas.map((f) => {
+    const datos = filtros.datosAlcance.get(f.comercio_id);
+    return {
+      clave: `${f.comercio_id}:${f.cliente_id}`,
+      cliente: nombreCompleto(f.nombre, f.apellido),
+      telefono: formatearTelefono(f.telefono),
+      comercio: nombres.get(f.comercio_id) ?? '',
+      visitas: f.operaciones,
+      acumulado: datos ? describirCosto(datos.tipoPrincipal, f.puntos_otorgados) : '',
+      premios: f.canjes,
+      ultima: fechaHoraLocal(f.ultima_actividad, datos?.zonaHoraria ?? filtros.zonaHoraria, anioDelPeriodo),
+      ultimaInstante: f.ultima_actividad,
+    };
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// El bloque "Clientes" entero (spec §3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Lo que hace falta de FiltrosReportes para el bloque (que es asignable a esto).
+export interface FiltrosBloqueClientes extends Omit<FiltrosTablaClientes, 'alcance'>, FiltrosFilasClientes {}
+
+export type EstadoTablaClientes =
+  | { tipo: 'error' }
+  | { tipo: 'vacio' }
+  | {
+      tipo: 'tabla';
+      columnas: ColumnaTablaClientes[];
+      filas: FilaTablaClientes[];
+      // "Página 2 de 7 · 312 clientes"
+      pie: string;
+      // Los enlaces de "Anterior" y "Siguiente"; null = ese enlace no se dibuja.
+      hrefAnterior: string | null;
+      hrefSiguiente: string | null;
+    };
+
+// Qué dibuja el bloque, ya decidido (como estadoPorDia):
+//   - la lectura falló (reporteClientes devolvió null): 'error'. Nunca una tabla vacía, que diría "no
+//     hubo clientes" cuando lo que pasó es que no se pudo leer.
+//   - total 0: 'vacio'. Se decide con la paginación (null sin páginas), no con `filas.length`: es el
+//     mismo criterio que el "Página X de Y", y con ?pagina=5 en un período sin actividad no sale una
+//     tabla con "Página 5 de 0".
+//   - si no, la tabla. La paginación sale del offset que la SQL dice que DEVOLVIÓ (paginacionClientes),
+//     y Anterior/Siguiente se arman con urlReportes, que conserva los filtros y el orden y solo cambia
+//     la página (la 1 no se escribe en la URL: es el default).
+export function estadoTablaClientes(
+  pagina: { filas: readonly FilaClienteReporte[]; total: number; offsetEfectivo: number } | null,
+  filtros: FiltrosBloqueClientes,
+): EstadoTablaClientes {
+  if (pagina === null) return { tipo: 'error' };
+  const paginacion = paginacionClientes(pagina.total, pagina.offsetEfectivo);
+  if (paginacion === null) return { tipo: 'vacio' };
+  return {
+    tipo: 'tabla',
+    columnas: columnasTablaClientes(filtros),
+    filas: filasTablaClientes(pagina.filas, filtros),
+    pie: `${paginacion.texto} · ${textoConteoClientes(pagina.total, filtros)}`,
+    hrefAnterior: paginacion.anterior === null ? null : urlReportes(filtros, { pagina: paginacion.anterior }),
+    hrefSiguiente: paginacion.siguiente === null ? null : urlReportes(filtros, { pagina: paginacion.siguiente }),
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

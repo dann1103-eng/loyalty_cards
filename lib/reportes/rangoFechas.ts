@@ -1,5 +1,5 @@
 // Rango de fechas de los filtros de reportes. Módulo PURO (sin BD ni JSX) para poder probar los
-// bordes sin montar nada — mismo criterio que atribucionEscaner.ts y agregados.ts.
+// bordes sin montar nada — mismo criterio que atribucionEscaner.ts y filtrosReportes.ts.
 //
 // Las fechas vienen de dos <input type="date"> por querystring, así que llegan como texto y pueden
 // ser cualquier cosa: vacías, con formato raro, o al revés (desde > hasta). Nada de eso debe llegar

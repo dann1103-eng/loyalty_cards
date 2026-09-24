@@ -22,11 +22,13 @@ import { TAMANO_PAGINA_CLIENTES } from './pantallaReportes';
 // ahí), nunca de la URL cruda.
 //
 // CRITERIO ANTE ERROR — NO es el mismo en todo el archivo:
-//   - Los wrappers VIEJOS descriptivos (reporteSucursales, reporteTopClientes, reporteTendencia,
-//     reporteFmComercios) registran el error con console.error ACÁ y devuelven `[]`. Fue la decisión
-//     de fail-soft del piloto: una pantalla de reportes rota no debía tumbar el panel, y la pantalla
-//     no distingue "vacío real" de "error". Siguen así mientras los usen el panel (reporte_sucursales)
-//     y el FM (reporte_fm_comercios); los otros dos se retiran con la Tarea 4c del plan 2026-09-23.
+//   - Los wrappers VIEJOS descriptivos (reporteSucursales, reporteFmComercios) registran el error con
+//     console.error ACÁ y devuelven `[]`. Fue la decisión de fail-soft del piloto: una pantalla de
+//     reportes rota no debía tumbar el panel, y la pantalla no distingue "vacío real" de "error".
+//     Siguen así mientras los usen el panel (reporte_sucursales) y el FM (reporte_fm_comercios). Los
+//     wrappers de reporte_top_clientes y reporte_tendencia se retiraron con la Tarea 4c del plan
+//     2026-09-23, cuando Reportes pasó a las funciones de la 0040 (las funciones SQL siguen: las
+//     retira una migración posterior).
 //   - reporteCajeros y los CUATRO de la 0040 (reporteResumen, reportePorDia, reporteClientes,
 //     reporteCajerosAlcance) devuelven `null` ante un error, NUNCA `[]`. En la pantalla de cajeros un
 //     vacío diría "nadie hizo nada raro" (ver reporteCajeros). En Reportes con filtros, un `[]` se
@@ -38,8 +40,6 @@ import { TAMANO_PAGINA_CLIENTES } from './pantallaReportes';
 // Los tipos de fila se DERIVAN de Database (fuente de verdad transcrita de la migración): si el shape
 // de una función cambia en types.ts, estos tipos y las pantallas se enteran en compilación.
 export type FilaReporteSucursal = Database['public']['Functions']['reporte_sucursales']['Returns'][number];
-export type FilaTopCliente = Database['public']['Functions']['reporte_top_clientes']['Returns'][number];
-export type FilaTendencia = Database['public']['Functions']['reporte_tendencia']['Returns'][number];
 export type FilaFmComercio = Database['public']['Functions']['reporte_fm_comercios']['Returns'][number];
 export type FilaReporteCajero = Database['public']['Functions']['reporte_cajeros']['Returns'][number];
 export type FilaReporteResumen = Database['public']['Functions']['reporte_resumen']['Returns'][number];
@@ -360,42 +360,6 @@ export async function reporteSucursales(
   const { data, error } = await supabase.rpc('reporte_sucursales', { p_comercio_id: comercioId });
   if (error) {
     console.error('[reportes] falló reporte_sucursales:', error);
-    return [];
-  }
-  return data ?? [];
-}
-
-// Top de clientes del comercio por cantidad de visitas (puntos como desempate). `limite` acota cuántas
-// filas pide la función (la propia SQL lo satura con greatest(..., 0)).
-export async function reporteTopClientes(
-  supabase: SupabaseClient<Database>,
-  comercioId: string,
-  limite: number,
-): Promise<FilaTopCliente[]> {
-  const { data, error } = await supabase.rpc('reporte_top_clientes', {
-    p_comercio_id: comercioId,
-    p_limite: limite,
-  });
-  if (error) {
-    console.error('[reportes] falló reporte_top_clientes:', error);
-    return [];
-  }
-  return data ?? [];
-}
-
-// Serie diaria (últimos `dias` días, hora de El Salvador) de acreditaciones y canjes. Incluye los días
-// sin actividad en 0, así la pantalla puede dibujar la tendencia sin huecos.
-export async function reporteTendencia(
-  supabase: SupabaseClient<Database>,
-  comercioId: string,
-  dias: number,
-): Promise<FilaTendencia[]> {
-  const { data, error } = await supabase.rpc('reporte_tendencia', {
-    p_comercio_id: comercioId,
-    p_dias: dias,
-  });
-  if (error) {
-    console.error('[reportes] falló reporte_tendencia:', error);
     return [];
   }
   return data ?? [];

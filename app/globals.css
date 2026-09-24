@@ -2124,6 +2124,119 @@ details.admin-fila:has(> summary:active) {
   white-space: nowrap;
 }
 
+/* ---------- tabla de clientes (reportes) ----------
+   TablaClientes.tsx. A 375px la tabla no entra: scrollea DENTRO de .tabla-marco (la página nunca de
+   costado) y la columna Cliente queda fija a la izquierda con `position: sticky`, así al mirar las
+   columnas de la derecha se sigue viendo de quién son. Las columnas se eligen por `data-columna` y no
+   por su posición: con dos o más comercios, Comercio es la segunda.
+   La celda fija necesita un fondo OPACO, o las otras columnas se ven pasar por debajo: el del marco,
+   --superficie-1, que en los tres temas es un color sólido. Y `border-collapse: separate`: con
+   `collapse`, el borde de una celda sticky no viaja con ella. */
+.tabla-marco {
+  overflow-x: auto;
+  background: var(--superficie-1);
+  border: 1px solid var(--borde-relieve);
+  border-radius: var(--radius);
+  box-shadow: var(--relieve-2);
+}
+.tabla-clientes {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.tabla-clientes :is(th, td) {
+  padding: 12px 14px;
+  text-align: right;
+  vertical-align: middle;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--linea);
+}
+.tabla-clientes tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.tabla-clientes thead th {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--texto-2);
+}
+/* Un encabezado que ordena: el enlace ocupa la celda entera, con 44px de alto para el dedo. */
+.tabla-clientes thead th:has(> a) {
+  padding: 0;
+}
+.tabla-clientes thead th > a {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 14px;
+}
+.tabla-clientes thead th > a .icono {
+  font-size: 14px;
+  color: var(--texto-3);
+}
+/* La columna por la que está ordenada, con el acento: es lo interactivo activo. */
+.tabla-clientes thead th:is([aria-sort="ascending"], [aria-sort="descending"]) > a,
+.tabla-clientes thead th:is([aria-sort="ascending"], [aria-sort="descending"]) > a .icono {
+  color: var(--acento);
+}
+.tabla-clientes td {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.86rem;
+  color: var(--texto);
+}
+/* El <th scope="row"> de cada fila: sin la negrita de un th (el nombre ya trae la suya). */
+.tabla-clientes tbody th {
+  font-weight: 400;
+}
+.tabla-clientes [data-columna="cliente"] {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--superficie-1);
+  text-align: left;
+  white-space: normal;
+  /* La línea que la separa de lo que pasa por debajo al scrollear. */
+  box-shadow: inset -1px 0 0 var(--linea);
+}
+.tabla-clientes thead [data-columna="cliente"] > a {
+  justify-content: flex-start;
+}
+/* El nombre parte renglón (un nombre largo no ensancha la columna fija más de la cuenta); el teléfono,
+   nunca: "+503 7777 1234" partido en dos se lee como dos números. El teléfono le da a la columna su
+   ancho mínimo. */
+.tabla-clientes [data-columna="cliente"] .admin-fila-nombre {
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+.tabla-clientes [data-columna="cliente"] .admin-fila-slug {
+  white-space: nowrap;
+}
+.tabla-clientes [data-columna="comercio"] {
+  text-align: left;
+}
+/* Solo la celda: el encabezado sigue en la mono de los demás. */
+.tabla-clientes td[data-columna="comercio"] {
+  font-family: var(--font-body);
+}
+.tabla-paginas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+.tabla-paginas-enlaces {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+}
+
 /* ---------- aviso de contexto (qué comercio se está configurando) ----------
    Solo se renderiza con 2+ comercios propios (ver AvisoComercioActivo.tsx). Discreto a propósito:
    es un recordatorio, no una alerta — pero con el acento del sistema para que el ojo lo agarre al
