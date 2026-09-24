@@ -147,8 +147,9 @@ function diaLocal(instante: string, zonaHoraria: string): string {
 }
 
 // Las filas del export, una por tarjeta, en el orden en que nacieron. null si NO se pudo leer algo
-// de lo que decide lo que dice el archivo (las tarjetas, las visitas o la zona del comercio): nunca
-// una lista a medias ni visitas en 0 que parezcan ciertas (la ruta responde 500).
+// de lo que decide lo que dice el archivo (las tarjetas, las visitas, la zona del comercio, los
+// programas o los niveles de descuento): nunca una lista a medias, visitas en 0 ni un saldo en otra
+// unidad que parezcan ciertos (la ruta responde 500).
 //
 // `tamanoPagina` es INYECTABLE para que las pruebas paginen de a 2 con cinco tarjetas; en producción,
 // el max-rows de PostgREST (1000).
@@ -186,10 +187,15 @@ export async function filasParaExportar(
     // modo 'todas', que pagina con su p_offset. Reusa la definición de "visita" del resto del panel en
     // vez de inventar otra. Antes salían de reporte_top_clientes con p_limite 100 000, que PostgREST
     // cortaba igual en 1000: del cliente 1001 en adelante, 0 visitas.
+    //
+    // Ordenadas por NOMBRE y no por visitas (el default): paginando por visitas, un cliente que recibe
+    // una visita mientras se exporta sube a una página ya leída y queda afuera, con 0. Por nombre, lo
+    // peor que pasa es una fila repetida en un corte de página (ver ModoTodasClientes), y el Map de
+    // abajo se queda con una sola.
     reporteClientes(
       supabase,
       { comercioIds: [comercioId], desde: null, hasta: null, sucursalId: null, cajeroId: null },
-      { modo: 'todas', tamanoPagina: tamano },
+      { modo: 'todas', orden: 'nombre', tamanoPagina: tamano },
     ),
     // El nombre y el TIPO de cada programa: el tipo es lo que decide en que unidad se lee el saldo.
     // `soloActivos: false` porque una tarjeta emitida en un programa que despues se desactivo sigue
@@ -220,17 +226,27 @@ export async function filasParaExportar(
     return null;
   }
   const zona = comercio.data.zona_horaria;
+  // Sin los programas no se sabe de qué tarjeta es cada fila NI en qué unidad se lee su saldo: la
+  // columna Tarjeta saldría vacía y una gift card de $12.50 diría "1250 puntos". listarProgramas ya
+  // registró el error.
+  if (programas === null) return null;
 
   // Una fila por cliente (p_comercios es este solo comercio). Un cliente que no está no tuvo
-  // actividad, y 0 es cierto: la lista vino COMPLETA (sin error y sin tope, chequeado arriba).
+  // actividad, y 0 es cierto: la lista vino COMPLETA (sin error y sin tope, chequeado arriba). Si un
+  // cliente llega DOS veces (una inserción corrió las filas durante la paginación), el Map se queda con
+  // la última lectura: reemplaza, nunca suma.
   const visitasPorCliente = new Map(visitas.filas.map((f) => [f.cliente_id, f.operaciones]));
-  const programaPorId = new Map((programas ?? []).map((p) => [p.id, p]));
+  const programaPorId = new Map(programas.map((p) => [p.id, p]));
 
   // Los niveles solo hacen falta si el comercio tiene un programa de descuento; casi ninguno lo
   // usa, asi que no se paga la consulta de gusto (mismo criterio que la pantalla Clientes).
   let niveles: NivelDeDescuento[] = [];
-  if ((programas ?? []).some((p) => p.tipoTarjeta === 'descuento')) {
-    niveles = (await listarNiveles(supabase, comercioId)) ?? [];
+  if (programas.some((p) => p.tipoTarjeta === 'descuento')) {
+    const leidos = await listarNiveles(supabase, comercioId);
+    // Sin los niveles, TODO cliente de descuento saldría "Sin descuento todavía", tenga el que tenga.
+    // listarNiveles ya registró el error.
+    if (leidos === null) return null;
+    niveles = leidos;
   }
 
   // El "hoy" del COMERCIO, no el del servidor: es lo que decide si una membresia se lee "Activa

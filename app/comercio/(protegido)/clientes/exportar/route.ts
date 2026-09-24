@@ -19,9 +19,10 @@ export const dynamic = 'force-dynamic';
 // FUERA de cualquier try/catch — redirect() funciona lanzando NEXT_REDIRECT y atraparlo desactiva
 // el gate.
 //
-// NUNCA UN ARCHIVO QUE PAREZCA CIERTO Y NO LO SEA: si una lectura falla (filasParaExportar da null) o
-// algo LANZA al armar el archivo, 500 en texto plano. Con <a download>, el navegador marca la descarga
-// como fallida; no le guarda al dueño un .xlsx vacío ni un CSV con las visitas en 0.
+// NUNCA UN ARCHIVO QUE PAREZCA CIERTO Y NO LO SEA: si una lectura falla (las tarjetas, las visitas, la
+// zona del comercio, los programas o los niveles de descuento: filasParaExportar da null) o algo LANZA
+// al armar el archivo, 500 en texto plano. Con <a download>, el navegador marca la descarga como
+// fallida; no le guarda al dueño un .xlsx vacío, un CSV con las visitas en 0 ni un saldo en otra unidad.
 
 const TIPO_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const ERROR_EXPORTACION = 'No se pudo generar la exportación. Probá de nuevo.';

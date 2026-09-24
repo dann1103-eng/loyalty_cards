@@ -351,6 +351,23 @@ describe('filasParaExportar (contra la base)', () => {
 //   tope: expected [ { nombre: 'Cliente Prueba', …(6) } ] to be null`.
 // - Suponer El Salvador si falla la lectura de la zona: cae "si falla la lectura de la zona…" con
 //   `exportó con una zona supuesta: expected [ { nombre: 'Cliente Prueba', …(6) } ] to be null`.
+//
+// Revisión de la Tarea 6 (2026-09-24), mismas reglas:
+// - Tolerar la falla de listarProgramas (sin la guarda, con `programas ?? []` como antes): cae "si
+//   falla la lectura de los programas…" con `exportó sin el nombre de la tarjeta y con el saldo en
+//   otra unidad: expected [ { nombre: 'Cliente Prueba', …(6) } ] to be null`.
+// - Tolerar la falla de listarNiveles (`niveles = leidos ?? []`): cae "si falla la lectura de los
+//   niveles…" con `exportó a los clientes de descuento sin sus niveles: expected [ { nombre: 'Cliente
+//   Prueba', …(6) } ] to be null`.
+// - La exportación sin `orden: 'nombre'` (el default, visitas desc): cae "las visitas se piden
+//   ordenadas por NOMBRE…" con `expected [ [ 'visitas', true, +0 ], …(1) ] to deeply equal [ [
+//   'nombre', false, +0 ], …(1) ]`. El wrapper ignorando `modo.orden` (reportes.ts): la misma, con el
+//   mismo mensaje. El wrapper siempre desc: la misma, con `expected [ [ 'nombre', true, +0 ], …(1) ]`.
+// - El default de 'todas' cambiado a 'nombre' (le cambiaría el orden al Excel de Reportes): no lo ve
+//   este archivo; caen 2 de lib/reportes/reportesConFiltros.test.ts ("todas, con tamaño de página 2…"
+//   y "…4 clientes (múltiplo exacto)…"), con `expected [ …(5) ] to deeply equal [ …(5) ]`.
+// - El Map de visitas SUMANDO un cliente repetido: cae "un cliente que llega DOS veces…" con `B sumó
+//   sus visitas dos veces: expected [ 3, 4, 1 ] to deeply equal [ 3, 2, 1 ]`.
 describe('filasParaExportar: los cuatro defectos (contra la base)', () => {
   const supabase = createServiceClient();
   const entorno = crearEntorno(supabase);
@@ -521,6 +538,113 @@ describe('filasParaExportar: los cuatro defectos (contra la base)', () => {
 
     expect(filas, 'exportó con una zona supuesta').toBeNull();
     expect(errores).toHaveBeenCalledWith('[exportar] no se pudo leer la zona horaria del comercio:', FALLA);
+  });
+
+  it('si falla la lectura de los programas, FALLA: una gift card de $12.50 no sale "1250 puntos"', async () => {
+    // Sin los programas no se sabe de qué tarjeta es cada fila ni en qué unidad se lee el saldo.
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'gift_card' });
+    await entorno.crearTarjeta(comercioId, 1250);
+    // Control: con la base respondiendo, el saldo sale en dólares.
+    expect((await filasParaExportar(supabase, comercioId))?.map((f) => f.saldo)).toEqual(['$12.50 disponibles']);
+
+    const errores = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const falla = clienteCon(supabase, {
+      tablas: { programas_tarjeta: () => consultaFalsa(() => ({ data: null, error: FALLA })) },
+    });
+
+    const filas = await filasParaExportar(falla, comercioId);
+
+    expect(filas, 'exportó sin el nombre de la tarjeta y con el saldo en otra unidad').toBeNull();
+    expect(errores).toHaveBeenCalledWith('[comercio] no se pudo listar los programas:', FALLA);
+  });
+
+  it('si falla la lectura de los niveles de descuento, FALLA: nadie sale "Sin descuento todavía" por error', async () => {
+    // Sin niveles REALES a propósito: limpiar() no borra niveles_descuento, y uno sembrado dejaría el
+    // comercio sin poder borrarse. Para ver que la lectura fallida hace fallar el export no hace falta:
+    // basta un programa de descuento, que es lo que dispara la lectura.
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    const programa = await crearPrograma(supabase, comercioId, {
+      nombre: 'Clientes frecuentes',
+      tipoTarjeta: 'descuento',
+      cashbackPorcentaje: null,
+      multipassVisitas: null,
+      membresiaDias: null,
+      cuponVigenciaDias: null,
+    });
+    if (!programa.ok) throw new Error(`no se pudo crear el programa de descuento: ${programa.error}`);
+    await entorno.crearTarjeta(comercioId, 0, { programaId: programa.id });
+    // Control: con la base respondiendo, la tarjeta de descuento sale.
+    expect((await filasParaExportar(supabase, comercioId))?.map((f) => f.tarjeta)).toEqual(['Clientes frecuentes']);
+
+    const errores = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const falla = clienteCon(supabase, {
+      tablas: { niveles_descuento: () => consultaFalsa(() => ({ data: null, error: FALLA })) },
+    });
+
+    const filas = await filasParaExportar(falla, comercioId);
+
+    expect(filas, 'exportó a los clientes de descuento sin sus niveles').toBeNull();
+    expect(errores).toHaveBeenCalledWith('[descuento] no se pudieron leer los niveles:', FALLA);
+  });
+
+  it('las visitas se piden ordenadas por NOMBRE (A→Z), no por visitas', async () => {
+    // Paginando por visitas, un cliente que recibe una visita MIENTRAS se exporta sube a una página ya
+    // leída y queda afuera, con 0 (ver ModoTodasClientes en lib/reportes/reportes.ts). Tres clientes
+    // con páginas de 2: dos llamadas.
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    for (const cuantas of [1, 2, 3]) {
+      const { id } = await entorno.crearTarjeta(comercioId, 0);
+      await entorno.sembrarActividad(visitas(id, cuantas));
+    }
+    const rpc = vi.spyOn(supabase, 'rpc');
+
+    const filas = await filasParaExportar(supabase, comercioId, { tamanoPagina: 2 });
+
+    expect(filas?.map((f) => f.visitas).sort()).toEqual([1, 2, 3]);
+    const pedidas = rpc.mock.calls
+      .filter(([funcion]) => funcion === 'reporte_clientes')
+      .map(([, args]) => {
+        const a = args as Record<string, unknown>;
+        return [a.p_orden, a.p_desc, a.p_offset];
+      });
+    expect(pedidas).toEqual([
+      ['nombre', false, 0],
+      ['nombre', false, 2],
+    ]);
+  });
+
+  it('un cliente que llega DOS veces (una inserción corrió las filas) no suma sus visitas dos veces', async () => {
+    // Con el orden por nombre, un cliente nuevo que entra ANTES del corte durante la paginación corre
+    // las filas una posición: la página siguiente repite la última de la anterior. El Map de visitas
+    // se tiene que quedar con UNA.
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    const a = await entorno.crearTarjeta(comercioId, 0, { createdAt: '2026-03-01T10:00:00-06:00' });
+    const b = await entorno.crearTarjeta(comercioId, 0, { createdAt: '2026-03-02T10:00:00-06:00' });
+    const c = await entorno.crearTarjeta(comercioId, 0, { createdAt: '2026-03-03T10:00:00-06:00' });
+    const fila = (clienteId: string, operaciones: number, total: number, offset: number) => ({
+      cliente_id: clienteId,
+      operaciones,
+      total,
+      offset_efectivo: offset,
+    });
+    // Página 1: A y B, de 3. Entre las dos llamadas entra un cliente nuevo antes de B: la página 2
+    // (de 4) vuelve a empezar con B.
+    const corrida = clienteCon(supabase, {
+      rpc: {
+        reporte_clientes: (args) =>
+          Promise.resolve({
+            data:
+              Number(args.p_offset) === 0
+                ? [fila(a.clienteId, 3, 3, 0), fila(b.clienteId, 2, 3, 0)]
+                : [fila(b.clienteId, 2, 4, 2), fila(c.clienteId, 1, 4, 2)],
+            error: null,
+          }),
+      },
+    });
+
+    const filas = await filasParaExportar(corrida, comercioId, { tamanoPagina: 2 });
+
+    expect(filas?.map((f) => f.visitas), 'B sumó sus visitas dos veces').toEqual([3, 2, 1]);
   });
 
   it('más de 50 000 tarjetas: FALLA en vez de exportar una lista cortada', async () => {

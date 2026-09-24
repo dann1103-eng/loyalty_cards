@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
-import type { DireccionOrden, OrdenClientes } from './filtrosReportes';
+import { direccionInicial, type DireccionOrden, type OrdenClientes } from './filtrosReportes';
 import {
   paginarPorOffset,
   paginarPorRango,
@@ -234,8 +234,9 @@ function compararTexto(a: string | null, b: string | null): number {
 //   - 'pagina': la tabla de la pantalla. UNA llamada, `tamanoPagina` filas (por defecto
 //     TAMANO_PAGINA_CLIENTES, el mismo número con el que paginacionClientes convierte el offset en
 //     "Página X de Y") en la página pedida, con el orden de la URL.
-//   - 'todas': el Excel (y la lista de clientes de la Tarea 6). Todas las filas por visitas desc (spec
-//     §4: el Excel no lleva orden/dir/pagina), con paginarPorOffset.
+//   - 'todas': el Excel (y la lista de clientes de la Tarea 6). TODAS las filas, con paginarPorOffset.
+//     Por defecto por visitas desc (spec §4: el Excel no lleva orden/dir/pagina); `orden` elige otra
+//     columna, siempre con su dirección inicial (direccionInicial: nombre A→Z, el resto desc).
 export interface ModoPaginaClientes {
   modo: 'pagina';
   pagina: number; // 1 = la primera; más allá del final, la SQL devuelve la última
@@ -245,6 +246,13 @@ export interface ModoPaginaClientes {
 }
 export interface ModoTodasClientes {
   modo: 'todas';
+  // Por defecto 'visitas' (el Excel de Reportes). Leer TODO paginando con un orden que se mueve con la
+  // actividad tiene una carrera: un cliente de la página 2 o siguientes que recibe una visita MIENTRAS
+  // se pagina sube a una página ya leída y queda afuera. Quien necesita a cada cliente sí o sí (la
+  // lista de clientes, que si no le pone 0 visitas) pide 'nombre' (0040: nombre, apellido, cliente_id):
+  // una visita no mueve a nadie, y un cliente nuevo solo corre las filas una posición (una fila
+  // repetida en el corte, nunca salteada). Solo un cambio de nombre en ese mismo instante movería a uno.
+  orden?: OrdenClientes;
   tamanoPagina?: number;
 }
 
@@ -271,8 +279,10 @@ export async function reporteClientes(
   modo: ModoPaginaClientes | ModoTodasClientes,
 ): Promise<PaginaPorOffset<FilaReporteCliente> | Paginado<FilaReporteCliente> | null> {
   if (modo.modo === 'todas') {
+    const orden = modo.orden ?? 'visitas';
+    const descendente = direccionInicial(orden) === 'desc';
     return paginarPorOffset(
-      (offset, limite) => pedirPaginaClientes(supabase, filtros, 'visitas', true, limite, offset),
+      (offset, limite) => pedirPaginaClientes(supabase, filtros, orden, descendente, limite, offset),
       modo.tamanoPagina ?? MAXIMO_POR_PAGINA,
     );
   }
