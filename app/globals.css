@@ -1266,6 +1266,18 @@ details.admin-fila:has(> summary:active) {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 20px;
   }
+  /* Tres cartas en una fila (la cabecera de Reportes: Visitas, Premios y Clientes). Modificador y no
+     un cambio de .metric-pila: el panel del comercio y el reporte del admin siguen con dos columnas, y
+     el dashboard del admin pisa las suyas con un gridTemplateColumns en línea. Reportes va en un
+     main de 640px: cada carta queda en ~187px, y con el número a 2.9rem un "123456" (seis dígitos
+     mono, ~167px) no entra en los ~145px de adentro. A 2.3rem entra. En móvil siguen apiladas, a
+     ancho completo y con el número grande. */
+  .metric-pila.tres {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .metric-pila.tres .metric-valor {
+    font-size: 2.3rem;
+  }
 }
 
 /* ---------- accesos rápidos (C2) ---------- */
@@ -2089,6 +2101,13 @@ details.admin-fila:has(> summary:active) {
   border-radius: var(--radius-pill);
   padding: 6px 12px;
   box-shadow: var(--hundido-1);
+  /* Ancho máximo y puntos suspensivos: el filtro de cajero muestra emails, y uno largo desbordaba la
+     página a 375px (un <a> en línea no se corta). El texto entero va en el `title` del chip. El
+     min(100%, …) es por si el tope fuera más ancho que la fila. */
+  max-width: min(100%, 15rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .filtro-chip.activo {
   color: var(--sobre-acento);

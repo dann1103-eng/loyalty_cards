@@ -1,366 +1,191 @@
 import Link from 'next/link';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
-import { listarSucursales, idsSucursalesPrincipales } from '@/lib/comercio/sucursales';
-import {
-  reporteSucursales,
-  reporteTendencia,
-  reporteTopClientes,
-  type FilaReporteSucursal,
-} from '@/lib/reportes/reportes';
-import { sumarTendencias, fusionarTopClientes } from '@/lib/reportes/agregados';
-import { comercioAConsultar } from '@/lib/reportes/filtrosReportes';
+import { idsSucursalesPrincipales } from '@/lib/comercio/sucursales';
 import { leerParametrosReportes } from '@/lib/reportes/parametrosReportes';
-import { listarProgramas } from '@/lib/comercio/programas';
-import { describirCosto } from '@/lib/tarjetas/unidadPrograma';
+import { cargarContextoReportes } from '@/lib/reportes/contextoReportes';
+import { resolverFiltrosReportes } from '@/lib/reportes/filtrosReportes';
+import { filtrosRpc, reporteResumen, reportePorDia } from '@/lib/reportes/reportes';
+import { urlExcelReportes } from '@/lib/reportes/urlReportes';
+import { totalesDelResumen, type TotalesResumen } from '@/lib/reportes/pantallaReportes';
+import { FiltrosReportes } from './FiltrosReportes';
+import { PorDia } from './PorDia';
+import { PorSucursal } from './PorSucursal';
+import { AvisoBloque } from './AvisoBloque';
 
 export const dynamic = 'force-dynamic';
 
-const DIAS_TENDENCIA = 14;
-const TOP_LIMITE = 5;
-
-// Etiqueta corta dd/mm a partir del `dia` (string "YYYY-MM-DD"). Se parte a mano en vez de `new Date`
-// para no arrastrar el desfase de zona horaria (la SQL ya cortó los días en hora de El Salvador).
-function etiquetaDia(dia: string): string {
-  const [, mm, dd] = dia.split('-');
-  return `${dd}/${mm}`;
-}
-
-function Estadistica({ valor, etiqueta }: { valor: number; etiqueta: string }) {
-  return (
-    <div>
-      <div className="dato-mono" style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--texto)', lineHeight: 1 }}>
-        {valor}
-      </div>
-      <div className="admin-fila-slug" style={{ marginTop: 4 }}>{etiqueta}</div>
-    </div>
-  );
-}
-
-// `esPrincipal` viene de afuera: reporte_sucursales (0010) no devuelve es_principal — se cruza con
-// el listado de sucursales que la página ya carga.
-function CartaSucursal({ fila, esPrincipal }: { fila: FilaReporteSucursal; esPrincipal: boolean }) {
-  return (
-    <div className="panel" style={{ marginTop: 0 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h3 className="admin-fila-nombre" style={{ fontSize: '1.05rem' }}>
-          {fila.sucursal_nombre ?? 'Sin sucursal'}
-          {esPrincipal && <span className="admin-fila-slug" style={{ marginLeft: 8 }}>Principal</span>}
-        </h3>
-        {fila.sucursal_activa === false && <span className="pastilla pastilla-inactivo">inactiva</span>}
-        {fila.sucursal_id === null && <span className="admin-fila-slug">actividad sin asignar</span>}
-      </div>
-      <div style={{ display: 'flex', gap: 28 }}>
-        <Estadistica valor={fila.clientes_unicos} etiqueta="Clientes" />
-        <Estadistica valor={fila.operaciones} etiqueta="Operaciones" />
-        <Estadistica valor={fila.canjes} etiqueta="Premios" />
-      </div>
-    </div>
-  );
-}
-
+// Reportes del dueño (spec 2026-09-23 §1 y §2): el CONGLOMERADO de sus comercios owner (ignora el
+// switcher del header, spec 2026-07-25 §4.7), filtrable por período, comercio, sucursal y cajero en
+// TODOS sus bloques. Los filtros van por GET y sin JavaScript: la URL es el reporte.
+//
+// El flujo es el de la cabecera de lib/reportes/contextoReportes.ts, el MISMO que la ruta del Excel,
+// para que la pantalla y el archivo filtren igual:
+//   gate → leerParametrosReportes → cargarContextoReportes → resolverFiltrosReportes → filtrosRpc.
+// Los ids de la URL (input del cliente) se validan en resolverFiltrosReportes ANTES de correr ninguna
+// RPC: un comercio que no es suyo, o una sucursal o un cajero de otro comercio, caen a su default.
+//
+// Toda decisión que no es puro markup vive en funciones puras con prueba (lib/reportes/
+// pantallaReportes.ts y urlReportes.ts): el repo no tiene pruebas de componentes.
 export default async function PaginaReportes({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  // Gate del dueño. La vista es el CONGLOMERADO de sus comercios owner (plan 2026-07-25 §4.7) e
-  // IGNORA el switcher del header. Los filtros vienen del querystring (input del cliente) y se
-  // validan ANTES de correr cualquier RPC — ?comercio contra la lista owner, ?sucursal por
-  // pertenencia al comercio resuelto. Un id ajeno, inválido o repetido cae a "Todo"/"todas".
-  const { comercios } = await verifyComercioOwner();
+  // Gate del dueño FUERA de cualquier try/catch: redirect() funciona lanzando NEXT_REDIRECT.
+  const sesion = await verifyComercioOwner();
   const parametros = leerParametrosReportes(await searchParams);
   const supabase = createServiceClient();
+  const varios = sesion.comercios.length >= 2;
 
-  // INTERINO hasta la Tarea 4b del plan 2026-09-23, que pasa esta página a cargarContextoReportes +
-  // resolverFiltrosReportes (lib/reportes/filtrosReportes.ts). Mientras tanto: comercioAConsultar
-  // resuelve el comercio ANTES de cargar sus sucursales, con la regla "un solo comercio = elegido"
-  // (el prechequeo que había acá miraba solo ?comercio, y un dueño con un comercio nunca cargaba
-  // sus sucursales). La sucursal se busca en la lista de ESE comercio: un id ajeno no está en ella y
-  // cae a "todas". Activas e inactivas: el histórico de una sucursal apagada sigue siendo consultable.
-  const comercioFiltrado = comercioAConsultar(comercios, parametros);
-  const sucursalesDelComercio = comercioFiltrado
-    ? ((await listarSucursales(supabase, comercioFiltrado.comercioId)) ?? [])
-    : [];
-  const sucursalFiltrada = sucursalesDelComercio.find((s) => s.id === parametros.sucursal) ?? null;
+  const cargado = await cargarContextoReportes(supabase, sesion, parametros);
+  if (!cargado.ok) {
+    // Sin el contexto no se puede validar la sucursal ni el cajero de la URL: resolver con listas
+    // vacías los descartaría EN SILENCIO y la pantalla mostraría números sin filtrar como si fueran
+    // los filtrados. Un aviso y ningún número (contextoReportes.ts).
+    console.error('[reportes] no se pudo cargar el contexto de los filtros:', cargado.error);
+    return (
+      <main className="admin-main" style={{ maxWidth: 640 }}>
+        <Encabezado varios={varios} urlExcel={null} />
+        <p className="admin-error reveal d2" role="alert">
+          No pudimos cargar los filtros. Recargá la página.
+        </p>
+      </main>
+    );
+  }
 
-  const alcance = comercioFiltrado ? [comercioFiltrado] : comercios;
-  // Todo en paralelo: 3 RPC por comercio del alcance + UNA sola consulta para las principales de
-  // todos ellos. Las principales van aparte (y no un listarSucursales por comercio) porque
-  // reporte_sucursales (0010) no devuelve es_principal y la etiqueta se resuelve cruzando por id:
-  // pedirlo comercio por comercio sumaba N round-trips en una página force-dynamic que se abre
-  // seguido, y en la vista filtrada repetía exactamente la consulta que ya hizo sucursalesDelComercio.
-  const [datos, idsPrincipales] = await Promise.all([
-    Promise.all(
-      alcance.map(async (c) => {
-        const [sucursales, tendencia, top] = await Promise.all([
-          reporteSucursales(supabase, c.comercioId),
-          reporteTendencia(supabase, c.comercioId, DIAS_TENDENCIA),
-          reporteTopClientes(supabase, c.comercioId, TOP_LIMITE),
-        ]);
-        return { comercio: c, sucursales, tendencia, top };
-      }),
-    ),
+  const filtros = resolverFiltrosReportes(sesion.comercios, parametros, cargado.contexto, new Date());
+  const rpc = filtrosRpc(filtros);
+
+  // En paralelo: el resumen (cabecera y cartas por sucursal), la serie en modo 'auto' (por día, o por
+  // mes si el tramo pasa de 62 días) y las principales del alcance para la etiqueta "Principal"
+  // (reporte_resumen no trae es_principal; si esa consulta falla, la etiqueta no sale: es cosmética).
+  const [resumen, porDia, idsPrincipales] = await Promise.all([
+    reporteResumen(supabase, rpc),
+    reportePorDia(supabase, rpc, 'auto'),
     idsSucursalesPrincipales(
       supabase,
-      alcance.map((c) => c.comercioId),
+      filtros.alcance.map((c) => c.comercioId),
     ),
   ]);
 
-  // Cabecera: con filtro de sucursal, SUS números; si no, la suma del alcance visible.
-  const filasVisibles = sucursalFiltrada
-    ? datos[0].sucursales.filter((f) => f.sucursal_id === sucursalFiltrada.id)
-    : datos.flatMap((d) => d.sucursales);
-  const totalOperaciones = filasVisibles.reduce((suma, f) => suma + f.operaciones, 0);
-
-  // El tipo de CADA comercio del alcance, no uno solo: esta pantalla agrega el conglomerado del
-  // dueno y cada negocio puede tener un tipo distinto. Se usa para decir los acumulados en la unidad
-  // correcta — en cashback y gift card el contador son CENTAVOS, y un "1250 pts" sobre $12.50 le
-  // hace leer mal su negocio.
-  const tipoPorComercio = new Map<string, string>(
-    await Promise.all(
-      alcance.map(async (c): Promise<[string, string]> => {
-        const suyos = await listarProgramas(supabase, c.comercioId);
-        return [c.comercioId, (suyos ?? []).find((p) => p.esPrincipal)?.tipoTarjeta ?? 'puntos'];
-      }),
-    ),
-  );
-  const totalPremios = filasVisibles.reduce((suma, f) => suma + f.canjes, 0);
-
-  const tendencia = sucursalFiltrada ? [] : sumarTendencias(datos.map((d) => d.tendencia));
-  const maxDia = Math.max(1, ...tendencia.map((d) => d.operaciones + d.canjes));
-  const hayActividad = totalOperaciones + totalPremios > 0;
-  const topGlobal = sucursalFiltrada
-    ? []
-    : fusionarTopClientes(
-        datos.map((d) => ({
-          comercioId: d.comercio.comercioId,
-          comercioNombre: d.comercio.nombre,
-          filas: d.top,
-        })),
-        TOP_LIMITE,
-      );
-
-  // reporte_sucursales arma sus filas desde la ACTIVIDAD (0010), no desde la tabla sucursales: un
-  // comercio sin movimientos devuelve 0 filas. Se separan para no repetir el mismo "todavía no hay
-  // actividad" una vez por comercio vacío — el ruido crecería justo cuando menos información hay.
-  const conActividad = datos.filter((d) => d.sucursales.length > 0);
-  const sinActividad = datos.filter((d) => d.sucursales.length === 0);
-
-  const urlComercio = (id?: string) => (id ? `/comercio/reportes?comercio=${id}` : '/comercio/reportes');
-  const urlSucursal = (id?: string) =>
-    comercioFiltrado
-      ? id
-        ? `/comercio/reportes?comercio=${comercioFiltrado.comercioId}&sucursal=${id}`
-        : urlComercio(comercioFiltrado.comercioId)
-      : urlComercio();
+  // La cabecera sale de la fila `es_total`. La 0040 la devuelve SIEMPRE (con ceros si no hubo nada):
+  // si falta, es un contrato roto y se trata como un error del bloque, no como ceros.
+  const totales = resumen ? totalesDelResumen(resumen.filas) : null;
+  if (resumen && !totales) {
+    console.error('[reportes] reporte_resumen respondió sin la fila total (contrato de la 0040)');
+  }
 
   return (
     <main className="admin-main" style={{ maxWidth: 640 }}>
-      <section className="reveal d1" style={{ marginBottom: 18 }}>
-        <h1 className="title" style={{ fontSize: '1.7rem', margin: 0 }}>Reportes</h1>
-        <p className="lede" style={{ marginTop: 6 }}>
-          {comercios.length > 1
-            ? 'Todos tus comercios en un solo lugar. Filtrá por comercio o sucursal.'
-            : 'Cómo se mueve tu programa de lealtad por sucursal.'}
-        </p>
-        {/* Actividad por cajero (Tanda 1). Es la vista que delata al que se sale de la curva: acá
-            los números están agregados por sucursal y ahí un cajero queda diluido entre sus
-            compañeros. Se lee siempre del comercio ACTIVO (el del switcher del header). */}
-        <Link className="btn-borde" style={{ marginTop: 12 }} href="/comercio/reportes/cajeros">
-          <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">badge</span>
+      <Encabezado varios={varios} urlExcel={urlExcelReportes(filtros)} />
+
+      <FiltrosReportes comercios={sesion.comercios} filtros={filtros} contexto={cargado.contexto} />
+
+      <Cabecera totales={totales} />
+
+      <PorDia filas={porDia?.filas ?? null} totales={totales} />
+
+      <PorSucursal filas={resumen?.filas ?? null} filtros={filtros} idsPrincipales={idsPrincipales} />
+
+      {/* TODO(4c): la tabla de clientes (TablaClientes.tsx, spec §3) va acá, en lugar del top 5 que
+          había. Hasta la 4c este bloque no se dibuja; la rama no se publica a medias. */}
+    </main>
+  );
+}
+
+// Título, bajada y los dos botones. `urlExcel` null = no hay filtros resueltos (el contexto no cargó):
+// sin filtros no hay qué descargar.
+function Encabezado({ varios, urlExcel }: { varios: boolean; urlExcel: string | null }) {
+  return (
+    <section className="reveal d1" style={{ marginBottom: 8 }}>
+      <h1 className="title" style={{ fontSize: '1.7rem', margin: 0 }}>
+        Reportes
+      </h1>
+      <p className="lede" style={{ marginTop: 6 }}>
+        {varios
+          ? 'Todos tus comercios en un solo lugar. Filtrá por período, comercio, sucursal o cajero.'
+          : 'Cómo se mueve tu programa de lealtad. Elegí el período y filtrá lo que quieras mirar.'}
+      </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 14 }}>
+        {/* <a download> y NUNCA <Link>: el destino es un Route Handler que devuelve un archivo, y el
+            prefetch de Link lo EJECUTARÍA (armar el Excel entero) en cada vista de esta página. El
+            atributo `download` es además lo que le dice a la regla de lint de Next que esto es una
+            descarga y no un enlace interno mal hecho (como el CSV de clientes/page.tsx). La URL lleva
+            los filtros de la vista, sin orden ni página (urlExcelReportes). */}
+        {urlExcel && (
+          <a className="btn-borde" href={urlExcel} download>
+            <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">
+              download
+            </span>
+            Descargar Excel
+          </a>
+        )}
+        {/* Actividad por cajero (Tanda 1): sigue como antes, del comercio ACTIVO y con su propio rango.
+            El detalle por cajero con todos estos filtros está en la hoja Cajeros del Excel y en el
+            filtro de cajero de esta pantalla (spec §2). */}
+        <Link className="btn-borde" href="/comercio/reportes/cajeros">
+          <span className="icono" style={{ fontSize: 18 }} aria-hidden="true">
+            badge
+          </span>
           Ver actividad por cajero
         </Link>
+      </div>
+    </section>
+  );
+}
+
+// Visitas, Premios y Clientes del alcance y el período, de la fila total del resumen. Clientes es la
+// cuenta DISTINTA (quien fue a dos sucursales, o tiene tarjeta en dos comercios, cuenta 1). Tres cartas
+// con .metric-pila.tres (globals.css): la pila de dos columnas la siguen usando el panel y el admin.
+function Cabecera({ totales }: { totales: TotalesResumen | null }) {
+  if (totales === null) {
+    return (
+      <section className="reveal d2" style={{ marginBottom: 26 }}>
+        <AvisoBloque />
       </section>
-
-      {/* Filtros (GET, sin JS): fila de comercios; con uno elegido, fila de sus sucursales. */}
-      <section className="reveal d1" style={{ marginBottom: 20 }}>
-        <div className="filtro-chips">
-          <Link className={`filtro-chip${!comercioFiltrado ? ' activo' : ''}`} href={urlComercio()}>
-            Todo
-          </Link>
-          {comercios.map((c) => (
-            <Link
-              key={c.comercioId}
-              className={`filtro-chip${comercioFiltrado?.comercioId === c.comercioId ? ' activo' : ''}`}
-              href={urlComercio(c.comercioId)}
-            >
-              {c.nombre}
-            </Link>
-          ))}
+    );
+  }
+  return (
+    <section className="metric-pila tres reveal d2">
+      <div className="metric-carta naranja">
+        <div className="metric-etiqueta">
+          <span>Visitas</span>
+          <span className="icono" aria-hidden="true">
+            sensors
+          </span>
         </div>
-        {comercioFiltrado && sucursalesDelComercio.length > 0 && (
-          <div className="filtro-chips" style={{ marginTop: 12 }}>
-            <Link className={`filtro-chip${!sucursalFiltrada ? ' activo' : ''}`} href={urlSucursal()}>
-              Todas
-            </Link>
-            {sucursalesDelComercio.map((s) => (
-              <Link
-                key={s.id}
-                className={`filtro-chip${sucursalFiltrada?.id === s.id ? ' activo' : ''}`}
-                href={urlSucursal(s.id)}
-              >
-                {s.nombre}
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Métricas de cabecera (alcance visible). */}
-      <section className="metric-pila reveal d2">
-        <div className="metric-carta naranja">
-          <div className="metric-etiqueta">
-            <span>Operaciones</span>
-            <span className="icono" aria-hidden="true">sensors</span>
-          </div>
-          <div>
-            <div className="metric-valor">{totalOperaciones}</div>
-            {/* "Operaciones" y no "Visitas acreditadas" desde la 0033: el conteo incluye ahora los
-                usos (cupón, visita de prepago, cobro de gift card) y las renovaciones de membresía,
-                que antes no se contaban y dejaban a esos comercios con el reporte en cero. */}
-            <div className="metric-sub">veces que atendiste a un cliente</div>
-          </div>
+        <div>
+          <div className="metric-valor">{totales.visitas}</div>
+          {/* "Visitas" (decisión de Daniel, spec "Rótulo"); la cuenta es la de la 0033: acreditaciones,
+              usos y renovaciones. El subtítulo que la explica se conserva. */}
+          <div className="metric-sub">veces que atendiste a un cliente</div>
         </div>
-        <div className="metric-carta menta">
-          <div className="metric-etiqueta">
-            <span>Premios canjeados</span>
-            <span className="icono" aria-hidden="true">redeem</span>
-          </div>
-          <div>
-            <div className="metric-valor">{totalPremios}</div>
-            <div className="metric-sub">recompensas entregadas</div>
-          </div>
+      </div>
+      <div className="metric-carta menta">
+        <div className="metric-etiqueta">
+          <span>Premios</span>
+          <span className="icono" aria-hidden="true">
+            redeem
+          </span>
         </div>
-      </section>
-
-      {sucursalFiltrada ? (
-        /* Vista por SUCURSAL: su carta + nota (tendencia y top son por comercio — RPC de la 0010;
-           crear variantes por sucursal quedó explícitamente fuera de alcance). */
-        <section className="reveal d3">
-          {filasVisibles.length === 0 ? (
-            <p className="admin-vacio">Todavía no hay actividad registrada en {sucursalFiltrada.nombre}.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {filasVisibles.map((f) => (
-                <CartaSucursal
-                  key={f.sucursal_id ?? 'sin-sucursal'}
-                  fila={f}
-                  esPrincipal={f.sucursal_id !== null && idsPrincipales.has(f.sucursal_id)}
-                />
-              ))}
-            </div>
-          )}
-          <p className="nota" style={{ marginTop: 14 }}>
-            Al filtrar por sucursal se ocultan la tendencia y el top de clientes: esos reportes solo
-            existen por comercio.{' '}
-            <Link className="admin-fila-slug" href={urlSucursal()}>Quitar el filtro de sucursal →</Link>
-          </p>
-        </section>
-      ) : (
-        <>
-          {/* Por comercio (cabecera con el nombre solo cuando hay 2+ en el alcance). Los comercios
-              sin actividad NO llevan bloque propio: se nombran juntos en una línea al final. */}
-          <section className="reveal d3" style={{ marginBottom: 22 }}>
-            {conActividad.length === 0 ? (
-              <p className="admin-vacio">
-                {alcance.length > 1
-                  ? 'Todavía no hay actividad registrada en ninguno de tus comercios.'
-                  : 'Todavía no hay actividad registrada.'}
-              </p>
-            ) : (
-              <>
-                {conActividad.map((d) => (
-                  <div key={d.comercio.comercioId} style={{ marginBottom: 18 }}>
-                    <p className="titulo-seccion" style={{ marginBottom: 10 }}>
-                      {alcance.length > 1 ? d.comercio.nombre : 'Por sucursal'}
-                    </p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {d.sucursales.map((f) => (
-                        <CartaSucursal
-                          key={f.sucursal_id ?? 'sin-sucursal'}
-                          fila={f}
-                          esPrincipal={f.sucursal_id !== null && idsPrincipales.has(f.sucursal_id)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                {sinActividad.length > 0 && (
-                  <p className="admin-fila-slug">
-                    Sin actividad todavía: {sinActividad.map((d) => d.comercio.nombre).join(', ')}.
-                  </p>
-                )}
-              </>
-            )}
-          </section>
-
-          {/* Tendencia agregada del alcance. */}
-          <section className="panel reveal d4" style={{ marginTop: 0, marginBottom: 22 }}>
-            <h2 className="admin-fila-nombre" style={{ fontSize: '1.1rem', marginBottom: 4 }}>
-              Últimos {DIAS_TENDENCIA} días
-            </h2>
-            <p className="admin-fila-slug" style={{ marginBottom: 16 }}>
-              Visitas y premios por día (visitas / premios).
-            </p>
-            {!hayActividad ? (
-              <p style={{ color: 'var(--texto-2)', fontSize: '0.9rem' }}>
-                Aún no hay movimientos para graficar.
-              </p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {tendencia.map((d) => {
-                  const total = d.operaciones + d.canjes;
-                  const pct = Math.round((total / maxDia) * 100);
-                  return (
-                    <div key={d.dia} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span className="dato-mono" style={{ width: 46, fontSize: '0.72rem', color: 'var(--texto-2)' }}>
-                        {etiquetaDia(d.dia)}
-                      </span>
-                      <div className="pista" style={{ flex: 1 }}>
-                        <div className="pista-relleno" style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="dato-mono" style={{ width: 58, textAlign: 'right', fontSize: '0.72rem', color: 'var(--texto-2)' }}>
-                        {d.operaciones}/{d.canjes}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          {/* Top de clientes (con etiqueta del comercio cuando el alcance es más de uno). */}
-          <section className="reveal d5">
-            <p className="titulo-seccion" style={{ marginBottom: 10 }}>Clientes más frecuentes</p>
-            {topGlobal.length === 0 ? (
-              <p className="admin-vacio">Todavía no hay clientes con visitas.</p>
-            ) : (
-              <div className="admin-lista">
-                {/* key por ID de comercio, no por nombre: comercios.nombre no es unique (0001), y
-                    dos homónimos con el mismo cliente colisionarían (ver test de fusionarTopClientes). */}
-                {topGlobal.map((c) => (
-                  <div key={`${c.comercio_id}-${c.cliente_id}`} className="admin-fila">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                      <span className="icono-circulo acento" aria-hidden="true">
-                        <span className="icono">person</span>
-                      </span>
-                      <div>
-                        <div className="admin-fila-nombre">{c.cliente_nombre}</div>
-                        <div className="admin-fila-slug">
-                          <span className="dato-mono">{c.visitas}</span> visitas
-                          {alcance.length > 1 ? ` · ${c.comercio_nombre}` : ''}
-                        </div>
-                      </div>
-                    </div>
-                    <span className="admin-fila-slug dato-mono">{describirCosto(tipoPorComercio.get(c.comercio_id) ?? 'puntos', c.puntos_totales)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </>
-      )}
-    </main>
+        <div>
+          <div className="metric-valor">{totales.premios}</div>
+          <div className="metric-sub">recompensas entregadas</div>
+        </div>
+      </div>
+      <div className="metric-carta">
+        <div className="metric-etiqueta">
+          <span>Clientes</span>
+          <span className="icono" aria-hidden="true">
+            group
+          </span>
+        </div>
+        <div>
+          <div className="metric-valor">{totales.clientes}</div>
+          <div className="metric-sub">con al menos una visita o premio</div>
+        </div>
+      </div>
+    </section>
   );
 }
