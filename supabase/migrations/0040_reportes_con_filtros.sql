@@ -89,7 +89,9 @@ create index if not exists canjes_tarjeta_fecha_idx on canjes (tarjeta_id, creat
 -- `es_total` sale de grouping(), NUNCA de "los ids son null": la actividad sin sucursal (anterior a la
 -- atribución, o de un cajero sin sucursal) también tiene sucursal_id null, y confundirla con el total
 -- mostraría el total como una sucursal más o se comería esa fila. grouping() devuelve un entero con
--- un bit por argumento: 3 (0b11) = ninguno de los dos agrupa = la fila del conjunto `()`.
+-- un bit por argumento: 3 (0b11) = ninguno de los dos agrupa = la fila del conjunto `()`. (Pedir los
+-- DOS ids null daría hoy lo mismo, porque una fila agrupada siempre trae comercio_id —tarjetas lo
+-- tiene NOT NULL—, así que esa mutación no la tira ninguna prueba; grouping() no depende de eso.)
 --
 -- El clientes_unicos de la fila total es la cuenta DISTINTA del alcance entero, no la suma de las
 -- sucursales: quien fue a dos sucursales (o tiene tarjeta en dos comercios) cuenta 1.
@@ -186,12 +188,20 @@ $$;
 -- timestamps, y el mes con date_trunc sobre `timestamp` sin zona: nada depende del TimeZone de la
 -- sesión.
 --
--- Dos líneas de esta función que ninguna prueba puede tirar, y está bien que así sea: (a) la exclusión
--- de los ajustes en el WHERE de `actividad` — acá los conteos filtran por clase y el tramo sale de
--- `primera`, así que un ajuste que llegara a `actividad` no cambiaría ningún número; queda por la
--- forma común. (b) El `p_hasta is not null` de `lim` — con p_hasta null, generate_series recibiría un
--- null y tampoco devolvería filas; está para que el contrato se lea en el código y para no recorrer
--- la historia en vano.
+-- Líneas de esta función que ninguna prueba puede tirar, y está bien que así sea (cada una se mutó y
+-- se corrió en PGlite, lib/reportes/sql0040.pglite.test.ts): (a) la exclusión de los ajustes en el
+-- WHERE de `actividad` — acá los conteos filtran por clase y el tramo sale de `primera`, así que un
+-- ajuste que llegara a `actividad` no cambiaría ningún número; queda por la forma común. (b) El
+-- `p_hasta is not null` de `lim` — con p_hasta null, generate_series recibiría un null y tampoco
+-- devolvería filas; está para que el contrato se lea en el código y para no recorrer la historia en
+-- vano. (c) El filtro de PERÍODO de `actividad`, en las dos ramas — el `left join` desde `dias` ya
+-- descarta toda fila cuyo día local cae fuera del tramo, y los bordes del período son exactamente
+-- bordes de día local: sacarlo entero, o cambiar el `<` del hasta por `<=`, no cambia ningún número.
+-- Solo se ve el `>=` del desde (un `>` perdería la fila de las 00:00 en punto, que es del primer día).
+-- Está para que el índice (tarjeta_id, created_at) lea el período y no toda la historia del alcance.
+-- (d) Parecido con el alcance de `actividad`: `conteo_dia` vuelve a unir con `lim` por comercio_id, así
+-- que la fila de un comercio ajeno no llegaría al conteo; la mutación "join lim on true" cae igual,
+-- pero porque DUPLICA filas cuando el alcance tiene dos comercios, no porque se cuele uno ajeno.
 create function reporte_por_dia(
   p_comercios uuid[], p_desde date, p_hasta date, p_sucursal_id uuid, p_cajero_id uuid,
   p_agrupar text
@@ -306,7 +316,9 @@ $$;
 -- Desempate (spec §3): por nombre, apellido en la misma dirección con los null al final, y después
 -- cliente_id → comercio_id; en las demás columnas, directo cliente_id → comercio_id. (comercio_id,
 -- cliente_id) es la clave del agregado, así que el orden es TOTAL: entre páginas ni repite ni saltea.
--- El nombre se ordena con la collation de la base, tal cual viene (sin lower()).
+-- El nombre se ordena con la collation de la base, tal cual viene (sin lower()). El `nulls last` del
+-- apellido ASCENDENTE es el default de `asc`: está para que el par de líneas se lea parejo, y quitarlo
+-- no cambia nada (esa mutación no la tira ninguna prueba); el del descendente sí hace falta.
 --
 -- PAGINACIÓN: `p_limite` se acota a [1, 1000] (null = 50, la página de la pantalla). `total` = filas
 -- antes de paginar. El offset se acota con el total para que una página más allá del final se lea
