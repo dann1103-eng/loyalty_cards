@@ -2,8 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { walletClient, issuerId } from './walletClient';
 import { idClasePrograma } from './ids';
-import { construirClase } from './construirRecursos';
+import { construirClase, cuerpoClaseApi } from './construirRecursos';
 import { heroUrlDeClase } from './heroUrl';
+import { resolverLogosClase } from './logosClase';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
 import { brandingEfectivo, necesitaClasePropia } from '../comercio/brandingEfectivo';
 import { encuadreDelComercio, encuadreDelPrograma } from '../comercio/encuadreFranja';
@@ -103,23 +104,32 @@ export async function syncClasePrograma(
     // cercanía que sí tienen los del programa principal.
     const ubicaciones = await listarUbicacionesGeopush(supabase, comercioId);
 
-    const cuerpo = construirClase(classId, {
-      // El nombre sigue siendo el del COMERCIO a propósito (decisión 9 del spec): el cliente tiene
-      // que reconocer de qué negocio es la tarjeta. Lo que distingue a los programas es la marca.
-      nombre: c.nombre,
-      colorFondo: marca.colorFondo,
+    // Los logos compuestos de ESTE programa (`?programa=`: la ruta resuelve con él la misma marca
+    // efectiva), con la marca efectiva: logo propio o heredado, y el color de fondo de su tarjeta.
+    const logos = await resolverLogosClase(comercioId, programaId, {
       logoUrl: marca.logoUrl,
-      // La portada compuesta de ESTE programa (misma banda que su pass de Apple), versionada por
-      // todo lo que dibuja. Sin NEXT_PUBLIC_BASE_URL cae a la foto cruda: degradación, no fallo.
-      heroUrl: heroUrlDeClase(comercioId, programaId, {
-        colorFondo: marca.colorFondo,
-        colorLabel: marca.colorLabel,
-        heroUrl: marca.heroUrl,
-        difuminadoFranja: marca.difuminadoFranja,
-        encuadreFranja: marca.encuadreFranja,
-      }),
-      ubicaciones,
+      colorFondo: marca.colorFondo,
     });
+
+    const cuerpo = cuerpoClaseApi(
+      construirClase(classId, {
+        // El nombre sigue siendo el del COMERCIO a propósito (decisión 9 del spec): el cliente tiene
+        // que reconocer de qué negocio es la tarjeta. Lo que distingue a los programas es la marca.
+        nombre: c.nombre,
+        colorFondo: marca.colorFondo,
+        logos,
+        // La portada compuesta de ESTE programa (misma banda que su pass de Apple), versionada por
+        // todo lo que dibuja. Sin base URL pública cae a la foto cruda: degradación, no fallo.
+        heroUrl: heroUrlDeClase(comercioId, programaId, {
+          colorFondo: marca.colorFondo,
+          colorLabel: marca.colorLabel,
+          heroUrl: marca.heroUrl,
+          difuminadoFranja: marca.difuminadoFranja,
+          encuadreFranja: marca.encuadreFranja,
+        }),
+        ubicaciones,
+      }),
+    );
     const client = walletClient();
 
     if (programa.google_class_id) {

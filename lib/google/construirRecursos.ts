@@ -3,14 +3,27 @@ import { rgbAHex } from './colorHex';
 import { frentePase, PIE_CODIGO, type CampoFrente, type Franja, type FrentePase } from '../tarjetas/frentePase';
 import { tipoOPuntos } from '../tarjetas/tipos';
 
+// Los logos de la clase YA RESUELTOS a URL (los arma logosDeClase, lib/google/logosClase.ts — el único
+// lugar que sabe armarlos).
+export interface LogosClase {
+  // Requerido: programLogo es obligatorio en la API (ver syncClase.ts, que filtra ANTES de llamar aquí
+  // a los comercios sin logo — Google no tiene el fallback de logoText que sí usa Apple).
+  programLogo: string;
+  // TRES estados, y los tres significan algo distinto en un `patch` (un campo omitido conserva su valor
+  // VIEJO en Google):
+  //   - una URL → poner el logo ancho (el logo del comercio es apaisado);
+  //   - null → BORRAR uno anterior (el logo se midió y no es ancho: el comercio que cambia su logo
+  //     ancho por uno cuadrado no puede quedarse con el ancho viejo);
+  //   - ausente / undefined → no tocarlo (la medición falló: un error pasajero no agrega ni quita).
+  wideProgramLogo?: string | null;
+}
+
 // Insumos mínimos para armar una LoyaltyClass: solo lo que la clase realmente usa (no el row
 // completo de `comercios`), para que estas funciones sean puras y fáciles de testear sin DB.
 export interface ComercioParaClase {
   nombre: string;
   colorFondo: string | null;
-  logoUrl: string; // requerido: programLogo es obligatorio en la API (ver syncClase.ts, que
-  // filtra ANTES de llamar aquí a los comercios sin logo — Google no tiene el fallback de
-  // logoText que sí usa Apple).
+  logos: LogosClase;
   heroUrl: string | null;
   // Geopush (migración 0016). Google dispara la notificación de cercanía a partir de estas
   // ubicaciones, igual que Apple con `locations` — pero con dos diferencias que importan:
@@ -27,18 +40,45 @@ export interface ComercioParaClase {
 // datos del comercio: si algún día Google cambia su límite, se cambia solo este número.
 const MAXIMO_UBICACIONES_GOOGLE = 10;
 
+// La LoyaltyClass que arma construirClase: la de googleapis, salvo que `wideProgramLogo` además admite
+// `null`. Los tipos de googleapis no lo prevén para este campo (sí para `balance.int`/`string`, ver
+// loyaltyPointsDe), pero en un `patch` el null es lo único que BORRA un logo ancho viejo. Se declara
+// acá, a la vista, en vez de esconderlo con un cast dentro de construirClase: así el tipo de retorno
+// dice la verdad y las pruebas pueden afirmar el null sin trucos.
+export type ClaseGoogle = Omit<walletobjects_v1.Schema$LoyaltyClass, 'wideProgramLogo'> & {
+  wideProgramLogo?: walletobjects_v1.Schema$Image | null;
+};
+
+// El cuerpo de construirClase en el tipo que piden `loyaltyclass.insert`/`patch`. Es el ÚNICO cast del
+// camino, en un solo lugar: solo ANGOSTA `wideProgramLogo` (TS lo acepta sin pasar por `unknown`) y el
+// null viaja igual en el JSON. La clase embebida en el JWT de linkGuardar no lo necesita: el payload
+// no está tipado contra googleapis.
+export function cuerpoClaseApi(clase: ClaseGoogle): walletobjects_v1.Schema$LoyaltyClass {
+  return clase as walletobjects_v1.Schema$LoyaltyClass;
+}
+
+// Los tres estados del logo ancho (ver LogosClase), SIN un spread por verdad: escrito como el resto de
+// los opcionales de este archivo —`...(x ? {...} : {})`—, el null (borrar) se perdería en silencio y
+// quedaría igual que "no tocar", y el comercio que cambia su logo ancho por uno cuadrado seguiría
+// viendo el ancho viejo en cada Android.
+function logoAnchoDe(uri: string | null | undefined): Pick<ClaseGoogle, 'wideProgramLogo'> {
+  if (uri === undefined) return {};
+  return { wideProgramLogo: uri === null ? null : { sourceUri: { uri } } };
+}
+
 // reviewStatus 'UNDER_REVIEW' (no 'draft'): un draft no puede usarse para crear objetos.
 // Cuentas Admin/Developer del propio Emisor SÍ pueden agregar passes de clases underReview
 // sin esperar el acceso de publicación (spec §3 del diseño, verificado contra la guía oficial
 // de onboarding). [Fuente: google-wallet/rest-samples/nodejs/demo-loyalty.js]
-export function construirClase(classId: string, comercio: ComercioParaClase): walletobjects_v1.Schema$LoyaltyClass {
+export function construirClase(classId: string, comercio: ComercioParaClase): ClaseGoogle {
   const hex = rgbAHex(comercio.colorFondo);
   return {
     id: classId,
     issuerName: comercio.nombre,
     programName: comercio.nombre,
     reviewStatus: 'UNDER_REVIEW',
-    programLogo: { sourceUri: { uri: comercio.logoUrl } },
+    programLogo: { sourceUri: { uri: comercio.logos.programLogo } },
+    ...logoAnchoDe(comercio.logos.wideProgramLogo),
     ...(comercio.heroUrl ? { heroImage: { sourceUri: { uri: comercio.heroUrl } } } : {}),
     ...(hex ? { hexBackgroundColor: hex } : {}),
     // `merchantLocations` y NO `locations`: este último es el LatLongPoint que la propia API marca

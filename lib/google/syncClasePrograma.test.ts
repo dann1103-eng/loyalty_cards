@@ -16,6 +16,13 @@ vi.mock('./walletClient', () => ({
   }),
 }));
 
+// La medición del logo, mockeada: los logos de prueba son URLs falsas y nada baja de la red. Por
+// defecto "no se pudo medir".
+const medidasLogoMock = vi.fn();
+vi.mock('./logoRemoto', () => ({
+  medidasLogo: (...args: unknown[]) => medidasLogoMock(...args),
+}));
+
 const supabase = createServiceClient();
 let comercioId: string | null = null;
 let programaId: string | null = null;
@@ -27,6 +34,7 @@ const BASE_ORIGINAL = process.env.NEXT_PUBLIC_BASE_URL;
 beforeEach(() => {
   insertMock.mockReset().mockResolvedValue({});
   patchMock.mockReset().mockResolvedValue({});
+  medidasLogoMock.mockReset().mockResolvedValue(null);
 });
 
 afterEach(async () => {
@@ -127,6 +135,47 @@ describe('syncClasePrograma', () => {
     expect(uri).toMatch(
       new RegExp(`^https://www\\.cardly-sv\\.site/api/comercios/${comercioId}/franja\\.png\\?programa=${id}&v=[0-9a-f]{12}$`),
     );
+  }, 30_000);
+
+  // La clase del programa lleva los logos compuestos de ESE programa: `?programa=` para que la ruta
+  // resuelva la misma marca efectiva, y medidos sobre SU logo.
+  //
+  // MUTACIÓN corrida el 2026-09-23 (restaurada y comparada con el índice de git): armar los logos con el
+  // del COMERCIO, `logoUrl: c.logo_url ?? marca.logoUrl` → FALLA esta prueba con `expected "vi.fn()" to
+  // be called with arguments: [ 'https://ejemplo.com/logo-prog.png' ]`.
+  it('con logo propio: programLogo al logo compuesto del programa (?programa=), medido sobre SU logo', async () => {
+    process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+    medidasLogoMock.mockResolvedValue({ ancho: 480, alto: 160 });
+    const id = await crearEscenario({ branding_propio: true, logo_url: 'https://ejemplo.com/logo-prog.png' });
+
+    await syncClasePrograma(supabase, comercioId!, id);
+
+    const cuerpo = insertMock.mock.calls[0][0].requestBody;
+    expect(cuerpo.programLogo.sourceUri.uri).toMatch(
+      new RegExp(`^https://www\\.cardly-sv\\.site/api/comercios/${comercioId}/logo\\.png\\?programa=${id}&v=[0-9a-f]{12}$`),
+    );
+    expect(cuerpo.wideProgramLogo.sourceUri.uri).toMatch(
+      new RegExp(`^https://www\\.cardly-sv\\.site/api/comercios/${comercioId}/logo-ancho\\.png\\?programa=${id}&v=[0-9a-f]{12}$`),
+    );
+    expect(medidasLogoMock).toHaveBeenCalledWith('https://ejemplo.com/logo-prog.png');
+  }, 30_000);
+
+  it('logo medido y NO ancho: el patch de la clase del programa lleva wideProgramLogo === null', async () => {
+    process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+    medidasLogoMock.mockResolvedValue({ ancho: 300, alto: 300 });
+    const id = await crearEscenario({
+      branding_propio: true,
+      color_fondo: 'rgb(255,0,0)',
+      google_class_id: 'issuer-test.programa_ya_existe',
+    });
+
+    await syncClasePrograma(supabase, comercioId!, id);
+
+    const cuerpo = patchMock.mock.calls[0][0].requestBody;
+    expect('wideProgramLogo' in cuerpo).toBe(true);
+    expect(cuerpo.wideProgramLogo).toBeNull();
+    // Sin logo propio: hereda (y mide) el del comercio.
+    expect(medidasLogoMock).toHaveBeenCalledWith('https://ejemplo.com/logo-comercio.png');
   }, 30_000);
 
   it('si el programa YA tiene google_class_id: patch, nunca un segundo insert', async () => {

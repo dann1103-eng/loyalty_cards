@@ -2,8 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { walletClient, issuerId } from './walletClient';
 import { idClaseGoogle } from './ids';
-import { construirClase } from './construirRecursos';
+import { construirClase, cuerpoClaseApi } from './construirRecursos';
 import { heroUrlDeClase } from './heroUrl';
+import { resolverLogosClase } from './logosClase';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
 import { encuadreDelComercio } from '../comercio/encuadreFranja';
 
@@ -41,8 +42,8 @@ export async function syncClaseComercio(
     // clase sin aviso por cercanía, no sin clase.
     const ubicaciones = await listarUbicacionesGeopush(supabase, comercioId);
 
-    // La portada compuesta (misma banda que el pass de Apple), versionada por todo lo que dibuja. Si
-    // falta NEXT_PUBLIC_BASE_URL cae a la foto cruda: degradación, no fallo.
+    // La portada compuesta (misma banda que el pass de Apple), versionada por todo lo que dibuja. Sin
+    // base URL pública (falta, o es la de desarrollo) cae a la foto cruda: degradación, no fallo.
     const heroUrl = heroUrlDeClase(comercioId, null, {
       colorFondo: comercio.color_fondo,
       colorLabel: comercio.color_label,
@@ -51,13 +52,24 @@ export async function syncClaseComercio(
       encuadreFranja: encuadreDelComercio(comercio),
     });
 
-    const cuerpo = construirClase(classId, {
-      nombre: comercio.nombre,
-      colorFondo: comercio.color_fondo,
+    // Los logos COMPUESTOS (el cuadrado para el círculo de Google y, si el logo es apaisado, el ancho),
+    // versionados por lo que dibujan. Mide el logo para decidir el ancho: en este camino caliente (cada
+    // registro de cliente) la medición tiene un tope de 2 s y queda en caché. Sin base URL pública cae
+    // al logo crudo.
+    const logos = await resolverLogosClase(comercioId, null, {
       logoUrl: comercio.logo_url,
-      heroUrl,
-      ubicaciones,
+      colorFondo: comercio.color_fondo,
     });
+
+    const cuerpo = cuerpoClaseApi(
+      construirClase(classId, {
+        nombre: comercio.nombre,
+        colorFondo: comercio.color_fondo,
+        logos,
+        heroUrl,
+        ubicaciones,
+      }),
+    );
     const client = walletClient();
 
     if (comercio.google_class_id) {

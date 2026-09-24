@@ -33,6 +33,13 @@ describe('urlHeroTarjeta', () => {
     delete process.env.NEXT_PUBLIC_BASE_URL;
     expect(urlHeroTarjeta('abc-123', 'v1')).toBeNull();
   });
+
+  // La base de una máquina de desarrollo. Un hero apuntando a localhost hace que Google rechace el
+  // patch ENTERO del objeto (`400 Image cannot be loaded`): mejor sin hero que sin objeto.
+  it('devuelve null con la base de desarrollo (http://localhost:3000): Google no puede bajarla', () => {
+    process.env.NEXT_PUBLIC_BASE_URL = 'http://localhost:3000';
+    expect(urlHeroTarjeta('abc-123', 'v1')).toBeNull();
+  });
 });
 
 describe('versionHero', () => {
@@ -127,6 +134,16 @@ describe('versionHeroTarjeta', () => {
   });
 });
 
+// La base de desarrollo (`http://localhost:3000`) en las tres funciones de URL. MUTACIONES corridas el
+// 2026-09-23 (cada una restaurada y comparada con el índice de git) — volver al chequeo de PRESENCIA de
+// antes, `process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '')`, en una sola función:
+//   (a) en urlFranjaClase → FALLAN "devuelve null con la base de desarrollo (http://localhost:3000)"
+//       (`expected 'http://localhost:3000/api/comercios/c…' to be null`), "con la base de desarrollo
+//       (http://localhost:3000): degrada a la foto cruda, nunca una URL a localhost" y la de desarrollo
+//       de syncClase.test.ts (3 en total);
+//   (b) en urlHeroTarjeta → FALLA "devuelve null con la base de desarrollo (http://localhost:3000):
+//       Google no puede bajarla" con `expected 'http://localhost:3000/api/tarjetas/ab…' to be null`.
+// (El mismo chequeo dentro de baseParaImagenesGoogle, que usan las dos: ver logosClase.test.ts, (b).)
 describe('urlFranjaClase', () => {
   it('sin programa: la portada del comercio', () => {
     process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
@@ -138,6 +155,10 @@ describe('urlFranjaClase', () => {
   });
   it('devuelve null si falta NEXT_PUBLIC_BASE_URL', () => {
     delete process.env.NEXT_PUBLIC_BASE_URL;
+    expect(urlFranjaClase('com-1', null, 'abc')).toBeNull();
+  });
+  it('devuelve null con la base de desarrollo (http://localhost:3000)', () => {
+    process.env.NEXT_PUBLIC_BASE_URL = 'http://localhost:3000';
     expect(urlFranjaClase('com-1', null, 'abc')).toBeNull();
   });
 });
@@ -173,6 +194,14 @@ describe('heroUrlDeClase', () => {
   it('sin NEXT_PUBLIC_BASE_URL: degrada a la foto cruda, no a null', () => {
     delete process.env.NEXT_PUBLIC_BASE_URL;
     expect(heroUrlDeClase('com-1', 'prog-9', marca)).toBe('https://ejemplo.com/h.jpg');
+  });
+
+  // EL caso del dev server: con un chequeo de PRESENCIA la portada se armaba sobre localhost y Google
+  // rechazaba el patch ENTERO de la clase, así que ninguna clase con portada se sincronizaba desde
+  // desarrollo (todos los demos tienen foto). Con la foto cruda del bucket, que sí es pública, anda.
+  it('con la base de desarrollo (http://localhost:3000): degrada a la foto cruda, nunca una URL a localhost', () => {
+    process.env.NEXT_PUBLIC_BASE_URL = 'http://localhost:3000';
+    expect(heroUrlDeClase('com-1', null, marca)).toBe('https://ejemplo.com/h.jpg');
   });
 
   it('sin foto efectiva: null (la clase sale sin heroImage, como siempre)', () => {

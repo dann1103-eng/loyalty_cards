@@ -12,6 +12,13 @@ vi.mock('./walletClient', () => ({
   }),
 }));
 
+// La medición del logo, mockeada: el logo del comercio de prueba es una URL falsa
+// (https://ejemplo.com/logo.png) y ninguna prueba baja nada de la red. Por defecto "no se pudo medir".
+const medidasLogoMock = vi.fn();
+vi.mock('./logoRemoto', () => ({
+  medidasLogo: (...args: unknown[]) => medidasLogoMock(...args),
+}));
+
 const supabase = createServiceClient();
 let comercioId: string | null = null;
 
@@ -41,6 +48,7 @@ async function crearComercio(datos: Partial<{ logo_url: string | null; google_cl
 beforeEach(() => {
   insertMock.mockReset().mockResolvedValue({});
   patchMock.mockReset().mockResolvedValue({});
+  medidasLogoMock.mockReset().mockResolvedValue(null);
 });
 
 afterEach(async () => {
@@ -98,6 +106,71 @@ describe('syncClaseComercio', () => {
     await syncClaseComercio(supabase, id);
     const [a, b] = patchMock.mock.calls.map((c) => c[0].requestBody.heroImage.sourceUri.uri);
     expect(a).not.toBe(b);
+  });
+
+  // Los logos de la clase (spec 2026-09-23): el cuadrado compuesto para el círculo de Google y, según
+  // las medidas, el ancho. El sync hace `patch`, y en un patch un campo omitido conserva su valor VIEJO.
+  //
+  // MUTACIÓN corrida el 2026-09-23 (restaurada y comparada con el índice de git): mandar el logo CRUDO,
+  // `logos: { programLogo: comercio.logo_url }` → FALLAN "con base pública: programLogo apunta al logo
+  // COMPUESTO…" (`expected 'https://ejemplo.com/logo.png' to match …`), "logo medido y NO ancho…"
+  // (`expected false to be true`), "logo ancho (3:1)…" (`TypeError: Cannot read properties of undefined
+  // (reading 'sourceUri')`) y la de la clase del comercio en linkGuardar.test.ts (4 en total). La del
+  // null cae además con la mutación de construirRecursos.test.ts y con la (a) de logosClase.test.ts.
+  describe('logos', () => {
+    const ID_EXISTENTE = 'issuer-test.comercio_ya-existe';
+
+    it('con base pública: programLogo apunta al logo COMPUESTO con versión, no al logo crudo', async () => {
+      process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+      const id = await crearComercio({ google_class_id: null });
+      await syncClaseComercio(supabase, id);
+      const uri = insertMock.mock.calls[0][0].requestBody.programLogo.sourceUri.uri;
+      expect(uri).toMatch(new RegExp(`^https://www\\.cardly-sv\\.site/api/comercios/${id}/logo\\.png\\?v=[0-9a-f]{12}$`));
+      // Mide el logo del COMERCIO (el crudo, del bucket).
+      expect(medidasLogoMock).toHaveBeenCalledWith('https://ejemplo.com/logo.png');
+    });
+
+    // El comercio que cambia su logo ancho por uno cuadrado: sin el null en el cuerpo del PATCH, el
+    // ancho viejo se quedaría en cada Android.
+    it('logo medido y NO ancho: el requestBody del patch lleva wideProgramLogo === null', async () => {
+      process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+      medidasLogoMock.mockResolvedValue({ ancho: 300, alto: 300 });
+      const id = await crearComercio({ google_class_id: ID_EXISTENTE });
+      await syncClaseComercio(supabase, id);
+      const cuerpo = patchMock.mock.calls[0][0].requestBody;
+      expect('wideProgramLogo' in cuerpo).toBe(true);
+      expect(cuerpo.wideProgramLogo).toBeNull();
+    });
+
+    it('logo ancho (3:1): el patch lleva wideProgramLogo con la ruta del logo ancho', async () => {
+      process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+      medidasLogoMock.mockResolvedValue({ ancho: 480, alto: 160 });
+      const id = await crearComercio({ google_class_id: ID_EXISTENTE });
+      await syncClaseComercio(supabase, id);
+      expect(patchMock.mock.calls[0][0].requestBody.wideProgramLogo.sourceUri.uri).toMatch(
+        new RegExp(`^https://www\\.cardly-sv\\.site/api/comercios/${id}/logo-ancho\\.png\\?v=[0-9a-f]{12}$`),
+      );
+    });
+
+    it('medición fallida: el patch NO lleva la clave (no agrega ni quita el logo ancho)', async () => {
+      process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+      const id = await crearComercio({ google_class_id: ID_EXISTENTE });
+      await syncClaseComercio(supabase, id);
+      expect('wideProgramLogo' in patchMock.mock.calls[0][0].requestBody).toBe(false);
+    });
+
+    // El dev server: con una imagen a localhost Google rechaza el patch ENTERO.
+    it('con la base de desarrollo: el logo crudo, sin medir y sin logo ancho', async () => {
+      process.env.NEXT_PUBLIC_BASE_URL = 'http://localhost:3000';
+      const id = await crearComercio({ google_class_id: ID_EXISTENTE, hero_url: 'https://ejemplo.com/hero.jpg' });
+      await syncClaseComercio(supabase, id);
+      const cuerpo = patchMock.mock.calls[0][0].requestBody;
+      expect(cuerpo.programLogo.sourceUri.uri).toBe('https://ejemplo.com/logo.png');
+      expect('wideProgramLogo' in cuerpo).toBe(false);
+      // Y la portada tampoco apunta a localhost: la foto cruda.
+      expect(cuerpo.heroImage.sourceUri.uri).toBe('https://ejemplo.com/hero.jpg');
+      expect(medidasLogoMock).not.toHaveBeenCalled();
+    });
   });
 
   it('sin foto: la clase sale sin heroImage, como siempre', async () => {

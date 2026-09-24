@@ -19,12 +19,16 @@ const frenteBase = {
 const HERO = 'https://ejemplo.com/api/tarjetas/xyz/hero.png?v=abc123def456';
 const FRANJA_PROPIA = 'https://ejemplo.com/storage/franja.png';
 
+// Los logos ya resueltos, como los arma logosDeClase (lib/google/logosClase.ts).
+const LOGO = 'https://www.cardly-sv.site/api/comercios/com-1/logo.png?v=abc123def456';
+const LOGO_ANCHO = 'https://www.cardly-sv.site/api/comercios/com-1/logo-ancho.png?v=abc123def456';
+
 describe('construirClase', () => {
   it('arma una LoyaltyClass con issuerName/programName = nombre del comercio y el logo requerido', () => {
     const clase = construirClase('123.comercio_abc', {
       nombre: 'Café Aurora',
       colorFondo: 'rgb(36, 24, 18)',
-      logoUrl: 'https://ejemplo.com/logo.png',
+      logos: { programLogo: LOGO },
       heroUrl: null,
       ubicaciones: [],
     });
@@ -32,13 +36,13 @@ describe('construirClase', () => {
     expect(clase.issuerName).toBe('Café Aurora');
     expect(clase.programName).toBe('Café Aurora');
     expect(clase.reviewStatus).toBe('UNDER_REVIEW');
-    expect(clase.programLogo).toEqual({ sourceUri: { uri: 'https://ejemplo.com/logo.png' } });
+    expect(clase.programLogo).toEqual({ sourceUri: { uri: LOGO } });
     expect(clase.hexBackgroundColor).toBe('#241812');
   });
 
   it('omite heroImage cuando el comercio no tiene hero_url (no manda null ni cadena vacía)', () => {
     const clase = construirClase('123.comercio_abc', {
-      nombre: 'X', colorFondo: null, logoUrl: 'https://ejemplo.com/logo.png', heroUrl: null,
+      nombre: 'X', colorFondo: null, logos: { programLogo: LOGO }, heroUrl: null,
       ubicaciones: [],
     });
     expect(clase.heroImage).toBeUndefined();
@@ -47,10 +51,50 @@ describe('construirClase', () => {
 
   it('incluye heroImage cuando el comercio sí subió una foto de franja', () => {
     const clase = construirClase('123.comercio_abc', {
-      nombre: 'X', colorFondo: null, logoUrl: 'https://ejemplo.com/logo.png', heroUrl: 'https://ejemplo.com/hero.png',
+      nombre: 'X', colorFondo: null, logos: { programLogo: LOGO }, heroUrl: 'https://ejemplo.com/hero.png',
       ubicaciones: [],
     });
     expect(clase.heroImage).toEqual({ sourceUri: { uri: 'https://ejemplo.com/hero.png' } });
+  });
+});
+
+// Los TRES estados del logo ancho, que en un `patch` significan cosas distintas: un campo omitido
+// conserva su valor VIEJO en Google.
+//
+// MUTACIÓN corrida el 2026-09-23 (restaurada y comparada con el índice de git): el spread por verdad
+// que usan los demás opcionales de construirClase,
+//   `...(comercio.logos.wideProgramLogo ? { wideProgramLogo: { sourceUri: { uri: … } } } : {})`
+// → FALLA "con null: la clave VIAJA, con null (borra un logo ancho anterior)" con `expected false to be
+// true`, y con el mismo mensaje las del requestBody en syncClase y syncClasePrograma y la del JWT en
+// linkGuardar (4 en total).
+describe('construirClase — wideProgramLogo', () => {
+  const base = { nombre: 'Pulso', colorFondo: null, heroUrl: null, ubicaciones: [] };
+
+  it('con URL: manda el logo ancho', () => {
+    const clase = construirClase('123.comercio_abc', { ...base, logos: { programLogo: LOGO, wideProgramLogo: LOGO_ANCHO } });
+    expect(clase.wideProgramLogo).toEqual({ sourceUri: { uri: LOGO_ANCHO } });
+    // El programLogo sigue yendo: es obligatorio y Google lo usa en la lista de tarjetas.
+    expect(clase.programLogo).toEqual({ sourceUri: { uri: LOGO } });
+  });
+
+  // El comercio que cambia su logo ancho por uno cuadrado: sin el null, el ancho viejo se queda en
+  // cada Android para siempre.
+  it('con null: la clave VIAJA, con null (borra un logo ancho anterior)', () => {
+    const clase = construirClase('123.comercio_abc', { ...base, logos: { programLogo: LOGO, wideProgramLogo: null } });
+    expect('wideProgramLogo' in clase).toBe(true);
+    expect(clase.wideProgramLogo).toBeNull();
+    // Y sobrevive la serialización (es lo que llega a Google, por REST o dentro del JWT).
+    expect(JSON.parse(JSON.stringify(clase))).toHaveProperty('wideProgramLogo', null);
+  });
+
+  it('sin la clave (medición fallida): no la manda — ni URL ni null', () => {
+    const clase = construirClase('123.comercio_abc', { ...base, logos: { programLogo: LOGO } });
+    expect('wideProgramLogo' in clase).toBe(false);
+  });
+
+  it('con la clave en undefined: igual que ausente (no la manda)', () => {
+    const clase = construirClase('123.comercio_abc', { ...base, logos: { programLogo: LOGO, wideProgramLogo: undefined } });
+    expect('wideProgramLogo' in clase).toBe(false);
   });
 });
 
@@ -437,7 +481,7 @@ describe('construirClase — geopush', () => {
   const base = {
     nombre: 'Café Aurora',
     colorFondo: null,
-    logoUrl: 'https://ejemplo.com/logo.png',
+    logos: { programLogo: LOGO },
     heroUrl: null,
   };
 

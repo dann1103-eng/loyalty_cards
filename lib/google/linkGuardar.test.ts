@@ -26,6 +26,13 @@ vi.mock('./walletClient', () => ({
   }),
 }));
 
+// La medición del logo, mockeada: los logos de prueba son URLs falsas y nada baja de la red. Por
+// defecto "no se pudo medir".
+const medidasLogoMock = vi.fn();
+vi.mock('./logoRemoto', () => ({
+  medidasLogo: (...args: unknown[]) => medidasLogoMock(...args),
+}));
+
 const supabase = createServiceClient();
 let ids: { comercioId: string; programaId: string; clienteId: string; tarjetaId: string } | null = null;
 
@@ -34,6 +41,7 @@ beforeEach(() => {
   patchClaseMock.mockReset().mockResolvedValue({});
   insertObjetoMock.mockReset().mockResolvedValue({});
   patchObjetoMock.mockReset().mockResolvedValue({});
+  medidasLogoMock.mockReset().mockResolvedValue(null);
 });
 
 // NEXT_PUBLIC_BASE_URL lo fijan las pruebas de la portada compuesta (viaja dentro de la URL): se
@@ -160,6 +168,85 @@ describe('generarLinkGuardar', () => {
       const delSync = patchClaseMock.mock.calls.at(-1)![0].requestBody.heroImage.sourceUri.uri;
 
       expect(clase.heroImage!.sourceUri.uri).toBe(delSync);
+    });
+  });
+
+  // Los logos de la clase embebida (spec 2026-09-23): Google upsertea la clase por id al procesar el
+  // JWT, así que tienen que ser los de la clase que VIAJA — con la misma rama programa/comercio que la
+  // portada — y con la MISMA URL que escribe el sync de esa clase.
+  //
+  // MUTACIONES corridas el 2026-09-23 (cada una restaurada y comparada con el índice de git):
+  //   (a) La rama del comercio con la marca del PROGRAMA, `{ logoUrl: marca.logoUrl ?? logoComercio,
+  //       colorFondo: marca.colorFondo }` → FALLA "clase del COMERCIO…" con `expected '…/logo.png?v=
+  //       f81253de1bb7' to be '…/logo.png?v=bf273504f003'` (distinto del de syncClaseComercio).
+  //   (b) Elegir la rama por `programa` en vez de `claseDelPrograma` → FALLA "clase del COMERCIO…": la URL
+  //       lleva `?programa=` y no pasa el `toMatch`.
+  //   (c) La rama del programa sin su id (`resolverLogosClase(tarjeta.comercio_id, null, …)`) → FALLA
+  //       "clase del PROGRAMA (su sync anduvo)…" en el `toMatch` del `?programa=`.
+  describe('logos en la clase embebida', () => {
+    type ClaseJwt = {
+      id: string;
+      programLogo: { sourceUri: { uri: string } };
+      wideProgramLogo?: { sourceUri: { uri: string } } | null;
+    };
+    async function claseDelJwt(tarjetaId: string): Promise<ClaseJwt> {
+      const url = await generarLinkGuardar(supabase, tarjetaId);
+      const claims = jwt.verify(url!.replace('https://pay.google.com/gp/v/save/', ''), publicKey, {
+        algorithms: ['RS256'],
+      }) as Record<string, unknown>;
+      return (claims.payload as { loyaltyClasses: ClaseJwt[] }).loyaltyClasses[0];
+    }
+
+    // Para que viaje la clase del COMERCIO con un programa de logo propio, la sync de la clase del
+    // programa tiene que FALLAR: el comercio del fixture ya tiene clase, así que el único insert es el
+    // del programa. (Un programa sin logo propio no sirve: ahí los dos logos son el mismo.)
+    //
+    // Si el JWT llevara el logo del PROGRAMA en la clase del comercio, Google se lo pondría a TODAS las
+    // tarjetas del negocio al upsertear, con un `?v=` distinto del de syncClaseComercio.
+    it('clase del COMERCIO: el logo del comercio (sin ?programa=) aunque el programa tenga logo propio — el MISMO que escribe syncClaseComercio', async () => {
+      process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+      medidasLogoMock.mockResolvedValue({ ancho: 300, alto: 300 });
+      const t = await crearTarjeta({});
+      await supabase
+        .from('programas_tarjeta')
+        .update({ branding_propio: true, logo_url: 'https://ejemplo.com/logo-PROGRAMA.png' })
+        .eq('id', t.programaId);
+      insertClaseMock.mockRejectedValueOnce(new Error('Google caído'));
+
+      const clase = await claseDelJwt(t.tarjetaId);
+
+      expect(clase.id).toBe('issuer-test.comercio_x');
+      expect(clase.programLogo.sourceUri.uri).toMatch(
+        new RegExp(`^https://www\\.cardly-sv\\.site/api/comercios/${t.comercioId}/logo\\.png\\?v=[0-9a-f]{12}$`),
+      );
+      // Medido y no ancho: el null viaja también dentro del JWT (borra un logo ancho viejo).
+      expect('wideProgramLogo' in clase).toBe(true);
+      expect(clase.wideProgramLogo).toBeNull();
+
+      await syncClaseComercio(supabase, t.comercioId);
+      const delSync = patchClaseMock.mock.calls.at(-1)![0].requestBody;
+      expect(clase.programLogo.sourceUri.uri).toBe(delSync.programLogo.sourceUri.uri);
+    });
+
+    it('clase del PROGRAMA (su sync anduvo): los logos compuestos de ese programa, con ?programa=', async () => {
+      process.env.NEXT_PUBLIC_BASE_URL = 'https://www.cardly-sv.site';
+      medidasLogoMock.mockResolvedValue({ ancho: 480, alto: 160 });
+      const t = await crearTarjeta({});
+      await supabase
+        .from('programas_tarjeta')
+        .update({ branding_propio: true, logo_url: 'https://ejemplo.com/logo-PROGRAMA.png' })
+        .eq('id', t.programaId);
+
+      const clase = await claseDelJwt(t.tarjetaId);
+
+      expect(clase.id).toBe(`issuer-test.programa_${t.programaId}`);
+      // El MISMO cuerpo que acaba de insertar syncClasePrograma: si difirieran, el upsert del JWT lo pisaría.
+      const delSync = insertClaseMock.mock.calls.at(-1)![0].requestBody;
+      expect(clase.programLogo.sourceUri.uri).toMatch(
+        new RegExp(`/api/comercios/${t.comercioId}/logo\\.png\\?programa=${t.programaId}&v=[0-9a-f]{12}$`),
+      );
+      expect(clase.programLogo.sourceUri.uri).toBe(delSync.programLogo.sourceUri.uri);
+      expect(clase.wideProgramLogo!.sourceUri.uri).toBe(delSync.wideProgramLogo.sourceUri.uri);
     });
   });
 

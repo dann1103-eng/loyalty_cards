@@ -231,7 +231,7 @@ function copiaTraePlantillaDeFilas(): boolean {
   const clase = construirClase('verificacion.plantilla', {
     nombre: 'Verificación',
     colorFondo: null,
-    logoUrl: 'https://www.cardly-sv.site/logo.png',
+    logos: { programLogo: 'https://www.cardly-sv.site/logo.png' },
     heroUrl: null,
     ubicaciones: [],
   });

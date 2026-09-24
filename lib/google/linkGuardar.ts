@@ -8,6 +8,7 @@ import { syncClaseComercio } from './syncClase';
 import { syncClasePrograma } from './syncClasePrograma';
 import { syncObjetoTarjeta } from './syncObjeto';
 import { urlHeroTarjeta, versionHeroTarjeta, heroUrlDeClase } from './heroUrl';
+import { resolverLogosClase } from './logosClase';
 import { listarUbicacionesGeopush } from '../comercio/geopush';
 import { hoyEnZona } from '../tarjetas/vigencia';
 import { brandingEfectivo } from '../comercio/brandingEfectivo';
@@ -118,13 +119,28 @@ export async function generarLinkGuardar(
       : null,
   );
 
-  // La guarda de arriba ya garantizó que el comercio tiene logo, y brandingEfectivo hereda ese
-  // valor cuando el programa no define uno propio — así que acá nunca es null. El `??` final es
-  // solo para que el tipo lo refleje.
+  // Los logos, con la MISMA rama que la portada de abajo y por el mismo motivo: tienen que ser los de
+  // la clase que VIAJA. Con `marca` en los dos casos, cuando la clase del programa no se pudo
+  // sincronizar (o el programa no la necesita) y el JWT lleva la del COMERCIO, Google upsertearía la
+  // clase del negocio con el logo del PROGRAMA — y con un `?v=` distinto del que escribe
+  // syncClaseComercio, así que además lo re-descargaría en cada JWT.
+  //
+  // La guarda de arriba ya garantizó que el comercio tiene logo (por eso `tarjeta.comercios.logo_url`
+  // y no `cm.logo_url`: el compilador solo lo sabe por esa ruta), y brandingEfectivo hereda ese valor
+  // cuando el programa no define uno propio — así que `marca.logoUrl` nunca es null. El `??` es solo
+  // para que el tipo lo refleje.
+  const logoComercio = tarjeta.comercios.logo_url;
+  const logos = claseDelPrograma
+    ? await resolverLogosClase(tarjeta.comercio_id, programa!.id, {
+        logoUrl: marca.logoUrl ?? logoComercio,
+        colorFondo: marca.colorFondo,
+      })
+    : await resolverLogosClase(tarjeta.comercio_id, null, { logoUrl: logoComercio, colorFondo: cm.color_fondo });
+
   const clase = construirClase(classId, {
     nombre: cm.nombre,
     colorFondo: marca.colorFondo,
-    logoUrl: marca.logoUrl ?? tarjeta.comercios.logo_url,
+    logos,
     // La portada tiene que ser la de ESTA clase: con la del comercio, la marca del comercio; con la
     // del programa, la efectiva. Con `marca` en los dos casos, un programa con branding propio que NO
     // llega a tener clase propia (necesitaClasePropia solo mira color de fondo, logo y foto) le

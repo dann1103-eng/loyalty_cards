@@ -1,10 +1,13 @@
 import crypto from 'node:crypto';
 import type { Encuadre } from '../comercio/encuadreFranja';
+import { baseParaImagenesGoogle } from './baseUrlPublica';
 
 // URL pública de la grilla de sellos compuesta por tarjeta (ver app/api/tarjetas/[tarjetaId]/hero.png).
 // Google necesita poder alcanzarla desde internet para heroImage — por eso NEXT_PUBLIC_BASE_URL,
-// nunca localhost. Devuelve null (no lanza) si falta: Google Wallet sigue funcionando sin la
-// grilla visual (cae al conteo de texto de siempre), igual que cualquier otra imagen best-effort.
+// nunca localhost. Devuelve null (no lanza) si falta o no es pública (baseParaImagenesGoogle): Google
+// Wallet sigue funcionando sin la grilla visual (cae al conteo de texto de siempre), igual que
+// cualquier otra imagen best-effort. Con una URL a localhost, en cambio, Google rechazaría el patch
+// ENTERO del objeto.
 //
 // EL `?v=` NO ES DECORATIVO: Google descarga la imagen UNA vez y la cachea en su CDN. Si la URL
 // no cambia, sigue mostrando la grilla vieja para siempre aunque el saldo suba — bug real visto en
@@ -12,7 +15,7 @@ import type { Encuadre } from '../comercio/encuadreFranja';
 // resume TODO lo que altera la imagen: al cambiar cualquiera de esos datos, cambia la URL y Google
 // vuelve a bajarla. Mismo truco que ya usa el bucket de imágenes del comercio con `?v=<timestamp>`.
 export function urlHeroTarjeta(tarjetaId: string, version: string): string | null {
-  const base = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '');
+  const base = baseParaImagenesGoogle();
   if (!base) return null;
   return `${base}/api/tarjetas/${tarjetaId}/hero.png?v=${version}`;
 }
@@ -20,9 +23,10 @@ export function urlHeroTarjeta(tarjetaId: string, version: string): string | nul
 // URL pública de la BANDA DE MARCA compuesta para la portada de la LoyaltyClass (ver
 // app/api/comercios/[comercioId]/franja.png). Mismo `?v=` de cache-busting que urlHeroTarjeta y por
 // el mismo motivo: Google descarga la imagen una vez y la cachea por URL. `programa` va ANTES de `v`
-// para que la URL sea estable y comparable en las pruebas.
+// para que la URL sea estable y comparable en las pruebas. null sin base pública: heroUrlDeClase cae
+// entonces a la foto cruda.
 export function urlFranjaClase(comercioId: string, programaId: string | null, version: string): string | null {
-  const base = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '');
+  const base = baseParaImagenesGoogle();
   if (!base) return null;
   const programa = programaId ? `programa=${encodeURIComponent(programaId)}&` : '';
   return `${base}/api/comercios/${comercioId}/franja.png?${programa}v=${version}`;
@@ -117,12 +121,12 @@ export function versionFranjaClase(marca: {
   });
 }
 
-// La portada que va en la clase: la compuesta si hay foto y base URL; la foto cruda si falta la base
-// (degradación); null sin foto. UNA función para los TRES lugares que construyen la clase
-// (syncClase, syncClasePrograma y la clase EMBEBIDA en el JWT de linkGuardar, que Google upsertea
-// por id). Si cada uno armara su URL, bastaría con que uno hasheara otros campos para que Google
-// re-descargara la misma imagen en cada llamada — o peor, para que un camino devolviera la clase a
-// la foto cruda deshaciendo lo que los otros dos lograron.
+// La portada que va en la clase: la compuesta si hay foto y base URL pública; la foto cruda si la base
+// falta o no es pública, como en desarrollo (degradación); null sin foto. UNA función para los TRES
+// lugares que construyen la clase (syncClase, syncClasePrograma y la clase EMBEBIDA en el JWT de
+// linkGuardar, que Google upsertea por id). Si cada uno armara su URL, bastaría con que uno hasheara
+// otros campos para que Google re-descargara la misma imagen en cada llamada — o peor, para que un
+// camino devolviera la clase a la foto cruda deshaciendo lo que los otros dos lograron.
 export function heroUrlDeClase(
   comercioId: string,
   programaId: string | null,
