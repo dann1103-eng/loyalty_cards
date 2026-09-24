@@ -148,6 +148,31 @@ antes de esas tareas.
   duplicados).
 - **Fuera de alcance, para el backlog:** la pantalla de Clientes (`clientes/page.tsx`) no pagina (se
   corta en 1000) y cae a valores por defecto si fallan programas, zona o niveles.
+- **Arreglos de revisión cerrados:** 4c `0e127f7` (foco AA de la columna fija, teléfono sin agrupar en
+  MX/AR/CL, `aria-sort` solo en la activa), 5b `326dba8`, 6 `7766374`; tarea compartida `8912bdf`
+  (`TIPO_XLSX`, `etiquetaDeArchivo` con NFD: "Panadería La Peña" → `panaderia-la-pena`, hoja Clientes
+  pedida por nombre y ordenada por visitas en JS).
+- **7 HECHA (2026-09-24)** — Daniel entró con el dueño de `cafe-aurora-demo`; membresía de dueño
+  TEMPORAL en `dulce-nube-demo` (script del scratchpad, aprobado por Daniel), quitada al final y
+  verificada (el dueño quedó con su única membresía). Visto en el navegador:
+  - "Todo" con dos comercios: 14 visitas / 1 premio / 5 clientes; "Por mes" (jul–sep, el tramo pasa de
+    62 días); por sucursal agrupado por comercio; tabla con Comercio y "5 filas (cliente por comercio)".
+  - Filtrando por Café Aurora: 12 / 1 / 3, sin columna Comercio, "3 clientes"; sin filas de sucursal ni
+    de cajero (una sola sucursal, sin cajeros), como corresponde.
+  - Orden por Acumulado (10, 8, 5 sellos) con `aria-sort` solo en la activa; los enlaces invierten la
+    activa y abren las demás en su dirección inicial.
+  - Personalizado precargado (desde "Desde siempre": sin desde, hasta hoy; comercio y orden en
+    `hidden`); un rango de un día muestra "Por día" 20/07 12/1.
+  - A 375 px: página sin scroll horizontal (375/375); la tabla scrollea en su marco (632 en 333) con
+    Cliente fija de 160 px y fondo opaco. Clientes: los dos botones de descarga apilados, sin desborde.
+    Marca: los chips sin recorte (`overflow: visible`, sin `max-width`).
+  - Descargas desde la sesión: `reportes-todos-desde-siempre_2026-09-24.xlsx`,
+    `reportes-cafe-aurora-2026-07-20_2026-07-20.xlsx`, `clientes-cafe-aurora.xlsx` y `.csv` (BOM), todas
+    200 + `no-store`. El Excel de "Todo" leído por dentro: 5 hojas, fila fija en las 4 tablas, teléfono
+    como texto con `@`, "Última actividad" como fecha (46223,672 = 20/07 16:08 local), Resumen con
+    filtros, totales, "Generado" y la nota; Cajeros con "Sin registrar".
+  - No verificable con los demos: la paginación (ningún demo pasa de 50 clientes; cubierta por las
+    pruebas) y el filtro de cajero (los demos no tienen cajeros; cubierto por las pruebas).
 
 ## Tarea 1a — Migración 0040: SQL y tipos
 
