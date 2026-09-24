@@ -128,8 +128,10 @@ que dependa de datos cambiantes lleva `?v=`; un cambio de logo es de la CLASE.
 **Archivos:**
 - Crear: una función pura para la caja del logo (p. ej. `lib/comercio/cartel/cajaLogo.ts` + prueba):
   entra `lado` reservado, ancho máximo de la combinación y las medidas del logo (o `null`); sale ancho y
-  alto de la caja. Alto = `lado` siempre; ancho = `lado × proporción`, acotado al máximo; sin medidas o
-  en `split × sticker` → cuadrada.
+  alto de la caja. Alto = `lado` siempre; ancho = `lado × proporción`, acotado al máximo; sin medidas →
+  cuadrada; en `split × sticker` el máximo es `lado` (nunca más ancha que el cuadrado; un logo alto da una
+  caja más angosta, que con `meet` se ve igual). En `foto` la caja se ANCLA a la izquierda (x fija en el
+  margen, `xMinYMid meet`), no se centra (corrección de la revisión).
 - Modificar: `lib/comercio/cartel/resolverDatosCartel.ts` — pasar `logoAncho`/`logoAlto` de `bajarImagen`
   (hoy se descartan, ~174-188); `null` si no se pudo medir.
 - Modificar: `lib/comercio/cartel/plantillas.ts` — `logoSvg` (~56, exportada ~252) usa la caja y

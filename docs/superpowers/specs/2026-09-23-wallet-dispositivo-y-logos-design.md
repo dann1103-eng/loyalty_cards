@@ -80,9 +80,16 @@ dibujan el logo con esa misma función.
   combinación. El logo se dibuja con `preserveAspectRatio="xMidYMid meet"` (entero, sin recorte),
   centrado en la caja. Un logo cuadrado o circular queda igual que hoy; uno ancho ocupa un rectángulo
   de alto `lado`. Sin medidas: caja cuadrada (hoy), pero con `meet`.
-- **`split × sticker`** (el nombre a la derecha del logo, `plantillas.ts:173`): ahí la caja SIGUE
-  CUADRADA (`lado × lado`, con `meet`): un logo ancho entra entero pero más chico, y el nombre no se
-  corre a la derecha. El nombre no tiene ajuste de ancho (`texto.ts:32-42`, `textoInter.ts:76-84`): un
+- **Anclaje (corrección de la revisión de la Tarea 3):** en `foto` el logo va anclado a la ESQUINA:
+  su x queda fija en el margen de siempre y la caja crece solo hacia la derecha (`xMinYMid meet`);
+  centrar la caja ahí se comía el margen y pegaba un logo ancho al borde del papel. En
+  `split × mostrador` el tope deja margen dentro de la franja. La prueba de "dentro del lienzo" exige
+  un margen mínimo, no solo `x >= 0`.
+- **`split × sticker`** (el nombre a la derecha del logo, `plantillas.ts:173`): ahí la caja NUNCA es
+  más ANCHA que el cuadrado de hoy (`anchoMaximo = lado`, con `meet`): un logo ancho entra entero pero
+  más chico, y la caja no se le mete encima al nombre (cuya x es fija). Un logo ALTO da una caja más
+  angosta que el cuadrado: con `meet` se dibuja exactamente el mismo rectángulo que dentro del
+  cuadrado, así que visualmente no cambia nada — no "restaurar" la caja cuadrada por eso. El nombre no tiene ajuste de ancho (`texto.ts:32-42`, `textoInter.ts:76-84`): un
   nombre largo ya puede salirse del lienzo HOY, y agrandar la caja del logo lo empeoraría. Ajustar el
   nombre queda fuera de esta spec.
 - Pruebas: una nueva que asevera `meet` en el `<image>` del logo (la existente de `xMidYMid slice`,
