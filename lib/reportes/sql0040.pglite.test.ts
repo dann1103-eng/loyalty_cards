@@ -18,10 +18,11 @@ import type { Database } from '../supabase/types';
 // esquema REAL, no una copia a mano — las migraciones 0001 a 0039 leídas del disco, en orden, y
 // después la 0040 byte-idéntica, también del disco (una mutación se hace editando ESE archivo). El
 // preámbulo pone lo que en Supabase ya existe: el esquema `auth` con `auth.users` (0001 y 0003 le
-// apuntan una FK) y los roles anon/authenticated/service_role (sin ellos los revoke/grant fallan, y un
-// grant con la firma mal escrita es justo lo que abortaría la transacción en Studio). pgcrypto se le
-// da a PGlite al crearlo, y el `create extension` de la 0001 lo encuentra. Ninguna migración vieja
-// necesitó parche (PGlite 0.5.8 = PostgreSQL 18.3).
+// apuntan una FK), los roles anon/authenticated/service_role (sin ellos los revoke/grant fallan, y un
+// grant con la firma mal escrita es justo lo que abortaría la transacción en Studio), los privilegios
+// por defecto de Supabase sobre las funciones de `public`, y pgcrypto instalado en `extensions` (el
+// `create extension if not exists` de la 0001 lo encuentra y no hace nada, como en Supabase). Ninguna
+// migración vieja necesitó parche (PGlite 0.5.8 = PostgreSQL 18.3).
 //
 // Cada caso usa comercios PROPIOS (ids nuevos): todas las funciones filtran por `p_comercios`, así que
 // no hace falta limpiar. Los instantes se siembran calculados en la zona de CADA comercio con desfases
@@ -37,16 +38,28 @@ import type { Database } from '../supabase/types';
 //
 // ══ MUTACIONES ══ Corridas de verdad el 2026-09-23, una por vez, sobre el .sql del DISCO: un corredor
 // reemplaza el texto exacto dentro de la función que corresponde (verificando cuántas veces aparece),
-// corre este archivo y restaura con `git checkout --`. 104 corridas: 96 caen, 8 no (abajo, por qué).
+// corre este archivo y restaura con `git checkout --`. 110 corridas (la última tanda, con este archivo
+// tal cual está): 102 caen, 8 no (abajo, por qué).
 // Formato: mutación → la prueba que cae: «el mensaje real» (el primero; acortado con …).
 // R = reporte_resumen, D = reporte_por_dia, C = reporte_clientes, K = reporte_cajeros_alcance.
 //
-// Carga
+// Carga y permisos
 //   grant de reporte_clientes con un integer menos → "la transacción entera llega al commit…":
 //     «error al cargar la 0040: expected 'function reporte_clientes(uuid[], date, date, uuid, uuid,
-//     text, boolean, integer) does not exist' to be null» (y las otras 32: sin funciones cae todo).
+//     text, boolean, integer) does not exist' to be null» (y las otras 33: sin funciones cae todo).
 //   sin el revoke de reporte_resumen → ídem: «permisos de reporte_resumen: expected { existe: true,
 //     anon: true, authenticated: true, service_role: true } to deeply equal { …anon: false, … }».
+//   Las tres de abajo NO caían con el preámbulo anterior (sin los privilegios por defecto de Supabase):
+//   corridas contra esa versión de este archivo, las tres siguieron en verde.
+//   el revoke de reporte_resumen solo `from public;` → ídem: «permisos de reporte_resumen: expected
+//     { existe: true, anon: true, authenticated: true, service_role: true } to deeply equal { existe:
+//     true, anon: false, authenticated: false, service_role: true }».
+//   el revoke de reporte_clientes sin authenticated (`from public, anon;`) → ídem: «permisos de
+//     reporte_clientes: expected { existe: true, anon: false, authenticated: true, service_role: true }
+//     to deeply equal { existe: true, anon: false, authenticated: false, service_role: true }». (Es lo que
+//     scripts/verificar-0040.ts no puede mirar por REST: sin JWT de authenticated, lo confirma esta.)
+//   el revoke de reporte_por_dia sin anon (`from public, authenticated;`) → ídem: «permisos de
+//     reporte_por_dia: expected { existe: true, anon: true, authenticated: false, … } …».
 //   cajero_email renombrada a email_cajero → "argumentos y columnas…": «Returns de
 //     reporte_cajeros_alcance: expected [ …'email_cajero'… ] to deeply equal [ …'cajero_email'… ]».
 //
@@ -81,21 +94,35 @@ import type { Database } from '../supabase/types';
 //     «…'2026-08-26'…» (canjes: H-25).
 //
 // Ajustes, bruto y clientes → "definiciones…" salvo aclaración
-//   R, los ajustes entran a actividad: «filas por sucursal (la de solo ajustes no aparece): expected
-//     [ 'Centro: 5 visitas', 'Solo ajustes: 0 visitas' ] to deeply equal [ 'Centro: 5 visitas' ]».
-//   R, un ajuste cuenta como visita: «visitas: 3 de K1 (…) + K4 + K5; el ajuste no: expected 7 to be 5».
+//   R, los ajustes entran a actividad: «filas por sucursal (…): expected [ 'Centro (activa: true): 5
+//     visitas', 'Cerrada (activa: false): 1 visitas', 'Solo ajustes (activa: true): 0 visitas' ] to
+//     deeply equal [ 'Centro (activa: true): 5 visitas', 'Cerrada (activa: false): 1 visitas' ]».
+//   R, un ajuste cuenta como visita: «visitas: 3 de K1 (…) + K4 + K5 + K6; los ajustes no: expected 9
+//     to be 6».
 //   C, los ajustes entran a actividad: «expected { K1: { …ultima: '2026-04-21T00:00:00.000Z' }, …, K3:
 //     { visitas: 0, acumulado: 0, premios: 0, … } } …» (la corrección de las 18:00 mueve la última
 //     actividad de K1, y K3 aparece).
 //   D, `primera` sin la exclusión de ajustes → "un ajuste viejo…": «días de la serie (de H-5 a H):
 //     expected 31 to be 6».
-//   K, un ajuste cuenta como visita: «… c1 … visitas: 5, … correcciones: 0 …».
+//   K, un ajuste cuenta como visita: «… c1 … visitas: 5, … correcciones: 0 …» (y "Sin registrar"
+//     visitas: 2, correcciones: 0).
 //   K, Clientes cuenta ajustes: «… c2 … correcciones: 1, puntos_ajustados: -5, premios: 0, clientes: 1».
-//   el acumulado sin el filtro de acreditación: R «acumulado BRUTO: …: expected 17 to be 14»; C «K1:
-//     { visitas: 3, acumulado: 13 …»; K «c1 … acumulado: 16»; el monto de K sin ese filtro «monto: 17.5».
+//   el acumulado sin el filtro de acreditación: R «acumulado BRUTO: 10 + 3 + 1 + 1, …: expected 18 to be
+//     15»; C «K1: { visitas: 3, acumulado: 13 …»; K «c1 … acumulado: 16»; el monto de K sin ese filtro
+//     «monto: 17.5».
 //   C, ultima_actividad solo de visitas: «K2: { …premios: 2, ultima: '1970-01-01T00:00:00.000Z' }» (null),
 //     y el orden por última.
 //   R, clientes sin distinct: «· clientes: expected 4 to be 2» (y 3 pruebas más).
+//   Revisión de la 1b — sin inactivos sembrados y con "Sin registrar" en 0 correcciones, estas tres NO
+//   caían (corridas contra la versión anterior de este archivo):
+//   K, el orden sin `(cajero_usuario_id is null)`: «expected [ { cajero: 'c1', … }, { cajero: 'c2', … },
+//     { cajero: 'sin registrar', …, correcciones: 1, … }, { cajero: 'c3', … } ] to deeply equal
+//     [ …c1, c2, c3, sin registrar ]» ("Sin registrar" empata con c2 y le gana a c3).
+//   R, sucursal_activa = "existe la sucursal" (`case when s.id is not null then true end` en lugar de
+//     `s.activa`): «filas por sucursal (…): expected [ 'Centro (activa: true): 5 visitas', 'Cerrada
+//     (activa: true): 1 visitas' ] to deeply equal [ …, 'Cerrada (activa: false): 1 visitas' ]».
+//   K, cajero_activo = "existe el cajero" (lo mismo con `u.activo`): «… { cajero: 'c3', email: 'c3',
+//     activo: true, … } …» contra `activo: false`.
 //
 // La fila total
 //   es_total = "sucursal_id is null" → "la actividad 'sin sucursal'…": «cuántas filas tienen es_total:
@@ -131,7 +158,7 @@ import type { Database } from '../supabase/types';
 // Columnas cruzadas en el select de afuera (en `language sql` se asignan por POSICIÓN)
 //   C, apellido ↔ teléfono → "cada fila trae…": «AnaAlfa@A: expected { nombre: 'Ana', apellido:
 //     '+5039…', telefono: 'Alfa' } …».
-//   R, canjes ↔ clientes_unicos: «premios: expected 4 to be 2».
+//   R, canjes ↔ clientes_unicos: «premios: expected 5 to be 2».
 //   K, forzadas ↔ ajustes: «… c2 … forzadas: 1, correcciones: 0 …»; forzadas ↔ canjes: «… · premios:
 //     expected +0 to be 2».
 //
@@ -170,12 +197,24 @@ const FIRMAS = {
   reporte_cajeros_alcance: 'reporte_cajeros_alcance(uuid[],date,date,uuid,uuid)',
 } as const;
 
+// Lo que Supabase ya trae y la 0001 da por hecho. Dos detalles que CAMBIAN lo que la prueba puede ver:
+//   • Los privilegios por defecto: en Supabase toda función nueva de `public` nace con execute
+//     EXPLÍCITO para anon, authenticated y service_role, no solo para PUBLIC. Sin imitarlo, un
+//     `revoke … from public` a secas (sin anon ni authenticated) dejaba la suite en verde, y en Studio
+//     la anon key habría seguido pudiendo ejecutar la función (revisión de la 1b; ver la tabla).
+//   • pgcrypto vive en el esquema `extensions`, que está en el search_path de la sesión pero NO en el
+//     `set search_path = public` de las funciones. Con pgcrypto en `public`, una función que llamara
+//     a digest() pasaría acá y fallaría en Studio. (La 0040 no usa pgcrypto.)
 const PREAMBULO = `
   create schema auth;
   create table auth.users (id uuid primary key);
   create role anon nologin;
   create role authenticated nologin;
   create role service_role nologin;
+  alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
+  create schema extensions;
+  create extension pgcrypto with schema extensions;
+  set search_path = "$user", public, extensions;
 `;
 
 function leerMigracion(archivo: string): string {
@@ -292,18 +331,18 @@ async function crearComercio(zona: Zona, id: string | null = null): Promise<Come
   return { id: comercioId, zona, programaId, recompensaId };
 }
 
-async function crearSucursal(comercio: Comercio, nombre: string): Promise<string> {
+async function crearSucursal(comercio: Comercio, nombre: string, activa = true): Promise<string> {
   const { id } = await una<{ id: string }>(
-    `insert into sucursales (comercio_id, nombre) values ($1, $2) returning id`,
-    [comercio.id, nombre],
+    `insert into sucursales (comercio_id, nombre, activa) values ($1, $2, $3) returning id`,
+    [comercio.id, nombre, activa],
   );
   return id;
 }
 
-async function crearCajero(comercio: Comercio, email: string): Promise<string> {
+async function crearCajero(comercio: Comercio, email: string, activo = true): Promise<string> {
   const { id } = await una<{ id: string }>(
-    `insert into usuarios_comercio (comercio_id, email, rol) values ($1, $2, 'cajero') returning id`,
-    [comercio.id, email],
+    `insert into usuarios_comercio (comercio_id, email, rol, activo) values ($1, $2, 'cajero', $3) returning id`,
+    [comercio.id, email, activo],
   );
   return id;
 }
@@ -475,6 +514,30 @@ describe('la 0040 como se va a pegar en Studio', () => {
               to_regclass('public.canjes_tarjeta_fecha_idx')::text as canjes`,
     );
     expect(indices).toEqual({ tarjetas: 'tarjetas_comercio_idx', canjes: 'canjes_tarjeta_fecha_idx' });
+  });
+
+  // Si el preámbulo dejara de imitar a Supabase, la prueba de permisos de arriba volvería a pasar con un
+  // `revoke … from public` a secas. Esto lo fija con una función sonda que no sobrevive al rollback.
+  it('el preámbulo se comporta como Supabase: un revoke solo de PUBLIC no le quita execute a anon, y pgcrypto está en extensions', async () => {
+    await db.exec(`
+      begin;
+      create function public.sonda_permisos() returns integer language sql as 'select 1';
+      revoke execute on function public.sonda_permisos() from public;
+    `);
+    try {
+      const r = await una<{ anon: boolean; authenticated: boolean }>(
+        `select has_function_privilege('anon', 'public.sonda_permisos()', 'execute') as anon,
+                has_function_privilege('authenticated', 'public.sonda_permisos()', 'execute') as authenticated`,
+      );
+      expect(r, 'privilegios de una función nueva tras revocar solo a PUBLIC').toEqual({ anon: true, authenticated: true });
+    } finally {
+      await db.exec('rollback');
+    }
+    const ext = await una<{ esquema: string }>(
+      `select n.nspname as esquema from pg_extension e join pg_namespace n on n.oid = e.extnamespace
+       where e.extname = 'pgcrypto'`,
+    );
+    expect(ext.esquema, 'esquema de pgcrypto').toBe('extensions');
   });
 
   // Punto 12 de la revisión de la 1a: los tipos de TS están escritos A MANO; si una columna cambia de
@@ -733,6 +796,7 @@ describe('definiciones: visitas, acumulado bruto, premios, clientes y ajustes', 
   let SA: string;
   let C1: string;
   let C2: string;
+  let C3: string;
   const etiqueta = new Map<string, string>();
   const horaLocal = (hh: string) => local(`${D} ${hh}`, SV);
 
@@ -743,15 +807,21 @@ describe('definiciones: visitas, acumulado bruto, premios, clientes y ajustes', 
   //     se asignan por POSICIÓN y dos bigint cruzados compilan igual);
   // K3: solo un ajuste −5, en la sucursal SA donde no pasó nada más (no es cliente, SA no aparece);
   // K4: una acreditación FORZADA +3;
-  // K5: una acreditación +1 sin cajero ("Sin registrar").
+  // K5: una acreditación +1 y una corrección −1, las dos sin cajero ("Sin registrar"). Con esa
+  //     corrección, "Sin registrar" empata en forzadas + ajustes con c2 y le gana a c3: si el orden
+  //     no la mandara al final con `(cajero_usuario_id is null)`, quedaría antes que c3;
+  // K6: una acreditación +1 en una sucursal INACTIVA ("Cerrada") con un cajero INACTIVO (c3): sin
+  //     inactivos sembrados, sucursal_activa y cajero_activo podrían salir de cualquier lado.
   beforeAll(async () => {
     E = await crearComercio(SV);
     S1 = await crearSucursal(E, 'Centro');
     SA = await crearSucursal(E, 'Solo ajustes');
+    const cerrada = await crearSucursal(E, 'Cerrada', false);
     C1 = await crearCajero(E, 'c1');
     C2 = await crearCajero(E, 'c2');
+    C3 = await crearCajero(E, 'c3', false);
     const t: Record<string, string> = {};
-    for (const k of ['K1', 'K2', 'K3', 'K4', 'K5']) {
+    for (const k of ['K1', 'K2', 'K3', 'K4', 'K5', 'K6']) {
       const clienteId = await crearCliente(k);
       etiqueta.set(clienteId, k);
       t[k] = await crearTarjeta(clienteId, E);
@@ -766,19 +836,23 @@ describe('definiciones: visitas, acumulado bruto, premios, clientes y ajustes', 
     await asiento(t.K3, { sucursal: SA, cajero: C2, en: horaLocal('13:00'), tipo: 'ajuste', puntos: -5 });
     await asiento(t.K4, { ...enS1, en: horaLocal('14:00'), puntos: 3, forzado: true });
     await asiento(t.K5, { sucursal: S1, cajero: null, en: horaLocal('15:00'), puntos: 1 });
+    await asiento(t.K5, { sucursal: S1, cajero: null, en: horaLocal('17:00'), tipo: 'ajuste', puntos: -1 });
+    await asiento(t.K6, { sucursal: cerrada, cajero: C3, en: horaLocal('16:00'), puntos: 1 });
   });
 
   it('reporte_resumen: visitas sin ajustes, acumulado bruto, quien solo canjeó es cliente, y una sucursal con solo ajustes no aparece', async () => {
     const f = await resumen([E.id], { desde: D, hasta: D });
     const total = totalDe(f);
-    expect(total.operaciones, 'visitas: 3 de K1 (acreditación, uso, renovación) + K4 + K5; el ajuste no').toBe(5);
-    expect(total.puntos_otorgados, 'acumulado BRUTO: 10 + 3 + 1, sin el uso −4 ni la renovación +7').toBe(14);
+    expect(total.operaciones, 'visitas: 3 de K1 (acreditación, uso, renovación) + K4 + K5 + K6; los ajustes no').toBe(6);
+    expect(total.puntos_otorgados, 'acumulado BRUTO: 10 + 3 + 1 + 1, sin el uso −4 ni la renovación +7').toBe(15);
     expect(total.canjes, 'premios').toBe(2);
-    expect(total.clientes_unicos, 'clientes: K1, K2 (solo premios), K4, K5 — K3 (solo ajuste) no').toBe(4);
+    expect(total.clientes_unicos, 'clientes: K1, K2 (solo premios), K4, K5, K6 — K3 (solo ajuste) no').toBe(5);
     expect(
-      f.filter((x) => !x.es_total).map((x) => `${x.sucursal_nombre}: ${x.operaciones} visitas`),
-      'filas por sucursal (la de solo ajustes no aparece)',
-    ).toEqual(['Centro: 5 visitas']);
+      f
+        .filter((x) => !x.es_total)
+        .map((x) => `${x.sucursal_nombre} (activa: ${x.sucursal_activa}): ${x.operaciones} visitas`),
+      'filas por sucursal (la de solo ajustes no aparece; la cerrada sí, marcada inactiva)',
+    ).toEqual(['Centro (activa: true): 5 visitas', 'Cerrada (activa: false): 1 visitas']);
   });
 
   it('reporte_clientes: un cliente con solo ajustes no tiene fila, un ajuste no mueve la última actividad y quien solo canjeó sí tiene fila', async () => {
@@ -799,12 +873,14 @@ describe('definiciones: visitas, acumulado bruto, premios, clientes y ajustes', 
       K2: { visitas: 0, acumulado: 0, premios: 2, ultima: horaLocal('12:00') },
       K4: { visitas: 1, acumulado: 3, premios: 0, ultima: horaLocal('14:00') },
       K5: { visitas: 1, acumulado: 1, premios: 0, ultima: horaLocal('15:00') },
+      K6: { visitas: 1, acumulado: 1, premios: 0, ultima: horaLocal('16:00') },
     });
   });
 
-  it('reporte_cajeros_alcance: los ajustes SÍ entran, como Correcciones, sin ser visitas ni hacer clientes', async () => {
+  it('reporte_cajeros_alcance: los ajustes SÍ entran, como Correcciones, sin ser visitas ni hacer clientes; "Sin registrar" va al final', async () => {
     const f = await cajeros([E.id], { desde: D, hasta: D });
-    const quien = (id: string | null) => (id === C1 ? 'c1' : id === C2 ? 'c2' : id === null ? 'sin registrar' : id);
+    const nombres = new Map<string | null, string>([[C1, 'c1'], [C2, 'c2'], [C3, 'c3'], [null, 'sin registrar']]);
+    const quien = (id: string | null) => nombres.get(id) ?? String(id);
     expect(
       f.map((x) => ({
         cajero: quien(x.cajero_usuario_id),
@@ -820,16 +896,18 @@ describe('definiciones: visitas, acumulado bruto, premios, clientes y ajustes', 
         clientes: x.clientes_unicos,
       })),
     ).toEqual([
-      // Orden: forzadas + ajustes de mayor a menor, "Sin registrar" al final.
+      // Orden: forzadas + ajustes de mayor a menor (c1 2, c2 1, c3 0), "Sin registrar" al final
+      // aunque sus 1 le ganen a c3.
       { cajero: 'c1', email: 'c1', activo: true, visitas: 4, acumulado: 13, monto: 12.5, forzadas: 1, correcciones: 1, puntos_ajustados: 2, premios: 2, clientes: 3 },
       { cajero: 'c2', email: 'c2', activo: true, visitas: 0, acumulado: 0, monto: 0, forzadas: 0, correcciones: 1, puntos_ajustados: -5, premios: 0, clientes: 0 },
-      { cajero: 'sin registrar', email: null, activo: null, visitas: 1, acumulado: 1, monto: 0, forzadas: 0, correcciones: 0, puntos_ajustados: 0, premios: 0, clientes: 1 },
+      { cajero: 'c3', email: 'c3', activo: false, visitas: 1, acumulado: 1, monto: 0, forzadas: 0, correcciones: 0, puntos_ajustados: 0, premios: 0, clientes: 1 },
+      { cajero: 'sin registrar', email: null, activo: null, visitas: 1, acumulado: 1, monto: 0, forzadas: 0, correcciones: 1, puntos_ajustados: -1, premios: 0, clientes: 1 },
     ]);
   });
 
   it('reporte_por_dia: el día cuenta visitas y premios, no ajustes', async () => {
     expect(await porDia([E.id], { desde: D, hasta: D }, 'dia')).toEqual([
-      { periodo: D, operaciones: 5, canjes: 2, es_mes: false },
+      { periodo: D, operaciones: 6, canjes: 2, es_mes: false },
     ]);
   });
 });

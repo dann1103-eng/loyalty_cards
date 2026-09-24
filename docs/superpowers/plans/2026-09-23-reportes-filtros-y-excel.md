@@ -163,7 +163,8 @@ antes de esas tareas.
 3. `limit (select …) offset (select …)` sobre el CTE compila y pagina.
 4. Total 0 con `p_limite = 1` y `p_offset` 0 y 250: cero filas, sin error (mata quitar el `greatest` de
    afuera).
-5. 312 de a 50 (o 7 de a 3) con la página 999: `offset_efectivo` = 300 (o 6) (mata la división numérica).
+5. 312 de a 50 (o 6 de a 4) con la página 999: `offset_efectivo` = 300 (o 4) (mata la división numérica;
+   "7 de a 3" NO sirve: 6/3 es exacto y la división numérica da lo mismo).
 6. `total`/`offset_efectivo` iguales en todas las filas; `p_limite` 0 → 1, 5000 → 1000, null → 50;
    `p_desc` null usa la dirección inicial de cada columna.
 7. Orden por nombre en las dos direcciones con apellido null al final; el mismo cliente en dos
