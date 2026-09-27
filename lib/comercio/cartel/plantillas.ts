@@ -4,6 +4,7 @@ import { DIMENSIONES_CARTEL, type DatosCartel, type FormatoCartel } from './tipo
 import { escaparXml, type DibujarTexto } from './texto';
 import { dibujarFranjas, dibujarTextosExtra } from './elementos';
 import { cajaLogo } from './cajaLogo';
+import { dibujarBloqueWallet, geometriaBloqueWallet } from './insigniasWallet';
 
 // `escaparXml` vive en texto.ts (lo necesita cada dibujante para escapar el texto que le llega en
 // crudo), pero se sigue re-exportando desde acá: es parte de la superficie pública de las plantillas.
@@ -142,13 +143,23 @@ async function plantillaCentrado(
   // El 0.865 reserva lo que va debajo del QR: el CTA (h*0.05), el teaser (h*0.045) y un respiro al
   // pie. En formato mostrador el tope da ~244 y no muerde —ahí sigue mandando el 0.5 del ancho—,
   // así que ese cartel se ve exactamente igual que antes de este arreglo.
-  const altoDisponible = (h * 0.865 - qrY) / 1.24;
+  //
+  // Debajo del teaser va además el bloque "Disponible para" + los botones de Wallet
+  // (insigniasWallet.ts), así que a ese 0.865 se le resta su alto y el aire que lo separa del
+  // teaser. En el sticker eso achica el QR (de ~155 a ~113 unidades, unos 2.8 cm de lado: se sigue
+  // escaneando sin problema desde la mesa); en el mostrador apenas lo toca (200 → ~199).
+  const anchoWallet = w * 0.5;
+  const aireWallet = h * 0.025;
+  const altoWallet = geometriaBloqueWallet(anchoWallet).alto;
+  const altoDisponible = (h * 0.865 - aireWallet - altoWallet - qrY) / 1.24;
   const qrLado = Math.min(w * 0.5, altoDisponible);
   // La mitad de la TARJETA, no del QR: con `qrLado / 2` el margen izquierdo corre todo el bloque
   // hacia la derecha (ver ladoTarjetaQr).
   const qrX = cx - ladoTarjetaQr(qrLado) / 2;
   const ctaY = qrY + qrLado * 1.24 + h * 0.05;
   const teaserY = ctaY + h * 0.045;
+  // Sin teaser, el bloque sube a ocupar su lugar en vez de dejar un hueco en el medio.
+  const walletY = (datos.textoTeaser ? teaserY : ctaY) + aireWallet;
 
   const qrSvg = await construirQrSvg(datos.urlRegistro, qrLado);
 
@@ -160,6 +171,7 @@ async function plantillaCentrado(
   ${tarjetaBlancaConQr(qrSvg, qrX, qrY, qrLado)}
   ${dibujarTexto({ texto: datos.textoCta, x: cx, y: ctaY, tamano: h * 0.026, peso: 600, anclaje: 'centro', color: datos.colorLabel })}
   ${datos.textoTeaser ? dibujarTexto({ texto: datos.textoTeaser, x: cx, y: teaserY, tamano: h * 0.022, peso: 400, anclaje: 'centro', color: datos.colorTexto }) : ''}
+  ${dibujarBloqueWallet({ cx, y: walletY, ancho: anchoWallet, colorEtiqueta: datos.colorTexto, dibujarTexto })}
   ${dibujarTextosExtra(datos.elementos, w, h, dibujarTexto)}
 </svg>`;
 }
@@ -190,6 +202,11 @@ async function plantillaSplit(
     const qrY = h / 2 - qrLado * 0.62;
     const qrSvg = await construirQrSvg(datos.urlRegistro, qrLado);
     const centroDerecha = anchoFranja + (w - anchoFranja) / 2;
+    const ctaY = qrY + qrLado * 1.24 + h * 0.05;
+    const teaserY = qrY + qrLado * 1.24 + h * 0.09;
+    // Acá sobra alto debajo del teaser (la mitad blanca es alta y el QR está centrado en ella): el
+    // bloque de Wallet entra sin achicar nada. Sin teaser, sube a ocupar su lugar.
+    const walletY = (datos.textoTeaser ? teaserY : ctaY) + h * 0.03;
 
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">
   <rect width="${w}" height="${h}" fill="#ffffff"/>
@@ -198,8 +215,9 @@ async function plantillaSplit(
   ${logoSvg(datos, anchoFranja / 2 - logoLado / 2, h * 0.08, logoLado, anchoMaximoLogo, 'centro', dibujarTexto)}
   ${dibujarTexto({ texto: datos.nombreComercio, x: anchoFranja / 2, y: h * 0.08 + logoLado + h * 0.04, tamano: h * 0.028, peso: 700, anclaje: 'centro', color: datos.colorTexto })}
   ${tarjetaBlancaConQr(qrSvg, qrX, qrY, qrLado)}
-  ${dibujarTexto({ texto: datos.textoCta, x: centroDerecha, y: qrY + qrLado * 1.24 + h * 0.05, tamano: h * 0.024, peso: 600, anclaje: 'centro', color: datos.colorLabel })}
-  ${datos.textoTeaser ? dibujarTexto({ texto: datos.textoTeaser, x: centroDerecha, y: qrY + qrLado * 1.24 + h * 0.09, tamano: h * 0.02, peso: 400, anclaje: 'centro', color: datos.colorTexto }) : ''}
+  ${dibujarTexto({ texto: datos.textoCta, x: centroDerecha, y: ctaY, tamano: h * 0.024, peso: 600, anclaje: 'centro', color: datos.colorLabel })}
+  ${datos.textoTeaser ? dibujarTexto({ texto: datos.textoTeaser, x: centroDerecha, y: teaserY, tamano: h * 0.02, peso: 400, anclaje: 'centro', color: datos.colorTexto }) : ''}
+  ${dibujarBloqueWallet({ cx: centroDerecha, y: walletY, ancho: (w - anchoFranja) * 0.8, colorEtiqueta: '#57534e', dibujarTexto })}
   ${dibujarTextosExtra(datos.elementos, w, h, dibujarTexto)}
 </svg>`;
   }
@@ -215,9 +233,15 @@ async function plantillaSplit(
   // `anchoMaximo = lado` (spec: "la caja SIGUE CUADRADA en split × sticker"). Un logo angosto (1:3)
   // igual se angosta: lo único que este tope prohíbe es CRECER, no encogerse.
   const anchoMaximoLogo = logoLado;
-  const qrLado = w * 0.42;
-  const qrX = w / 2 - ladoTarjetaQr(qrLado) / 2;
   const qrY = altoFranja + h * 0.08;
+  // Debajo del CTA va el bloque de Wallet. El QR se acota para que el bloque termine a más tardar en
+  // el 97% del alto: tarjeta (1.24 × lado) + CTA (h × 0.045) + aire (h × 0.03) + bloque. En este
+  // cuadrado eso lo baja de 168 a ~120 unidades (unos 3 cm de lado).
+  const anchoWallet = w * 0.5;
+  const altoWallet = geometriaBloqueWallet(anchoWallet).alto;
+  const qrLado = Math.min(w * 0.42, (h * 0.97 - h * 0.045 - h * 0.03 - altoWallet - qrY) / 1.24);
+  const qrX = w / 2 - ladoTarjetaQr(qrLado) / 2;
+  const ctaY = qrY + qrLado * 1.24 + h * 0.045;
   const qrSvg = await construirQrSvg(datos.urlRegistro, qrLado);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim.mm.ancho}mm" height="${dim.mm.alto}mm" viewBox="0 0 ${w} ${h}">
@@ -227,7 +251,8 @@ async function plantillaSplit(
   ${logoSvg(datos, w * 0.08, altoFranja / 2 - logoLado / 2, logoLado, anchoMaximoLogo, 'centro', dibujarTexto)}
   ${dibujarTexto({ texto: datos.nombreComercio, x: w * 0.08 + logoLado + w * 0.04, y: altoFranja / 2 + logoLado * 0.13, tamano: h * 0.032, peso: 700, anclaje: 'inicio', color: datos.colorTexto })}
   ${tarjetaBlancaConQr(qrSvg, qrX, qrY, qrLado)}
-  ${dibujarTexto({ texto: datos.textoCta, x: w / 2, y: qrY + qrLado * 1.24 + h * 0.045, tamano: h * 0.026, peso: 600, anclaje: 'centro', color: datos.colorLabel })}
+  ${dibujarTexto({ texto: datos.textoCta, x: w / 2, y: ctaY, tamano: h * 0.026, peso: 600, anclaje: 'centro', color: datos.colorLabel })}
+  ${dibujarBloqueWallet({ cx: w / 2, y: ctaY + h * 0.03, ancho: anchoWallet, colorEtiqueta: '#57534e', dibujarTexto })}
   ${dibujarTextosExtra(datos.elementos, w, h, dibujarTexto)}
 </svg>`;
 }
@@ -274,16 +299,26 @@ async function plantillaFoto(
   // siquiera acota el logo 3:1 de las pruebas (pide 168, contra el tope viejo de 104 que sí lo
   // recortaba y lo dejaba pegado casi al borde izquierdo).
   const anchoMaximoLogo = w * 0.5;
-  const qrLado = w * 0.42;
+  // La tarjeta blanca crece hacia ARRIBA para meter, debajo del CTA, el bloque de Wallet. El QR se
+  // acota para que la tarjeta nunca suba hasta el logo: su borde superior queda por lo menos
+  // h × 0.03 por debajo del cuadrado del logo (que termina en h × 0.06 + logoLado). En el mostrador
+  // ese tope no muerde; en el sticker baja el QR de 168 a ~154 unidades.
+  const anchoWallet = w * 0.5;
+  const aireWallet = h * 0.03;
+  const altoWallet = geometriaBloqueWallet(anchoWallet).alto;
+  const qrLado = Math.min(w * 0.42, (h * 0.82 - logoLado - aireWallet - altoWallet) / 1.5);
   const tarjetaAncho = w * 0.8;
-  const tarjetaAlto = qrLado * 1.5;
+  const tarjetaAlto = qrLado * 1.5 + aireWallet + altoWallet;
   const tarjetaX = (w - tarjetaAncho) / 2;
   const tarjetaY = h - tarjetaAlto - h * 0.06;
   // Acá SÍ es media medida del QR y no de `ladoTarjetaQr`: esta plantilla no usa
   // tarjetaBlancaConQr — dibuja su propia tarjeta (más ancha que alta, con espacio para el CTA
   // adentro) y `qrX` posiciona el QR pelado dentro de ella.
   const qrX = w / 2 - qrLado / 2;
-  const qrY = tarjetaY + tarjetaAlto * 0.12;
+  // 0.18 × lado = el 12% del alto que tenía la tarjeta antes del bloque de Wallet (1.5 × lado): el QR
+  // conserva su margen de arriba aunque la tarjeta haya crecido.
+  const qrY = tarjetaY + qrLado * 0.18;
+  const ctaY = qrY + qrLado * 1.22;
 
   const qrSvg = await construirQrSvg(datos.urlRegistro, qrLado);
 
@@ -299,7 +334,8 @@ async function plantillaFoto(
   ${logoSvg(datos, w * 0.06, h * 0.06, logoLado, anchoMaximoLogo, 'inicio', dibujarTexto)}
   <rect x="${tarjetaX}" y="${tarjetaY}" width="${tarjetaAncho}" height="${tarjetaAlto}" rx="${tarjetaAncho * 0.04}" fill="#ffffff"/>
   <g transform="translate(${qrX}, ${qrY})">${qrSvg}</g>
-  ${dibujarTexto({ texto: datos.textoCta, x: w / 2, y: qrY + qrLado * 1.22, tamano: h * 0.026, peso: 600, anclaje: 'centro', color: '#1c1917' })}
+  ${dibujarTexto({ texto: datos.textoCta, x: w / 2, y: ctaY, tamano: h * 0.026, peso: 600, anclaje: 'centro', color: '#1c1917' })}
+  ${dibujarBloqueWallet({ cx: w / 2, y: ctaY + aireWallet, ancho: anchoWallet, colorEtiqueta: '#57534e', dibujarTexto })}
   ${dibujarTextosExtra(datos.elementos, w, h, dibujarTexto)}
 </svg>`;
 }

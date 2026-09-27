@@ -177,12 +177,21 @@ describe('rasterizarCartelPng', () => {
     const nitido = await rasterizarCartelPng(svg, 'sticker');
     const borroso = await sharp(Buffer.from(svg)).resize(ancho, alto).png().toBuffer();
 
-    const grisesNitido = await contarGrisesIntermedios(nitido);
-    const grisesBorroso = await contarGrisesIntermedios(borroso);
+    // Se cuenta SOLO dentro de la tarjeta blanca del QR. Medido el 2026-09-26: por el camino malo lo
+    // único que sale borroso es el QR (el <svg> anidado); el texto y los botones de Wallet salen
+    // igual de nítidos por los dos caminos. Contando el cartel entero, el texto blanco sobre los
+    // botones negros (insigniasWallet.ts) sumaba ~1800 grises de antialias IDÉNTICOS a las dos
+    // cuentas y la proporción caía de 6x a 1.6x sin que nada se hubiera desenfocado.
+    const tarjeta = svg.match(/<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="[\d.]+" rx="[\d.]+" fill="#ffffff"\/>/)!;
+    const escala = ancho / DIMENSIONES_CARTEL.sticker.viewBox.ancho;
+    const [tx, ty, tl] = tarjeta.slice(1).map((v) => Math.round(Number(v) * escala));
+    const region = { left: tx, top: ty, width: tl, height: tl };
+    const grisesNitido = await contarGrisesIntermedios(await sharp(nitido).extract(region).toBuffer());
+    const grisesBorroso = await contarGrisesIntermedios(await sharp(borroso).extract(region).toBuffer());
 
-    // Medido el 2026-07-31: 1318 píxeles intermedios el nítido contra 7901 el borroso (6.0x). El
-    // umbral de la mitad deja muchísimo aire para cambios de layout y sigue lejísimos de poder
-    // pasar si se pierde el density (ahí las dos cuentas serían LA MISMA).
+    // Medido el 2026-07-31 sobre el cartel entero: 1318 píxeles intermedios el nítido contra 7901 el
+    // borroso (6.0x). El umbral de la mitad deja muchísimo aire para cambios de layout y sigue
+    // lejísimos de poder pasar si se pierde el density (ahí las dos cuentas serían LA MISMA).
     expect(grisesNitido).toBeLessThan(grisesBorroso * 0.5);
   });
 
@@ -432,6 +441,10 @@ describe('el texto del cartel SIN fuentes del sistema (la condición de Vercel)'
       nombreComercio: '',
       textoCta: '',
       textoTeaser: null,
+      // "Disponible para", sobre los botones de Wallet (insigniasWallet.ts), es un texto FIJO que se
+      // dibuja en colorTexto y no se puede vaciar: se le devuelve su color de marca para que el
+      // control siga midiendo "cero texto magenta" y no ese rótulo.
+      colorTexto: DATOS.colorTexto,
     };
     expect(await contarMagenta(await rasterizarCartelSinFuentes(datos, 'sticker'))).toBe(0);
   });
