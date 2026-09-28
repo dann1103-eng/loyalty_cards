@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { TIPOS_TARJETA, crearComercio } from './guardarComercio';
 import { generarSlugUnico } from './slugComercio';
+import { ESCRIBINOS } from '../marca';
 
 // Alta self-serve de un comercio por el DUEÑO (plan 2026-07-25 §4.6). A diferencia del alta de FM:
 //  - la CUENTA nunca viene de un formulario — se deriva del comercio activo de la sesión (control
@@ -44,7 +45,7 @@ export async function crearComercioPropio(
     return { ok: false, error: 'No se pudo crear el comercio.' };
   }
   const cuentaId = comercioActivo?.cuenta_id;
-  if (!cuentaId) return { ok: false, error: 'Tu comercio no está asociado a una cuenta. Escribinos a soporte@cardly-sv.site.' };
+  if (!cuentaId) return { ok: false, error: `Tu comercio no está asociado a una cuenta. ${ESCRIBINOS}.` };
 
   // 2) Email para la membresía nueva: el de la membresía owner ACTUAL (fuente estable — los claims
   //    podrían no traer email).

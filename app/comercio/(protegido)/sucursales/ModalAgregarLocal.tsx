@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { accionCrearSucursal, accionCrearComercioPropio } from './actions';
 import { TIPOS_TARJETA } from '@/lib/comercios/guardarComercio';
+import { MARCA } from '@/lib/marca';
 
 // "¿Ya estamos en el navegador?" sin setState en un effect (esa regla es ERROR en este repo).
 // Hace falta porque el sheet se monta con createPortal sobre document.body, que no existe en el
@@ -170,7 +171,7 @@ export default function ModalAgregarLocal({
                   <span className="admin-fila-slug">
                     {puedeCrearComercio
                       ? 'Otra marca, con su propia tarjeta e identidad.'
-                      : 'Tu comercio no está asociado a una cuenta — escribinos a soporte@cardly-sv.site.'}
+                      : `Tu comercio no está asociado a una cuenta — escribinos a ${MARCA.correoSoporte}.`}
                   </span>
                 </span>
               </button>

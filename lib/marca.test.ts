@@ -87,10 +87,10 @@ describe('el rebranding a Cardly SV no dejó "FM" a la vista', () => {
     expect(culpables, `Quedó "FM" a la vista del usuario:\n${culpables.join('\n')}`).toEqual([]);
   });
 
-  it('el correo de soporte que se muestra es el del dominio propio', () => {
-    // Si alguien cambia el dominio y se olvida de acá, el dueño escribe a un buzón que no existe.
-    expect(MARCA.correoSoporte).toBe('soporte@cardly-sv.site');
-    expect(MARCA.correoSoporte.endsWith('@cardly-sv.site')).toBe(true);
+  it('el correo de soporte es el de FM Communications, no el de @cardly-sv.site', () => {
+    // El buzón de @cardly-sv.site se dejó de pagar el 2026-09-28: quien le escriba ahí no le llega a
+    // nadie. Si alguien lo vuelve a poner, el dueño y el cliente escriben a un buzón que no existe.
+    expect(MARCA.correoSoporte).toBe('soporte@fmcomsolutions.com');
   });
 
   it('el sitio lleva www: sin él, el dominio raíz redirige y rompe el registro de passes', () => {

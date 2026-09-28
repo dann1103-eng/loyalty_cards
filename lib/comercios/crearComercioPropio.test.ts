@@ -208,7 +208,7 @@ describe('crearComercioPropio', () => {
     // FM. Ver lib/marca.test.ts, que impide que el nombre viejo reaparezca en lo que ve el usuario.
     expect(res).toEqual({
       ok: false,
-      error: 'Tu comercio no está asociado a una cuenta. Escribinos a soporte@cardly-sv.site.',
+      error: 'Tu comercio no está asociado a una cuenta. Escribinos a soporte@fmcomsolutions.com.',
     });
   });
 

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { URL_MANIFIESTO_COMERCIO } from '@/lib/manifiestos';
+import { MARCA } from '@/lib/marca';
 import FormularioLoginComercio from './FormularioLoginComercio';
 
 // Fuera de (protegido): sin esta declaración propia heredaría el manifest del portal del cliente
@@ -12,7 +13,7 @@ const MENSAJES: Record<string, string> = {
   // uso), venció (24 h) o llegó cortado. El cliente no puede resolverlo solo — el único camino es
   // que FM le genere otro desde la ficha del comercio.
   'link-vencido':
-    'Ese link de acceso ya no sirve: se usa una sola vez y vence a las 24 horas. Pedí uno nuevo a soporte@cardly-sv.site.',
+    `Ese link de acceso ya no sirve: se usa una sola vez y vence a las 24 horas. Pedí uno nuevo a ${MARCA.correoSoporte}.`,
 };
 
 export default async function PaginaLoginComercio({

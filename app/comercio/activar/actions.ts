@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClienteServidor } from '@/lib/supabase/server';
 import { COOKIE_COMERCIO_ACTIVO, COOKIE_SUCURSAL_ACTIVA } from '@/lib/comercio/cookieComercio';
+import { MARCA } from '@/lib/marca';
 
 // Canje del link de invitación. Vive en una Server Action (POST) y NO en el GET de la página a
 // propósito: el token es de UN SOLO USO y WhatsApp —como todo mensajero— abre el link con un GET
@@ -35,7 +36,7 @@ export async function activarAcceso(
   const tipo = String(formData.get('tipo') ?? '');
 
   if (!tokenHash || !esTipoAceptado(tipo)) {
-    return { error: 'Ese link de acceso no es válido. Pedí uno nuevo a soporte@cardly-sv.site.' };
+    return { error: `Ese link de acceso no es válido. Pedí uno nuevo a ${MARCA.correoSoporte}.` };
   }
 
   const supabase = await createClienteServidor();
@@ -53,7 +54,7 @@ export async function activarAcceso(
       redirect('/comercio/clave');
     }
     return {
-      error: 'Ese link de acceso ya no sirve: se usa una sola vez y vence a las 24 horas. Pedí uno nuevo a soporte@cardly-sv.site.',
+      error: `Ese link de acceso ya no sirve: se usa una sola vez y vence a las 24 horas. Pedí uno nuevo a ${MARCA.correoSoporte}.`,
     };
   }
 

@@ -5,7 +5,7 @@ import { construirReverso, resolverAviso, escaparHtml, type CampoReverso, type D
 // si alguien "arregla" el sitio quitándole el `www`, la constante y la prueba cambiarían juntas y
 // nadie se enteraría. El dominio raíz redirige, y esa redirección ya rompió el registro de passes
 // en producción el 2026-07-26.
-const PIE_EMISOR = 'Cardly SV\nsoporte@cardly-sv.site\nwww.cardly-sv.site';
+const PIE_EMISOR = 'Cardly SV\nsoporte@fmcomsolutions.com\nwww.cardly-sv.site';
 
 // Comercio recién creado: ninguna regla, ninguna recompensa, nada configurado. Es un estado REAL
 // (ni reglas_puntos ni recompensas reciben filas por defecto, y crearComercio no inserta ninguna).

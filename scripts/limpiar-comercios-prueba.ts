@@ -91,6 +91,11 @@ async function main() {
   await paso('usuarios_comercio', () => supabase.from('usuarios_comercio').delete().in('comercio_id', ids));
   await paso('sucursales', () => supabase.from('sucursales').delete().in('comercio_id', ids));
   await paso('recompensas', () => supabase.from('recompensas').delete().in('comercio_id', ids));
+  // reglas_puntos (0001) y niveles_descuento (0018) apuntan a comercios SIN cascade. Faltaban acá y
+  // en el fixture: el 2026-09-28 el borrado de 18 "Comercio Prueba" se frenó en el último paso
+  // con un 23503 de reglas_puntos_comercio_id_fkey.
+  await paso('reglas_puntos', () => supabase.from('reglas_puntos').delete().in('comercio_id', ids));
+  await paso('niveles_descuento', () => supabase.from('niveles_descuento').delete().in('comercio_id', ids));
   await paso('tarjetas', () => supabase.from('tarjetas').delete().in('comercio_id', ids));
   await paso('programas_tarjeta', () => supabase.from('programas_tarjeta').delete().in('comercio_id', ids));
   if (clienteIds.length) {

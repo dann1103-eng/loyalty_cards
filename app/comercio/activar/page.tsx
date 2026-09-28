@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { URL_MANIFIESTO_COMERCIO } from '@/lib/manifiestos';
+import { MARCA } from '@/lib/marca';
 import FormularioActivar from './FormularioActivar';
 
 export const dynamic = 'force-dynamic';
@@ -41,7 +42,7 @@ export default async function PaginaActivar({
           <p className="lede" style={{ marginTop: 6, color: 'var(--texto-2)' }}>
             {linkCompleto
               ? 'Tocá el botón para entrar y definir tu contraseña. Este link se usa una sola vez.'
-              : 'Este link está incompleto o mal copiado. Pedí uno nuevo a soporte@cardly-sv.site.'}
+              : `Este link está incompleto o mal copiado. Pedí uno nuevo a ${MARCA.correoSoporte}.`}
           </p>
         </div>
 

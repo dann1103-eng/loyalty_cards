@@ -9,7 +9,8 @@
 // registro de passes en producción el 2026-07-26.
 export const MARCA = {
   nombre: 'Cardly SV',
-  correoSoporte: 'soporte@cardly-sv.site',
+  // Buzón de FM Communications: el de @cardly-sv.site se dejó de pagar (2026-09-28).
+  correoSoporte: 'soporte@fmcomsolutions.com',
   sitio: 'www.cardly-sv.site',
 } as const;
 

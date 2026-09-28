@@ -309,7 +309,9 @@ export function crearEntorno(supabase: SupabaseClient<Database>): EntornoComerci
           | 'recompensas'
           | 'programas_tarjeta'
           | 'notificaciones_enviadas'
-          | 'difusiones',
+          | 'difusiones'
+          | 'reglas_puntos'
+          | 'niveles_descuento',
         columna: string,
         ids: string[],
       ) => {
@@ -360,6 +362,11 @@ export function crearEntorno(supabase: SupabaseClient<Database>): EntornoComerci
       await borrar('usuarios_comercio', 'comercio_id', comercios);
       await borrar('sucursales', 'comercio_id', comercios);
       await borrar('recompensas', 'comercio_id', comercios);
+      // reglas_puntos (0001) y niveles_descuento (0018) también apuntan a comercios sin cascade:
+      // sin estas dos líneas el comercio no se borraba y quedaba en el admin como "Comercio Prueba"
+      // (se borraron 18 a mano el 2026-09-28, con scripts/limpiar-comercios-prueba.ts).
+      await borrar('reglas_puntos', 'comercio_id', comercios);
+      await borrar('niveles_descuento', 'comercio_id', comercios);
       // tarjetas ANTES que programas_tarjeta (tarjetas.programa_id la referencia); programas_tarjeta
       // ANTES que comercios (programas_tarjeta.comercio_id lo referencia). clientes no se relaciona
       // con ninguna de las dos, así que su posición entre medio no importa.

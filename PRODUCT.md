@@ -11,7 +11,7 @@ su marca, y sus clientes la agregan desde un registro público. El cajero acredi
 escaneando el QR del cliente, y el saldo se actualiza en el bolsillo de esa persona.
 
 **La marca es Cardly SV.** Sitio `www.cardly-sv.site` (con `www`: el dominio raíz redirige y esa
-redirección rompió el registro de passes en producción). Soporte `soporte@cardly-sv.site`. La fuente
+redirección rompió el registro de passes en producción). Soporte `soporte@fmcomsolutions.com`. La fuente
 de verdad es `lib/marca.ts`, y ningún texto de interfaz vuelve a escribir el nombre o el correo a
 mano.
 
