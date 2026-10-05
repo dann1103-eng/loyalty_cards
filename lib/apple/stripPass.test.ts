@@ -19,6 +19,8 @@ const datosBase = {
   colorLabel: 'rgb(255, 255, 255)',
   stripUrl: 'https://ejemplo.com/franja.png',
   selloIconoUrl: null,
+  selloIcono2Url: null,
+  patronSellos: { patron: 'intercalado' as const, casillas: [] },
   heroUrl: null,
   difuminadoFranja: 'ninguno',
   encuadreFranja: { modo: 'llenar' as const, focoX: 50, focoY: 50, zoom: 100 },
@@ -107,5 +109,81 @@ describe('componerStrips con franja propia', () => {
     expect(strips).not.toBeNull();
     const meta = await sharp(strips!.s2).metadata();
     expect([meta.width, meta.height], 'la banda @2x mide 750×246').toEqual([750, 246]);
+  }, 30_000);
+});
+
+// ── La grilla con DOS íconos de sello (migración 0041) ────────────────────────────────────────────
+// Se mira el PÍXEL del centro de cada casilla en el PNG, no el árbol que se le pasa a next/og: lo que
+// le importa al dueño es qué dibujo sale en qué casilla.
+//
+// 4 sellos llenos en una fila: cada uno mide 52 y hay 8 de separación, así que la fila ocupa 232 y
+// arranca en (375 − 232) / 2 = 71.5. Los centros caen en x = 97, 157, 217 y 277, a media altura.
+describe('componerStrips — grilla con dos íconos de sello', () => {
+  const CENTROS = [97, 157, 217, 277];
+  const ROJO: [number, number, number] = [255, 0, 0];
+  const AZUL: [number, number, number] = [0, 0, 255];
+
+  const cuadrado = (color: { r: number; g: number; b: number }) =>
+    sharp({ create: { width: 120, height: 120, channels: 3, background: color } }).png().toBuffer();
+
+  // El primer ícono es ROJO y el segundo AZUL; cada URL responde con el suyo. `sinSegundo` hace que
+  // el segundo dé 404, como una imagen borrada del bucket.
+  async function grilla(sobre: Partial<typeof datosBase> & Record<string, unknown>, sinSegundo = false) {
+    const [rojo, azul] = [await cuadrado({ r: 255, g: 0, b: 0 }), await cuadrado({ r: 0, g: 0, b: 255 })];
+    const real = globalThis.fetch;
+    const png = (buf: Buffer) =>
+      new Response(new Uint8Array(buf), { status: 200, headers: { 'content-type': 'image/png' } });
+    vi.stubGlobal('fetch', (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes('ejemplo.com/a.png')) return png(rojo);
+      if (url.includes('ejemplo.com/b.png')) return sinSegundo ? new Response('no', { status: 404 }) : png(azul);
+      return real(input as RequestInfo, init);
+    }) as typeof fetch);
+
+    const strips = await componerStrips({
+      ...datosBase,
+      tipoTarjeta: 'sellos',
+      puntos: 4,
+      selloMeta: 4,
+      stripUrl: null,
+      selloIconoUrl: 'https://ejemplo.com/a.png',
+      selloIcono2Url: 'https://ejemplo.com/b.png',
+      ...sobre,
+    });
+    expect(strips, 'la composición no debería fallar').not.toBeNull();
+    return Promise.all(CENTROS.map((x) => pixel(strips!.s1, x, 61)));
+  }
+
+  it('intercalado: rojo, azul, rojo, azul', async () => {
+    expect(await grilla({ patronSellos: { patron: 'intercalado', casillas: [] } })).toEqual([ROJO, AZUL, ROJO, AZUL]);
+  }, 30_000);
+
+  it('ultimo: solo la casilla del premio lleva el segundo ícono', async () => {
+    expect(await grilla({ patronSellos: { patron: 'ultimo', casillas: [] } })).toEqual([ROJO, ROJO, ROJO, AZUL]);
+  }, 30_000);
+
+  it('casillas elegidas: la 1 y la 3', async () => {
+    expect(await grilla({ patronSellos: { patron: 'casillas', casillas: [1, 3] } })).toEqual([AZUL, ROJO, AZUL, ROJO]);
+  }, 30_000);
+
+  it('sin segundo ícono, el patrón no se mira: la grilla de siempre', async () => {
+    expect(await grilla({ selloIcono2Url: null, patronSellos: { patron: 'intercalado', casillas: [] } })).toEqual([
+      ROJO, ROJO, ROJO, ROJO,
+    ]);
+  }, 30_000);
+
+  it('si el segundo ícono no baja, todas las casillas llevan el primero (nunca una casilla vacía)', async () => {
+    expect(await grilla({ patronSellos: { patron: 'intercalado', casillas: [] } }, true)).toEqual([
+      ROJO, ROJO, ROJO, ROJO,
+    ]);
+  }, 30_000);
+
+  it('solo segundo ícono (sin primero): las demás casillas llevan el aro de siempre, no un hueco', async () => {
+    const px = await grilla({ selloIconoUrl: null, patronSellos: { patron: 'ultimo', casillas: [] } });
+    expect(px[3], 'la última es el ícono').toEqual(AZUL);
+    // Un sello lleno SIN ícono es un círculo del color de etiqueta con un punto del color de fondo
+    // en el medio: el centro exacto es ese punto (negro), no el fondo de la franja ni el ícono.
+    expect(px[0]).toEqual([0, 0, 0]);
+    expect(px[0]).not.toEqual(AZUL);
   }, 30_000);
 });

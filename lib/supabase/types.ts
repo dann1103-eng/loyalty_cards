@@ -72,6 +72,10 @@ export type Database = {
           created_at: string;
           tipo_tarjeta: string;
           sello_icono_url: string | null;
+          // Migración 0041: segundo ícono de sello y su patrón (lib/tarjetas/patronSellos.ts).
+          sello_icono_2_url: string | null;
+          sello_patron: string | null;
+          sello_casillas: number[] | null;
           sello_meta: number | null;
           difuminado_franja: string;
           // Encuadre de la foto de fondo de la franja (migración 0032). NOT NULL con default: el
@@ -138,6 +142,9 @@ export type Database = {
           created_at?: string;
           tipo_tarjeta?: string;
           sello_icono_url?: string | null;
+          sello_icono_2_url?: string | null;
+          sello_patron?: string | null;
+          sello_casillas?: number[] | null;
           sello_meta?: number | null;
           difuminado_franja?: string;
           encuadre_franja?: string;
@@ -183,6 +190,9 @@ export type Database = {
           created_at?: string;
           tipo_tarjeta?: string;
           sello_icono_url?: string | null;
+          sello_icono_2_url?: string | null;
+          sello_patron?: string | null;
+          sello_casillas?: number[] | null;
           sello_meta?: number | null;
           difuminado_franja?: string;
           encuadre_franja?: string;
@@ -1074,6 +1084,10 @@ export type Database = {
           hero_url: string | null;
           strip_url: string | null;
           sello_icono_url: string | null;
+          // Migración 0041: segundo ícono de sello y su patrón (lib/tarjetas/patronSellos.ts).
+          sello_icono_2_url: string | null;
+          sello_patron: string | null;
+          sello_casillas: number[] | null;
           difuminado_franja: string | null;
           // El nombre que el cliente ve en su pase (migración 0033). null = el pase sale como
           // antes. NO es `nombre`, que es el rótulo interno del dueño y en el programa principal
@@ -1123,6 +1137,9 @@ export type Database = {
           hero_url?: string | null;
           strip_url?: string | null;
           sello_icono_url?: string | null;
+          sello_icono_2_url?: string | null;
+          sello_patron?: string | null;
+          sello_casillas?: number[] | null;
           difuminado_franja?: string | null;
           nombre_pase?: string | null;
           aviso_vencimiento_activo?: boolean;
@@ -1163,6 +1180,9 @@ export type Database = {
           hero_url?: string | null;
           strip_url?: string | null;
           sello_icono_url?: string | null;
+          sello_icono_2_url?: string | null;
+          sello_patron?: string | null;
+          sello_casillas?: number[] | null;
           difuminado_franja?: string | null;
           nombre_pase?: string | null;
           aviso_vencimiento_activo?: boolean;

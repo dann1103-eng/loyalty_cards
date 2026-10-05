@@ -6,6 +6,7 @@ import { encuadreDelComercio, encuadreDelPrograma, type Medidas } from '../encua
 import { urlRegistroPrograma } from '../urlRegistroPrograma';
 import { combinarDatosCartel } from './combinarDatos';
 import type { DatosCartel } from './tipos';
+import { patronDeFila } from '@/lib/tarjetas/patronSellos';
 
 // Descarga una imagen pública (Storage) y la convierte a data: URI. NUNCA se pasa una URL remota a
 // construirCartelSvg (spec §4.1): un renderizador SVG del lado servidor puede no resolver
@@ -88,13 +89,13 @@ export async function resolverDatosCartel(
         // porque brandingEfectivo pide el branding COMPLETO, y rellenar esos tres con literales
         // inventados dejaría un `stripUrl: null` mentiroso a la espera de que alguien lo lea.
         // Cuesta cero round-trips.
-        .select('nombre, slug, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja')
+        .select('nombre, slug, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja')
         .eq('id', comercioId)
         .maybeSingle(),
       supabase
         .from('programas_tarjeta')
         .select(
-          'slug, es_principal, activo, tipo_tarjeta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja',
+          'slug, es_principal, activo, tipo_tarjeta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja',
         )
         .eq('id', programaId)
         .eq('comercio_id', comercioId)
@@ -139,6 +140,8 @@ export async function resolverDatosCartel(
       heroUrl: comercio.hero_url,
       stripUrl: comercio.strip_url,
       selloIconoUrl: comercio.sello_icono_url,
+      selloIcono2Url: comercio.sello_icono_2_url,
+      patronSellos: patronDeFila(comercio),
       difuminadoFranja: comercio.difuminado_franja,
       encuadreFranja: encuadreDelComercio(comercio),
     },
@@ -151,6 +154,8 @@ export async function resolverDatosCartel(
       heroUrl: programa.hero_url,
       stripUrl: programa.strip_url,
       selloIconoUrl: programa.sello_icono_url,
+      selloIcono2Url: programa.sello_icono_2_url,
+      patronSellos: patronDeFila(programa),
       // `?? undefined` porque en el programa esta columna es nullable y en BrandingBase no:
       // undefined activa el `??` de brandingEfectivo y hereda.
       difuminadoFranja: programa.difuminado_franja ?? undefined,

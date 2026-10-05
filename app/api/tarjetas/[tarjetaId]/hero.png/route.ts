@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { componerStrips } from '@/lib/apple/stripPass';
 import { brandingEfectivo } from '@/lib/comercio/brandingEfectivo';
 import { encuadreDelComercio, encuadreDelPrograma } from '@/lib/comercio/encuadreFranja';
+import { patronDeFila } from '@/lib/tarjetas/patronSellos';
 
 export const runtime = 'nodejs';
 
@@ -29,7 +30,7 @@ export async function GET(
     // cacheaba esa imagen equivocada. Peor: el cache-busting de heroUrl.ts hashea el branding, así
     // que la URL cambiaba y Google re-descargaba… la misma imagen mal dibujada.
     .select(
-      'puntos_actuales, programas_tarjeta(tipo_tarjeta, sello_meta, nombre_pase, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(tipo_tarjeta, sello_meta, color_fondo, color_texto, color_label, logo_url, strip_url, sello_icono_url, hero_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja)',
+      'puntos_actuales, programas_tarjeta(tipo_tarjeta, sello_meta, nombre_pase, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(tipo_tarjeta, sello_meta, color_fondo, color_texto, color_label, logo_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, hero_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja)',
     )
     .eq('id', tarjetaId)
     .maybeSingle();
@@ -54,6 +55,8 @@ export async function GET(
       heroUrl: c.hero_url,
       stripUrl: c.strip_url,
       selloIconoUrl: c.sello_icono_url,
+      selloIcono2Url: c.sello_icono_2_url,
+      patronSellos: patronDeFila(c),
       difuminadoFranja: c.difuminado_franja,
       encuadreFranja: encuadreDelComercio(c),
     },
@@ -67,6 +70,8 @@ export async function GET(
           heroUrl: programa.hero_url,
           stripUrl: programa.strip_url,
           selloIconoUrl: programa.sello_icono_url,
+          selloIcono2Url: programa.sello_icono_2_url,
+          patronSellos: patronDeFila(programa),
           difuminadoFranja: programa.difuminado_franja ?? undefined,
           encuadreFranja: encuadreDelPrograma(programa),
         }
@@ -81,6 +86,8 @@ export async function GET(
     colorLabel: marca.colorLabel ?? 'rgb(255, 255, 255)',
     stripUrl: marca.stripUrl,
     selloIconoUrl: marca.selloIconoUrl,
+    selloIcono2Url: marca.selloIcono2Url,
+    patronSellos: marca.patronSellos,
     heroUrl: marca.heroUrl,
     difuminadoFranja: marca.difuminadoFranja,
     encuadreFranja: marca.encuadreFranja,

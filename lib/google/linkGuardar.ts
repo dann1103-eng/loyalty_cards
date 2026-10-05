@@ -13,6 +13,7 @@ import { listarUbicacionesGeopush } from '../comercio/geopush';
 import { hoyEnZona } from '../tarjetas/vigencia';
 import { brandingEfectivo } from '../comercio/brandingEfectivo';
 import { encuadreDelComercio, encuadreDelPrograma } from '../comercio/encuadreFranja';
+import { patronDeFila } from '@/lib/tarjetas/patronSellos';
 
 // Payload con la clase y el objeto EMBEBIDOS (no solo su id): mismo patrón exacto de
 // google-wallet/rest-samples/nodejs/demo-loyalty.js, verificado 2026-07-20. La documentación
@@ -32,7 +33,7 @@ export async function generarLinkGuardar(
     // bug que el resto del sistema ya tenía arreglado.
     // clientes(nombre, apellido): por el mismo upsert, el objeto embebido tiene que llevar NOMBRE y
     // APELLIDO igual que el de syncObjetoTarjeta, o los borraría (0036, spec 2026-09-17).
-    .select('comercio_id, qr_token, puntos_actuales, vigencia_hasta, usado_en, clientes(nombre, apellido), programas_tarjeta(id, tipo_tarjeta, sello_meta, nombre_pase, google_class_id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(nombre, zona_horaria, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, google_class_id, tipo_tarjeta, sello_meta)')
+    .select('comercio_id, qr_token, puntos_actuales, vigencia_hasta, usado_en, clientes(nombre, apellido), programas_tarjeta(id, tipo_tarjeta, sello_meta, nombre_pase, google_class_id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(nombre, zona_horaria, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, google_class_id, tipo_tarjeta, sello_meta)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
@@ -100,6 +101,8 @@ export async function generarLinkGuardar(
       heroUrl: cm.hero_url,
       stripUrl: cm.strip_url,
       selloIconoUrl: cm.sello_icono_url,
+      selloIcono2Url: cm.sello_icono_2_url,
+      patronSellos: patronDeFila(cm),
       difuminadoFranja: cm.difuminado_franja,
       encuadreFranja: encuadreDelComercio(cm),
     },
@@ -113,6 +116,8 @@ export async function generarLinkGuardar(
           heroUrl: programa.hero_url,
           stripUrl: programa.strip_url,
           selloIconoUrl: programa.sello_icono_url,
+          selloIcono2Url: programa.sello_icono_2_url,
+          patronSellos: patronDeFila(programa),
           difuminadoFranja: programa.difuminado_franja ?? undefined,
           encuadreFranja: encuadreDelPrograma(programa),
         }

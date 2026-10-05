@@ -3,11 +3,12 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { componerFranja } from '@/lib/apple/stripPass';
 import { brandingEfectivo } from '@/lib/comercio/brandingEfectivo';
 import { encuadreDelComercio, encuadreDelPrograma } from '@/lib/comercio/encuadreFranja';
+import { patronDeFila, SIN_PATRON } from '@/lib/tarjetas/patronSellos';
 
 export const runtime = 'nodejs';
 
 const COLUMNAS_MARCA =
-  'color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja';
+  'color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja';
 
 // La portada (heroImage) de la LoyaltyClass de Google: la MISMA banda de marca que va en el pass de
 // Apple (velo, difuminado, resplandor, encuadre). Hasta la 0032 la clase apuntaba a la foto cruda y
@@ -52,6 +53,8 @@ export async function GET(
       heroUrl: c.hero_url,
       stripUrl: c.strip_url,
       selloIconoUrl: c.sello_icono_url,
+      selloIcono2Url: c.sello_icono_2_url,
+      patronSellos: patronDeFila(c),
       difuminadoFranja: c.difuminado_franja,
       encuadreFranja: encuadreDelComercio(c),
     },
@@ -65,6 +68,8 @@ export async function GET(
           heroUrl: programa.hero_url,
           stripUrl: programa.strip_url,
           selloIconoUrl: programa.sello_icono_url,
+          selloIcono2Url: programa.sello_icono_2_url,
+          patronSellos: patronDeFila(programa),
           difuminadoFranja: programa.difuminado_franja ?? undefined,
           encuadreFranja: encuadreDelPrograma(programa),
         }
@@ -84,6 +89,8 @@ export async function GET(
       colorLabel: marca.colorLabel ?? 'rgb(255, 255, 255)',
       stripUrl: null,
       selloIconoUrl: null,
+      selloIcono2Url: null,
+      patronSellos: SIN_PATRON,
       heroUrl: marca.heroUrl,
       difuminadoFranja: marca.difuminadoFranja,
       encuadreFranja: marca.encuadreFranja,

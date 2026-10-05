@@ -24,6 +24,8 @@ function datosBase() {
     webServiceURL: 'https://example.com/api/apple',
     authenticationToken: '0123456789abcdef0123456789abcdef',
     selloIconoUrl: null,
+    selloIcono2Url: null,
+    patronSellos: { patron: 'intercalado' as const, casillas: [] },
     heroUrl: null,
     logoUrl: null,
     difuminadoFranja: 'medio',

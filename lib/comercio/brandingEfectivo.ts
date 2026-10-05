@@ -3,6 +3,7 @@
 // de "efectivo" y no puedan divergir — que es exactamente lo que pasó dos veces en julio de 2026
 // cuando el tipo de tarjeta se mudó al programa y quedaron consumidores leyendo la columna legada.
 import { ENCUADRE_POR_DEFECTO, type Encuadre } from './encuadreFranja';
+import { SIN_PATRON, type PatronSellos } from '../tarjetas/patronSellos';
 
 export interface BrandingBase {
   colorFondo: string | null;
@@ -12,6 +13,10 @@ export interface BrandingBase {
   heroUrl: string | null;
   stripUrl: string | null;
   selloIconoUrl: string | null;
+  // El SEGUNDO ícono de sello y en qué casillas va (migración 0041). Sin segundo ícono el patrón no
+  // se mira. Obligatorios los dos, por lo mismo que `encuadreFranja`.
+  selloIcono2Url: string | null;
+  patronSellos: PatronSellos;
   difuminadoFranja: string;
   // Obligatorio a propósito (como `reverso` y `ubicaciones` en DatosPass): el compilador obliga a
   // cada consumidor a decidir, en vez de que uno nuevo se lo olvide en silencio.
@@ -21,9 +26,13 @@ export interface BrandingBase {
 // El programa define lo que quiera y hereda el resto. `brandingPropio` es el interruptor maestro.
 // `encuadreFranja` va aparte del Partial porque en el programa `null` es un valor ("no lo toqué"),
 // mismo patrón que `mostrarComoFunciona` en ReversoPrograma.
-export type BrandingPrograma = Partial<Omit<BrandingBase, 'encuadreFranja'>> & {
+export type BrandingPrograma = Partial<Omit<BrandingBase, 'encuadreFranja' | 'patronSellos'>> & {
   brandingPropio: boolean;
   encuadreFranja?: Encuadre | null;
+  // Un patrón ya saneado (patronDeFila). Acá no existe un "null = heredá": de quién es el patrón lo
+  // deciden los ÍCONOS (ver brandingEfectivo). Opcional porque hay consumidores que no dibujan la
+  // grilla (el portal pide solo los tres colores); el que la dibuja tiene que pasarlo.
+  patronSellos?: PatronSellos;
 };
 
 export function brandingEfectivo(
@@ -51,6 +60,13 @@ export function brandingEfectivo(
     heroUrl: programa.heroUrl ?? comercio.heroUrl,
     stripUrl: programa.stripUrl ?? comercio.stripUrl,
     selloIconoUrl: programa.selloIconoUrl ?? comercio.selloIconoUrl,
+    // EL SEGUNDO ÍCONO Y SU PATRÓN VIAJAN JUNTOS, y cuelgan de que la tarjeta tenga sellos PROPIOS —
+    // no es `programa.selloIcono2Url ?? comercio.selloIcono2Url`. Con ese `??`, una tarjeta que
+    // subió su propio ícono y no quiere un segundo heredaría el segundo del negocio, intercalado con
+    // el suyo: dos dibujos que nadie eligió juntos, y sin forma de sacarlo desde su pantalla.
+    ...(programa.selloIconoUrl || programa.selloIcono2Url
+      ? { selloIcono2Url: programa.selloIcono2Url ?? null, patronSellos: programa.patronSellos ?? SIN_PATRON }
+      : { selloIcono2Url: comercio.selloIcono2Url, patronSellos: comercio.patronSellos }),
     difuminadoFranja: programa.difuminadoFranja ?? comercio.difuminadoFranja,
     // EL ENCUADRE VIAJA CON LA FOTO, y NO es `programa.encuadreFranja ?? comercio.encuadreFranja`:
     // la posición de una foto solo tiene sentido para ESA foto. Con foto propia, su encuadre (o el

@@ -4,6 +4,7 @@ import { stopsDifuminado } from './difuminadoFranja';
 import { comprimirPng } from './imagenesPass';
 import { colocarFoto, MARCO_FRANJA, type Encuadre, type Medidas } from '@/lib/comercio/encuadreFranja';
 import type { Franja } from '@/lib/tarjetas/frentePase';
+import { llevaSegundoIcono, type PatronSellos } from '@/lib/tarjetas/patronSellos';
 
 // Composición de la FRANJA (strip) del pass con next/og — el "pipeline de composición de
 // imágenes" que la Fase 3 no tenía: llegó gratis con los íconos del portal (PWA). Tres casos:
@@ -25,6 +26,11 @@ export interface DatosStrip {
   // apagado (translúcido) en los VACÍOS — como las tarjetas de sellos físicas. Si no hay ícono
   // (o su descarga falla), se usa el estilo de círculos de siempre.
   selloIconoUrl: string | null;
+  // El SEGUNDO ícono (migración 0041) y en qué casillas va. Sin segundo ícono la grilla sale como
+  // siempre y el patrón no se mira. Si solo hay segundo (sin primero), las demás casillas llevan el
+  // aro de siempre: sirve para marcar solo la casilla del premio.
+  selloIcono2Url: string | null;
+  patronSellos: PatronSellos;
   // Foto de fondo de la franja (hero_url): la grilla/banda se compone ENCIMA con un oscurecido
   // para que sellos y número sigan legibles. Sin foto, el fondo es el color del pass.
   heroUrl: string | null;
@@ -131,8 +137,17 @@ function capasDeFondo(datos: DatosStrip, escala: number, foto: FotoFondo | null,
   return capas;
 }
 
-function grillaSellos(datos: DatosStrip, escala: number, iconoDataUrl: string | null, foto: FotoFondo | null) {
+function grillaSellos(
+  datos: DatosStrip,
+  escala: number,
+  iconos: { primero: string | null; segundo: string | null },
+  foto: FotoFondo | null,
+) {
   const meta = datos.selloMeta ?? 10;
+  // El ícono de CADA casilla. Sin segundo ícono (no se subió, o no bajó) todas llevan el primero:
+  // exactamente la grilla de antes de la 0041.
+  const iconoDe = (i: number): string | null =>
+    iconos.segundo && llevaSegundoIcono(i, meta, datos.patronSellos) ? iconos.segundo : iconos.primero;
   const llenos = Math.min(datos.puntos, meta);
   // Con más de 6 sellos se parte en 2 filas: círculos más grandes y legibles que una sola fila
   // apretada, y menos ancho total expuesto al recorte.
@@ -171,7 +186,9 @@ function grillaSellos(datos: DatosStrip, escala: number, iconoDataUrl: string | 
         key: `fila-${f}`,
         props: {
           style: { display: 'flex', gap: 8 * escala },
-          children: sellos.slice(f * porFila, (f + 1) * porFila).map((i) => ({
+          children: sellos.slice(f * porFila, (f + 1) * porFila).map((i) => {
+            const iconoDataUrl = iconoDe(i);
+            return {
             type: 'div',
             key: `sello-${i}`,
             props: {
@@ -238,7 +255,8 @@ function grillaSellos(datos: DatosStrip, escala: number, iconoDataUrl: string | 
                     }]
                   : [],
             },
-          })),
+          };
+          }),
         },
       })),
     },
@@ -372,7 +390,7 @@ function queFranja(datos: DatosStrip, franja: FotoFondo | null): Franja {
 async function renderizar(
   datos: DatosStrip,
   escala: number,
-  iconoDataUrl: string | null,
+  iconos: IconosSello,
   foto: FotoFondo | null,
   franja: FotoFondo | null,
 ): Promise<Buffer> {
@@ -380,7 +398,7 @@ async function renderizar(
     queFranja(datos, franja) === 'propia'
       ? franjaPropia(datos, escala, franja!)
       : queFranja(datos, franja) === 'grilla'
-        ? grillaSellos(datos, escala, iconoDataUrl, foto)
+        ? grillaSellos(datos, escala, iconos, foto)
         : bandaMarca(datos, escala, foto);
   const img = new ImageResponse(jsx as React.ReactElement, { width: 375 * escala, height: 123 * escala });
   // next/og escupe PNG de 24 bits sin cuantizar: con una foto de fondo, las tres franjas sumaban
@@ -423,13 +441,17 @@ async function medir(buf: Buffer): Promise<Medidas | null> {
   }
 }
 
+// Los dos íconos de sello ya bajados, como data URL. `segundo` en null = grilla de un solo ícono.
+type IconosSello = { primero: string | null; segundo: string | null };
+
 // Baja el ícono y la foto UNA vez y mide la foto UNA vez: componerStrips renderiza tres escalas con
 // lo mismo, y la ruta de portada de clase una sola.
 async function bajarInsumos(
   datos: DatosStrip,
-): Promise<{ iconoUrl: string | null; foto: FotoFondo | null; franja: FotoFondo | null }> {
-  const [icono, hero, propia] = await Promise.all([
+): Promise<{ iconos: IconosSello; foto: FotoFondo | null; franja: FotoFondo | null }> {
+  const [icono, icono2, hero, propia] = await Promise.all([
     descargarImagen(datos.selloIconoUrl, 'el ícono del sello'),
+    descargarImagen(datos.selloIcono2Url, 'el segundo ícono del sello'),
     descargarImagen(datos.heroUrl, 'la foto de fondo de la franja'),
     descargarImagen(datos.stripUrl, 'la franja del comercio'),
   ]);
@@ -437,7 +459,7 @@ async function bajarInsumos(
   // Si la franja propia no bajó, `franja` queda null y se compone la grilla o la banda: el comercio
   // ve su diseño de siempre en vez de un pase sin franja.
   const franja = propia ? { dataUrl: comoDataUrl(propia)!, medidas: await medir(propia.buf) } : null;
-  return { iconoUrl: comoDataUrl(icono), foto, franja };
+  return { iconos: { primero: comoDataUrl(icono), segundo: comoDataUrl(icono2) }, foto, franja };
 }
 
 // UNA escala. Para la portada de la clase de Google (app/api/comercios/[comercioId]/franja.png), que
@@ -445,8 +467,8 @@ async function bajarInsumos(
 // para servir uno. Respeta stripUrl igual que componerStrips (la ruta lo manda en null a propósito).
 export async function componerFranja(datos: DatosStrip, escala: 1 | 2 | 3): Promise<Buffer | null> {
   try {
-    const { iconoUrl, foto, franja } = await bajarInsumos(datos);
-    return await renderizar(datos, escala, iconoUrl, foto, franja);
+    const { iconos, foto, franja } = await bajarInsumos(datos);
+    return await renderizar(datos, escala, iconos, foto, franja);
   } catch (error) {
     console.warn('[apple] no se pudo componer la franja de una escala:', error);
     return null;
@@ -457,8 +479,8 @@ export async function componerStrips(datos: DatosStrip): Promise<StripsPass | nu
   try {
     // Los insumos se bajan y se miden UNA vez para las tres escalas (no tres llamadas a
     // componerFranja: eso bajaría y mediría la foto tres veces).
-    const { iconoUrl, foto, franja } = await bajarInsumos(datos);
-    const [s1, s2, s3] = await Promise.all([1, 2, 3].map((e) => renderizar(datos, e, iconoUrl, foto, franja)));
+    const { iconos, foto, franja } = await bajarInsumos(datos);
+    const [s1, s2, s3] = await Promise.all([1, 2, 3].map((e) => renderizar(datos, e, iconos, foto, franja)));
     return { s1, s2, s3, franja: queFranja(datos, franja) };
   } catch (error) {
     console.warn('[apple] no se pudo componer la franja; el pass sale sin strip:', error);

@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/types';
 import { brandingEfectivo } from '@/lib/comercio/brandingEfectivo';
 import { encuadreDelComercio, encuadreDelPrograma } from '@/lib/comercio/encuadreFranja';
+import { patronDeFila } from '@/lib/tarjetas/patronSellos';
 
 // La marca que el CLIENTE FINAL ve al escanear el QR del mostrador.
 //
@@ -34,7 +35,7 @@ const SIN_MARCA: MarcaRegistro = { colorFondo: null, colorTexto: null, colorLabe
 // rellenarlos con literales inventados dejaría un `stripUrl: null` mentiroso esperando a que
 // alguien lo lea. Cuesta cero round-trips extra —— mismo criterio que resolverDatosCartel.
 const COLUMNAS_MARCA =
-  'color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja';
+  'color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja';
 
 export async function marcaDelRegistro(
   supabase: SupabaseClient<Database>,
@@ -73,6 +74,8 @@ export async function marcaDelRegistro(
       heroUrl: comercio.hero_url,
       stripUrl: comercio.strip_url,
       selloIconoUrl: comercio.sello_icono_url,
+      selloIcono2Url: comercio.sello_icono_2_url,
+      patronSellos: patronDeFila(comercio),
       difuminadoFranja: comercio.difuminado_franja,
       encuadreFranja: encuadreDelComercio(comercio),
     },
@@ -86,6 +89,8 @@ export async function marcaDelRegistro(
           heroUrl: programa.hero_url,
           stripUrl: programa.strip_url,
           selloIconoUrl: programa.sello_icono_url,
+          selloIcono2Url: programa.sello_icono_2_url,
+          patronSellos: patronDeFila(programa),
           // undefined activa el `??` de brandingEfectivo y hereda.
           difuminadoFranja: programa.difuminado_franja ?? undefined,
           encuadreFranja: encuadreDelPrograma(programa),

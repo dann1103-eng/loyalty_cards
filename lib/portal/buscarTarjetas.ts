@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/types';
 import { normalizarTelefono } from '../clientes/normalizarTelefono';
 import { historialParaCliente, type MovimientoPortal } from './historialCliente';
+import { SIN_PATRON } from '@/lib/tarjetas/patronSellos';
 import { brandingEfectivo } from '../comercio/brandingEfectivo';
 import { ENCUADRE_POR_DEFECTO } from '../comercio/encuadreFranja';
 import { describirFila, type NivelDeDescuento } from '../tarjetas/estadoTarjeta';
@@ -186,6 +187,8 @@ export async function buscarTarjetasPorTelefono(
         heroUrl: null,
         stripUrl: null,
         selloIconoUrl: null,
+        selloIcono2Url: null,
+        patronSellos: SIN_PATRON,
         difuminadoFranja: 'medio',
         // Mismo motivo que `difuminadoFranja`: el portal no dibuja la franja, así que el encuadre
         // es relleno y nadie lo lee.

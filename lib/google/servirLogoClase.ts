@@ -4,6 +4,7 @@ import { createServiceClient } from '../supabase/server';
 import { brandingEfectivo } from '../comercio/brandingEfectivo';
 import { encuadreDelComercio, encuadreDelPrograma } from '../comercio/encuadreFranja';
 import { bajarLogo } from './logoRemoto';
+import { patronDeFila } from '@/lib/tarjetas/patronSellos';
 
 // Lo que comparten las rutas logo.png y logo-ancho.png de app/api/comercios/[comercioId]/ (los dos
 // logos de la LoyaltyClass de Google, ver logosClase.ts): leer la marca efectiva, bajar el logo,
@@ -23,7 +24,7 @@ import { bajarLogo } from './logoRemoto';
 // Mismas columnas y misma resolución de marca que franja.png: `?programa=` elige la marca EFECTIVA de
 // ese programa (logo y color propios o heredados), la misma que usa syncClasePrograma para armar la URL.
 const COLUMNAS_MARCA =
-  'color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja';
+  'color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja';
 
 // Más holgado que el tope de la MEDICIÓN (logoRemoto.ts, 2 s), y no porque nadie espere: Google baja
 // esta imagen DENTRO del patch de la clase, y el registro de un cliente espera ese patch. Las razones
@@ -103,6 +104,8 @@ export async function servirLogoClase(
       heroUrl: c.hero_url,
       stripUrl: c.strip_url,
       selloIconoUrl: c.sello_icono_url,
+      selloIcono2Url: c.sello_icono_2_url,
+      patronSellos: patronDeFila(c),
       difuminadoFranja: c.difuminado_franja,
       encuadreFranja: encuadreDelComercio(c),
     },
@@ -116,6 +119,8 @@ export async function servirLogoClase(
           heroUrl: programa.hero_url,
           stripUrl: programa.strip_url,
           selloIconoUrl: programa.sello_icono_url,
+          selloIcono2Url: programa.sello_icono_2_url,
+          patronSellos: patronDeFila(programa),
           difuminadoFranja: programa.difuminado_franja ?? undefined,
           encuadreFranja: encuadreDelPrograma(programa),
         }

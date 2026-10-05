@@ -11,7 +11,7 @@ afterEach(() => {
 function datos(sobre: Partial<DatosVersionHero> = {}): DatosVersionHero {
   return {
     puntos: 3, selloMeta: 8, colorFondo: 'rgb(36, 24, 18)', colorLabel: 'rgb(214, 146, 74)',
-    selloIconoUrl: 'https://ejemplo.com/icono.png', heroUrl: 'https://ejemplo.com/hero.jpg',
+    selloIconoUrl: 'https://ejemplo.com/icono.png', selloIcono2Url: null, patronSellos: { patron: 'intercalado' as const, casillas: [] }, heroUrl: 'https://ejemplo.com/hero.jpg',
     stripUrl: null, difuminadoFranja: 'medio', hayTextoEncima: false,
     encuadreFranja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
     ...sobre,
@@ -51,6 +51,24 @@ describe('versionHero', () => {
   // cacheada y la grilla se queda congelada mientras el contador sí sube.
   it('cambia cuando cambian los puntos (invalida el caché de Google al acreditar)', () => {
     expect(versionHero(datos({ puntos: 3 }))).not.toBe(versionHero(datos({ puntos: 4 })));
+  });
+
+  // El segundo ícono (0041) cambia qué se dibuja en cada casilla: tiene que cambiar la URL o Google
+  // sigue sirviendo la grilla de un solo ícono para siempre.
+  it('cambia cuando se sube un segundo ícono, y cuando cambian su patrón o sus casillas', () => {
+    const con = (sobre: Partial<DatosVersionHero> = {}) =>
+      versionHero(datos({ selloIcono2Url: 'https://ejemplo.com/b.png', ...sobre }));
+    expect(con()).not.toBe(versionHero(datos()));
+    expect(con({ patronSellos: { patron: 'ultimo', casillas: [] } })).not.toBe(con());
+    expect(con({ patronSellos: { patron: 'casillas', casillas: [5] } })).not.toBe(
+      con({ patronSellos: { patron: 'casillas', casillas: [5, 10] } }),
+    );
+  });
+
+  // Sin segundo ícono el patrón no dibuja nada: cambiarlo no puede hacer que Google re-descargue.
+  // Y de paso fija que la 0041 no le cambió la URL a las tarjetas que no la usan.
+  it('SIN segundo ícono, el patrón no entra al hash', () => {
+    expect(versionHero(datos({ patronSellos: { patron: 'ultimo', casillas: [3] } }))).toBe(versionHero(datos()));
   });
 
   it('cambia cuando el comercio cambia el ícono del sello', () => {
@@ -95,7 +113,7 @@ describe('versionHeroTarjeta', () => {
   // La marca EFECTIVA, sin progreso: lo que syncObjeto y linkGuardar le pasan (brandingEfectivo).
   const marca = {
     colorFondo: 'rgb(36, 24, 18)', colorLabel: 'rgb(214, 146, 74)',
-    selloIconoUrl: 'https://ejemplo.com/icono.png', heroUrl: 'https://ejemplo.com/hero.jpg',
+    selloIconoUrl: 'https://ejemplo.com/icono.png', selloIcono2Url: null, patronSellos: { patron: 'intercalado' as const, casillas: [] }, heroUrl: 'https://ejemplo.com/hero.jpg',
     stripUrl: null, difuminadoFranja: 'medio',
     encuadreFranja: { modo: 'llenar' as const, focoX: 50, focoY: 50, zoom: 100 },
   };
@@ -171,7 +189,7 @@ describe('versionFranjaClase', () => {
     // Es EXACTAMENTE versionHero con progreso cero, sin meta, sin ícono y sin franja propia: lo que
     // dibuja la ruta franja.png. Si un sync hasheara otra cosa, la URL de la clase no coincidiría.
     expect(versionFranjaClase(marca)).toBe(
-      versionHero({ ...marca, puntos: 0, selloMeta: null, selloIconoUrl: null, stripUrl: null, hayTextoEncima: false }),
+      versionHero({ ...marca, puntos: 0, selloMeta: null, selloIconoUrl: null, selloIcono2Url: null, patronSellos: { patron: 'intercalado', casillas: [] }, stripUrl: null, hayTextoEncima: false }),
     );
   });
 });

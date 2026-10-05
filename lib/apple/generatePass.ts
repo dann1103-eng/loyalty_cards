@@ -4,6 +4,7 @@ import { requireEnv } from '@/lib/env';
 import { componerStrips, descargarImagen } from './stripPass';
 import { redimensionarLogo } from './imagenesPass';
 import type { CampoReverso } from './construirReverso';
+import type { PatronSellos } from '@/lib/tarjetas/patronSellos';
 import { frentePase, PIE_CODIGO } from '@/lib/tarjetas/frentePase';
 import type { Encuadre } from '@/lib/comercio/encuadreFranja';
 import {
@@ -65,6 +66,9 @@ export interface DatosPass {
   hoyIso: string;
   stripUrl: string | null;
   selloIconoUrl: string | null;
+  // Segundo ícono de sello y su patrón (0041): van derecho a componerStrips.
+  selloIcono2Url: string | null;
+  patronSellos: PatronSellos;
   heroUrl: string | null;
   logoUrl: string | null;
   difuminadoFranja: string;
@@ -161,6 +165,8 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
     colorLabel: datos.colorLabel,
     stripUrl: datos.stripUrl,
     selloIconoUrl: datos.selloIconoUrl,
+    selloIcono2Url: datos.selloIcono2Url,
+    patronSellos: datos.patronSellos,
     heroUrl: datos.heroUrl,
     difuminadoFranja: datos.difuminadoFranja,
     encuadreFranja: datos.encuadreFranja,

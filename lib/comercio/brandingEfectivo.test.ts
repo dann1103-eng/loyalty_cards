@@ -20,6 +20,8 @@ const COMERCIO: BrandingBase = {
   heroUrl: 'https://ejemplo.com/hero-comercio.png',
   stripUrl: null,
   selloIconoUrl: 'https://ejemplo.com/sello-comercio.png',
+  selloIcono2Url: 'https://ejemplo.com/sello2-comercio.png',
+  patronSellos: { patron: 'ultimo', casillas: [] },
   difuminadoFranja: 'medio',
   encuadreFranja: { modo: 'completa', focoX: 10, focoY: 90, zoom: 150 },
 };
@@ -92,6 +94,40 @@ describe('brandingEfectivo', () => {
       encuadreFranja: { modo: 'llenar', focoX: 0, focoY: 0, zoom: 300 },
     });
     expect(r.encuadreFranja).toEqual(COMERCIO.encuadreFranja);
+  });
+});
+
+// El segundo ícono de sello (0041) y su patrón van JUNTOS y cuelgan de que la tarjeta tenga sellos
+// propios, igual que el encuadre cuelga de la foto.
+describe('brandingEfectivo — segundo ícono de sello', () => {
+  const PATRON_PROPIO = { patron: 'casillas' as const, casillas: [5, 10] };
+
+  it('tarjeta SIN sellos propios: hereda el segundo ícono y el patrón del negocio', () => {
+    const r = brandingEfectivo(COMERCIO, { brandingPropio: true, colorFondo: 'rgb(1,2,3)', patronSellos: PATRON_PROPIO });
+    expect(r.selloIcono2Url).toBe(COMERCIO.selloIcono2Url);
+    // …aunque le haya quedado un patrón guardado de cuando tuvo íconos propios.
+    expect(r.patronSellos).toEqual(COMERCIO.patronSellos);
+  });
+
+  it('tarjeta con ícono propio y SIN segundo: NO hereda el segundo del negocio', () => {
+    // MUTACIÓN: `programa.selloIcono2Url ?? comercio.selloIcono2Url` mezcla el ícono de la tarjeta
+    // con el segundo del negocio, que nadie eligió juntos.
+    const r = brandingEfectivo(COMERCIO, { brandingPropio: true, selloIconoUrl: 'https://ejemplo.com/sello-programa.png', patronSellos: PATRON_PROPIO });
+    expect(r.selloIconoUrl).toBe('https://ejemplo.com/sello-programa.png');
+    expect(r.selloIcono2Url).toBeNull();
+  });
+
+  it('tarjeta con segundo ícono propio: usa el suyo y SU patrón; el primero lo sigue heredando', () => {
+    const r = brandingEfectivo(COMERCIO, { brandingPropio: true, selloIcono2Url: 'https://ejemplo.com/sello2-programa.png', patronSellos: PATRON_PROPIO });
+    expect(r.selloIconoUrl).toBe(COMERCIO.selloIconoUrl);
+    expect(r.selloIcono2Url).toBe('https://ejemplo.com/sello2-programa.png');
+    expect(r.patronSellos).toEqual(PATRON_PROPIO);
+  });
+
+  it('con branding_propio APAGADO se ignoran los íconos y el patrón propios', () => {
+    const r = brandingEfectivo(COMERCIO, { brandingPropio: false, selloIcono2Url: 'https://ejemplo.com/sello2-programa.png', patronSellos: PATRON_PROPIO });
+    expect(r.selloIcono2Url).toBe(COMERCIO.selloIcono2Url);
+    expect(r.patronSellos).toEqual(COMERCIO.patronSellos);
   });
 });
 

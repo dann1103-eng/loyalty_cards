@@ -71,6 +71,8 @@ describe('presupuesto de peso del .pkpass', () => {
       selloMeta: 10,
       stripUrl: null,
       selloIconoUrl: null,
+      selloIcono2Url: null,
+      patronSellos: { patron: 'intercalado' as const, casillas: [] },
       heroUrl: hero,
       logoUrl: logo,
       difuminadoFranja: 'medio',

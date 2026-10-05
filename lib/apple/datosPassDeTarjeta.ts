@@ -6,6 +6,7 @@ import { listarUbicacionesGeopush } from '../comercio/geopush';
 import { brandingEfectivo, reversoEfectivo } from '../comercio/brandingEfectivo';
 import { encuadreDelComercio, encuadreDelPrograma } from '../comercio/encuadreFranja';
 import { hoyEnZona } from '../tarjetas/vigencia';
+import { patronDeFila } from '@/lib/tarjetas/patronSellos';
 
 export async function datosPassDeTarjeta(
   supabase: SupabaseClient<Database>,
@@ -28,7 +29,7 @@ export async function datosPassDeTarjeta(
   const { data: tarjeta } = await supabase
     .from('tarjetas')
     .select(
-      '*, comercios(*), clientes(nombre, apellido), programas_tarjeta(tipo_tarjeta, sello_meta, nombre_pase, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, reverso_propio, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona)',
+      '*, comercios(*), clientes(nombre, apellido), programas_tarjeta(tipo_tarjeta, sello_meta, nombre_pase, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, reverso_propio, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona)',
     )
     .eq('apple_serial_number', serialNumber)
     .maybeSingle();
@@ -66,6 +67,8 @@ export async function datosPassDeTarjeta(
       heroUrl: c.hero_url,
       stripUrl: c.strip_url,
       selloIconoUrl: c.sello_icono_url,
+      selloIcono2Url: c.sello_icono_2_url,
+      patronSellos: patronDeFila(c),
       difuminadoFranja: c.difuminado_franja,
       encuadreFranja: encuadreDelComercio(c),
     },
@@ -79,6 +82,8 @@ export async function datosPassDeTarjeta(
           heroUrl: programa.hero_url,
           stripUrl: programa.strip_url,
           selloIconoUrl: programa.sello_icono_url,
+          selloIcono2Url: programa.sello_icono_2_url,
+          patronSellos: patronDeFila(programa),
           // `?? undefined` porque en el programa esta columna es nullable y en BrandingBase no:
           // undefined activa el `??` de brandingEfectivo y hereda; null lo activaría igual, pero
           // el tipo pide undefined para no prometer un string que no está.
@@ -191,6 +196,8 @@ export async function datosPassDeTarjeta(
       hoyIso,
       stripUrl: marca.stripUrl,
       selloIconoUrl: marca.selloIconoUrl,
+      selloIcono2Url: marca.selloIcono2Url,
+      patronSellos: marca.patronSellos,
       heroUrl: marca.heroUrl,
       logoUrl: marca.logoUrl,
       difuminadoFranja: marca.difuminadoFranja,

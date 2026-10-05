@@ -22,6 +22,10 @@ export interface PatronSellos {
   casillas: number[];
 }
 
+// Lo que da una fila con las dos columnas en NULL. Para los lugares que arman una marca sin leer la
+// base (pruebas, el portal, la portada de clase).
+export const SIN_PATRON: PatronSellos = { patron: PATRON_POR_DEFECTO, casillas: [] };
+
 // Lo que sale de la base o de un formulario es dato hostil: un patrón desconocido cae al de por
 // defecto, y de las casillas sobreviven solo los enteros de 1 a MAX_CASILLAS, sin repetir y en
 // orden. Se DESCARTA lo ilegible en vez de arreglarlo ("5.7" no es la casilla 5 ni la 6).
@@ -34,6 +38,12 @@ export function sanearPatronSellos(patron: unknown, casillas: unknown): PatronSe
     patron: esPatronSello(patron) ? patron : PATRON_POR_DEFECTO,
     casillas: [...new Set(validas)].sort((a, b) => a - b),
   };
+}
+
+// El patrón de una fila de `comercios` o de `programas_tarjeta`, ya saneado. Un solo lugar para que
+// los consumidores de la marca no repitan (ni se olviden) el saneo.
+export function patronDeFila(fila: { sello_patron: string | null; sello_casillas: number[] | null }): PatronSellos {
+  return sanearPatronSellos(fila.sello_patron, fila.sello_casillas);
 }
 
 // ¿La casilla `indice` (desde 0, como la recorre la grilla) lleva el SEGUNDO ícono?

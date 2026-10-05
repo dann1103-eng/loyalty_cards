@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { Encuadre } from '../comercio/encuadreFranja';
 import { baseParaImagenesGoogle } from './baseUrlPublica';
+import { SIN_PATRON, type PatronSellos } from '@/lib/tarjetas/patronSellos';
 
 // URL pública de la grilla de sellos compuesta por tarjeta (ver app/api/tarjetas/[tarjetaId]/hero.png).
 // Google necesita poder alcanzarla desde internet para heroImage — por eso NEXT_PUBLIC_BASE_URL,
@@ -38,6 +39,9 @@ export interface DatosVersionHero {
   colorFondo: string | null;
   colorLabel: string | null;
   selloIconoUrl: string | null;
+  // Segundo ícono de sello y su patrón (0041): cambian qué se dibuja en cada casilla.
+  selloIcono2Url: string | null;
+  patronSellos: PatronSellos;
   heroUrl: string | null;
   stripUrl: string | null;
   difuminadoFranja: string;
@@ -66,6 +70,10 @@ export function versionHero(d: DatosVersionHero): string {
     d.puntos, d.selloMeta, d.colorFondo, d.colorLabel,
     d.selloIconoUrl, d.heroUrl, d.stripUrl, d.difuminadoFranja,
     d.encuadreFranja.modo, d.encuadreFranja.focoX, d.encuadreFranja.focoY, d.encuadreFranja.zoom,
+    // El segundo ícono y su patrón entran SOLO si hay segundo ícono: sin él el patrón no dibuja
+    // nada, y así el hash de toda tarjeta que no lo usa queda byte a byte como antes de la 0041
+    // (agregar tres posiciones fijas le habría cambiado la URL a TODAS y Google las re-bajaría).
+    ...(d.selloIcono2Url ? [d.selloIcono2Url, d.patronSellos.patron, d.patronSellos.casillas.join(',')] : []),
   ]);
   return crypto.createHash('sha1').update(clave).digest('hex').slice(0, 12);
 }
@@ -114,6 +122,8 @@ export function versionFranjaClase(marca: {
     colorFondo: marca.colorFondo,
     colorLabel: marca.colorLabel,
     selloIconoUrl: null,
+    selloIcono2Url: null,
+    patronSellos: SIN_PATRON,
     heroUrl: marca.heroUrl,
     stripUrl: null,
     difuminadoFranja: marca.difuminadoFranja,
