@@ -7,8 +7,10 @@ import manifiestoRaiz from '@/app/manifest';
 import {
   manifiestoComercio,
   manifiestoAdmin,
+  manifiestoInicio,
   URL_MANIFIESTO_COMERCIO,
   URL_MANIFIESTO_ADMIN,
+  URL_MANIFIESTO_INICIO,
 } from './manifiestos';
 
 // MUTATION-TESTING (cada fila se corrió el 2026-09-23: romper, confirmar el mensaje de fallo
@@ -48,6 +50,45 @@ describe('manifiestoComercio()', () => {
   // El bug original (2026-09-22): el dueño instalaba el portal del CLIENTE desde su propio login.
   it('no es el manifest del cliente: start_url no empieza con /mi-tarjeta', () => {
     expect(m.start_url!.startsWith('/mi-tarjeta')).toBe(false);
+  });
+});
+
+// La página de inicio es la puerta del dueño: instalar la app desde ahí tiene que dejar el PANEL.
+// Bug real del 2026-10-05: heredaba el manifest de la raíz y un dueño quedó con un acceso a
+// /mi-tarjeta.
+describe('manifiestoInicio()', () => {
+  const m = manifiestoInicio();
+
+  it('instala el panel del comercio, no el portal del cliente', () => {
+    expect(m.start_url).toBe('/comercio/panel');
+    expect(m.start_url!.startsWith('/mi-tarjeta')).toBe(false);
+    expect(m.name).toBe(manifiestoComercio().name);
+    expect(m.display).toBe('standalone');
+  });
+
+  it('es LA MISMA app que la del login (mismo id): no deja dos íconos iguales', () => {
+    expect(m.id).toBe(manifiestoComercio().id);
+  });
+
+  // La diferencia con el del comercio, y la razón de que exista: el scope tiene que contener a la
+  // página DESDE la que se instala. MUTACIÓN: reusar manifiestoComercio() tal cual deja `/` fuera.
+  it('el scope contiene a la página de inicio y al start_url', () => {
+    expect('/'.startsWith(m.scope!)).toBe(true);
+    expect(m.start_url!.startsWith(m.scope!)).toBe(true);
+  });
+
+  it('app/page.tsx lo declara en su metadata exportada', () => {
+    const codigo = sinComentarios(readFileSync(join(RAIZ, 'app/page.tsx'), 'utf-8'));
+    expect(codigo).toMatch(/export\s+const\s+metadata\b/);
+    expect(codigo).toMatch(/manifest:\s*URL_MANIFIESTO_INICIO\b/);
+  });
+
+  it('la ruta que lo sirve existe donde dice la constante, y sirve ESTE manifest', async () => {
+    expect(URL_MANIFIESTO_INICIO).toBe('/manifiestos/inicio.webmanifest');
+    const archivo = join(RAIZ, 'app', URL_MANIFIESTO_INICIO, 'route.ts');
+    expect(existsSync(archivo), `falta ${archivo}`).toBe(true);
+    const { GET } = await import(pathToFileURL(archivo).href);
+    expect(await (GET() as Response).json()).toEqual(m);
   });
 });
 

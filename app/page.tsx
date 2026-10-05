@@ -26,6 +26,7 @@ import {
 import { MARCA } from '@/lib/marca';
 import { openGraphDe, twitterDe } from '@/lib/metadatosOg';
 import { TIPOS, buscarTipo } from '@/lib/tarjetas/tipos';
+import { URL_MANIFIESTO_INICIO } from '@/lib/manifiestos';
 
 // Página de entrada de cardly-sv.site. Le habla a DUEÑOS DE COMERCIO que todavía no son clientes:
 // el cliente final nunca llega acá, llega por el código de su propio comercio.
@@ -56,6 +57,10 @@ export const metadata: Metadata = {
   title: { absolute: TITULO },
   description: DESCRIPCION,
   alternates: { canonical: '/' },
+  // Esta página es la puerta del DUEÑO. Sin esto hereda el manifest de la raíz (el portal del
+  // cliente) y "instalar app" desde acá deja un acceso a /mi-tarjeta: le pasó a un dueño real el
+  // 2026-10-05. Ver manifiestoInicio en lib/manifiestos.ts.
+  manifest: URL_MANIFIESTO_INICIO,
   // Por los helpers y NO escribiendo `{ url, title, description }` a mano: Next reemplaza el objeto
   // `openGraph` entero en vez de combinarlo con el del layout, así que armarlo a mano acá deja la
   // página sin `og:image`. Ver el encabezado de lib/metadatosOg.ts — ya pasó una vez.

@@ -15,6 +15,8 @@ import type { MetadataRoute } from 'next';
 // (manifiestos.test.ts) pueda matchear contra el nombre exacto en vez de un string suelto.
 export const URL_MANIFIESTO_COMERCIO = '/manifiestos/comercio.webmanifest';
 export const URL_MANIFIESTO_ADMIN = '/manifiestos/admin.webmanifest';
+// El de la página de inicio (`/`). Ver manifiestoInicio más abajo.
+export const URL_MANIFIESTO_INICIO = '/manifiestos/inicio.webmanifest';
 
 // Mismos íconos que app/manifest.ts: /mi-tarjeta/icono-192 y -512 dibujan el ícono genérico de la
 // marca Cardly (renderIconoCardly, lib/portal/iconoCardly.tsx), son públicos y no hay todavía nada
@@ -50,6 +52,26 @@ export function manifiestoComercio(): MetadataRoute.Manifest {
     theme_color: FONDO,
     icons: ICONOS,
   };
+}
+
+// El manifest de la PÁGINA DE INICIO (`/`). Instala lo mismo que el del comercio —el panel—, con un
+// scope distinto.
+//
+// Por qué existe: `/` heredaba el manifest de la raíz (el portal del cliente), y la página de inicio
+// es por donde entra el DUEÑO: la que le vende el producto y le muestra "Ingresar". Un dueño real
+// instaló la app desde ahí el 2026-10-05, le quedó un acceso a /mi-tarjeta y no pudo entrar. Es el
+// mismo bug del 2026-09-22, por la única puerta que había quedado abierta. El cliente no pasa por
+// `/`: llega por el QR a /registro/… y a /mi-tarjeta, que siguen instalando su portal.
+//
+// Por qué no reusa manifiestoComercio tal cual: su scope es '/comercio/' y `/` queda AFUERA. Que un
+// navegador deje instalar desde un documento fuera del scope de su manifest no es algo que este
+// repo pueda probar, así que acá el scope es '/', que contiene a la página desde la que se instala
+// y al start_url — no depende de esa tolerancia.
+//
+// Mismo `id` que el del comercio a propósito: para el navegador es LA MISMA app. Quien la instale
+// desde el inicio y quien la instale desde el login tienen una sola, no dos íconos iguales.
+export function manifiestoInicio(): MetadataRoute.Manifest {
+  return { ...manifiestoComercio(), scope: '/' };
 }
 
 export function manifiestoAdmin(): MetadataRoute.Manifest {

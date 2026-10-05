@@ -1463,5 +1463,15 @@ patrón) y el radio volvía a la opción vieja tras guardar (React reinicia el f
   cambio llega al guardar el patrón, al publicar la marca o con el próximo sello. Ya era así antes.
 - Casillas "de premio" con texto o ícono derivado de las recompensas (lo que muestra la competencia): no se
   hizo; hoy se logra a mano con el patrón "casillas".
-- "Instalar app" desde la página de inicio instala el portal del cliente (`/mi-tarjeta`): reportado por un
-  dueño real el 2026-10-05. Las pantallas del comercio ya instalan bien; falta decidir qué instala `/`.
+- Farmacias ABC (comercio de pruebas de Daniel) quedó A PROPÓSITO con un regalo como segundo ícono en la
+  última casilla, para verlo en su teléfono. Se quita desde Marca → Imágenes.
+
+### "Instalar app" desde la página de inicio (2026-10-05, sin migración)
+
+Un dueño real instaló la app desde `/` y le quedó un acceso a `/mi-tarjeta`: la página de inicio era la
+única pantalla del dueño que seguía heredando el manifest de la raíz. Ahora declara
+`/manifiestos/inicio.webmanifest` (`manifiestoInicio`): el mismo panel y el mismo `id` que el del comercio,
+con scope `/` para que contenga a la página desde la que se instala. `/mi-tarjeta` y `/registro/…` siguen
+instalando el portal del cliente. **Sin probar:** la instalación real en un teléfono (solo se verificó el
+manifest que sirve cada página). Quien ya instaló el acceso equivocado tiene que borrarlo e instalarlo de
+nuevo.
