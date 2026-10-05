@@ -1414,3 +1414,54 @@ anchos). **Volver atrás:** `git revert` de los commits de la entrega; la 0040 s
 - El "Clientes" del panel (solo visitas) puede no coincidir con el de Reportes (visita o premio).
 - El admin de FM sigue diciendo "Operaciones".
 - Next.js 16.2.10 tiene avisos de seguridad corregidos en 16.2.11+ (tarea aparte ofrecida a Daniel).
+
+## 2026-09-26 al 2026-10-05 — Cartel con Wallet, correo de soporte, limpieza de pruebas y segundo ícono de sello (PUBLICADO)
+
+Cuatro entregas chicas, sin spec ni plan propios (cada una se hizo y se verificó en la misma sesión).
+
+### Cartel del QR: "Disponible para" + botones de Wallet (`3b748b7`, sin migración)
+
+Todo cartel lleva debajo del CTA el rótulo "Disponible para" y dos botones negros, Apple Wallet y Google
+Wallet (`lib/comercio/cartel/insigniasWallet.ts`), en las tres plantillas y los dos formatos. No son las
+insignias oficiales (no están en el repo). En el sticker de 10×10 el QR se achica para que quepa todo
+(centrado ~2.8 cm, split ~3 cm, foto ~3.8 cm). La prueba de nitidez del PNG ahora cuenta grises solo
+dentro de la tarjeta del QR: es lo único que el camino sin `density` desenfoca.
+
+### Correo de soporte y comercios de prueba (`c7d0e38`, `ddb49c8`, sin migración)
+
+- Soporte pasó a `soporte@fmcomsolutions.com` (el de `@cardly-sv.site` se dejó de pagar). Sale de
+  `MARCA.correoSoporte` en todos lados; los seis mensajes que lo tenían escrito a mano ahora leen la
+  constante. El 2026-09-28 se mandó el push a los 15 pases de Apple instalados con
+  `scripts/actualizar-todos-los-pases-apple.ts` (simulacro sin `--confirmar`), y Daniel lo vio en su iPhone.
+- Se borraron 18 "Comercio Prueba" huérfanos. La causa: ni el fixture ni
+  `scripts/limpiar-comercios-prueba.ts` borraban `reglas_puntos` ni `niveles_descuento` (sin cascade).
+  Arreglados los dos; mutado con `primerosPasos.test.ts` (sin la línea queda 1 huérfano, con ella 0).
+
+### Segundo ícono de sello (`ebe5b09..` — migración 0041 APLICADA y verificada el 2026-10-05)
+
+El dueño puede subir un segundo ícono de sello y elegir dónde va: intercalado, mitad y mitad, solo el
+último (el del premio) o las casillas que elija. Sin segundo ícono todo queda como antes, incluida la URL
+del hero de Google (el patrón entra al hash solo si hay segundo ícono).
+
+- **0041:** `sello_icono_2_url`, `sello_patron`, `sello_casillas` en `comercios` y `programas_tarjeta`,
+  todas nullable. Verificación: `scripts/verificar-0041.ts`.
+- **La regla** vive en `lib/tarjetas/patronSellos.ts` (`llevaSegundoIcono`) y la usan el pase
+  (`stripPass.grillaSellos`), el hero de Google y la vista previa del editor.
+- **Herencia** (`brandingEfectivo`): el segundo ícono y su patrón viajan JUNTOS y cuelgan de que la tarjeta
+  tenga sellos propios; una tarjeta con ícono propio no hereda el segundo del negocio.
+- **Solo segundo ícono, sin primero:** las demás casillas llevan el aro de siempre.
+- **Editor:** campo "Segundo ícono de los sellos (opcional)" en Imágenes y, con uno subido, el selector
+  `PatronSellos.tsx`, que guarda con su propia acción (`guardarPatronSellos`) y empuja Apple y Google.
+
+**Verificado en el navegador** con Farmacias ABC (comercio de pruebas de Daniel): subida, los cuatro
+patrones, el error de "casillas" vacías, la imagen real de una tarjeta, y quitar el ícono. El comercio quedó
+como estaba. Dos defectos encontrados ahí y arreglados: el "Listo" se perdía al guardar (la `key` llevaba el
+patrón) y el radio volvía a la opción vieja tras guardar (React reinicia el form nativo).
+
+**Pendientes:**
+- Subir un ícono de sello (primero o segundo) sincroniza Google pero no manda push a Apple: en iPhone el
+  cambio llega al guardar el patrón, al publicar la marca o con el próximo sello. Ya era así antes.
+- Casillas "de premio" con texto o ícono derivado de las recompensas (lo que muestra la competencia): no se
+  hizo; hoy se logra a mano con el patrón "casillas".
+- "Instalar app" desde la página de inicio instala el portal del cliente (`/mi-tarjeta`): reportado por un
+  dueño real el 2026-10-05. Las pantallas del comercio ya instalan bien; falta decidir qué instala `/`.

@@ -366,9 +366,11 @@ export default async function PaginaBranding({
           ))}
           {esSellos && segundoIconoPropio && (
             <PatronSellos
-              // La key lleva lo guardado: tras guardar (o al cambiar de tarjeta) el componente se
-              // remonta con el estado nuevo en vez de quedarse con el de la tarjeta anterior.
-              key={[seleccionado?.id ?? 'negocio', patronPropio.patron, ...patronPropio.casillas].join('-')}
+              // La key es SOLO de qué se está diseñando: al cambiar de tarjeta el componente se
+              // remonta con el patrón de esa tarjeta. No lleva el patrón guardado: con él adentro,
+              // guardar remontaba el componente y se perdía el "Listo" (visto en el navegador el
+              // 2026-10-05) — y la vista previa, que es lo único que cambiaba, queda fuera de pantalla.
+              key={seleccionado?.id ?? 'negocio'}
               programaId={seleccionado?.id ?? null}
               meta={metaDeLaGrilla}
               inicial={patronPropio}

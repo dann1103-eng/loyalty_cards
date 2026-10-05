@@ -47,7 +47,14 @@ export default function PatronSellos({
     <form action={ejecutar} className="field" style={{ marginTop: 4 }}>
       <span className="field-etiqueta">¿Dónde va el segundo sello?</span>
       <input type="hidden" name="casillas" value={casillas.join(',')} />
-      <div className="encuadre-modos" role="radiogroup" aria-label="Dónde va el segundo sello" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+      {/* La key remonta las opciones cada vez que un guardado empieza o termina. No es decorativa:
+          al terminar una Server Action, React 19 reinicia el <form> nativo y cada radio vuelve al
+          `checked` con el que se montó. El estado de React sigue bien (el esquema de abajo y el dato
+          guardado son los correctos), pero la opción marcada pasa a ser la vieja: visto en el
+          navegador el 2026-10-05, guardando "solo el último" quedaba marcada "las casillas que yo
+          elija". Un radio recién montado nace con el `checked` actual como valor por defecto, así
+          que el reinicio ya no lo mueve. Mismo bug que FormularioBranding resuelve en su <select>. */}
+      <div key={pendiente ? 'guardando' : 'quieto'} className="encuadre-modos" role="radiogroup" aria-label="Dónde va el segundo sello" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
         {OPCIONES.map(({ valor, etiqueta }) => (
           <label key={valor}>
             <input
