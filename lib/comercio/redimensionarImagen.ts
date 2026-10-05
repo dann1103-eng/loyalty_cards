@@ -20,6 +20,7 @@
 export const LADOS_MAXIMOS: Record<string, number> = {
   logo: 480,
   sello_icono: 180,
+  sello_icono_2: 180,
   hero: 1400,
   strip: 1400,
 };
@@ -36,7 +37,7 @@ export function ladoMaximoDe(campo: string): number {
 // 87×86 (el 35%) se veía a 21 px dentro de una caja de 44, la mitad que el de otro comercio.
 // Nadie exporta sus logos recortados al milímetro, así que lo hace la app.
 // La foto de fondo NO se recorta: es a sangre, ocupa toda la franja y no tiene "dibujo" que centrar.
-const CAMPOS_QUE_SE_RECORTAN = new Set(['logo', 'sello_icono']);
+const CAMPOS_QUE_SE_RECORTAN = new Set(['logo', 'sello_icono', 'sello_icono_2']);
 
 // Un píxel cuenta como "dibujo" arriba de este alfa. No es 0 para que el antialiasing casi
 // invisible del borde no cuente como contenido y deje el recorte sin efecto.

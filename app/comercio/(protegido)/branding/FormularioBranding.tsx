@@ -26,6 +26,7 @@ import { hexDesdeRgb, rgbDesdeTexto } from '@/lib/comercio/colorHex';
 // PIE_CODIGO es el mismo literal que las dos billeteras escriben debajo del QR.
 import { frentePase, PIE_CODIGO, type Franja } from '@/lib/tarjetas/frentePase';
 import { tipoOPuntos } from '@/lib/tarjetas/tipos';
+import { llevaSegundoIcono, type PatronSellos } from '@/lib/tarjetas/patronSellos';
 import { LARGO_MAXIMO_NOMBRE_PASE } from '@/lib/comercio/nombrePase';
 import type { SeccionBranding } from './page';
 import {
@@ -108,7 +109,11 @@ type Props = {
     hero: string | null;
     strip: string | null;
     selloIcono: string | null;
+    /* El segundo ícono de sello que se ve (0041), ya resuelto: el propio o el del negocio. */
+    selloIcono2: string | null;
   };
+  /* En qué casillas va el segundo ícono. Lo guarda PatronSellos (pestaña Imágenes), no este form. */
+  patronSellos: PatronSellos;
   /* Los formularios de subida (Server Actions aparte) se inyectan en la columna del editor. */
   subidas: ReactNode;
   /* Pestaña activa de la URL (spec "Marca, con pestañas", `?seccion=`), calculada en el Server
@@ -139,6 +144,7 @@ export default function FormularioBranding({
   usaDisenoPropio,
   tieneDisenoGuardado,
   urls,
+  patronSellos,
   subidas,
   seccionActiva,
 }: Props) {
@@ -506,7 +512,14 @@ export default function FormularioBranding({
                         <div key={f} style={{ display: 'flex', gap: 6 }}>
                           {Array.from({ length: meta }, (_, i) => i)
                             .slice(f * porFila, (f + 1) * porFila)
-                            .map((i) => (
+                            .map((i) => {
+                              // El ícono de ESTA casilla: la misma regla que el pass real
+                              // (stripPass.grillaSellos), con la misma función pura.
+                              const icono =
+                                urls.selloIcono2 && llevaSegundoIcono(i, meta, patronSellos)
+                                  ? urls.selloIcono2
+                                  : urls.selloIcono;
+                              return (
                               <div
                                 key={`${meta}-${i}`}
                                 className="sello"
@@ -518,17 +531,17 @@ export default function FormularioBranding({
                                   // propio el sello ES el ícono, sin fondo ni borde; SIN ícono, el aro y
                                   // el punto. Y sin boxShadow: ese resplandor no existe en el pass, y
                                   // esta vista previa se vende como "réplica del pass real".
-                                  ...(urls.selloIcono
+                                  ...(icono
                                     ? { background: 'none', border: 'none' }
                                     : i < llenos
                                       ? { background: label, border: 'none' }
                                       : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.16)' }),
                                 }}
                               >
-                                {urls.selloIcono ? (
+                                {icono ? (
                                   // eslint-disable-next-line @next/next/no-img-element -- vista previa simple
                                   <img
-                                    src={urls.selloIcono}
+                                    src={icono}
                                     alt=""
                                     aria-hidden="true"
                                     style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: i < llenos ? 1 : 0.32 }}
@@ -539,7 +552,8 @@ export default function FormularioBranding({
                                   <span className="punto" />
                                 )}
                               </div>
-                            ))}
+                              );
+                            })}
                         </div>
                       );
                     })}

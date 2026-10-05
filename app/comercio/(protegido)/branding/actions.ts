@@ -5,6 +5,7 @@ import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { guardarBranding } from '@/lib/comercio/guardarBranding';
 import { guardarReverso } from '@/lib/comercio/guardarReverso';
+import { guardarPatronSellos, patronSellosDesdeFormulario } from '@/lib/comercio/guardarPatronSellos';
 import { encuadreDesdeFormulario } from '@/lib/comercio/encuadreFranja';
 import {
   guardarBrandingPrograma,
@@ -28,6 +29,7 @@ import {
   rutaImagenComercio,
   rutaImagenPrograma,
   CAMPOS_IMAGEN,
+  esIconoDeSello,
 } from '@/lib/comercio/imagenComercio';
 import type { Database } from '@/lib/supabase/types';
 
@@ -187,7 +189,7 @@ export async function accionSubirImagen(
   }
   // hero/sello_icono/strip entran en la GRILLA compuesta por tarjeta: hay que re-sincronizar los
   // objetos o los passes ya guardados siguen mostrando la imagen cacheada por Google.
-  if (campo === 'hero' || campo === 'sello_icono' || campo === 'strip') {
+  if (campo === 'hero' || esIconoDeSello(campo) || campo === 'strip') {
     await syncObjetosComercio(supabase, comercioId);
   }
 
@@ -233,7 +235,7 @@ export async function accionQuitarImagen(
   if (campo === 'logo' || campo === 'hero') {
     await syncClaseComercio(supabase, comercioId);
   }
-  if (campo === 'hero' || campo === 'sello_icono' || campo === 'strip') {
+  if (campo === 'hero' || esIconoDeSello(campo) || campo === 'strip') {
     await syncObjetosComercio(supabase, comercioId);
   }
 
@@ -290,7 +292,7 @@ export async function accionGuardarBrandingDePrograma(
   // dueño subió dejaría de verse.
   const { data: imagenes } = await supabase
     .from('programas_tarjeta')
-    .select('logo_url, hero_url, strip_url, sello_icono_url')
+    .select('logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url')
     .eq('id', programaId)
     .eq('comercio_id', comercioId)
     .maybeSingle();
@@ -306,6 +308,7 @@ export async function accionGuardarBrandingDePrograma(
       heroUrl: imagenes?.hero_url ?? null,
       stripUrl: imagenes?.strip_url ?? null,
       selloIconoUrl: imagenes?.sello_icono_url ?? null,
+      selloIcono2Url: imagenes?.sello_icono_2_url ?? null,
     }),
   });
   if (!res.ok) return { error: res.error };
@@ -505,3 +508,35 @@ export async function accionQuitarImagenDePrograma(
 // puede borrar (la API no tiene delete), así que crearla al guardar el formulario dejaría un recurso
 // permanente en el emisor por cada tarjeta que el dueño solo estaba probando.
 
+// Guarda dónde va el SEGUNDO ícono de sello (migración 0041): del negocio (programaId null) o de una
+// tarjeta. Va aparte de "Publicar cambios" porque el patrón pertenece al segundo ícono, que se sube
+// en la pestaña Imágenes — ver lib/comercio/guardarPatronSellos.ts.
+//
+// Después de guardar hay que empujar el cambio igual que al cambiar un ícono: la grilla viaja DENTRO
+// del .pkpass (push de Apple) y en el heroImage de cada objeto de Google (cacheado por URL).
+export async function accionGuardarPatronSellos(
+  programaId: string | null,
+  _estadoPrevio: EstadoBranding,
+  formData: FormData,
+): Promise<EstadoBranding> {
+  const { comercioId } = await verifyComercioOwner();
+  const supabase = createServiceClient();
+
+  const res = await guardarPatronSellos(
+    supabase,
+    comercioId,
+    programaId,
+    patronSellosDesdeFormulario(String(formData.get('patron') ?? ''), String(formData.get('casillas') ?? '')),
+  );
+  if (!res.ok) return { error: res.error };
+
+  if (programaId) {
+    await propagarMarcaPrograma(supabase, comercioId, programaId);
+  } else {
+    await notificarCambioComercio(supabase, comercioId);
+    await syncObjetosComercio(supabase, comercioId);
+  }
+
+  revalidatePath('/comercio/branding');
+  return { ok: true };
+}

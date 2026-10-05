@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import sharp from 'sharp';
 import { componerStrips } from './stripPass';
+import type { PatronSellos } from '@/lib/tarjetas/patronSellos';
 
 // LA prueba de que la franja del comercio no se CORTA.
 //
@@ -20,7 +21,7 @@ const datosBase = {
   stripUrl: 'https://ejemplo.com/franja.png',
   selloIconoUrl: null,
   selloIcono2Url: null,
-  patronSellos: { patron: 'intercalado' as const, casillas: [] },
+  patronSellos: { patron: 'intercalado', casillas: [] } as PatronSellos,
   heroUrl: null,
   difuminadoFranja: 'ninguno',
   encuadreFranja: { modo: 'llenar' as const, focoX: 50, focoY: 50, zoom: 100 },

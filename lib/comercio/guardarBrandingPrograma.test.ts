@@ -399,6 +399,7 @@ describe('hayMarcaPropia', () => {
     heroUrl: null,
     stripUrl: null,
     selloIconoUrl: null,
+    selloIcono2Url: null,
   };
 
   it('sin ningún campo: no hay marca propia', () => {
@@ -414,6 +415,7 @@ describe('hayMarcaPropia', () => {
     expect(hayMarcaPropia({ ...NADA, heroUrl: 'https://ejemplo.com/h.png' })).toBe(true);
     expect(hayMarcaPropia({ ...NADA, stripUrl: 'https://ejemplo.com/s.png' })).toBe(true);
     expect(hayMarcaPropia({ ...NADA, selloIconoUrl: 'https://ejemplo.com/i.png' })).toBe(true);
+    expect(hayMarcaPropia({ ...NADA, selloIcono2Url: 'https://ejemplo.com/i2.png' })).toBe(true);
   });
 });
 

@@ -12,10 +12,17 @@ const MIME_A_EXT: Record<string, string> = {
 // 2 MB: de sobra para un logo/strip/hero; corta subidas accidentales de fotos gigantes.
 export const TAMANO_MAXIMO_BYTES = 2 * 1024 * 1024;
 
-// Los cuatro campos de imagen del comercio. sello_icono solo aplica a tipo_tarjeta='sellos', pero
-// la validación de campo es la misma. Nunca se confía en un nombre de campo del cliente para
-// nombrar una columna: el Server Action lo valida contra esta lista.
-export const CAMPOS_IMAGEN = ['logo', 'strip', 'hero', 'sello_icono'] as const;
+// Los cinco campos de imagen del comercio. sello_icono y sello_icono_2 (el segundo ícono, 0041)
+// solo aplican a tipo_tarjeta='sellos', pero la validación de campo es la misma. Nunca se confía en
+// un nombre de campo del cliente para nombrar una columna: el Server Action lo valida contra esta
+// lista, y la columna es SIEMPRE `${campo}_url`.
+export const CAMPOS_IMAGEN = ['logo', 'strip', 'hero', 'sello_icono', 'sello_icono_2'] as const;
+
+// Los campos que se dibujan dentro de la GRILLA de sellos de cada tarjeta. Un cambio en cualquiera
+// obliga a re-sincronizar los objetos de Google (su heroImage se cachea por URL).
+export function esIconoDeSello(campo: string): boolean {
+  return campo === 'sello_icono' || campo === 'sello_icono_2';
+}
 export type CampoImagen = (typeof CAMPOS_IMAGEN)[number];
 
 // Devuelve el primer problema, o null si la imagen es aceptable.

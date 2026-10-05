@@ -10,6 +10,8 @@ import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import FormularioBranding from './FormularioBranding';
 import FormularioReverso from './FormularioReverso';
 import SubidaImagen from './SubidaImagen';
+import PatronSellos from './PatronSellos';
+import { patronDeFila } from '@/lib/tarjetas/patronSellos';
 import AvisoComercioActivo from '../AvisoComercioActivo';
 
 export const dynamic = 'force-dynamic';
@@ -58,7 +60,7 @@ export default async function PaginaBranding({
   const [{ data: c }, programas] = await Promise.all([
     supabase
       .from('comercios')
-      .select('nombre, zona_horaria, tipo_tarjeta, color_fondo, color_texto, color_label, sello_meta, logo_url, strip_url, hero_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona')
+      .select('nombre, zona_horaria, tipo_tarjeta, color_fondo, color_texto, color_label, sello_meta, logo_url, strip_url, hero_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona')
       .eq('id', comercioId)
       .maybeSingle(),
     // Solo los activos: darle diseño propio a una tarjeta desactivada no se ve en ningún lado, y su
@@ -152,7 +154,29 @@ export default async function PaginaBranding({
   ];
   if (esSellos) {
     imagenes.push({ campo: 'sello_icono', etiqueta: 'Ícono de los sellos', propia: marca?.selloIconoUrl ?? null, heredada: c.sello_icono_url, google: false });
+    // Opcional (0041): para intercalar dos sellos o marcar distinto el del premio. La heredada se
+    // muestra solo si la tarjeta de verdad la hereda — con ícono propio, no (ver sellosEfectivos).
+    imagenes.push({
+      campo: 'sello_icono_2',
+      etiqueta: 'Segundo ícono de los sellos (opcional)',
+      propia: marca?.selloIcono2Url ?? null,
+      heredada: marca?.selloIconoUrl ? null : c.sello_icono_2_url,
+      google: false,
+    });
   }
+
+  // El segundo ícono y su patrón que se VEN en la vista previa. La misma regla que brandingEfectivo:
+  // viajan juntos y cuelgan de que la tarjeta tenga sellos propios — si no, son los del negocio.
+  const patronDelNegocio = patronDeFila(c);
+  const sellosPropios = Boolean(marca && (marca.selloIconoUrl || marca.selloIcono2Url));
+  const sellosEfectivos = sellosPropios
+    ? { icono2: marca!.selloIcono2Url, patron: marca!.patronSellos }
+    : { icono2: c.sello_icono_2_url, patron: patronDelNegocio };
+  // El selector del patrón aparece solo donde hay un segundo ícono PROPIO de lo que se diseña: una
+  // tarjeta que lo hereda usa el patrón del negocio, y se cambia diseñando el negocio.
+  const segundoIconoPropio = seleccionado ? (marca?.selloIcono2Url ?? null) : c.sello_icono_2_url;
+  const patronPropio = seleccionado && marca ? marca.patronSellos : patronDelNegocio;
+  const metaDeLaGrilla = programaDeReferencia?.selloMeta ?? null;
 
   // Ninguno de los tres campos que crean la tarjeta en Google está definido todavía: recién ahí
   // subir un logo o una portada cruza la línea de lo irreversible.
@@ -176,6 +200,7 @@ export default async function PaginaBranding({
         heroUrl: marca.heroUrl,
         stripUrl: marca.stripUrl,
         selloIconoUrl: marca.selloIconoUrl,
+        selloIcono2Url: marca.selloIcono2Url,
       })
     : false;
   const tieneReversoGuardado = reversoPrograma
@@ -318,10 +343,13 @@ export default async function PaginaBranding({
                 hero: marca?.heroUrl ?? c.hero_url,
                 strip: marca?.stripUrl ?? c.strip_url,
                 selloIcono: marca?.selloIconoUrl ?? c.sello_icono_url,
+                selloIcono2: sellosEfectivos.icono2,
               }
-            : { logo: c.logo_url, hero: c.hero_url, strip: c.strip_url, selloIcono: c.sello_icono_url }
+            : { logo: c.logo_url, hero: c.hero_url, strip: c.strip_url, selloIcono: c.sello_icono_url, selloIcono2: c.sello_icono_2_url }
         }
-        subidas={imagenes.map(({ campo, etiqueta, propia, heredada, google }) => (
+        patronSellos={sellosEfectivos.patron}
+        subidas={<>
+          {imagenes.map(({ campo, etiqueta, propia, heredada, google }) => (
           <SubidaImagen
             key={campo}
             campo={campo}
@@ -335,7 +363,18 @@ export default async function PaginaBranding({
             avisaGoogle={seleccionado !== null && google}
             cruzaLaLinea={cruzaLaLinea}
           />
-        ))}
+          ))}
+          {esSellos && segundoIconoPropio && (
+            <PatronSellos
+              // La key lleva lo guardado: tras guardar (o al cambiar de tarjeta) el componente se
+              // remonta con el estado nuevo en vez de quedarse con el de la tarjeta anterior.
+              key={[seleccionado?.id ?? 'negocio', patronPropio.patron, ...patronPropio.casillas].join('-')}
+              programaId={seleccionado?.id ?? null}
+              meta={metaDeLaGrilla}
+              inicial={patronPropio}
+            />
+          )}
+        </>}
         seccionActiva={seccionActiva}
       />
 

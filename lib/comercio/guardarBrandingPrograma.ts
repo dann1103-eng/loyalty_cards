@@ -5,6 +5,7 @@ import { NIVELES_DIFUMINADO } from '../apple/difuminadoFranja';
 import { necesitaClasePropia } from './brandingEfectivo';
 import { encuadreDelPrograma, encuadreDesdeFormulario, validarEncuadre, type Encuadre } from './encuadreFranja';
 import { validarNombrePase } from './nombrePase';
+import { patronDeFila, type PatronSellos } from '../tarjetas/patronSellos';
 
 // Escritura del branding de UN programa de tarjeta (migración 0027). El espejo de
 // guardarBranding.ts, con dos diferencias que importan:
@@ -67,6 +68,9 @@ export interface BrandingProgramaFila {
   heroUrl: string | null;
   stripUrl: string | null;
   selloIconoUrl: string | null;
+  // Segundo ícono de sello y su patrón (0041). El patrón llega ya saneado (patronDeFila).
+  selloIcono2Url: string | null;
+  patronSellos: PatronSellos;
   difuminadoFranja: string | null;
   // null = las cuatro columnas del encuadre están en null ("no lo toqué"), ver encuadreDelPrograma.
   encuadreFranja: Encuadre | null;
@@ -182,6 +186,9 @@ export function hayMarcaPropia(campos: {
   heroUrl: string | null;
   stripUrl: string | null;
   selloIconoUrl: string | null;
+  // El segundo ícono SÍ es marca (es una imagen que el dueño subió para esta tarjeta). Su patrón no
+  // entra: sin segundo ícono no dibuja nada.
+  selloIcono2Url: string | null;
 }): boolean {
   return Object.values(campos).some((valor) => valor !== null);
 }
@@ -230,7 +237,7 @@ export async function brandingDeProgramas(
   const { data, error } = await supabase
     .from('programas_tarjeta')
     .select(
-      'id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, sello_meta, nombre_pase',
+      'id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, sello_meta, nombre_pase',
     )
     .eq('comercio_id', comercioId);
 
@@ -249,6 +256,8 @@ export async function brandingDeProgramas(
     heroUrl: f.hero_url,
     stripUrl: f.strip_url,
     selloIconoUrl: f.sello_icono_url,
+    selloIcono2Url: f.sello_icono_2_url,
+    patronSellos: patronDeFila(f),
     difuminadoFranja: f.difuminado_franja,
     encuadreFranja: encuadreDelPrograma(f),
     selloMeta: f.sello_meta,
