@@ -12,6 +12,11 @@ export const MARCA = {
   // Buzón de FM Communications: el de @cardly-sv.site se dejó de pagar (2026-09-28).
   correoSoporte: 'soporte@fmcomsolutions.com',
   sitio: 'www.cardly-sv.site',
+  // El Instagram de Cardly. CON `www` y SIN esquema, igual que el sitio y por el mismo motivo: va
+  // como texto al pie del reverso del pase, y lo vuelven tocable los detectores de datos de iOS, que
+  // reconocen `www.` por su cuenta. Sin los parámetros de seguimiento del link para compartir
+  // (`stkn`, `utm_source`): son de quien copió el link, no de la cuenta.
+  instagram: 'www.instagram.com/cardlysv',
 } as const;
 
 // Frase de contacto lista para pegar al final de un mensaje de error dirigido al dueño de un

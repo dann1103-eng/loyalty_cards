@@ -825,7 +825,7 @@ este orden y omitiendo lo que esté vacío:
 2. **Términos de uso** — lo que escribas vos.
 3. **Instagram / Facebook / WhatsApp / Sitio web** — enlaces tocables.
 4. **Nombre de empresa**.
-5. **Información del emisor** — Cardly SV, `soporte@fmcomsolutions.com` y `www.cardly-sv.site`.
+5. **Información del emisor** — Cardly SV, `soporte@fmcomsolutions.com`, `www.cardly-sv.site` y `www.instagram.com/cardlysv`.
 
 Todo se configura en **Editor de marca**, al final de la pantalla.
 
@@ -935,6 +935,7 @@ Al final del reverso, siempre y en todos los comercios:
 Cardly SV
 soporte@fmcomsolutions.com
 www.cardly-sv.site
+www.instagram.com/cardlysv
 ```
 
 ✅ Esperado: el correo y el sitio se ven tocables (iOS los detecta solo). Si no lo fueran, el texto

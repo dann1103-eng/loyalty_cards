@@ -15,4 +15,5 @@ export const EMISOR_CARDLY = {
   nombre: MARCA.nombre,
   correo: MARCA.correoSoporte,
   sitio: MARCA.sitio,
+  instagram: MARCA.instagram,
 } as const;

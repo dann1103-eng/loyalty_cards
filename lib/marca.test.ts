@@ -93,6 +93,14 @@ describe('el rebranding a Cardly SV no dejó "FM" a la vista', () => {
     expect(MARCA.correoSoporte).toBe('soporte@fmcomsolutions.com');
   });
 
+  it('el Instagram es el de Cardly, con www y sin esquema ni parámetros de seguimiento', () => {
+    // Va como TEXTO al pie del reverso: lo vuelve tocable el detector de iOS, que reconoce `www.`.
+    // Con `https://` adelante se vería como una URL cruda; con `?stkn=…&utm_source=…` (lo que trae
+    // el link de "compartir perfil") saldría una línea larguísima en cada tarjeta.
+    expect(MARCA.instagram).toBe('www.instagram.com/cardlysv');
+    expect(MARCA.instagram).not.toMatch(/[?&=]|^https?:/);
+  });
+
   it('el sitio lleva www: sin él, el dominio raíz redirige y rompe el registro de passes', () => {
     expect(MARCA.sitio.startsWith('www.')).toBe(true);
   });

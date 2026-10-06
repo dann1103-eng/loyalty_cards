@@ -209,7 +209,7 @@ export function construirReverso(datos: DatosReverso): CampoReverso[] {
   // 7. El nombre del comercio, SIEMPRE.
   campos.push({ key: 'empresa', label: 'Nombre de empresa', value: datos.nombreComercio });
 
-  // 8. El pie de Cardly, SIEMPRE y en todos los comercios (sin excepción por plan). Las tres líneas
+  // 8. El pie de Cardly, SIEMPRE y en todos los comercios (sin excepción por plan). Las cuatro líneas
   // van en `value` separadas por \n porque el attributedValue de Apple solo admite <a> — no <br> ni
   // marcado de bloque, así que no hay forma de apilarlas ahí.
   //
@@ -220,7 +220,7 @@ export function construirReverso(datos: DatosReverso): CampoReverso[] {
   campos.push({
     key: 'emisor',
     label: 'Información del emisor',
-    value: `${EMISOR_CARDLY.nombre}\n${EMISOR_CARDLY.correo}\n${EMISOR_CARDLY.sitio}`,
+    value: `${EMISOR_CARDLY.nombre}\n${EMISOR_CARDLY.correo}\n${EMISOR_CARDLY.sitio}\n${EMISOR_CARDLY.instagram}`,
   });
 
   // 9. Aviso de campaña o inactividad (migración 0026). Va AL FINAL a propósito, después del pie
