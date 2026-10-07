@@ -65,6 +65,10 @@ export async function accionGuardarBranding(
       focoY: String(formData.get('foco_franja_y') ?? ''),
       zoom: String(formData.get('zoom_franja') ?? ''),
     }),
+    // Campo oculto 'si'/'no' que el formulario del negocio manda SIEMPRE. Solo un 'no' explícito
+    // apaga el velo: si el campo no llegara (un formulario viejo abierto en otra pestaña durante el
+    // deploy), se guarda true, que es como estaba todo antes de la 0042.
+    oscurecer_franja: String(formData.get('oscurecer_franja') ?? '') !== 'no',
   });
 
   if (!res.ok) return { error: res.error };
@@ -104,6 +108,7 @@ export async function accionGuardarReverso(
     terminos_uso: String(formData.get('terminos_uso') ?? ''),
     red_instagram: String(formData.get('red_instagram') ?? ''),
     red_facebook: String(formData.get('red_facebook') ?? ''),
+    red_tiktok: String(formData.get('red_tiktok') ?? ''),
     red_whatsapp: String(formData.get('red_whatsapp') ?? ''),
     sitio_web: String(formData.get('sitio_web') ?? ''),
     // Un checkbox HTML manda 'on' cuando está marcado y NO manda NADA cuando no lo está: la
@@ -280,6 +285,8 @@ export async function accionGuardarBrandingDePrograma(
       focoY: String(formData.get('foco_franja_y') ?? ''),
       zoom: String(formData.get('zoom_franja') ?? ''),
     },
+    // Vacío cuando la tarjeta no tiene foto propia: ⇒ null ⇒ se usa la decisión del negocio.
+    oscurecerFranja: String(formData.get('oscurecer_franja') ?? ''),
     selloMeta: String(formData.get('sello_meta') ?? ''),
     // El nombre del pase NO es marca (no entra en hayMarcaPropia, más abajo): es identidad del
     // programa, como la meta. Vacío ⇒ null ⇒ el pase de esta tarjeta vuelve a salir sin nombre.
@@ -350,6 +357,7 @@ export async function accionGuardarReversoDePrograma(
     terminosUso: String(formData.get('terminos_uso') ?? ''),
     redInstagram: String(formData.get('red_instagram') ?? ''),
     redFacebook: String(formData.get('red_facebook') ?? ''),
+    redTiktok: String(formData.get('red_tiktok') ?? ''),
     redWhatsapp: String(formData.get('red_whatsapp') ?? ''),
     sitioWeb: String(formData.get('sitio_web') ?? ''),
     // Un <select> de tres opciones y no una casilla: acá el campo es tri-estado (heredar del

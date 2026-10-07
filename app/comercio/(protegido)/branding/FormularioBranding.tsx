@@ -93,6 +93,9 @@ type Props = {
   /* Encuadre con el que arranca el formulario: el guardado del negocio (nunca null), o el propio de
      la tarjeta (null si nunca lo tocó → se edita desde el default). */
   encuadreInicial: Encuadre | null;
+  /* Si la foto se oscurece detrás de la grilla de sellos (0042), ya resuelto: lo de la tarjeta con
+     foto propia, lo del negocio si la hereda. */
+  oscurecerInicial: boolean;
   /* Si la foto que se ve es PROPIA de lo que se diseña (negocio: hay foto; tarjeta: hero_url propio).
      Decide si los cuatro campos del encuadre viajan y si el bloque se edita — el encuadre viaja con
      la foto, no se hereda campo por campo (brandingEfectivo). */
@@ -147,6 +150,7 @@ export default function FormularioBranding({
   inicial,
   heredado,
   encuadreInicial,
+  oscurecerInicial,
   fotoPropia,
   usaDisenoPropio,
   tieneDisenoGuardado,
@@ -264,6 +268,7 @@ export default function FormularioBranding({
 
   // ---- encuadre de la foto de la franja ---------------------------------------------------------
   const [encuadre, setEncuadre] = useState<Encuadre>(encuadreInicial ?? ENCUADRE_POR_DEFECTO);
+  const [oscurecer, setOscurecer] = useState(oscurecerInicial);
   // Medidas naturales de la foto: null hasta que se conocen. Sin ellas la foto se dibuja con cover
   // centrado y no se arrastra (colocarFoto exige medidas válidas y devolvería el marco pelado).
   const [medidasFoto, setMedidasFoto] = useState<Medidas | null>(null);
@@ -488,7 +493,13 @@ export default function FormularioBranding({
                         ? { position: 'absolute', left: `${colocacion.left}%`, top: `${colocacion.top}%`, width: `${colocacion.ancho}%`, height: `${colocacion.alto}%`, maxWidth: 'none' }
                         : { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
                     />
-                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} />
+                    {/* El velo, con la MISMA regla que el pass real (stripPass): sobre la grilla de sellos lo
+                        decide el comercio (0042); en los demás tipos, solo si hay algo escrito encima.
+                        Antes esta vista previa lo pintaba siempre, y a una membresía sin nombre le
+                        mostraba la foto más apagada de lo que salía en el teléfono del cliente. */}
+                    {(esSellos && metaConfigurada !== null ? oscurecer : Boolean(frente.sobreFranja)) && (
+                      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} />
+                    )}
                     {stops && (
                       <>
                         <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(180deg, ${fondo} 0%, rgba(0,0,0,0) ${stops.v[0]}%, rgba(0,0,0,0) ${stops.v[1]}%, ${fondo} 100%)` }} />
@@ -815,6 +826,31 @@ export default function FormularioBranding({
                 solo cuando se ven, publicar los colores con una franja personalizada puesta mandaría
                 cuatro vacíos, encuadreDesdeFormulario daría null y el guardado borraría el encuadre
                 que el dueño ya había ajustado. */}
+            {/* El velo viaja con la misma regla que el encuadre (`mandaEncuadre`): en el negocio siempre,
+                en una tarjeta solo con foto propia. Va en un campo OCULTO y no en el name de la
+                casilla de abajo: una casilla sin marcar no manda nada, y "no llegó" tiene que poder
+                distinguirse de "el dueño la apagó". */}
+            {mandaEncuadre && <input type="hidden" name="oscurecer_franja" value={oscurecer ? 'si' : 'no'} />}
+
+            {/* Solo donde tiene efecto: una tarjeta de sellos con foto propia a la vista. En los
+                otros tipos el velo no es una elección (depende de si hay texto encima). */}
+            {esSellos && editaEncuadre && (
+              <div className="field">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={oscurecer}
+                    onChange={(e) => setOscurecer(e.target.checked)}
+                  />
+                  Oscurecer la foto detrás de los sellos
+                </label>
+                <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>
+                  Oscurecida, los sellos resaltan más. Sin oscurecer, tu foto se ve tal cual: fijate
+                  arriba que los sellos sigan leyéndose.
+                </p>
+              </div>
+            )}
+
             {mandaEncuadre && !editaEncuadre && (
               <>
                 <input type="hidden" name="encuadre_franja" value={encuadre.modo} />

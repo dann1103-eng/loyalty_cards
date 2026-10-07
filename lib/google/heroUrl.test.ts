@@ -11,7 +11,7 @@ afterEach(() => {
 function datos(sobre: Partial<DatosVersionHero> = {}): DatosVersionHero {
   return {
     puntos: 3, selloMeta: 8, colorFondo: 'rgb(36, 24, 18)', colorLabel: 'rgb(214, 146, 74)',
-    selloIconoUrl: 'https://ejemplo.com/icono.png', selloIcono2Url: null, patronSellos: { patron: 'intercalado' as const, casillas: [] }, heroUrl: 'https://ejemplo.com/hero.jpg',
+    selloIconoUrl: 'https://ejemplo.com/icono.png', selloIcono2Url: null, patronSellos: { patron: 'intercalado' as const, casillas: [] }, oscurecerFranja: true, heroUrl: 'https://ejemplo.com/hero.jpg',
     stripUrl: null, difuminadoFranja: 'medio', hayTextoEncima: false,
     encuadreFranja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
     ...sobre,
@@ -65,6 +65,13 @@ describe('versionHero', () => {
     );
   });
 
+  // El velo de la grilla (0042): apagarlo cambia los píxeles, así que tiene que cambiar la URL. Con
+  // el default (oscurecer) la URL queda como antes de la 0042 — el control es la prueba de abajo,
+  // "SIN segundo ícono…", que compara contra el mismo `datos()` de siempre.
+  it('cambia cuando el comercio apaga el oscurecido de la foto', () => {
+    expect(versionHero(datos({ oscurecerFranja: false }))).not.toBe(versionHero(datos()));
+  });
+
   // Sin segundo ícono el patrón no dibuja nada: cambiarlo no puede hacer que Google re-descargue.
   // Y de paso fija que la 0041 no le cambió la URL a las tarjetas que no la usan.
   it('SIN segundo ícono, el patrón no entra al hash', () => {
@@ -113,7 +120,7 @@ describe('versionHeroTarjeta', () => {
   // La marca EFECTIVA, sin progreso: lo que syncObjeto y linkGuardar le pasan (brandingEfectivo).
   const marca = {
     colorFondo: 'rgb(36, 24, 18)', colorLabel: 'rgb(214, 146, 74)',
-    selloIconoUrl: 'https://ejemplo.com/icono.png', selloIcono2Url: null, patronSellos: { patron: 'intercalado' as const, casillas: [] }, heroUrl: 'https://ejemplo.com/hero.jpg',
+    selloIconoUrl: 'https://ejemplo.com/icono.png', selloIcono2Url: null, patronSellos: { patron: 'intercalado' as const, casillas: [] }, oscurecerFranja: true, heroUrl: 'https://ejemplo.com/hero.jpg',
     stripUrl: null, difuminadoFranja: 'medio',
     encuadreFranja: { modo: 'llenar' as const, focoX: 50, focoY: 50, zoom: 100 },
   };
@@ -189,7 +196,7 @@ describe('versionFranjaClase', () => {
     // Es EXACTAMENTE versionHero con progreso cero, sin meta, sin ícono y sin franja propia: lo que
     // dibuja la ruta franja.png. Si un sync hasheara otra cosa, la URL de la clase no coincidiría.
     expect(versionFranjaClase(marca)).toBe(
-      versionHero({ ...marca, puntos: 0, selloMeta: null, selloIconoUrl: null, selloIcono2Url: null, patronSellos: { patron: 'intercalado', casillas: [] }, stripUrl: null, hayTextoEncima: false }),
+      versionHero({ ...marca, puntos: 0, selloMeta: null, selloIconoUrl: null, selloIcono2Url: null, patronSellos: { patron: 'intercalado', casillas: [] }, oscurecerFranja: true, stripUrl: null, hayTextoEncima: false }),
     );
   });
 });

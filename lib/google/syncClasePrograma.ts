@@ -38,7 +38,7 @@ export async function syncClasePrograma(
   const { data: programa, error } = await supabase
     .from('programas_tarjeta')
     .select(
-      'id, branding_propio, google_class_id, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, comercios(nombre, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja)',
+      'id, branding_propio, google_class_id, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja, comercios(nombre, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja)',
     )
     .eq('id', programaId)
     // Scope por comercio: conocer el id de un programa ajeno no debe permitir tocarle la clase.
@@ -77,6 +77,7 @@ export async function syncClasePrograma(
       patronSellos: patronDeFila(c),
       difuminadoFranja: c.difuminado_franja,
       encuadreFranja: encuadreDelComercio(c),
+      oscurecerFranja: c.oscurecer_franja,
     },
     {
       // Si el branding propio está apagado pero la clase YA existe, se le hace patch con lo
@@ -93,6 +94,7 @@ export async function syncClasePrograma(
       patronSellos: patronDeFila(programa),
       difuminadoFranja: programa.difuminado_franja ?? undefined,
       encuadreFranja: encuadreDelPrograma(programa),
+      oscurecerFranja: programa.oscurecer_franja,
     },
   );
 

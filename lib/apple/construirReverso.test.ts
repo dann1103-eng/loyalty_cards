@@ -18,6 +18,7 @@ function datosBase(): DatosReverso {
     terminosUso: null,
     redInstagram: null,
     redFacebook: null,
+    redTiktok: null,
     redWhatsapp: null,
     sitioWeb: null,
     reglas: [],
@@ -33,6 +34,7 @@ function datosCompletos(): DatosReverso {
     terminosUso: '1. Los puntos no tienen valor monetario.',
     redInstagram: 'https://instagram.com/cafeteria',
     redFacebook: 'https://facebook.com/cafeteria',
+    redTiktok: 'https://www.tiktok.com/@cafeteria',
     redWhatsapp: 'https://wa.me/50370000000',
     sitioWeb: 'https://cafeteria.example.com',
     reglas: [{ tipo: 'por_visita', valor: 2, activa_desde: '2026-01-01T00:00:00Z' }],
@@ -211,7 +213,7 @@ describe('construirReverso — cuándo aparece la sección automática', () => {
 
     expect(claves(campos)).not.toContain('como_funciona');
     // El resto del reverso sobrevive: el interruptor apaga UNA sección, no el reverso entero.
-    expect(claves(campos)).toEqual(['terminos', 'instagram', 'facebook', 'whatsapp', 'sitio', 'empresa', 'emisor']);
+    expect(claves(campos)).toEqual(['terminos', 'instagram', 'facebook', 'tiktok', 'whatsapp', 'sitio', 'empresa', 'emisor']);
   });
 
   it('con recompensas y sin reglas, emite solo la parte de recompensas', () => {
@@ -254,7 +256,7 @@ describe('construirReverso — cuándo aparece la sección automática', () => {
 });
 
 describe('construirReverso — orden y forma de los campos', () => {
-  it('emite las ocho claves en el orden del spec §3', () => {
+  it('emite las nueve claves en orden (las ocho del spec §3 más TikTok, 0042, después de Facebook)', () => {
     const campos = construirReverso(datosCompletos());
 
     expect(claves(campos)).toEqual([
@@ -262,6 +264,7 @@ describe('construirReverso — orden y forma de los campos', () => {
       'terminos',
       'instagram',
       'facebook',
+      'tiktok',
       'whatsapp',
       'sitio',
       'empresa',
@@ -272,6 +275,7 @@ describe('construirReverso — orden y forma de los campos', () => {
       'Términos de uso',
       'Instagram',
       'Facebook',
+      'TikTok',
       'WhatsApp',
       'Sitio web',
       'Nombre de empresa',
@@ -395,6 +399,7 @@ describe('construirReverso — aviso de campaña o inactividad', () => {
       terminosUso: null,
       redInstagram: null,
       redFacebook: null,
+      redTiktok: null,
       redWhatsapp: null,
       sitioWeb: null,
       reglas: [],
@@ -483,5 +488,21 @@ describe('la unidad que ve el cliente corresponde a su tipo de tarjeta', () => {
     const puntos = comoFuncionaDe({ ...datosCompletos(), tipoTarjeta: 'puntos' });
     expect(puntos).toContain('2 puntos');
     expect(puntos).toContain('Café gratis — 10 puntos');
+  });
+});
+
+// TikTok (migración 0042): un enlace más, con las mismas reglas que las otras redes.
+describe('construirReverso — TikTok', () => {
+  it('con dato, es un link tocable con su etiqueta; el value es la dirección cruda', () => {
+    const campos = construirReverso({ ...datosBase(), redTiktok: 'https://www.tiktok.com/@cafeteria' });
+    const tiktok = campos.find((campo) => campo.key === 'tiktok')!;
+    expect(tiktok.label).toBe('TikTok');
+    expect(tiktok.value).toBe('https://www.tiktok.com/@cafeteria');
+    expect(tiktok.attributedValue).toBe('<a href="https://www.tiktok.com/@cafeteria">TikTok</a>');
+  });
+
+  it('sin dato, la fila desaparece entera', () => {
+    expect(claves(construirReverso({ ...datosBase(), redTiktok: null }))).not.toContain('tiktok');
+    expect(claves(construirReverso({ ...datosBase(), redTiktok: '   ' }))).not.toContain('tiktok');
   });
 });

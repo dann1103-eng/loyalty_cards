@@ -22,6 +22,7 @@ export interface DatosReversoPrograma {
   terminosUso: string;
   redInstagram: string;
   redFacebook: string;
+  redTiktok: string;
   redWhatsapp: string;
   sitioWeb: string;
   // Tri-estado, y por eso NO es un checkbox en la pantalla: null = "como en mi negocio" (heredar),
@@ -35,6 +36,7 @@ export interface ReversoProgramaFila {
   terminosUso: string | null;
   redInstagram: string | null;
   redFacebook: string | null;
+  redTiktok: string | null;
   redWhatsapp: string | null;
   sitioWeb: string | null;
   mostrarComoFunciona: boolean | null;
@@ -50,6 +52,7 @@ export function hayReversoPropio(valores: ReversoNormalizado & { mostrarComoFunc
     valores.terminosUso !== null ||
     valores.redInstagram !== null ||
     valores.redFacebook !== null ||
+    valores.redTiktok !== null ||
     valores.redWhatsapp !== null ||
     valores.sitioWeb !== null ||
     valores.mostrarComoFunciona !== null
@@ -82,6 +85,7 @@ export async function guardarReversoPrograma(
       terminos_uso: v.terminosUso,
       red_instagram: v.redInstagram,
       red_facebook: v.redFacebook,
+      red_tiktok: v.redTiktok,
       red_whatsapp: v.redWhatsapp,
       sitio_web: v.sitioWeb,
       mostrar_como_funciona: datos.mostrarComoFunciona,
@@ -144,7 +148,7 @@ export async function reversoDePrograma(
   const { data, error } = await supabase
     .from('programas_tarjeta')
     .select(
-      'id, reverso_propio, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona',
+      'id, reverso_propio, terminos_uso, red_instagram, red_facebook, red_tiktok, red_whatsapp, sitio_web, mostrar_como_funciona',
     )
     .eq('id', programaId)
     .eq('comercio_id', comercioId)
@@ -158,6 +162,7 @@ export async function reversoDePrograma(
     terminosUso: data.terminos_uso,
     redInstagram: data.red_instagram,
     redFacebook: data.red_facebook,
+    redTiktok: data.red_tiktok,
     redWhatsapp: data.red_whatsapp,
     sitioWeb: data.sitio_web,
     mostrarComoFunciona: data.mostrar_como_funciona,

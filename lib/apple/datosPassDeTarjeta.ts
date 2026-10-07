@@ -29,7 +29,7 @@ export async function datosPassDeTarjeta(
   const { data: tarjeta } = await supabase
     .from('tarjetas')
     .select(
-      '*, comercios(*), clientes(nombre, apellido), programas_tarjeta(tipo_tarjeta, sello_meta, nombre_pase, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, reverso_propio, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona)',
+      '*, comercios(*), clientes(nombre, apellido), programas_tarjeta(tipo_tarjeta, sello_meta, nombre_pase, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja, reverso_propio, terminos_uso, red_instagram, red_facebook, red_tiktok, red_whatsapp, sitio_web, mostrar_como_funciona)',
     )
     .eq('apple_serial_number', serialNumber)
     .maybeSingle();
@@ -71,6 +71,7 @@ export async function datosPassDeTarjeta(
       patronSellos: patronDeFila(c),
       difuminadoFranja: c.difuminado_franja,
       encuadreFranja: encuadreDelComercio(c),
+      oscurecerFranja: c.oscurecer_franja,
     },
     programa
       ? {
@@ -91,6 +92,7 @@ export async function datosPassDeTarjeta(
           // Acá `null` SÍ viaja tal cual: brandingEfectivo lo lee como "nunca lo tocó" y decide
           // según la foto (default con foto propia, el del negocio si hereda la foto).
           encuadreFranja: encuadreDelPrograma(programa),
+          oscurecerFranja: programa.oscurecer_franja,
         }
       : null,
   );
@@ -104,6 +106,7 @@ export async function datosPassDeTarjeta(
       terminosUso: c.terminos_uso,
       redInstagram: c.red_instagram,
       redFacebook: c.red_facebook,
+      redTiktok: c.red_tiktok,
       redWhatsapp: c.red_whatsapp,
       sitioWeb: c.sitio_web,
       mostrarComoFunciona: c.mostrar_como_funciona,
@@ -114,6 +117,7 @@ export async function datosPassDeTarjeta(
           terminosUso: programa.terminos_uso,
           redInstagram: programa.red_instagram,
           redFacebook: programa.red_facebook,
+          redTiktok: programa.red_tiktok,
           redWhatsapp: programa.red_whatsapp,
           sitioWeb: programa.sitio_web,
           // Acá se pasa el null TAL CUAL, sin `?? undefined`: en esta columna null significa
@@ -202,6 +206,7 @@ export async function datosPassDeTarjeta(
       logoUrl: marca.logoUrl,
       difuminadoFranja: marca.difuminadoFranja,
       encuadreFranja: marca.encuadreFranja,
+      oscurecerFranja: marca.oscurecerFranja,
       // El reverso se ARMA en cada generación, nunca se congela una copia: un reverso que promete
       // una recompensa que el dueño ya cambió es una promesa incumplida frente al cliente final.
       reverso: construirReverso({
@@ -212,6 +217,7 @@ export async function datosPassDeTarjeta(
         terminosUso: dorso.terminosUso,
         redInstagram: dorso.redInstagram,
         redFacebook: dorso.redFacebook,
+        redTiktok: dorso.redTiktok,
         redWhatsapp: dorso.redWhatsapp,
         sitioWeb: dorso.sitioWeb,
         // `?? []` es la mitad del best-effort: con error, `data` viene null y la sección automática

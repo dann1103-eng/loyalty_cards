@@ -39,6 +39,7 @@ export interface DatosReverso {
   terminosUso: string | null;
   redInstagram: string | null;
   redFacebook: string | null;
+  redTiktok: string | null;
   redWhatsapp: string | null;
   sitioWeb: string | null;
   reglas: ReglaReverso[];
@@ -200,16 +201,17 @@ export function construirReverso(datos: DatosReverso): CampoReverso[] {
     campos.push({ key: 'terminos', label: 'Términos de uso', value: datos.terminosUso });
   }
 
-  // 3-6. Redes y sitio, cada una un link tocable. La que no tiene dato desaparece entera.
+  // 3-7. Redes y sitio, cada una un link tocable. La que no tiene dato desaparece entera.
   if (hayTexto(datos.redInstagram)) campos.push(campoLink('instagram', 'Instagram', datos.redInstagram));
   if (hayTexto(datos.redFacebook)) campos.push(campoLink('facebook', 'Facebook', datos.redFacebook));
+  if (hayTexto(datos.redTiktok)) campos.push(campoLink('tiktok', 'TikTok', datos.redTiktok));
   if (hayTexto(datos.redWhatsapp)) campos.push(campoLink('whatsapp', 'WhatsApp', datos.redWhatsapp));
   if (hayTexto(datos.sitioWeb)) campos.push(campoLink('sitio', 'Sitio web', datos.sitioWeb));
 
-  // 7. El nombre del comercio, SIEMPRE.
+  // 8. El nombre del comercio, SIEMPRE.
   campos.push({ key: 'empresa', label: 'Nombre de empresa', value: datos.nombreComercio });
 
-  // 8. El pie de Cardly, SIEMPRE y en todos los comercios (sin excepción por plan). Las cuatro líneas
+  // 9. El pie de Cardly, SIEMPRE y en todos los comercios (sin excepción por plan). Las cuatro líneas
   // van en `value` separadas por \n porque el attributedValue de Apple solo admite <a> — no <br> ni
   // marcado de bloque, así que no hay forma de apilarlas ahí.
   //
@@ -223,7 +225,7 @@ export function construirReverso(datos: DatosReverso): CampoReverso[] {
     value: `${EMISOR_CARDLY.nombre}\n${EMISOR_CARDLY.correo}\n${EMISOR_CARDLY.sitio}\n${EMISOR_CARDLY.instagram}`,
   });
 
-  // 9. Aviso de campaña o inactividad (migración 0026). Va AL FINAL a propósito, después del pie
+  // 10. Aviso de campaña o inactividad (migración 0026). Va AL FINAL a propósito, después del pie
   // fijo: es la sección más nueva y más cambiante, y el orden del resto del reverso no debe
   // saltar cada vez que un aviso aparece o desaparece. changeMessage con "%@" es lo único que
   // convierte un cambio de VALOR de este campo en un aviso visible en la pantalla de bloqueo —

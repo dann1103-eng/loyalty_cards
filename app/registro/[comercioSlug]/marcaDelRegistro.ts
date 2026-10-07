@@ -35,7 +35,7 @@ const SIN_MARCA: MarcaRegistro = { colorFondo: null, colorTexto: null, colorLabe
 // rellenarlos con literales inventados dejaría un `stripUrl: null` mentiroso esperando a que
 // alguien lo lea. Cuesta cero round-trips extra —— mismo criterio que resolverDatosCartel.
 const COLUMNAS_MARCA =
-  'color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja';
+  'color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja';
 
 export async function marcaDelRegistro(
   supabase: SupabaseClient<Database>,
@@ -78,6 +78,7 @@ export async function marcaDelRegistro(
       patronSellos: patronDeFila(comercio),
       difuminadoFranja: comercio.difuminado_franja,
       encuadreFranja: encuadreDelComercio(comercio),
+      oscurecerFranja: comercio.oscurecer_franja,
     },
     programa
       ? {
@@ -94,6 +95,7 @@ export async function marcaDelRegistro(
           // undefined activa el `??` de brandingEfectivo y hereda.
           difuminadoFranja: programa.difuminado_franja ?? undefined,
           encuadreFranja: encuadreDelPrograma(programa),
+          oscurecerFranja: programa.oscurecer_franja,
         }
       : null,
   );

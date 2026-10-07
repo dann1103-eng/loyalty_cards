@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createServiceClient } from '../supabase/server';
-import { guardarReverso, validarUrlHttps, type DatosReversoComercio } from './guardarReverso';
+import { guardarReverso, normalizarReverso, validarUrlHttps, type DatosReversoComercio } from './guardarReverso';
 
 const supabase = createServiceClient();
 const idsDePrueba: string[] = [];
@@ -31,6 +31,7 @@ function datosVacios(): DatosReversoComercio {
     terminos_uso: '',
     red_instagram: '',
     red_facebook: '',
+    red_tiktok: '',
     red_whatsapp: '',
     sitio_web: '',
     mostrar_como_funciona: true,
@@ -69,6 +70,7 @@ describe('guardarReverso', () => {
       terminos_uso: 'Los sellos no vencen.',
       red_instagram: 'https://instagram.com/fm',
       red_facebook: 'https://facebook.com/fm',
+      red_tiktok: 'https://www.tiktok.com/@fm',
       red_whatsapp: 'https://wa.me/50370000000',
       sitio_web: 'https://fm.example',
       mostrar_como_funciona: false,
@@ -110,6 +112,7 @@ describe('guardarReverso', () => {
     const res = await guardarReverso(supabase, id, {
       ...datosVacios(),
       red_facebook: 'javascript:alert(1)',
+      red_tiktok: 'javascript:alert(1)',
     });
 
     expect(res.ok).toBe(false);
@@ -190,6 +193,7 @@ describe('guardarReverso', () => {
       terminos_uso: '   ',
       red_instagram: '',
       red_facebook: '\n\t ',
+      red_tiktok: '\n\t ',
       red_whatsapp: '',
       sitio_web: '  ',
       mostrar_como_funciona: true,
@@ -243,5 +247,50 @@ describe('guardarReverso', () => {
 
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/no existe/i);
+  });
+});
+
+// TikTok (migración 0042) pasa por la MISMA validación que las otras redes.
+describe('normalizarReverso — TikTok', () => {
+  const VACIO = { terminosUso: '', redInstagram: '', redFacebook: '', redTiktok: '', redWhatsapp: '', sitioWeb: '' };
+
+  it('un enlace https se conserva tal cual; vacío queda en null', () => {
+    const con = normalizarReverso({ ...VACIO, redTiktok: '  https://www.tiktok.com/@fm  ' });
+    expect(con).toEqual({ ok: true, valores: expect.objectContaining({ redTiktok: 'https://www.tiktok.com/@fm' }) });
+    const sin = normalizarReverso(VACIO);
+    expect(sin).toEqual({ ok: true, valores: expect.objectContaining({ redTiktok: null }) });
+  });
+
+  // MUTACIÓN: sacar a TikTok de la lista `enlaces` deja pasar esto y el javascript: termina en un
+  // href dentro del pase.
+  it('se rechaza lo que no es https, y el mensaje nombra a TikTok', () => {
+    for (const malo of ['javascript:alert(1)', 'http://tiktok.com/@fm', '@fm']) {
+      const res = normalizarReverso({ ...VACIO, redTiktok: malo });
+      expect(res).toEqual({ ok: false, error: 'El enlace de TikTok debe empezar con https:// y ser una dirección válida.' });
+    }
+  });
+
+  // Agregar TikTok corrió los índices de la lista interna: cada valor tiene que seguir saliendo por
+  // SU campo. MUTACIÓN: dejar `redWhatsapp: enlaces[2][1]` le pone el TikTok al WhatsApp.
+  it('cada enlace sale por su propio campo', () => {
+    const res = normalizarReverso({
+      terminosUso: '',
+      redInstagram: 'https://instagram.com/a',
+      redFacebook: 'https://facebook.com/b',
+      redTiktok: 'https://www.tiktok.com/@c',
+      redWhatsapp: 'https://wa.me/50370001234',
+      sitioWeb: 'https://e.example.com',
+    });
+    expect(res).toEqual({
+      ok: true,
+      valores: {
+        terminosUso: null,
+        redInstagram: 'https://instagram.com/a',
+        redFacebook: 'https://facebook.com/b',
+        redTiktok: 'https://www.tiktok.com/@c',
+        redWhatsapp: 'https://wa.me/50370001234',
+        sitioWeb: 'https://e.example.com',
+      },
+    });
   });
 });

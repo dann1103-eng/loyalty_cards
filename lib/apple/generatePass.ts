@@ -76,6 +76,8 @@ export interface DatosPass {
   // `reverso` y `ubicaciones`: si fuera opcional, una ruta de emisión nueva dibujaría la foto con
   // el encuadre por defecto y nadie se enteraría.
   encuadreFranja: Encuadre;
+  // Si la grilla de sellos oscurece la foto (0042): va derecho a componerStrips.
+  oscurecerFranja: boolean;
   // Campos del reverso del pass, ya armados por construirReverso. Arreglo vacio = pass sin reverso
   // (es lo que pasa si las consultas de reglas/recompensas fallan: best-effort, ver datosPassDeTarjeta).
   //
@@ -170,6 +172,7 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
     heroUrl: datos.heroUrl,
     difuminadoFranja: datos.difuminadoFranja,
     encuadreFranja: datos.encuadreFranja,
+    oscurecerFranja: datos.oscurecerFranja,
     // El velo sobre la foto solo si vamos a escribir encima. Es el MISMO recorte que hace frentePase
     // con el nombre del pase; acá no se puede consultar `frente` porque `frente` depende de lo que
     // esta composición dibuje (`strips.franja`).

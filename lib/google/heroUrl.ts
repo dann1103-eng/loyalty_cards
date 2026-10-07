@@ -50,6 +50,8 @@ export interface DatosVersionHero {
   // así que cambia los píxeles y tiene que entrar al hash. Antes el nombre del pase no entraba
   // porque solo viajaba en textModulesData, que no dibuja nada.
   hayTextoEncima: boolean;
+  // Si la grilla de sellos oscurece la foto (0042): cambia los píxeles de la grilla.
+  oscurecerFranja: boolean;
 }
 
 // Hash corto de todo lo que la composición dibuja. Determinístico a propósito: la misma tarjeta con
@@ -74,6 +76,9 @@ export function versionHero(d: DatosVersionHero): string {
     // nada, y así el hash de toda tarjeta que no lo usa queda byte a byte como antes de la 0041
     // (agregar tres posiciones fijas le habría cambiado la URL a TODAS y Google las re-bajaría).
     ...(d.selloIcono2Url ? [d.selloIcono2Url, d.patronSellos.patron, d.patronSellos.casillas.join(',')] : []),
+    // Mismo criterio para el velo de la grilla (0042): solo entra cuando el comercio lo APAGÓ, que
+    // es lo único que cambia el dibujo. Con el default el hash queda idéntico al de antes.
+    ...(d.oscurecerFranja ? [] : ['sin-velo']),
   ]);
   return crypto.createHash('sha1').update(clave).digest('hex').slice(0, 12);
 }
@@ -124,6 +129,8 @@ export function versionFranjaClase(marca: {
     selloIconoUrl: null,
     selloIcono2Url: null,
     patronSellos: SIN_PATRON,
+    // La portada de la clase no dibuja la grilla: el velo de la grilla no le cambia nada.
+    oscurecerFranja: true,
     heroUrl: marca.heroUrl,
     stripUrl: null,
     difuminadoFranja: marca.difuminadoFranja,

@@ -21,14 +21,19 @@ export interface BrandingBase {
   // Obligatorio a propósito (como `reverso` y `ubicaciones` en DatosPass): el compilador obliga a
   // cada consumidor a decidir, en vez de que uno nuevo se lo olvide en silencio.
   encuadreFranja: Encuadre;
+  // Si la foto se oscurece cuando encima va la GRILLA DE SELLOS (migración 0042). Los demás tipos
+  // no lo miran: ahí el velo depende de si hay texto escrito encima (stripPass.capasDeFondo).
+  oscurecerFranja: boolean;
 }
 
 // El programa define lo que quiera y hereda el resto. `brandingPropio` es el interruptor maestro.
 // `encuadreFranja` va aparte del Partial porque en el programa `null` es un valor ("no lo toqué"),
 // mismo patrón que `mostrarComoFunciona` en ReversoPrograma.
-export type BrandingPrograma = Partial<Omit<BrandingBase, 'encuadreFranja' | 'patronSellos'>> & {
+export type BrandingPrograma = Partial<Omit<BrandingBase, 'encuadreFranja' | 'patronSellos' | 'oscurecerFranja'>> & {
   brandingPropio: boolean;
   encuadreFranja?: Encuadre | null;
+  // Como el encuadre: en el programa null es "no lo toqué".
+  oscurecerFranja?: boolean | null;
   // Un patrón ya saneado (patronDeFila). Acá no existe un "null = heredá": de quién es el patrón lo
   // deciden los ÍCONOS (ver brandingEfectivo). Opcional porque hay consumidores que no dibujan la
   // grilla (el portal pide solo los tres colores); el que la dibuja tiene que pasarlo.
@@ -73,6 +78,10 @@ export function brandingEfectivo(
     // default si nunca lo tocó); heredando la foto, se hereda el encuadre del negocio aunque el
     // programa tenga uno guardado de una foto anterior.
     encuadreFranja: programa.heroUrl ? (programa.encuadreFranja ?? ENCUADRE_POR_DEFECTO) : comercio.encuadreFranja,
+    // EL VELO TAMBIÉN VIAJA CON LA FOTO, por lo mismo: "no oscurecer" se decide mirando UNA foto. Con
+    // foto propia vale lo de la tarjeta (o el default, oscurecer, si nunca lo tocó); heredando la
+    // foto del negocio se hereda su decisión, aunque a la tarjeta le haya quedado una guardada.
+    oscurecerFranja: programa.heroUrl ? (programa.oscurecerFranja ?? true) : comercio.oscurecerFranja,
   };
 }
 
@@ -105,6 +114,7 @@ export interface ReversoBase {
   terminosUso: string | null;
   redInstagram: string | null;
   redFacebook: string | null;
+  redTiktok: string | null;
   redWhatsapp: string | null;
   sitioWeb: string | null;
   // En `comercios` esta columna es NOT NULL (0013): el comercio SIEMPRE tiene una decisión tomada.
@@ -130,6 +140,7 @@ export function reversoEfectivo(
     terminosUso: programa.terminosUso ?? comercio.terminosUso,
     redInstagram: programa.redInstagram ?? comercio.redInstagram,
     redFacebook: programa.redFacebook ?? comercio.redFacebook,
+    redTiktok: programa.redTiktok ?? comercio.redTiktok,
     redWhatsapp: programa.redWhatsapp ?? comercio.redWhatsapp,
     sitioWeb: programa.sitioWeb ?? comercio.sitioWeb,
     // `??` y NUNCA `||`: acá el valor es un BOOLEANO y `false` es una decisión del dueño ("en esta

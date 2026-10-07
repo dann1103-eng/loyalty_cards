@@ -24,6 +24,7 @@ const COMERCIO: BrandingBase = {
   patronSellos: { patron: 'ultimo', casillas: [] },
   difuminadoFranja: 'medio',
   encuadreFranja: { modo: 'completa', focoX: 10, focoY: 90, zoom: 150 },
+  oscurecerFranja: true,
 };
 
 describe('brandingEfectivo', () => {
@@ -94,6 +95,33 @@ describe('brandingEfectivo', () => {
       encuadreFranja: { modo: 'llenar', focoX: 0, focoY: 0, zoom: 300 },
     });
     expect(r.encuadreFranja).toEqual(COMERCIO.encuadreFranja);
+  });
+});
+
+// El velo de la grilla de sellos (0042) viaja con la FOTO, igual que el encuadre.
+describe('brandingEfectivo — oscurecer la foto detrás de los sellos', () => {
+  const NEGOCIO_SIN_VELO = { ...COMERCIO, oscurecerFranja: false };
+
+  it('tarjeta que HEREDA la foto: vale lo del negocio, aunque tenga algo guardado', () => {
+    // MUTACIÓN: `programa.oscurecerFranja ?? comercio.oscurecerFranja` aplica a la foto del negocio
+    // una decisión que se tomó mirando otra foto.
+    const r = brandingEfectivo(NEGOCIO_SIN_VELO, { brandingPropio: true, colorFondo: 'rgb(1,2,3)', oscurecerFranja: true });
+    expect(r.oscurecerFranja).toBe(false);
+  });
+
+  it('tarjeta con foto propia: vale lo suyo', () => {
+    const r = brandingEfectivo(COMERCIO, { brandingPropio: true, heroUrl: 'https://ejemplo.com/h.png', oscurecerFranja: false });
+    expect(r.oscurecerFranja).toBe(false);
+  });
+
+  it('tarjeta con foto propia que nunca lo tocó: oscurece (el default), no hereda el "no" del negocio', () => {
+    const r = brandingEfectivo(NEGOCIO_SIN_VELO, { brandingPropio: true, heroUrl: 'https://ejemplo.com/h.png', oscurecerFranja: null });
+    expect(r.oscurecerFranja).toBe(true);
+  });
+
+  it('con branding_propio APAGADO se ignora lo de la tarjeta', () => {
+    const r = brandingEfectivo(COMERCIO, { brandingPropio: false, heroUrl: 'https://ejemplo.com/h.png', oscurecerFranja: false });
+    expect(r.oscurecerFranja).toBe(true);
   });
 });
 
@@ -175,6 +203,7 @@ const REVERSO_COMERCIO: ReversoBase = {
   terminosUso: 'Términos del negocio.',
   redInstagram: 'https://instagram.com/negocio',
   redFacebook: 'https://facebook.com/negocio',
+  redTiktok: 'https://www.tiktok.com/@negocio',
   redWhatsapp: 'https://wa.me/50370000000',
   sitioWeb: 'https://negocio.com',
   mostrarComoFunciona: true,

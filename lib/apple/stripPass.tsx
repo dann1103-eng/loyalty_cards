@@ -43,8 +43,12 @@ export interface DatosStrip {
   // Si la app va a ESCRIBIR algo sobre la franja (el nombre del pase). Decide el velo oscuro sobre la
   // foto: existe para que ese texto se lea, y sin texto solo apaga la foto del comercio (lo reportó
   // Daniel el 2026-09-17 con su membresía, que no lleva nada encima). La grilla de sellos lleva velo
-  // SIEMPRE, sin mirar esto: los círculos son lo que tiene que resaltar.
+  // por defecto, sin mirar esto: los círculos son lo que tiene que resaltar. Si el comercio lo
+  // apaga, manda `oscurecerFranja`.
   hayTextoEncima: boolean;
+  // Si la GRILLA DE SELLOS oscurece la foto de fondo (migración 0042). true = como siempre. La
+  // banda de los otros tipos no lo mira: ahí decide `hayTextoEncima`.
+  oscurecerFranja: boolean;
 }
 
 // La foto ya bajada, con sus medidas. Sin medidas (sharp no pudo leerla) la capa cae al cover
@@ -272,7 +276,7 @@ function grillaSellos(
         position: 'relative',
         background: datos.colorFondo,
       },
-      children: [...capasDeFondo(datos, escala, foto, true), filasDeSellos],
+      children: [...capasDeFondo(datos, escala, foto, datos.oscurecerFranja), filasDeSellos],
     },
   };
 }

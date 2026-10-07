@@ -33,7 +33,7 @@ export async function generarLinkGuardar(
     // bug que el resto del sistema ya tenía arreglado.
     // clientes(nombre, apellido): por el mismo upsert, el objeto embebido tiene que llevar NOMBRE y
     // APELLIDO igual que el de syncObjetoTarjeta, o los borraría (0036, spec 2026-09-17).
-    .select('comercio_id, qr_token, puntos_actuales, vigencia_hasta, usado_en, clientes(nombre, apellido), programas_tarjeta(id, tipo_tarjeta, sello_meta, nombre_pase, google_class_id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(nombre, zona_horaria, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, google_class_id, tipo_tarjeta, sello_meta)')
+    .select('comercio_id, qr_token, puntos_actuales, vigencia_hasta, usado_en, clientes(nombre, apellido), programas_tarjeta(id, tipo_tarjeta, sello_meta, nombre_pase, google_class_id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(nombre, zona_horaria, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja, google_class_id, tipo_tarjeta, sello_meta)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
@@ -105,6 +105,7 @@ export async function generarLinkGuardar(
       patronSellos: patronDeFila(cm),
       difuminadoFranja: cm.difuminado_franja,
       encuadreFranja: encuadreDelComercio(cm),
+      oscurecerFranja: cm.oscurecer_franja,
     },
     programa
       ? {
@@ -120,6 +121,7 @@ export async function generarLinkGuardar(
           patronSellos: patronDeFila(programa),
           difuminadoFranja: programa.difuminado_franja ?? undefined,
           encuadreFranja: encuadreDelPrograma(programa),
+          oscurecerFranja: programa.oscurecer_franja,
         }
       : null,
   );

@@ -24,7 +24,7 @@ import { patronDeFila } from '@/lib/tarjetas/patronSellos';
 // Mismas columnas y misma resolución de marca que franja.png: `?programa=` elige la marca EFECTIVA de
 // ese programa (logo y color propios o heredados), la misma que usa syncClasePrograma para armar la URL.
 const COLUMNAS_MARCA =
-  'color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja';
+  'color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja';
 
 // Más holgado que el tope de la MEDICIÓN (logoRemoto.ts, 2 s), y no porque nadie espere: Google baja
 // esta imagen DENTRO del patch de la clase, y el registro de un cliente espera ese patch. Las razones
@@ -108,6 +108,7 @@ export async function servirLogoClase(
       patronSellos: patronDeFila(c),
       difuminadoFranja: c.difuminado_franja,
       encuadreFranja: encuadreDelComercio(c),
+      oscurecerFranja: c.oscurecer_franja,
     },
     programa
       ? {
@@ -123,6 +124,7 @@ export async function servirLogoClase(
           patronSellos: patronDeFila(programa),
           difuminadoFranja: programa.difuminado_franja ?? undefined,
           encuadreFranja: encuadreDelPrograma(programa),
+          oscurecerFranja: programa.oscurecer_franja,
         }
       : null,
   );

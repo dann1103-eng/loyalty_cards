@@ -89,13 +89,13 @@ export async function resolverDatosCartel(
         // porque brandingEfectivo pide el branding COMPLETO, y rellenar esos tres con literales
         // inventados dejaría un `stripUrl: null` mentiroso a la espera de que alguien lo lea.
         // Cuesta cero round-trips.
-        .select('nombre, slug, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja')
+        .select('nombre, slug, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja')
         .eq('id', comercioId)
         .maybeSingle(),
       supabase
         .from('programas_tarjeta')
         .select(
-          'slug, es_principal, activo, tipo_tarjeta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja',
+          'slug, es_principal, activo, tipo_tarjeta, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja',
         )
         .eq('id', programaId)
         .eq('comercio_id', comercioId)
@@ -144,6 +144,7 @@ export async function resolverDatosCartel(
       patronSellos: patronDeFila(comercio),
       difuminadoFranja: comercio.difuminado_franja,
       encuadreFranja: encuadreDelComercio(comercio),
+      oscurecerFranja: comercio.oscurecer_franja,
     },
     {
       brandingPropio: programa.branding_propio,
@@ -160,6 +161,7 @@ export async function resolverDatosCartel(
       // undefined activa el `??` de brandingEfectivo y hereda.
       difuminadoFranja: programa.difuminado_franja ?? undefined,
       encuadreFranja: encuadreDelPrograma(programa),
+      oscurecerFranja: programa.oscurecer_franja,
     },
   );
 

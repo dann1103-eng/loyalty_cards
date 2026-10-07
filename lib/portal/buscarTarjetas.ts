@@ -193,6 +193,7 @@ export async function buscarTarjetasPorTelefono(
         // Mismo motivo que `difuminadoFranja`: el portal no dibuja la franja, así que el encuadre
         // es relleno y nadie lo lee.
         encuadreFranja: ENCUADRE_POR_DEFECTO,
+        oscurecerFranja: true,
       },
       p
         ? {

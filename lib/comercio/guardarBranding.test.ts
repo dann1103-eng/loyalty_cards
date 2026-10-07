@@ -44,6 +44,7 @@ describe('guardarBranding', () => {
       difuminado_franja: 'fuerte',
       nombre_pase: null,
       encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
+      oscurecer_franja: true,
     });
 
     expect(res.ok).toBe(true);
@@ -67,6 +68,7 @@ describe('guardarBranding', () => {
       difuminado_franja: 'medio',
       nombre_pase: null,
       encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
+      oscurecer_franja: true,
     });
 
     expect(res.ok).toBe(false);
@@ -83,6 +85,7 @@ describe('guardarBranding', () => {
       difuminado_franja: 'medio',
       nombre_pase: null,
       encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
+      oscurecer_franja: true,
     });
 
     expect(res.ok).toBe(false);
@@ -99,6 +102,7 @@ describe('guardarBranding', () => {
       difuminado_franja: 'extremo',
       nombre_pase: null,
       encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
+      oscurecer_franja: true,
     });
 
     expect(res.ok).toBe(false);
@@ -134,6 +138,7 @@ describe('guardarBranding', () => {
       difuminado_franja: 'medio',
       nombre_pase: null,
       encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
+      oscurecer_franja: true,
     });
 
     expect(res.ok).toBe(true);
@@ -174,6 +179,7 @@ describe('guardarBranding', () => {
       // es lo que va a viajar al headerField de Apple y al textModulesData de Google.
       nombre_pase: '  Socio Oro  ',
       encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
+      oscurecer_franja: true,
     });
 
     expect(res.ok).toBe(true);
@@ -193,6 +199,7 @@ describe('guardarBranding', () => {
       difuminado_franja: 'medio',
       nombre_pase: null,
       encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
+      oscurecer_franja: true,
     });
     expect(vaciado.ok).toBe(true);
     const { data: despues } = await supabase
@@ -216,6 +223,7 @@ describe('guardarBranding', () => {
       difuminado_franja: 'medio',
       nombre_pase: 'a'.repeat(41),
       encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
+      oscurecer_franja: true,
     });
     expect(res).toEqual({ ok: false, error: 'El nombre del pase no puede pasar de 40 caracteres.' });
   });
@@ -230,6 +238,7 @@ describe('guardarBranding', () => {
       difuminado_franja: 'medio',
       nombre_pase: null,
       encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
+      oscurecer_franja: true,
     });
 
     expect(res.ok).toBe(false);
@@ -242,6 +251,7 @@ describe('guardarBranding', () => {
       color_fondo: 'rgb(10, 20, 30)', color_texto: 'rgb(255, 255, 255)', color_label: 'rgb(200, 200, 200)',
       sello_meta: null, difuminado_franja: 'medio', nombre_pase: null,
       encuadre_franja: { modo: 'completa', focoX: 10, focoY: 90, zoom: 150 },
+      oscurecer_franja: true,
     });
     expect(res.ok).toBe(true);
     const { data } = await supabase.from('comercios').select('encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja').eq('id', id).single();
@@ -255,6 +265,7 @@ describe('guardarBranding', () => {
       color_fondo: 'rgb(10, 20, 30)', color_texto: 'rgb(255, 255, 255)', color_label: 'rgb(200, 200, 200)',
       sello_meta: null, difuminado_franja: 'medio', nombre_pase: null,
       encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 999 },
+      oscurecer_franja: true,
     });
     expect(res).toEqual({ ok: false, error: 'El zoom debe ser un entero de 100 a 300.' });
   });
@@ -263,8 +274,35 @@ describe('guardarBranding', () => {
     const id = await crearComercio();
     const res = await guardarBranding(supabase, id, {
       color_fondo: 'rgb(10, 20, 30)', color_texto: 'rgb(255, 255, 255)', color_label: 'rgb(200, 200, 200)',
-      sello_meta: null, difuminado_franja: 'medio', nombre_pase: null, encuadre_franja: null,
+      sello_meta: null, difuminado_franja: 'medio', nombre_pase: null, encuadre_franja: null, oscurecer_franja: true,
     });
     expect(res).toEqual({ ok: false, error: 'Falta el encuadre de la foto de fondo.' });
+  });
+});
+
+// El velo de la grilla de sellos (migración 0042), en el NEGOCIO: la columna es NOT NULL y nace en true.
+describe('guardarBranding — oscurecer la foto detrás de los sellos', () => {
+  const DATOS = {
+    color_fondo: 'rgb(1, 2, 3)',
+    color_texto: 'rgb(4, 5, 6)',
+    color_label: 'rgb(7, 8, 9)',
+    sello_meta: null,
+    difuminado_franja: 'medio',
+    nombre_pase: null,
+    encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
+  };
+  const leer = async (id: string) =>
+    (await supabase.from('comercios').select('oscurecer_franja').eq('id', id).single()).data!.oscurecer_franja;
+
+  it('un comercio nace oscureciendo, se puede apagar y volver a encender', async () => {
+    const id = await crearComercio();
+    expect(await leer(id)).toBe(true);
+
+    expect((await guardarBranding(supabase, id, { ...DATOS, oscurecer_franja: false })).ok).toBe(true);
+    // MUTACIÓN: quitar `oscurecer_franja` del update deja true y el dueño "apaga" algo que no se apaga.
+    expect(await leer(id)).toBe(false);
+
+    expect((await guardarBranding(supabase, id, { ...DATOS, oscurecer_franja: true })).ok).toBe(true);
+    expect(await leer(id)).toBe(true);
   });
 });

@@ -24,6 +24,9 @@ export interface DatosBranding {
   // roto): las columnas del comercio son NOT NULL, así que acá null es un ERROR, no "heredá". El
   // formulario del negocio manda los cuatro campos SIEMPRE (haya foto o no).
   encuadre_franja: { modo: string; focoX: number; focoY: number; zoom: number } | null;
+  // Si la foto se oscurece detrás de la grilla de sellos (0042). Llega YA como booleano: el
+  // formulario manda 'si'/'no' en un campo oculto y la conversión vive en la Server Action.
+  oscurecer_franja: boolean;
 }
 
 export type ResultadoBranding = { ok: true } | { ok: false; error: string };
@@ -83,6 +86,9 @@ export async function guardarBranding(
       foco_franja_x: datos.encuadre_franja.focoX,
       foco_franja_y: datos.encuadre_franja.focoY,
       zoom_franja: datos.encuadre_franja.zoom,
+      // Boolean() por lo mismo que mostrar_como_funciona en guardarReverso: un undefined borraría la
+      // clave al serializar y la columna (NOT NULL) quedaría sin tocar, en silencio.
+      oscurecer_franja: Boolean(datos.oscurecer_franja),
     })
     .eq('id', comercioId)
     .select('id')

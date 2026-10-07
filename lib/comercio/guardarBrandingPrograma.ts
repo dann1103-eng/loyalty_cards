@@ -37,6 +37,9 @@ export interface DatosBrandingPrograma {
   // programa son nullable. El encuadre solo cuenta cuando la tarjeta tiene foto propia — con la
   // foto del negocio viaja el encuadre del negocio (ver brandingEfectivo).
   encuadreFranja: { modo: string; focoX: number; focoY: number; zoom: number } | null;
+  // Si la foto se oscurece detrás de la grilla de sellos (0042). Igual que el encuadre: null SE
+  // ESCRIBE y significa "no lo toqué", y solo cuenta con foto propia.
+  oscurecerFranja: boolean | null;
   // OJO: sello_meta NO es branding y no se rige por brandingPropio. Es la mecánica del programa —
   // el pase la lee SIEMPRE desde programas_tarjeta (datosPassDeTarjeta.ts), mire o no el
   // interruptor. Y su `null` es un VALOR legítimo (un cupón no tiene meta), no una ausencia: nunca
@@ -74,6 +77,7 @@ export interface BrandingProgramaFila {
   difuminadoFranja: string | null;
   // null = las cuatro columnas del encuadre están en null ("no lo toqué"), ver encuadreDelPrograma.
   encuadreFranja: Encuadre | null;
+  oscurecerFranja: boolean | null;
   selloMeta: number | null;
   nombrePase: string | null;
 }
@@ -130,6 +134,7 @@ export async function guardarBrandingPrograma(
       foco_franja_x: datos.encuadreFranja?.focoX ?? null,
       foco_franja_y: datos.encuadreFranja?.focoY ?? null,
       zoom_franja: datos.encuadreFranja?.zoom ?? null,
+      oscurecer_franja: datos.oscurecerFranja,
       sello_meta: datos.selloMeta,
       // Recortado: es el texto que va al primaryField de Apple y al textModulesData de Google.
       nombre_pase: datos.nombrePase?.trim() ?? null,
@@ -237,7 +242,7 @@ export async function brandingDeProgramas(
   const { data, error } = await supabase
     .from('programas_tarjeta')
     .select(
-      'id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, sello_meta, nombre_pase',
+      'id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja, sello_meta, nombre_pase',
     )
     .eq('comercio_id', comercioId);
 
@@ -260,9 +265,19 @@ export async function brandingDeProgramas(
     patronSellos: patronDeFila(f),
     difuminadoFranja: f.difuminado_franja,
     encuadreFranja: encuadreDelPrograma(f),
+    oscurecerFranja: f.oscurecer_franja,
     selloMeta: f.sello_meta,
     nombrePase: f.nombre_pase,
   }));
+}
+
+// El campo oculto `oscurecer_franja` del formulario de UNA TARJETA: 'si' / 'no', o vacío cuando no
+// viaja (la tarjeta no tiene foto propia) ⇒ null ⇒ "no lo toqué". Cualquier otra cosa también es
+// null: es el estado que NO cambia lo que el cliente ve.
+export function oscurecerDesdeFormulario(valor: string): boolean | null {
+  if (valor === 'si') return true;
+  if (valor === 'no') return false;
+  return null;
 }
 
 // Convierte lo que llega del formulario. Cadena vacía ⇒ null ⇒ heredar. Mismo criterio que
@@ -275,6 +290,7 @@ export function brandingProgramaDesdeFormulario(campos: {
   colorLabel: string;
   difuminadoFranja: string;
   encuadre: { modo: string; focoX: string; focoY: string; zoom: string };
+  oscurecerFranja: string;
   selloMeta: string;
   nombrePase: string;
 }): DatosBrandingPrograma {
@@ -290,6 +306,7 @@ export function brandingProgramaDesdeFormulario(campos: {
     // Los cuatro campos se leen como UNIDAD (encuadreDesdeFormulario): los cuatro vacíos son null
     // —heredar—, y uno solo vacío llega como NaN para que la validación lo rechace con mensaje.
     encuadreFranja: encuadreDesdeFormulario(campos.encuadre),
+    oscurecerFranja: oscurecerDesdeFormulario(campos.oscurecerFranja),
     // Number() y no parseInt: parseInt('12a') devuelve 12 y se tragaría el typo del dueño en
     // silencio. NaN llega hasta la validación de arriba, que lo rechaza con un mensaje claro.
     selloMeta: metaLimpia === '' ? null : Number(metaLimpia),

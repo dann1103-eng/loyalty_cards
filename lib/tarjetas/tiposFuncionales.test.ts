@@ -196,6 +196,7 @@ describe('la meta de sellos: quien la lee y quien la escribe miran la MISMA fila
       difuminado_franja: 'medio',
       nombre_pase: null,
       encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
+      oscurecer_franja: true,
     });
     expect(res.ok, res.ok ? '' : res.error).toBe(true);
 
@@ -219,6 +220,7 @@ describe('la meta de sellos: quien la lee y quien la escribe miran la MISMA fila
       difuminado_franja: 'medio',
       nombre_pase: null,
       encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
+      oscurecer_franja: true,
     });
 
     // FM le cambia el tipo al COMERCIO y no toca el programa: la divergencia que abría el agujero.

@@ -8,7 +8,7 @@ import { patronDeFila, SIN_PATRON } from '@/lib/tarjetas/patronSellos';
 export const runtime = 'nodejs';
 
 const COLUMNAS_MARCA =
-  'color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja';
+  'color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja';
 
 // La portada (heroImage) de la LoyaltyClass de Google: la MISMA banda de marca que va en el pass de
 // Apple (velo, difuminado, resplandor, encuadre). Hasta la 0032 la clase apuntaba a la foto cruda y
@@ -57,6 +57,7 @@ export async function GET(
       patronSellos: patronDeFila(c),
       difuminadoFranja: c.difuminado_franja,
       encuadreFranja: encuadreDelComercio(c),
+      oscurecerFranja: c.oscurecer_franja,
     },
     programa
       ? {
@@ -72,6 +73,7 @@ export async function GET(
           patronSellos: patronDeFila(programa),
           difuminadoFranja: programa.difuminado_franja ?? undefined,
           encuadreFranja: encuadreDelPrograma(programa),
+          oscurecerFranja: programa.oscurecer_franja,
         }
       : null,
   );
@@ -94,6 +96,8 @@ export async function GET(
       heroUrl: marca.heroUrl,
       difuminadoFranja: marca.difuminadoFranja,
       encuadreFranja: marca.encuadreFranja,
+      // No dibuja grilla (es la portada de la clase), así que esto no se mira.
+      oscurecerFranja: true,
       // La portada de la CLASE no lleva nada escrito encima: sin velo sobre la foto.
       hayTextoEncima: false,
     },

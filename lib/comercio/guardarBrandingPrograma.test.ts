@@ -8,6 +8,7 @@ import {
   brandingProgramaDesdeFormulario,
   volverAHeredarMarca,
   hayMarcaPropia,
+  oscurecerDesdeFormulario,
 } from './guardarBrandingPrograma';
 
 const supabase = createServiceClient();
@@ -46,6 +47,7 @@ const BRANDING_VACIO = {
   colorLabel: null,
   difuminadoFranja: null,
   encuadreFranja: null,
+  oscurecerFranja: null,
   selloMeta: null,
   nombrePase: null,
 };
@@ -428,6 +430,7 @@ describe('brandingProgramaDesdeFormulario', () => {
       colorLabel: '   ',
       difuminadoFranja: '',
       encuadre: { modo: '', focoX: '', focoY: '', zoom: '' },
+      oscurecerFranja: '',
       selloMeta: '',
       nombrePase: '  Socio Oro  ',
     });
@@ -447,6 +450,7 @@ describe('brandingProgramaDesdeFormulario', () => {
       brandingPropio: false,
       colorFondo: '', colorTexto: '', colorLabel: '', difuminadoFranja: '',
       encuadre: { modo: '', focoX: '', focoY: '', zoom: '' },
+      oscurecerFranja: '',
       selloMeta: '',
       nombrePase: '   ',
     });
@@ -462,6 +466,7 @@ describe('brandingProgramaDesdeFormulario', () => {
       colorLabel: '',
       difuminadoFranja: '',
       encuadre: { modo: '', focoX: '', focoY: '', zoom: '' },
+      oscurecerFranja: '',
       selloMeta: '12a',
       nombrePase: '',
     });
@@ -470,7 +475,7 @@ describe('brandingProgramaDesdeFormulario', () => {
   });
 
   describe('encuadre', () => {
-    const base = { brandingPropio: false, colorFondo: '', colorTexto: '', colorLabel: '', difuminadoFranja: '', selloMeta: '', nombrePase: '' };
+    const base = { brandingPropio: false, colorFondo: '', colorTexto: '', colorLabel: '', difuminadoFranja: '', oscurecerFranja: '', selloMeta: '', nombrePase: '' };
     it('cuatro vacíos → null', () => {
       expect(brandingProgramaDesdeFormulario({ ...base, encuadre: { modo: '', focoX: '', focoY: '', zoom: '' } }).encuadreFranja).toBeNull();
     });
@@ -479,5 +484,32 @@ describe('brandingProgramaDesdeFormulario', () => {
       expect(r.encuadreFranja).not.toBeNull();
       expect(Number.isNaN(r.encuadreFranja!.focoX)).toBe(true);
     });
+  });
+});
+
+// El velo de la grilla de sellos (migración 0042) en una TARJETA: tri-estado, como el encuadre.
+describe('oscurecer la foto detrás de los sellos, por tarjeta', () => {
+  it("oscurecerDesdeFormulario: 'si' y 'no' son valores; vacío o basura es null (no lo toqué)", () => {
+    expect(oscurecerDesdeFormulario('si')).toBe(true);
+    expect(oscurecerDesdeFormulario('no')).toBe(false);
+    expect(oscurecerDesdeFormulario('')).toBeNull();
+    expect(oscurecerDesdeFormulario('on')).toBeNull();
+  });
+
+  it('se guarda false, y null lo vuelve a dejar sin decidir', async () => {
+    const { comercioId, principalId } = await comercioConDosProgramas();
+    const leer = async () =>
+      (await supabase.from('programas_tarjeta').select('oscurecer_franja').eq('id', principalId).single()).data!
+        .oscurecer_franja;
+
+    expect((await guardarBrandingPrograma(supabase, comercioId, principalId, { ...BRANDING_VACIO, oscurecerFranja: false })).ok).toBe(true);
+    // MUTACIÓN: quitar `oscurecer_franja` del update deja null y el pase sigue oscurecido.
+    expect(await leer()).toBe(false);
+
+    expect((await guardarBrandingPrograma(supabase, comercioId, principalId, { ...BRANDING_VACIO, oscurecerFranja: null })).ok).toBe(true);
+    expect(await leer()).toBeNull();
+
+    const fila = (await brandingDeProgramas(supabase, comercioId)).find((f) => f.programaId === principalId)!;
+    expect(fila.oscurecerFranja).toBeNull();
   });
 });

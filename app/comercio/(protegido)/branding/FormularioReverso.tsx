@@ -10,13 +10,14 @@ import {
 } from './actions';
 import { borradorTerminos } from '@/lib/comercio/borradorTerminos';
 
-type ClaveEnlace = 'red_instagram' | 'red_facebook' | 'red_whatsapp' | 'sitio_web';
+type ClaveEnlace = 'red_instagram' | 'red_facebook' | 'red_tiktok' | 'red_whatsapp' | 'sitio_web';
 type ClaveTexto = ClaveEnlace | 'terminos_uso';
 
 type TextosReverso = {
   terminos_uso: string;
   red_instagram: string;
   red_facebook: string;
+  red_tiktok: string;
   red_whatsapp: string;
   sitio_web: string;
 };
@@ -43,6 +44,7 @@ type Props = {
 const CAMPOS_ENLACE: { campo: ClaveEnlace; etiqueta: string; ejemplo: string; ayuda?: string }[] = [
   { campo: 'red_instagram', etiqueta: 'Instagram', ejemplo: 'https://instagram.com/tunegocio' },
   { campo: 'red_facebook', etiqueta: 'Facebook', ejemplo: 'https://facebook.com/tunegocio' },
+  { campo: 'red_tiktok', etiqueta: 'TikTok', ejemplo: 'https://www.tiktok.com/@tunegocio' },
   {
     campo: 'red_whatsapp',
     etiqueta: 'WhatsApp',
@@ -90,6 +92,7 @@ export default function FormularioReverso({
     terminos_uso: inicial.terminos_uso,
     red_instagram: inicial.red_instagram,
     red_facebook: inicial.red_facebook,
+    red_tiktok: inicial.red_tiktok,
     red_whatsapp: inicial.red_whatsapp,
     sitio_web: inicial.sitio_web,
   });

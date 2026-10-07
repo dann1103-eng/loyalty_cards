@@ -218,14 +218,14 @@ export async function primerosPasos(
     supabase
       .from('comercios')
       .select(
-        'logo_url, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona',
+        'logo_url, terminos_uso, red_instagram, red_facebook, red_tiktok, red_whatsapp, sitio_web, mostrar_como_funciona',
       )
       .eq('id', comercioId)
       .maybeSingle(),
     supabase
       .from('programas_tarjeta')
       .select(
-        'cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias, reverso_propio, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona',
+        'cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias, reverso_propio, terminos_uso, red_instagram, red_facebook, red_tiktok, red_whatsapp, sitio_web, mostrar_como_funciona',
       )
       .eq('comercio_id', comercioId)
       .eq('es_principal', true)
@@ -259,6 +259,7 @@ export async function primerosPasos(
           terminosUso: c.terminos_uso,
           redInstagram: c.red_instagram,
           redFacebook: c.red_facebook,
+          redTiktok: c.red_tiktok,
           redWhatsapp: c.red_whatsapp,
           sitioWeb: c.sitio_web,
           mostrarComoFunciona: c.mostrar_como_funciona,
@@ -269,6 +270,7 @@ export async function primerosPasos(
               terminosUso: programa.data.terminos_uso,
               redInstagram: programa.data.red_instagram,
               redFacebook: programa.data.red_facebook,
+              redTiktok: programa.data.red_tiktok,
               redWhatsapp: programa.data.red_whatsapp,
               sitioWeb: programa.data.sitio_web,
               mostrarComoFunciona: programa.data.mostrar_como_funciona,

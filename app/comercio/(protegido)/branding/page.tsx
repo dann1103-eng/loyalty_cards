@@ -60,7 +60,7 @@ export default async function PaginaBranding({
   const [{ data: c }, programas] = await Promise.all([
     supabase
       .from('comercios')
-      .select('nombre, zona_horaria, tipo_tarjeta, color_fondo, color_texto, color_label, sello_meta, logo_url, strip_url, hero_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja, terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona')
+      .select('nombre, zona_horaria, tipo_tarjeta, color_fondo, color_texto, color_label, sello_meta, logo_url, strip_url, hero_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja, terminos_uso, red_instagram, red_facebook, red_tiktok, red_whatsapp, sitio_web, mostrar_como_funciona')
       .eq('id', comercioId)
       .maybeSingle(),
     // Solo los activos: darle diseño propio a una tarjeta desactivada no se ve en ningún lado, y su
@@ -99,6 +99,7 @@ export default async function PaginaBranding({
     terminos_uso: c.terminos_uso ?? '',
     red_instagram: c.red_instagram ?? '',
     red_facebook: c.red_facebook ?? '',
+    red_tiktok: c.red_tiktok ?? '',
     red_whatsapp: c.red_whatsapp ?? '',
     sitio_web: c.sitio_web ?? '',
     mostrar_como_funciona: c.mostrar_como_funciona,
@@ -208,6 +209,7 @@ export default async function PaginaBranding({
         terminosUso: reversoPrograma.terminosUso,
         redInstagram: reversoPrograma.redInstagram,
         redFacebook: reversoPrograma.redFacebook,
+        redTiktok: reversoPrograma.redTiktok,
         redWhatsapp: reversoPrograma.redWhatsapp,
         sitioWeb: reversoPrograma.sitioWeb,
         mostrarComoFunciona: reversoPrograma.mostrarComoFunciona,
@@ -333,6 +335,11 @@ export default async function PaginaBranding({
         encuadreInicial={
           seleccionado ? (fotoPropia ? (marca?.encuadreFranja ?? null) : encuadreDelNegocio) : encuadreDelNegocio
         }
+        // El velo viaja con la foto, igual que el encuadre de arriba: con foto propia, lo de la
+        // tarjeta (o el default si nunca lo tocó); heredando la foto, lo del negocio.
+        oscurecerInicial={
+          seleccionado && fotoPropia ? (marca?.oscurecerFranja ?? true) : c.oscurecer_franja
+        }
         fotoPropia={fotoPropia}
         usaDisenoPropio={usaDisenoPropio}
         tieneDisenoGuardado={tieneDisenoGuardado}
@@ -403,6 +410,7 @@ export default async function PaginaBranding({
                   terminos_uso: reversoPrograma?.terminosUso ?? '',
                   red_instagram: reversoPrograma?.redInstagram ?? '',
                   red_facebook: reversoPrograma?.redFacebook ?? '',
+                  red_tiktok: reversoPrograma?.redTiktok ?? '',
                   red_whatsapp: reversoPrograma?.redWhatsapp ?? '',
                   sitio_web: reversoPrograma?.sitioWeb ?? '',
                   // null = heredar. NO se colapsa a false: apagaría la sección en esta tarjeta.

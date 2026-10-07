@@ -26,7 +26,7 @@ export async function syncObjetoTarjeta(
     // secundario se sincronizaba a Google con el tipo del COMERCIO — la misma falla que tenía el
     // lado de Apple (ver datosPassDeTarjeta.ts).
     // clientes(nombre, apellido): NOMBRE y APELLIDO debajo de la franja (0036, spec 2026-09-17).
-    .select('qr_token, puntos_actuales, vigencia_hasta, usado_en, google_object_id, comercio_id, clientes(nombre, apellido), programas_tarjeta(tipo_tarjeta, sello_meta, nombre_pase, google_class_id, branding_propio, color_fondo, color_label, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(google_class_id, zona_horaria, tipo_tarjeta, sello_meta, color_fondo, color_label, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, hero_url, strip_url, difuminado_franja, encuadre_franja, foco_franja_x, foco_franja_y, zoom_franja)')
+    .select('qr_token, puntos_actuales, vigencia_hasta, usado_en, google_object_id, comercio_id, clientes(nombre, apellido), programas_tarjeta(tipo_tarjeta, sello_meta, nombre_pase, google_class_id, branding_propio, color_fondo, color_label, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja), comercios(google_class_id, zona_horaria, tipo_tarjeta, sello_meta, color_fondo, color_label, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, hero_url, strip_url, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja)')
     .eq('id', tarjetaId)
     .maybeSingle();
 
@@ -67,6 +67,7 @@ export async function syncObjetoTarjeta(
       patronSellos: patronDeFila(cm),
       difuminadoFranja: cm.difuminado_franja,
       encuadreFranja: encuadreDelComercio(cm),
+      oscurecerFranja: cm.oscurecer_franja,
     },
     programa
       ? {
@@ -80,6 +81,7 @@ export async function syncObjetoTarjeta(
           patronSellos: patronDeFila(programa),
           difuminadoFranja: programa.difuminado_franja ?? undefined,
           encuadreFranja: encuadreDelPrograma(programa),
+          oscurecerFranja: programa.oscurecer_franja,
         }
       : null,
   );

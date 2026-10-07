@@ -26,6 +26,7 @@ function datosBase() {
     selloIconoUrl: null,
     selloIcono2Url: null,
     patronSellos: { patron: 'intercalado' as const, casillas: [] },
+    oscurecerFranja: true,
     heroUrl: null,
     logoUrl: null,
     difuminadoFranja: 'medio',

@@ -10,6 +10,7 @@ export interface DatosReversoComercio {
   terminos_uso: string;
   red_instagram: string;
   red_facebook: string;
+  red_tiktok: string;
   red_whatsapp: string;
   sitio_web: string;
   // Llega YA como booleano. Un checkbox HTML manda 'on' cuando está marcado y NO manda nada cuando
@@ -49,6 +50,7 @@ export interface CamposReverso {
   terminosUso: string;
   redInstagram: string;
   redFacebook: string;
+  redTiktok: string;
   redWhatsapp: string;
   sitioWeb: string;
 }
@@ -57,6 +59,7 @@ export interface ReversoNormalizado {
   terminosUso: string | null;
   redInstagram: string | null;
   redFacebook: string | null;
+  redTiktok: string | null;
   redWhatsapp: string | null;
   sitioWeb: string | null;
 }
@@ -65,7 +68,7 @@ export type ResultadoNormalizacion =
   | { ok: true; valores: ReversoNormalizado }
   | { ok: false; error: string };
 
-// Normaliza y valida los cinco campos de texto del reverso. Vive acá y la usan LOS DOS que escriben
+// Normaliza y valida los seis campos de texto del reverso. Vive acá y la usan LOS DOS que escriben
 // reverso —el del comercio y el del programa— para que el tope de caracteres y la exigencia de
 // https:// no puedan divergir entre las dos pantallas: el texto termina en la misma tarjeta.
 export function normalizarReverso(campos: CamposReverso): ResultadoNormalizacion {
@@ -83,6 +86,7 @@ export function normalizarReverso(campos: CamposReverso): ResultadoNormalizacion
   const enlaces: [string, string | null][] = [
     ['El enlace de Instagram', normalizarOpcional(campos.redInstagram)],
     ['El enlace de Facebook', normalizarOpcional(campos.redFacebook)],
+    ['El enlace de TikTok', normalizarOpcional(campos.redTiktok)],
     ['El enlace de WhatsApp', normalizarOpcional(campos.redWhatsapp)],
     ['La dirección del sitio web', normalizarOpcional(campos.sitioWeb)],
   ];
@@ -108,8 +112,9 @@ export function normalizarReverso(campos: CamposReverso): ResultadoNormalizacion
       // La defensa contra comillas es el escape del render (spec §7.1), no esta normalización.
       redInstagram: enlaces[0][1],
       redFacebook: enlaces[1][1],
-      redWhatsapp: enlaces[2][1],
-      sitioWeb: enlaces[3][1],
+      redTiktok: enlaces[2][1],
+      redWhatsapp: enlaces[3][1],
+      sitioWeb: enlaces[4][1],
     },
   };
 }
@@ -127,6 +132,7 @@ export async function guardarReverso(
     terminosUso: datos.terminos_uso,
     redInstagram: datos.red_instagram,
     redFacebook: datos.red_facebook,
+    redTiktok: datos.red_tiktok,
     redWhatsapp: datos.red_whatsapp,
     sitioWeb: datos.sitio_web,
   });
@@ -139,6 +145,7 @@ export async function guardarReverso(
       terminos_uso: v.terminosUso,
       red_instagram: v.redInstagram,
       red_facebook: v.redFacebook,
+      red_tiktok: v.redTiktok,
       red_whatsapp: v.redWhatsapp,
       sitio_web: v.sitioWeb,
       // Boolean() no es redundante pese al tipo: si un llamador de JS mandara undefined, la

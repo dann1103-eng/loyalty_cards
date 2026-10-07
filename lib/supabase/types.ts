@@ -91,6 +91,8 @@ export type Database = {
           terminos_uso: string | null;
           red_instagram: string | null;
           red_facebook: string | null;
+          red_tiktok: string | null;
+          oscurecer_franja: boolean;
           red_whatsapp: string | null;
           sitio_web: string | null;
           mostrar_como_funciona: boolean;
@@ -155,6 +157,8 @@ export type Database = {
           terminos_uso?: string | null;
           red_instagram?: string | null;
           red_facebook?: string | null;
+          red_tiktok?: string | null;
+          oscurecer_franja?: boolean;
           red_whatsapp?: string | null;
           sitio_web?: string | null;
           mostrar_como_funciona?: boolean;
@@ -203,6 +207,8 @@ export type Database = {
           terminos_uso?: string | null;
           red_instagram?: string | null;
           red_facebook?: string | null;
+          red_tiktok?: string | null;
+          oscurecer_franja?: boolean;
           red_whatsapp?: string | null;
           sitio_web?: string | null;
           mostrar_como_funciona?: boolean;
@@ -1110,6 +1116,8 @@ export type Database = {
           terminos_uso: string | null;
           red_instagram: string | null;
           red_facebook: string | null;
+          red_tiktok: string | null;
+          oscurecer_franja: boolean | null;
           red_whatsapp: string | null;
           sitio_web: string | null;
           // NULLABLE acá y NOT NULL en comercios: null es "heredá", no "apagada".
@@ -1154,6 +1162,8 @@ export type Database = {
           terminos_uso?: string | null;
           red_instagram?: string | null;
           red_facebook?: string | null;
+          red_tiktok?: string | null;
+          oscurecer_franja?: boolean | null;
           red_whatsapp?: string | null;
           sitio_web?: string | null;
           mostrar_como_funciona?: boolean | null;
@@ -1197,6 +1207,8 @@ export type Database = {
           terminos_uso?: string | null;
           red_instagram?: string | null;
           red_facebook?: string | null;
+          red_tiktok?: string | null;
+          oscurecer_franja?: boolean | null;
           red_whatsapp?: string | null;
           sitio_web?: string | null;
           mostrar_como_funciona?: boolean | null;

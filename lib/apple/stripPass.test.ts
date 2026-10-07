@@ -22,6 +22,7 @@ const datosBase = {
   selloIconoUrl: null,
   selloIcono2Url: null,
   patronSellos: { patron: 'intercalado', casillas: [] } as PatronSellos,
+  oscurecerFranja: true,
   heroUrl: null,
   difuminadoFranja: 'ninguno',
   encuadreFranja: { modo: 'llenar' as const, focoX: 50, focoY: 50, zoom: 100 },
@@ -186,5 +187,37 @@ describe('componerStrips — grilla con dos íconos de sello', () => {
     // en el medio: el centro exacto es ese punto (negro), no el fondo de la franja ni el ícono.
     expect(px[0]).toEqual([0, 0, 0]);
     expect(px[0]).not.toEqual(AZUL);
+  }, 30_000);
+});
+
+// ── El velo sobre la foto, detrás de la GRILLA de sellos (migración 0042) ─────────────────────────
+// Hasta la 0042 la grilla oscurecía la foto siempre. Ahora lo decide el comercio. Se mira un píxel
+// de la foto que no tapa ningún sello: la esquina del centro de la franja entre dos filas no sirve
+// (hay sellos), así que se usa un punto del margen lateral, donde la grilla nunca dibuja (56 pt por
+// lado quedan libres) y, con difuminado 'ninguno', tampoco hay degradé.
+describe('componerStrips — la grilla oscurece la foto solo si el comercio quiere', () => {
+  async function rojoDelMargen(oscurecerFranja: boolean): Promise<number> {
+    vi.stubGlobal('fetch', responderCon(await franjaCuadrada()));
+    const strips = await componerStrips({
+      ...datosBase,
+      tipoTarjeta: 'sellos',
+      puntos: 2,
+      selloMeta: 4,
+      stripUrl: null,
+      heroUrl: 'https://ejemplo.com/foto.jpg',
+      oscurecerFranja,
+    });
+    expect(strips, 'la composición no debería fallar').not.toBeNull();
+    expect(strips!.franja).toBe('grilla');
+    return (await pixel(strips!.s1, 20, 61))[0];
+  }
+
+  it('con el oscurecido encendido (el default), la foto se apaga', async () => {
+    expect(await rojoDelMargen(true)).toBeLessThan(200);
+  }, 30_000);
+
+  // MUTACIÓN: volver a `capasDeFondo(datos, escala, foto, true)` deja la foto apagada también acá.
+  it('con el oscurecido apagado, la foto queda intacta', async () => {
+    expect(await rojoDelMargen(false)).toBe(255);
   }, 30_000);
 });
