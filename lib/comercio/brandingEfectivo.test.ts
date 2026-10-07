@@ -232,9 +232,20 @@ describe('reversoEfectivo', () => {
     expect(resultado.terminosUso).toBe('Términos del cupón.');
     expect(resultado.redInstagram).toBe('https://instagram.com/cupon');
     expect(resultado.redFacebook).toBe(REVERSO_COMERCIO.redFacebook);
+    expect(resultado.redTiktok).toBe(REVERSO_COMERCIO.redTiktok);
     expect(resultado.redWhatsapp).toBe(REVERSO_COMERCIO.redWhatsapp);
     expect(resultado.sitioWeb).toBe(REVERSO_COMERCIO.sitioWeb);
     expect(resultado.mostrarComoFunciona).toBe(true);
+  });
+
+  // TikTok (0042) hereda como las otras redes. MUTACIÓN (corrida el 2026-10-06): con
+  // `redTiktok: comercio.redTiktok` el TikTok propio de la tarjeta se guarda y nunca se muestra.
+  it('el TikTok de la tarjeta pisa al del negocio', () => {
+    const resultado = reversoEfectivo(REVERSO_COMERCIO, { reversoPropio: true, redTiktok: 'https://www.tiktok.com/@cupon' });
+    expect(resultado.redTiktok).toBe('https://www.tiktok.com/@cupon');
+    expect(REVERSO_COMERCIO.redTiktok, 'el negocio tiene OTRO: si no, la prueba no distingue nada').not.toBe(
+      'https://www.tiktok.com/@cupon',
+    );
   });
 
   // LA prueba de este módulo. `false` es un valor ELEGIDO por el dueño ("no quiero la sección en

@@ -72,6 +72,16 @@ describe('versionHero', () => {
     expect(versionHero(datos({ oscurecerFranja: false }))).not.toBe(versionHero(datos()));
   });
 
+  // El hash de una tarjeta que NO usa lo nuevo (sin segundo ícono, con el velo de siempre) tiene que
+  // ser, literal, el de antes de las migraciones 0041 y 0042. El valor está calculado a mano con la
+  // fórmula vieja —sha1 de [3, false, 3, 8, fondo, etiqueta, ícono, foto, null, 'medio', 'llenar',
+  // 50, 50, 100]— y NO se actualiza porque sí: si cambia, cambió la URL del hero de TODAS las
+  // tarjetas y Google las vuelve a bajar todas. MUTACIÓN (corrida el 2026-10-06): meter el velo al
+  // hash también cuando está encendido deja verdes todas las demás pruebas de este archivo.
+  it('una tarjeta que no usa lo nuevo conserva el hash de antes de la 0041 y la 0042', () => {
+    expect(versionHero(datos())).toBe('9116cd09b6c7');
+  });
+
   // Sin segundo ícono el patrón no dibuja nada: cambiarlo no puede hacer que Google re-descargue.
   // Y de paso fija que la 0041 no le cambió la URL a las tarjetas que no la usan.
   it('SIN segundo ícono, el patrón no entra al hash', () => {

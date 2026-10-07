@@ -56,16 +56,19 @@ describe('guardarReversoPrograma', () => {
       ...REVERSO_VACIO,
       terminosUso: '  El cupón vence a los 30 días.  ',
       redInstagram: 'https://instagram.com/cupon',
+      redTiktok: 'https://www.tiktok.com/@cupon',
     });
 
     expect(res.ok).toBe(true);
     const { data } = await supabase
       .from('programas_tarjeta')
-      .select('terminos_uso, red_instagram, red_facebook, sitio_web, reverso_propio')
+      .select('terminos_uso, red_instagram, red_facebook, red_tiktok, sitio_web, reverso_propio')
       .eq('id', cuponId)
       .single();
     expect(data!.terminos_uso, 'se guarda recortado').toBe('El cupón vence a los 30 días.');
     expect(data!.red_instagram).toBe('https://instagram.com/cupon');
+    // MUTACIÓN (corrida el 2026-10-06): sin `red_tiktok` en el update de la tarjeta queda en null.
+    expect(data!.red_tiktok).toBe('https://www.tiktok.com/@cupon');
     // null = heredá el del comercio. Se GUARDA null y no se copia el valor del comercio: copiarlo
     // dejaría el cupón congelado en el Facebook de hoy cuando el dueño cambie el del negocio.
     expect(data!.red_facebook, 'lo que el dueño no escribió queda en null, que es la herencia').toBeNull();
@@ -286,10 +289,13 @@ describe('hayReversoPropio', () => {
     expect(hayReversoPropio(NADA)).toBe(false);
   });
 
-  it('cualquiera de los seis campos alcanza', () => {
+  it('cualquiera de los siete campos alcanza', () => {
     expect(hayReversoPropio({ ...NADA, terminosUso: 'x' })).toBe(true);
     expect(hayReversoPropio({ ...NADA, redInstagram: 'x' })).toBe(true);
     expect(hayReversoPropio({ ...NADA, redFacebook: 'x' })).toBe(true);
+    // MUTACIÓN (corrida el 2026-10-06): sin TikTok en la lista, una tarjeta que SOLO cargó su TikTok
+    // queda con reverso_propio en false y el cliente sigue viendo el reverso del negocio.
+    expect(hayReversoPropio({ ...NADA, redTiktok: 'x' })).toBe(true);
     expect(hayReversoPropio({ ...NADA, redWhatsapp: 'x' })).toBe(true);
     expect(hayReversoPropio({ ...NADA, sitioWeb: 'x' })).toBe(true);
     // `false` NO es "vacío": es la decisión de apagar la sección solo en esta tarjeta.

@@ -1475,3 +1475,43 @@ con scope `/` para que contenga a la página desde la que se instala. `/mi-tarje
 instalando el portal del cliente. **Sin probar:** la instalación real en un teléfono (solo se verificó el
 manifest que sirve cada página). Quien ya instaló el acceso equivocado tiene que borrarlo e instalarlo de
 nuevo.
+
+## 2026-10-06 — Instagram de Cardly en el pie, vista previa de sellos alargados, TikTok y velo opcional (PUBLICADO)
+
+### Sin migración (`78a377c`, `ba57a56`)
+
+- **El pie del reverso suma el Instagram de Cardly:** `MARCA.instagram` = `www.instagram.com/cardlysv`, con
+  `www` y sin esquema ni parámetros de seguimiento, igual que el sitio. Push a los 19 pases de Apple
+  instalados el 2026-10-06.
+- **Vista previa del editor: un ícono de sello más alto que ancho se salía de su casilla** (87×180 se
+  dibujaba de 34×70 en una casilla de 34×34). Era solo la vista previa — `.sello` es un grid de filas
+  automáticas y el `height: 100%` del ícono no se resolvía —; el pase real siempre lo dibujó bien. Ahora la
+  casilla y el ícono toman el lado en píxeles de `ladoDelSello`. Reportado por Daniel con Cafetería Piloto.
+
+### Migración 0042 — APLICADA y verificada el 2026-10-06 (`scripts/verificar-0042.ts`)
+
+`red_tiktok` y `oscurecer_franja`, en `comercios` y en `programas_tarjeta`.
+
+- **TikTok en el reverso:** un enlace más, después de Facebook, con la misma validación que las otras redes
+  (`normalizarReverso`: https y 500 caracteres) y la misma herencia campo por campo. Solo Apple, como todo
+  el reverso.
+- **Oscurecer la foto detrás de los sellos, a elección:** hasta hoy la grilla de sellos oscurecía la foto
+  siempre. Ahora hay una casilla en Marca → Franja (solo sellos con foto propia). `comercios.oscurecer_franja`
+  es NOT NULL DEFAULT true; en el programa es nullable y VIAJA CON LA FOTO, igual que el encuadre
+  (`brandingEfectivo`). Entra al hash del hero de Google solo cuando está apagado, así que ninguna URL
+  existente cambió. Los otros tipos no lo miran: ahí el velo sigue dependiendo de si hay texto encima.
+- **De paso:** la vista previa del editor pintaba el velo SIEMPRE, también en tipos que no son sellos; ahora
+  usa la misma regla que el pase.
+
+**Pendientes:**
+- El formulario manda el velo en un campo oculto `oscurecer_franja` ('si'/'no'). En el negocio, solo un 'no'
+  explícito lo apaga: un formulario viejo abierto durante el deploy guarda true.
+- Con el velo apagado, los sellos VACÍOS sin ícono propio (un aro blanco al 7 %) pueden perderse sobre una
+  foto clara. La vista previa lo muestra; no hay aviso automático.
+
+**Verificado en el navegador** con Farmacias ABC: la casilla en Franja (apagarla quita el velo de la vista
+previa al instante, se guarda, sobrevive a la recarga, y la imagen real de una tarjeta sale sin oscurecer) y
+el campo TikTok en Reverso (el navegador frena lo que no es una URL; una válida se guarda y llega al reverso
+de una tarjeta real como enlace). El comercio quedó como estaba. Mutaciones: 15 de 15 caen; la primera
+pasada dejó 5 vivas (el guardado y la herencia del TikTok, y que el velo no cambie el hash por defecto) y se
+escribieron las pruebas que faltaban — entre ellas el hash LITERAL de antes de la 0041 en `heroUrl.test.ts`.

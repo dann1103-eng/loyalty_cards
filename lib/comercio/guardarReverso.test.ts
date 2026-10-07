@@ -64,7 +64,7 @@ describe('validarUrlHttps', () => {
 });
 
 describe('guardarReverso', () => {
-  it('guarda términos, las cuatro URLs y el interruptor', async () => {
+  it('guarda términos, las cinco URLs y el interruptor', async () => {
     const id = await crearComercio();
     const res = await guardarReverso(supabase, id, {
       terminos_uso: 'Los sellos no vencen.',
@@ -79,12 +79,15 @@ describe('guardarReverso', () => {
     expect(res.ok).toBe(true);
     const { data } = await supabase
       .from('comercios')
-      .select('terminos_uso, red_instagram, red_facebook, red_whatsapp, sitio_web, mostrar_como_funciona')
+      .select('terminos_uso, red_instagram, red_facebook, red_tiktok, red_whatsapp, sitio_web, mostrar_como_funciona')
       .eq('id', id)
       .single();
     expect(data!.terminos_uso).toBe('Los sellos no vencen.');
     expect(data!.red_instagram).toBe('https://instagram.com/fm');
     expect(data!.red_facebook).toBe('https://facebook.com/fm');
+    // MUTACIÓN (corrida el 2026-10-06): sin `red_tiktok` en el update esto queda en null y el dueño
+    // ve "guardado" sin que su TikTok llegue nunca a la tarjeta.
+    expect(data!.red_tiktok).toBe('https://www.tiktok.com/@fm');
     expect(data!.red_whatsapp).toBe('https://wa.me/50370000000');
     expect(data!.sitio_web).toBe('https://fm.example');
     // El false tiene que sobrevivir: el default de la columna es true, así que olvidar el campo en
