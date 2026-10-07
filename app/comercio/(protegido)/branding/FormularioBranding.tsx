@@ -125,6 +125,13 @@ type Props = {
   seccionActiva: SeccionBranding;
 };
 
+// El lado de cada casilla de sellos en la vista previa: más chicas cuando la grilla se parte en dos
+// filas (más de 6 sellos). La casilla y el ícono de adentro miden LO MISMO, y los dos lo toman de acá.
+function ladoDelSello(meta: number): { width: number; height: number } {
+  const lado = meta > 6 ? 34 : 42;
+  return { width: lado, height: lado };
+}
+
 const CAMPOS_COLOR = [
   ['color_fondo', 'Color de fondo'],
   ['color_texto', 'Color de texto'],
@@ -524,8 +531,7 @@ export default function FormularioBranding({
                                 key={`${meta}-${i}`}
                                 className="sello"
                                 style={{
-                                  width: meta > 6 ? 34 : 42,
-                                  height: meta > 6 ? 34 : 42,
+                                  ...ladoDelSello(meta),
                                   animationDelay: `${i * 0.04}s`,
                                   // Mismas reglas que el pass real (lib/apple/stripPass.tsx): CON ícono
                                   // propio el sello ES el ícono, sin fondo ni borde; SIN ícono, el aro y
@@ -544,7 +550,14 @@ export default function FormularioBranding({
                                     src={icono}
                                     alt=""
                                     aria-hidden="true"
-                                    style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: i < llenos ? 1 : 0.32 }}
+                                    // El lado en PÍXELES, no '100%': `.sello` es un grid con filas
+                                    // automáticas, y ahí un alto en porcentaje no se resuelve — el
+                                    // ícono tomaba el ancho de la casilla y crecía en alto con su
+                                    // propia proporción. Medido el 2026-10-06: un ícono de 87×180
+                                    // salía de 34×70 dentro de una casilla de 34×34, pisando la fila
+                                    // de abajo (reportado por Daniel con Cafetería Piloto). El pase
+                                    // real nunca lo tuvo: stripPass ya le da width/height fijos.
+                                    style={{ ...ladoDelSello(meta), objectFit: 'contain', opacity: i < llenos ? 1 : 0.32 }}
                                   />
                                 ) : i < llenos ? (
                                   <span style={{ width: '30%', height: '30%', borderRadius: 999, background: fondo }} />
