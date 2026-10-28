@@ -182,13 +182,28 @@ export async function altaYAcreditacionPorTelefono(
     '',
   );
 
+  // El regalo de bienvenida (0043): `emitir_tarjeta` le puso sellos ya puestos a la tarjeta NUEVA, y
+  // `puntosActuales` los incluye. Sin nombrarlos, el dueño leería "ya tiene su tarjeta con 1 sello.
+  // Ahora tiene 3 de 10" y no entendería de dónde salieron los otros dos. Se dice SOLO si la tarjeta
+  // nació acá y con regalo: el cliente que ya tenía su tarjeta no recibe nada (el regalo se da una
+  // vez), y lo que cuenta es lo que `registrarCliente` devolvió que se entregó (alta.sellosRegalo),
+  // no lo que el programa tiene configurado hoy ni la cantidad que el dueño acaba de acreditar. La
+  // unidad sale del mismo helper que `acreditado`, así "1 sello" / "2 sellos" concuerdan.
+  const regalo =
+    alta.esNuevaTarjeta && alta.sellosRegalo > 0
+      ? describirCosto(programa.tipoTarjeta, alta.sellosRegalo)
+      : null;
+
   return {
     ok: true,
     tarjetaId: alta.tarjetaId,
     esNuevaTarjeta: alta.esNuevaTarjeta,
     puntosActuales: res.puntosActuales,
-    mensaje: alta.esNuevaTarjeta
-      ? `Listo: ${nombre} ya tiene su tarjeta con ${acreditado}. Ahora tiene ${queda}.`
-      : `Listo: le acreditaste ${acreditado} a ${nombre}. Ahora tiene ${queda}.`,
+    mensaje:
+      regalo !== null
+        ? `Listo: ${nombre} ya tiene su tarjeta con ${regalo} de regalo y ${acreditado}. Ahora tiene ${queda}.`
+        : alta.esNuevaTarjeta
+          ? `Listo: ${nombre} ya tiene su tarjeta con ${acreditado}. Ahora tiene ${queda}.`
+          : `Listo: le acreditaste ${acreditado} a ${nombre}. Ahora tiene ${queda}.`,
   };
 }

@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createServiceClient } from '../supabase/server';
 import { crearEntorno } from '../../test/fixtures/entornoComercio';
 import { crearPrograma } from './programas';
+import { guardarBranding } from './guardarBranding';
 import { altaYAcreditacionPorTelefono } from './altaPorTelefono';
 
 // Dar de alta y acreditar por TELÉFONO, desde el panel del comercio.
@@ -470,5 +471,150 @@ describe('la regla de mínimo de compra en "Agregar cliente" (0039)', () => {
       );
       expect(res.error).not.toBe('La compra mínima para sumar es $10.00.');
     }
+  });
+});
+
+// El regalo de bienvenida (0043, Tarea 5 del plan docs/superpowers/plans/2026-10-28-sellos-de-regalo.md),
+// dicho en el mensaje de "Agregar cliente".
+//
+// La tarjeta que nace por acá ya viene con los sellos de regalo (la crea `emitir_tarjeta`, vía
+// registrarCliente), y el mensaje de éxito es lo único que el dueño lee tras darla de alta. Si dijera
+// "ya tiene su tarjeta con 1 sello" y el pase mostrara 3 de 10, el dueño creería que la pantalla
+// mintió, o que el sistema le regaló sellos de más. Por eso el mensaje nombra el regalo y el total.
+//
+// La prueba HONESTA, al estilo de lib/tarjetas/sellosRegalo.integracion.test.ts: el comercio queda con
+// sus columnas legadas vacías y la meta y el regalo se cargan con `guardarBranding`, la MISMA función
+// que llama la pantalla de Marca. Nunca con un update directo a `sellos_regalo`: así la prueba mide
+// lo que vive el dueño. Necesita la 0043 aplicada (columna y emitir_tarjeta).
+//
+// MUTACIONES CONFIRMADAS el 2026-10-28 (cada una corrida contra este archivo entero y restaurada con
+// `git checkout -- lib/comercio/altaPorTelefono.ts`; el mensaje es el que imprimió vitest):
+//   - `alta.sellosRegalo > 0` solo, sin `alta.esNuevaTarjeta &&`: NO la atrapa ninguna prueba, y no
+//     puede. `registrarCliente` devuelve sellosRegalo 0 en toda tarjeta que ya existía (contrato que
+//     prueban los casos 3 y 9 de lib/tarjetas/sellosRegalo.integracion.test.ts), así que la condición
+//     es un segundo cerrojo y quitarla no cambia ningún resultado alcanzable. Se deja a propósito.
+//   - La versión que sí puede pasar en la práctica, tomar el regalo de `programa.sellosRegalo` (lo
+//     configurado hoy) en vez de `alta.sellosRegalo` y sin la condición, hace fallar SOLO la prueba
+//     del teléfono que ya tenía su tarjeta: "Expected: 'Listo: le acreditaste 1 sello a Ana. Ahora
+//     tiene 4 de 10 sellos.'" contra "Received: 'Listo: Ana ya tiene su tarjeta con 2 sellos de regalo
+//     y 1 sello. Ahora tiene 4 de 10 sellos.'".
+//   - Quitar la frase del regalo del mensaje (`con ${acreditado}` a secas) hace fallar 3: la del
+//     regalo 2 ("Received: 'Listo: Ana ya tiene su tarjeta con 1 sello. Ahora tiene 3 de 10
+//     sellos.'"), la del regalo 1, y la del teléfono repetido en su primera alta ("expected … to
+//     contain 'de regalo'").
+//   - Usar `datos.cantidad` en vez de `alta.sellosRegalo` para el texto del regalo hace fallar 2: con
+//     cantidad 1, "con 1 sello de regalo y 1 sello" en vez de "con 2 sellos de regalo y 1 sello"; con
+//     cantidad 2, "con 2 sellos de regalo y 2 sellos" en vez de "con 1 sello de regalo y 2 sellos".
+//     Por eso la prueba del regalo 1 usa cantidad 2: con cantidades iguales no se vería.
+//   - Pluralizar a mano (`${alta.sellosRegalo} sellos` en vez de describirCosto) hace fallar SOLO la
+//     del regalo 1: "Received: '… con 1 sellos de regalo y 2 sellos. …'" contra "… con 1 sello de
+//     regalo y 2 sellos. …".
+//   - La frontera `alta.sellosRegalo >= 0` (en vez de `> 0`) hace fallar SOLO la de sin regalo:
+//     "Received: 'Listo: Ana ya tiene su tarjeta con 0 sellos de regalo y 1 sello. Ahora tiene 1 de 10
+//     sellos.'".
+describe('el regalo de bienvenida en "Agregar cliente" (0043)', () => {
+  // Lo que el formulario de Marca manda además de la meta y el regalo. Valores que pasan la
+  // validación; no importan para estas pruebas.
+  const MARCA_BASE = {
+    color_fondo: 'rgb(10, 20, 30)',
+    color_texto: 'rgb(255, 255, 255)',
+    color_label: 'rgb(255, 255, 255)',
+    difuminado_franja: 'medio',
+    nombre_pase: null,
+    encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
+    oscurecer_franja: true,
+  };
+
+  // Un comercio de sellos con meta 10 y el regalo dado, cargados POR EL CAMINO DE PRODUCCIÓN (modo
+  // negocio: escribe al programa principal).
+  async function comercioConRegalo(sellosRegalo: number): Promise<{ comercioId: string; programaId: string }> {
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    const res = await guardarBranding(supabase, comercioId, {
+      ...MARCA_BASE,
+      sello_meta: 10,
+      sellos_regalo: sellosRegalo,
+    });
+    if (!res.ok) throw new Error(`[test] no se pudo cargar el regalo: ${res.error}`);
+    return { comercioId, programaId: entorno.obtenerProgramaPrincipal(comercioId) };
+  }
+
+  it('alta nueva con regalo 2 y cantidad 1: saldo 3 y el mensaje dice el regalo, lo acreditado y cómo queda', async () => {
+    const { comercioId, programaId } = await comercioConRegalo(2);
+
+    const res = await altaYAcreditacionPorTelefono(supabase, comercioId, {
+      telefono: telefonoUnico(),
+      nombre: 'Ana',
+      programaId,
+      cantidad: 1,
+    });
+
+    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    if (!res.ok) return;
+    expect(res.esNuevaTarjeta).toBe(true);
+    // El saldo se lee de la BASE, no de lo que devolvió la función: es lo que ve el cliente en el pase.
+    expect((await estadoDe(res.tarjetaId)).puntos_actuales, '2 de regalo + 1 acreditado').toBe(3);
+    expect(res.puntosActuales).toBe(3);
+    expect(res.mensaje).toBe('Listo: Ana ya tiene su tarjeta con 2 sellos de regalo y 1 sello. Ahora tiene 3 de 10 sellos.');
+  });
+
+  it('con regalo 1 el regalo va en singular, y se distingue de lo acreditado (cantidad 2)', async () => {
+    // Regalo 1 y cantidad 2 a propósito: el regalo va en singular ("1 sello") y lo acreditado en
+    // plural ("2 sellos"), y cada número sale de SU origen. Con cantidad igual al regalo, usar uno
+    // por el otro daría el mismo texto y la prueba no lo vería.
+    const { comercioId, programaId } = await comercioConRegalo(1);
+
+    const res = await altaYAcreditacionPorTelefono(supabase, comercioId, {
+      telefono: telefonoUnico(),
+      nombre: 'Ana',
+      programaId,
+      cantidad: 2,
+    });
+
+    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    if (!res.ok) return;
+    expect((await estadoDe(res.tarjetaId)).puntos_actuales).toBe(3);
+    expect(res.mensaje).toBe('Listo: Ana ya tiene su tarjeta con 1 sello de regalo y 2 sellos. Ahora tiene 3 de 10 sellos.');
+  });
+
+  it('un teléfono que YA tenía su tarjeta no recibe regalo ni se lo dice: mensaje de siempre, saldo +cantidad', async () => {
+    // El regalo se da UNA vez, cuando nace la tarjeta (decisión 2 del plan). La segunda alta del
+    // mismo teléfono en el mismo programa, con el regalo SIGUIENDO configurado, es el caso que lo
+    // mide: si el mensaje (o el saldo) volviera a contar el regalo, el dueño creería que se lo dio dos
+    // veces.
+    const { comercioId, programaId } = await comercioConRegalo(2);
+    const telefono = telefonoUnico();
+
+    const primera = await altaYAcreditacionPorTelefono(supabase, comercioId, {
+      telefono, nombre: 'Ana', programaId, cantidad: 1,
+    });
+    const segunda = await altaYAcreditacionPorTelefono(supabase, comercioId, {
+      telefono, nombre: 'Ana', programaId, cantidad: 1,
+    });
+
+    expect(primera.ok && segunda.ok).toBe(true);
+    if (!primera.ok || !segunda.ok) return;
+    expect(primera.mensaje).toContain('de regalo');
+    expect(segunda.esNuevaTarjeta).toBe(false);
+    expect(segunda.tarjetaId).toBe(primera.tarjetaId);
+    expect(segunda.mensaje).toBe('Listo: le acreditaste 1 sello a Ana. Ahora tiene 4 de 10 sellos.');
+    expect(segunda.mensaje).not.toContain('de regalo');
+    expect((await estadoDe(segunda.tarjetaId)).puntos_actuales, '3 de la primera + 1 de la segunda, sin regalo nuevo').toBe(4);
+  });
+
+  it('sin regalo configurado el mensaje de tarjeta nueva es el de siempre, sin "de regalo"', async () => {
+    const { comercioId, programaId } = await comercioConRegalo(0);
+
+    const res = await altaYAcreditacionPorTelefono(supabase, comercioId, {
+      telefono: telefonoUnico(),
+      nombre: 'Ana',
+      programaId,
+      cantidad: 1,
+    });
+
+    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    if (!res.ok) return;
+    expect(res.mensaje).toBe('Listo: Ana ya tiene su tarjeta con 1 sello. Ahora tiene 1 de 10 sellos.');
+    expect(res.mensaje).not.toContain('de regalo');
+    expect((await estadoDe(res.tarjetaId)).puntos_actuales).toBe(1);
   });
 });
