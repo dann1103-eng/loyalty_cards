@@ -226,6 +226,29 @@ describe('historialTarjeta', () => {
     expect(movimientos!.map((m) => m.clase)).toEqual(['acreditacion', 'uso', 'renovacion']);
   });
 
+  it('conserva la clase "regalo" (0043): los sellos con los que nace una tarjeta no son una acreditación', async () => {
+    // La misma trampa de normalizarClase, con la clase que entró después: el CHECK del ledger admite
+    // 'regalo' desde la 0043, pero si CLASES no la nombra, el fallback la colapsa en 'acreditacion' y
+    // la ficha del dueño dice "Acreditación +2" para algo que el cliente nunca compró — que es lo
+    // que el movimiento existe para explicar. Los deltas y la suma corrida son los de una tarjeta
+    // real: nace con 2 de regalo y después acredita 1.
+    //
+    // MUTACIÓN (verificada el 2026-10-28): sacar 'regalo' de CLASES hace fallar esta prueba con
+    // `expected [ 'acreditacion', 'acreditacion' ] to deeply equal [ 'acreditacion', 'regalo' ]`
+    // (el regalo sale como acreditación, el mismo defecto del 2026-09-08).
+    const comercioId = await entorno.crearComercio();
+    const { id } = await entorno.crearTarjeta(comercioId, 0);
+
+    const base = Date.now() - 10 * 60 * 60 * 1000;
+    await ledgerEnFecha(id, 2, new Date(base), { tipo: 'regalo' });
+    await ledgerEnFecha(id, 1, new Date(base + 60_000));
+
+    const movimientos = await historialTarjeta(supabase, comercioId, id);
+
+    expect(movimientos!.map((m) => m.clase)).toEqual(['acreditacion', 'regalo']);
+    expect(movimientos!.map((m) => m.saldoResultante)).toEqual([3, 2]);
+  });
+
   it('devuelve una lista vacía (no null) para una tarjeta sin movimientos', async () => {
     // La distinción que hace útil el `T[] | null`: "no hay movimientos" NO es "no se pudieron leer".
     const comercioId = await entorno.crearComercio();
@@ -242,7 +265,7 @@ describe('historialTarjeta', () => {
 // las dos pantallas que lo muestran — la ficha del dueño y el portal del cliente. Van acá y no en
 // un archivo aparte porque protegen el mismo defecto que la prueba de las clases.
 describe('etiquetaClase', () => {
-  it('nombra las cinco clases sin llamar acreditación a un uso ni a una renovación', () => {
+  it('nombra las seis clases sin llamar acreditación a un uso, a una renovación ni a un regalo', () => {
     // MUTACIÓN: devolver 'Acreditación' para 'uso' o 'renovacion' rompe esta prueba. Era
     // literalmente lo que hacía el `return 'Acreditación'` final del if encadenado.
     expect(etiquetaClase('acreditacion')).toBe('Acreditación');
@@ -250,6 +273,9 @@ describe('etiquetaClase', () => {
     expect(etiquetaClase('canje')).toBe('Canje');
     expect(etiquetaClase('uso')).toBe('Uso');
     expect(etiquetaClase('renovacion')).toBe('Renovación');
+    // El texto que ven el dueño y el cliente en la fila del regalo (0043). MUTACIÓN: devolver
+    // 'Acreditación' para 'regalo' rompe esta línea.
+    expect(etiquetaClase('regalo')).toBe('Regalo de bienvenida');
   });
 });
 

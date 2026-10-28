@@ -9,6 +9,11 @@ export interface RegistrarClienteResult {
   qrToken: string;
   esNuevoCliente: boolean;
   esNuevaTarjeta: boolean;
+  // Cuántos sellos de regalo trajo la tarjeta al nacer (0043). Es lo que devolvió emitir_tarjeta, y
+  // 0 en los DOS caminos de tarjeta que ya existía (la que se encontró y la que ganó la carrera):
+  // el regalo se da UNA vez, cuando nace la tarjeta, y quien vuelve a registrarse no recibe nada.
+  // Lo lee la pantalla de "Tu tarjeta está lista", que solo menciona el regalo si de verdad llegó.
+  sellosRegalo: number;
 }
 
 // Qué fecha de vencimiento le toca a la tarjeta que se está por emitir. Solo el tipo `cupon` tiene
@@ -161,6 +166,7 @@ export async function registrarCliente(
       qrToken: tarjetaExistente.qr_token,
       esNuevoCliente,
       esNuevaTarjeta: false,
+      sellosRegalo: 0,
     };
   }
 
@@ -170,23 +176,29 @@ export async function registrarCliente(
   // que el dueño configuró en Programas no valdría nada. Ver lib/tarjetas/tiposFuncionales.test.ts.
   const vigenciaHasta = await vigenciaInicial(supabase, comercioId, programaId);
 
-  // qr_token lo genera la base de datos: default encode(gen_random_bytes(16), 'hex')
-  // (migración 0001); aquí solo lo leemos de vuelta.
-  const { data: nuevaTarjeta, error: crearTarjetaError } = await supabase
-    .from('tarjetas')
-    .insert({
-      cliente_id: clienteId,
-      comercio_id: comercioId,
-      programa_id: programaId,
-      // null en todo tipo que no sea cupón, que es el default de la columna: se pasa explícito para
-      // que el insert sea uno solo y no dos ramas que puedan divergir.
-      vigencia_hasta: vigenciaHasta,
-    })
-    .select('id, qr_token')
-    .single();
+  // La tarjeta se emite con la función emitir_tarjeta (0043) y no con un insert: la tarjeta y su
+  // regalo de bienvenida tienen que nacer en UNA sola transacción. Dos escrituras desde acá (el
+  // insert con el saldo inicial y la fila del ledger) podían dejar una tarjeta con sellos que el
+  // historial no explica, y el historial es lo que mira el dueño cuando un cliente reclama.
+  //
+  // El regalo NO viaja por parámetro: la función lo lee del programa, y solo si es de sellos. Así
+  // este llamador no puede regalar de más, y no hay que acordarse de preguntarle nada al programa.
+  // qr_token lo genera la base de datos (default encode(gen_random_bytes(16), 'hex'), migración
+  // 0001); la función lo devuelve y aquí solo lo leemos.
+  //
+  // `vigencia_hasta` null en todo tipo que no sea cupón, que es el default de la columna: se pasa
+  // explícito para que la emisión sea una sola y no dos ramas que puedan divergir.
+  const { data: filasEmitidas, error: crearTarjetaError } = await supabase.rpc('emitir_tarjeta', {
+    p_comercio_id: comercioId,
+    p_programa_id: programaId,
+    p_cliente_id: clienteId,
+    p_vigencia_hasta: vigenciaHasta,
+  });
   if (crearTarjetaError) {
-    // Misma carrera que arriba, ahora sobre el unique (cliente_id, programa_id):
-    // recuperamos la tarjeta que ganó y conservamos su qr_token ya emitido.
+    // Misma carrera que arriba, ahora sobre el unique (cliente_id, programa_id): la función lanza
+    // 23505 cuando el insert de la tarjeta choca, y PostgREST devuelve ese SQLSTATE en `code` igual
+    // que con un insert directo. Como la excepción aborta la función entera, no queda ningún regalo
+    // suelto: recuperamos la tarjeta que ganó (que ya recibió el suyo) y conservamos su qr_token.
     if (crearTarjetaError.code !== '23505') throw crearTarjetaError;
     const { data: tarjetaGanadora, error: relecturaTarjetaError } = await supabase
       .from('tarjetas')
@@ -203,16 +215,23 @@ export async function registrarCliente(
       qrToken: tarjetaGanadora.qr_token,
       esNuevoCliente,
       esNuevaTarjeta: false,
+      sellosRegalo: 0,
     };
   }
 
-  await inicializarApple(supabase, nuevaTarjeta.id);
+  // Una función `returns table` llega como arreglo, aunque devuelva una sola fila. Sin fila, algo
+  // salió mal en la base sin lanzar nada: no se inventa una tarjeta.
+  const nuevaTarjeta = filasEmitidas?.[0];
+  if (!nuevaTarjeta) throw new Error('emitir_tarjeta no devolvió la tarjeta emitida');
+
+  await inicializarApple(supabase, nuevaTarjeta.id_tarjeta);
 
   return {
     clienteId,
-    tarjetaId: nuevaTarjeta.id,
-    qrToken: nuevaTarjeta.qr_token,
+    tarjetaId: nuevaTarjeta.id_tarjeta,
+    qrToken: nuevaTarjeta.token_qr,
     esNuevoCliente,
     esNuevaTarjeta: true,
+    sellosRegalo: nuevaTarjeta.sellos_regalados,
   };
 }

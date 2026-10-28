@@ -9,10 +9,11 @@ import { describirCosto } from '../tarjetas/unidadPrograma';
 // Los datos no viven en una tabla nueva: transacciones_puntos y canjes ya los tenían desde la 0001.
 // Lo que faltaba era la consulta (historial_tarjeta, migración 0015) y la pantalla.
 
-// Las cinco clases de movimiento que puede tener una tarjeta. Cuatro salen del CHECK de
-// transacciones_puntos (migración 0019: acreditacion, ajuste, uso, renovacion) y 'canje' de la otra
-// tabla del ledger, que historial_tarjeta une en la misma lista.
-export type ClaseMovimiento = 'acreditacion' | 'ajuste' | 'canje' | 'uso' | 'renovacion';
+// Las seis clases de movimiento que puede tener una tarjeta. Cinco salen del CHECK de
+// transacciones_puntos (migración 0019: acreditacion, ajuste, uso, renovacion; y 'regalo' desde la
+// 0043: los sellos con los que nace una tarjeta) y 'canje' de la otra tabla del ledger, que
+// historial_tarjeta une en la misma lista.
+export type ClaseMovimiento = 'acreditacion' | 'ajuste' | 'canje' | 'uso' | 'renovacion' | 'regalo';
 
 export interface MovimientoHistorial {
   id: string;
@@ -33,13 +34,17 @@ export interface OpcionesHistorial {
   desde?: string | null;
 }
 
-const CLASES: readonly string[] = ['acreditacion', 'ajuste', 'canje', 'uso', 'renovacion'];
+const CLASES: readonly string[] = ['acreditacion', 'ajuste', 'canje', 'uso', 'renovacion', 'regalo'];
 
 function normalizarClase(valor: string): ClaseMovimiento {
   // Hasta el 2026-09-08 esto era `valor === 'ajuste' || valor === 'canje' ? valor : 'acreditacion'`,
   // o sea que 'uso' y 'renovacion' —clases legítimas desde la 0019— se colapsaban en acreditación.
   // El dueño y el cliente veían "Acreditación +0" en una renovación de membresía y
   // "Acreditación -1250" en un cobro de gift card: un hecho falso, y con la unidad equivocada.
+  //
+  // Lo mismo le tocaba a 'regalo' (0043) si se olvidaba aquí: el dueño habría leído "Acreditación +2"
+  // en la ficha de un cliente que todavía no compró nada, justo lo que el movimiento existe para
+  // explicar.
   //
   // El fallback no se retira, se acota a lo DESCONOCIDO: una fila con un tipo que esta versión del
   // código no conoce no puede dejar la pantalla forense sin dibujar (misma política que tipoOPuntos).
@@ -99,6 +104,7 @@ const ETIQUETAS: Record<ClaseMovimiento, string> = {
   canje: 'Canje',
   uso: 'Uso',
   renovacion: 'Renovación',
+  regalo: 'Regalo de bienvenida',
 };
 
 export function etiquetaClase(clase: ClaseMovimiento): string {

@@ -91,5 +91,12 @@ export async function POST(request: NextRequest) {
     console.error('[google] error inesperado sincronizando el registro:', err);
   }
 
-  return NextResponse.json({ tarjetaId: resultado.tarjetaId, googleWalletDisponible });
+  // `sellosRegalo` es lo que la tarjeta trajo al NACER (0 si el cliente ya la tenía): la pantalla de
+  // registro dibuja los sellos que de verdad recibió y solo menciona el regalo si llegó, así que no
+  // puede deducirlo de lo que dice el programa (un cliente que vuelve a registrarse no recibe nada).
+  return NextResponse.json({
+    tarjetaId: resultado.tarjetaId,
+    googleWalletDisponible,
+    sellosRegalo: resultado.sellosRegalo,
+  });
 }

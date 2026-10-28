@@ -28,6 +28,7 @@ const ICONO_CLASE: Record<ClaseMovimiento, string> = {
   canje: 'redeem',
   uso: 'remove_circle',
   renovacion: 'autorenew',
+  regalo: 'card_giftcard',
 };
 
 const TONO_CLASE: Record<ClaseMovimiento, string> = {
@@ -36,6 +37,7 @@ const TONO_CLASE: Record<ClaseMovimiento, string> = {
   canje: 'neutro',
   uso: 'neutro',
   renovacion: 'menta',
+  regalo: 'menta',
 };
 
 // Ficha forense de un cliente: cada movimiento con su hora, su sucursal, su cajero y su motivo.
