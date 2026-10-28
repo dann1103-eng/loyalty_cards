@@ -90,6 +90,26 @@ export function textoRegaloRegistro(sellosRegalo: number): string {
   return `Arrancás con ${sellosRegalo} ${palabra} de regalo.`;
 }
 
+// La línea del FORMULARIO de registro, la que se lee ANTES de registrarse. Solo con regalo mayor que 0.
+//
+// POR QUÉ NO ES textoRegaloRegistro: antes de enviar, la página no puede saber si ese teléfono ya tiene
+// tarjeta (eso lo resuelve el servidor al registrar), y el regalo se da UNA sola vez, a las tarjetas
+// NUEVAS. La frase sin condición se le mostraba a todos, y un cliente que volvía (el propio dueño, con
+// 5 sellos) leía "Arrancás con 2 sellos de regalo.", se registraba y recibía su tarjeta de siempre, sin
+// regalo: la pantalla le había prometido algo falso. Con "Si es tu primera tarjeta," la promesa es
+// verdad para todos los que la leen.
+//
+// "Tu tarjeta está lista" SIGUE con textoRegaloRegistro: ahí la línea solo sale cuando la API dice que
+// la tarjeta de verdad recibió el regalo (`sellosRegalo` de la respuesta es mayor que 0), así que la
+// frase sin condición ya es cierta y ponerle "Si es tu primera tarjeta" sería hablarle de un "si" que
+// ya se resolvió.
+//
+// Singular SOLO con exactamente uno, misma regla que textoRegaloRegistro.
+export function textoRegaloAntesDeRegistrar(sellosRegalo: number): string {
+  const palabra = sellosRegalo === 1 ? 'sello' : 'sellos';
+  return `Si es tu primera tarjeta, arrancás con ${sellosRegalo} ${palabra} de regalo.`;
+}
+
 // El aviso de Marca cuando el regalo, por sí solo, ya alcanza una recompensa. NO bloquea el guardado
 // (decisión del dueño del proyecto: es una advertencia, no una regla).
 //

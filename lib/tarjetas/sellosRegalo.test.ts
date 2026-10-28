@@ -4,6 +4,7 @@ import {
   sellosRegaloDesdeFormulario,
   describirArranque,
   textoRegaloRegistro,
+  textoRegaloAntesDeRegistrar,
   avisoRegaloAlcanzaPremio,
   contadorDeRespuesta,
   sellosRegaloDelPrograma,
@@ -53,6 +54,20 @@ import {
 //   `=== 1` falla SOLO "8 de 10: le faltan 2" (por eso existe: acota el singular por arriba).
 // - `textoRegaloRegistro`: singular roto (`=== 1 ? 'sellos' : 'sellos'`) falla "1 → singular"
 //   ("1 sellos de regalo"); singular de más (`<= 2`) falla "2 → plural" ("2 sello de regalo").
+// - `textoRegaloAntesDeRegistrar` (la frase del formulario, antes de registrarse; mutaciones
+//   confirmadas 2026-10-28, cada una restaurada con `git checkout -- <archivo>`): singular roto
+//   (`=== 1 ? 'sellos' : 'sellos'`) falla SOLO "1 → singular" (`Expected: "Si es tu primera tarjeta,
+//   arrancás con 1 sello de regalo."`, `Received: "...con 1 sellos de regalo."`); quitar la cláusula
+//   "Si es tu primera tarjeta, " falla las 3 pruebas (`Received: "arrancás con 2 sellos de regalo."`);
+//   y que la función delegue en `textoRegaloRegistro` (la frase vieja, sin condición) falla las 3
+//   (`Received: "Arrancás con 2 sellos de regalo."`).
+//   LO QUE NINGUNA PRUEBA PROTEGE: que RegistroCliente.tsx llame a esta función en la pantalla del
+//   formulario y a `textoRegaloRegistro` en "Tu tarjeta está lista". Se corrió la mutación (cambiar las
+//   dos llamadas de lugar) y las 61 pruebas de este archivo siguieron verdes, y `tsc` también. No tiene
+//   remedio con una prueba pura: el repo no tiene pruebas de componentes, y paginasRegistro.test.ts
+//   solo lee la prop `sellosRegalo` del elemento que devuelve la página, sin dibujar RegistroCliente;
+//   asertar ahí el texto sería inventar una prueba de componente. Se verifica en el navegador (el
+//   HTML del servidor de la pantalla del formulario trae "Si es tu primera tarjeta, arrancás con…").
 // - `avisoRegaloAlcanzaPremio` (mutaciones confirmadas 2026-10-28, cada una restaurada después):
 //   `<` → `<=` en la comparación con el costo (regalo igual al costo ya no avisa): falla "regalo IGUAL
 //   al costo (5 de 5)" (`expected null to be 'Con 5 de regalo…'`); el tope un sello corto
@@ -276,6 +291,23 @@ describe('textoRegaloRegistro', () => {
 
   it('9 → plural: solo el 1 exacto es singular', () => {
     expect(textoRegaloRegistro(9)).toBe('Arrancás con 9 sellos de regalo.');
+  });
+});
+
+describe('textoRegaloAntesDeRegistrar', () => {
+  // La frase del formulario, antes de enviar: la página no sabe si el teléfono ya tiene tarjeta y el
+  // regalo es solo para las nuevas, así que va condicionada ("Si es tu primera tarjeta"). Los
+  // literales se escriben a mano, no se arman con textoRegaloRegistro.
+  it('2 → plural, con la condición de la primera tarjeta', () => {
+    expect(textoRegaloAntesDeRegistrar(2)).toBe('Si es tu primera tarjeta, arrancás con 2 sellos de regalo.');
+  });
+
+  it('5 → plural: otra cifra, para que el número no sea un 2 fijo', () => {
+    expect(textoRegaloAntesDeRegistrar(5)).toBe('Si es tu primera tarjeta, arrancás con 5 sellos de regalo.');
+  });
+
+  it('1 → singular: "1 sello"', () => {
+    expect(textoRegaloAntesDeRegistrar(1)).toBe('Si es tu primera tarjeta, arrancás con 1 sello de regalo.');
   });
 });
 

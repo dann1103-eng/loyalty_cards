@@ -4,7 +4,11 @@ import { useState, useSyncExternalStore, type FormEvent } from 'react';
 import { PAISES, PAIS_DEFAULT, buscarPaisPorClave } from '@/lib/clientes/paises';
 import { billeteraDeEntrada, fraseWalletDelFormulario, type Plataforma } from '@/lib/clientes/plataforma';
 import { frentePase } from '@/lib/tarjetas/frentePase';
-import { contadorDeRespuesta, textoRegaloRegistro } from '@/lib/tarjetas/sellosRegalo';
+import {
+  contadorDeRespuesta,
+  textoRegaloAntesDeRegistrar,
+  textoRegaloRegistro,
+} from '@/lib/tarjetas/sellosRegalo';
 import { promesaRegistro, promesaTarjetaLista, rotuloTarjeta } from '@/lib/tarjetas/textosPorTipo';
 import BotonesWallet from '@/app/_ui/BotonesWallet';
 import type { MarcaRegistro } from './marcaDelRegistro';
@@ -356,10 +360,12 @@ export default function RegistroCliente({
             y esta pantalla es su primer contacto con la tarjeta. Una línea y no una tarjeta de
             muestra: este paso nunca la tuvo, y la muestra aparece recién en "Tu tarjeta está lista".
             Mismo recuadro corto con filo de acento que ya usan los avisos de las pantallas del dueño
-            (.aviso-contexto, con el margen de FiltrosReportes). Solo con regalo > 0. */}
+            (.aviso-contexto, con el margen de FiltrosReportes). Solo con regalo > 0. Lleva "Si es tu
+            primera tarjeta" porque aquí todavía no se sabe si el teléfono ya tiene una (el regalo es
+            solo para las nuevas); la de "Tu tarjeta está lista" no, porque allí ya se sabe. */}
         {sellosRegalo > 0 && (
           <p className="aviso-contexto reveal d2" style={{ margin: '14px 0 0' }}>
-            {textoRegaloRegistro(sellosRegalo)}
+            {textoRegaloAntesDeRegistrar(sellosRegalo)}
           </p>
         )}
 
