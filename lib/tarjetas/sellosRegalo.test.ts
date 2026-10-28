@@ -24,8 +24,9 @@ import {
 //   nombra la meta" y "1 con meta 1".
 // - Fijar el 10 en el mensaje de la regla 4 (`(${selloMeta})` → `(10)`): fallan "el mensaje nombra la
 //   meta del programa" (recibe "(10)" y espera "(5)") y "1 con meta 1".
-// - Quitar `|| sellosRegalo < 0` de la regla 1: falla "-1" con meta 10 y con meta null (devuelve null:
-//   -1 pasaba por "menos que la meta").
+// - Quitar `|| sellosRegalo < 0` de la regla 1: falla "-1" con meta 10 (devuelve null: -1 pasaba por
+//   "menos que la meta") y "-1" con meta null (devuelve el mensaje de la regla 3, "Poné la meta de
+//   sellos antes de regalar sellos.", en vez del de la regla 1).
 // - Quitar `!Number.isInteger(...)` de la regla 1: fallan NaN y 1.5 (con meta 10 y con null), Infinity
 //   y "'2a' → lo rechaza la regla 1" (devuelven null, o el mensaje de la regla 3 o 4, en vez del de la
 //   regla 1: un NaN no pasa ninguna comparación).
@@ -41,12 +42,15 @@ import {
 //   "un archivo en vez de un número" y "'2a' → lo rechaza la regla 1" (`expected +0 to be NaN`).
 // - Tratar lo que no es string como ausente (`typeof valor === 'string' ? Number(valor) : 0`): falla
 //   "un archivo en vez de un número → NaN, no 0".
-// - `describirArranque`: `faltan = selloMeta - sellosRegalo` → `selloMeta` (falla en las 4 pruebas,
-//   "le faltan 10" en vez de "le faltan 8"), e intercambiar regalo y meta en el texto (las 4 pruebas,
-//   "arranca con 10 de 2"). Por eso el caso 3 de 7 trae tres cifras distintas.
+// - `describirArranque`: `faltan = selloMeta - sellosRegalo` → `selloMeta` (falla en las 5 pruebas,
+//   "le faltan 10" en vez de "le faltan 8"), e intercambiar regalo y meta en el texto (las 5 pruebas,
+//   "arranca con 10 de 2"). Por eso el caso 3 de 7 trae tres cifras distintas. El singular (confirmadas
+//   2026-10-28, restauradas): "siempre plural" (`verbo = 'le faltan'`) falla SOLO "9 de 10: le falta 1"
+//   (`Expected: "…sellos: le falta 1. Es un…"`, `Received: "…sellos: le faltan 1. Es un…"`); "siempre
+//   singular" falla las otras 4 (2 de 10, 1 de 10, 3 de 7 y 8 de 10); y `faltan <= 2` en vez de
+//   `=== 1` falla SOLO "8 de 10: le faltan 2" (por eso existe: acota el singular por arriba).
 // - `textoRegaloRegistro`: singular roto (`=== 1 ? 'sellos' : 'sellos'`) falla "1 → singular"
 //   ("1 sellos de regalo"); singular de más (`<= 2`) falla "2 → plural" ("2 sello de regalo").
-//
 // - `avisoRegaloAlcanzaPremio` (mutaciones confirmadas 2026-10-28, cada una restaurada después):
 //   `<` → `<=` en la comparación con el costo (regalo igual al costo ya no avisa): falla "regalo IGUAL
 //   al costo (5 de 5)" (`expected null to be 'Con 5 de regalo…'`); el tope un sello corto
@@ -246,8 +250,15 @@ describe('describirArranque', () => {
   });
 
   it('9 de 10: le falta 1 (el borde de arriba, el regalo más grande que admite la regla)', () => {
+    // Singular: "le falta 1", no "le faltan 1".
     expect(describirArranque(10, 9)).toBe(
-      'Un cliente nuevo arranca con 9 de 10 sellos: le faltan 1. Es un regalo de verdad, y las tarjetas que ya existen no cambian.',
+      'Un cliente nuevo arranca con 9 de 10 sellos: le falta 1. Es un regalo de verdad, y las tarjetas que ya existen no cambian.',
+    );
+  });
+
+  it('8 de 10: le faltan 2 (el plural arranca en 2, no en 3)', () => {
+    expect(describirArranque(10, 8)).toBe(
+      'Un cliente nuevo arranca con 8 de 10 sellos: le faltan 2. Es un regalo de verdad, y las tarjetas que ya existen no cambian.',
     );
   });
 });

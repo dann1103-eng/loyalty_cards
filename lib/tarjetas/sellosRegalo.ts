@@ -67,6 +67,10 @@ export function sellosRegaloDesdeFormulario(valor: FormDataEntryValue | null): n
 // El texto de debajo del campo en Marca, en vivo. Solo se muestra con regalo mayor que 0 y meta
 // válida (el componente decide cuándo); con eso, `meta - regalo` es siempre 1 o más.
 //
+// "le falta 1" en singular, "le faltan N" desde 2: con el regalo más grande que admite la regla (9 de
+// 10) el dueño leía "le faltan 1", que se lee como un error de la pantalla. Misma regla que
+// textoRegaloRegistro: singular SOLO con exactamente uno.
+//
 // Dice "es un regalo de verdad" sin rodeos: en el estudio las dos tarjetas pedían el mismo esfuerzo,
 // pero en Cardly la meta es del PROGRAMA y no de cada tarjeta, así que subir la meta para
 // compensarlo cambiaría la meta de todos los clientes que ya tienen tarjeta. El dueño tiene que
@@ -74,7 +78,8 @@ export function sellosRegaloDesdeFormulario(valor: FormDataEntryValue | null): n
 // sus clientes de hoy: el regalo se da UNA vez, al nacer la tarjeta.
 export function describirArranque(selloMeta: number, sellosRegalo: number): string {
   const faltan = selloMeta - sellosRegalo;
-  return `Un cliente nuevo arranca con ${sellosRegalo} de ${selloMeta} sellos: le faltan ${faltan}. Es un regalo de verdad, y las tarjetas que ya existen no cambian.`;
+  const verbo = faltan === 1 ? 'le falta' : 'le faltan';
+  return `Un cliente nuevo arranca con ${sellosRegalo} de ${selloMeta} sellos: ${verbo} ${faltan}. Es un regalo de verdad, y las tarjetas que ya existen no cambian.`;
 }
 
 // La línea de la página de registro, para el cliente. Solo con regalo mayor que 0. El efecto
