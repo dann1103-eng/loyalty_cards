@@ -288,6 +288,10 @@ describe('accionGuardarBrandingDePrograma: sellos de regalo', () => {
 //   - el `value` del input fijo en "0" en vez de `valores.sellos_regalo`: `expected '0' to be '2'`.
 //   - `min="1"` en vez de `min="0"`: `expected '1' to be '0'`.
 //   - el estado inicial en '' en vez de `inicial.sellos_regalo`: `expected '' to be '2'`.
+//   - la frase fija de la ayuda ("Dejalo en 0 si no querés regalar ninguno."), restaurada con `git
+//     checkout -- <archivo>` cada vez: borrarla del componente o escribirla sin el acento falla con
+//     `frase fija, modo negocio: expected false to be true`; dejarla solo en modo negocio
+//     (`programaId === null && …`), con `frase fija, modo tarjeta: expected false to be true`.
 //
 // El AVISO de que el regalo ya alcanza una recompensa (mutaciones confirmadas 2026-10-28, restauradas):
 //   - quitar la línea del aviso de FormularioBranding.tsx: `modo negocio, regalo = costo: expected false
@@ -474,6 +478,14 @@ describe('FormularioBranding: el campo de sellos de regalo, desde el HTML real',
     expect(campo.get('placeholder')).toBe('0');
     expect(conRegalo.includes('Sellos de regalo al registrarse')).toBe(true);
     expect(conRegalo.includes(EFECTO)).toBe(true);
+    // La ayuda fija de debajo del campo, en los DOS modos (negocio y tarjeta): es la que le dice al dueño
+    // que 0 apaga el regalo. En el JSX parte la frase en dos renglones, y el HTML la junta en uno solo.
+    const FRASE_FIJA = 'Dejalo en 0 si no querés regalar ninguno.';
+    expect(conRegalo.includes(FRASE_FIJA), 'frase fija, modo negocio').toBe(true);
+    expect(
+      dibujar(propsTarjeta('programa-de-prueba', '10', '2')).includes(FRASE_FIJA),
+      'frase fija, modo tarjeta',
+    ).toBe(true);
     // Debajo de la meta, no encima.
     expect(conRegalo.indexOf('name="sello_meta"')).toBeLessThan(conRegalo.indexOf('name="sellos_regalo"'));
 
