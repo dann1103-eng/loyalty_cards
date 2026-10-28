@@ -25,8 +25,13 @@ import { guardarBranding } from '../comercio/guardarBranding';
 // Cada mutante es una copia EXACTA de emitir_tarjeta con UNA línea rota, creada con otro nombre. El
 // SQL lo corre el dueño en Studio (el asistente no puede correr DDL):
 //
-//   - .superpowers/sdd/2026-10-28-sellos-de-regalo/mutantes-0043.sql        crea los cuatro
-//   - .superpowers/sdd/2026-10-28-sellos-de-regalo/mutantes-0043-borrar.sql  los borra
+//   - supabase/pruebas/mutantes-0043.sql        crea los cuatro
+//   - supabase/pruebas/mutantes-0043-borrar.sql  los borra
+//
+// Viven en `supabase/pruebas/` y NO en `supabase/migrations/`: no son migraciones (no se aplican al
+// desplegar ni dejan nada en la base), son herramienta de prueba. Y viven en el repo porque el
+// workspace de la sesión (`.superpowers/`) está en el `.gitignore` y se borra al cerrarla: sin esta
+// copia los mutantes serían imposibles de volver a correr.
 //
 // Después, uno por uno (con el mutante creado, y antes de borrarlos):
 //

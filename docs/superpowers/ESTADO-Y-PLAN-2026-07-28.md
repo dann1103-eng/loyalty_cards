@@ -1614,10 +1614,12 @@ código que hoy corre en producción no la nombra, así que aplicarla antes del 
 - **Mutantes de SQL de `emitir_tarjeta`**: se prueban con copias (`emitir_tarjeta_mut_a/b/c/d`, sin
   la condición de tipo, saldo 0, sin fila de libro, sin la condición de comercio) para no romper la
   función real en la base compartida. `lib/tarjetas/emitirTarjeta.sql.test.ts` toma el nombre de
-  `EMITIR_TARJETA_FUNCION`. Los SQL viven en el workspace de la sesión, fuera del repo.
+  `EMITIR_TARJETA_FUNCION`. Los SQL viven en el repo, en `supabase/pruebas/` (`mutantes-0043.sql` y
+  `mutantes-0043-borrar.sql`; NO en `supabase/migrations/`, no son migraciones).
 
 ### Pendientes
-- Correr los 4 mutantes de SQL (Daniel pega `mutantes-0043.sql` en Studio; después el SQL que los borra).
+- Correr los 4 mutantes de SQL (Daniel pega `supabase/pruebas/mutantes-0043.sql` en Studio; después
+  `supabase/pruebas/mutantes-0043-borrar.sql`, que los borra).
 - QA manual en el panel real: guardar el regalo en Marca y verlo al recargar, y la ficha de un cliente
   nuevo con "Regalo de bienvenida" (verificado en el navegador: registro, tarjeta lista, base, y el
   formulario de Marca montado con props fijas; falta lo que necesita sesión de dueño).
