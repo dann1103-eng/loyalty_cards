@@ -306,6 +306,10 @@ export default async function PaginaBranding({
                 color_texto: marca?.colorTexto ?? '',
                 color_label: marca?.colorLabel ?? '',
                 sello_meta: marca?.selloMeta != null ? String(marca.selloMeta) : '',
+                // Del mismo origen que la meta de arriba (la fila del programa elegido): el regalo se
+                // valida contra ELLA, así que tienen que precargarse juntos. Ausente = '0', no vacío:
+                // el campo dice "0" y no hay dos formas de escribir "sin regalo".
+                sellos_regalo: String(marca?.sellosRegalo ?? 0),
                 // Del programa ELEGIDO. No se hereda del negocio: el nombre del pase es identidad
                 // de ESTA tarjeta, no un color que se pueda tomar prestado.
                 nombre_pase: seleccionado?.nombrePase ?? '',
@@ -322,6 +326,10 @@ export default async function PaginaBranding({
                     : c.sello_meta != null
                       ? String(c.sello_meta)
                       : '',
+                // Del programa PRINCIPAL por lo mismo que la meta: es la fila donde guardarBranding
+                // escribe el regalo, en el mismo update que la meta. `comercios` no tiene esta columna
+                // (nació en la 0043 directo en programas_tarjeta), así que no hay a qué caer.
+                sellos_regalo: String(principal?.sellosRegalo ?? 0),
                 // Del programa PRINCIPAL, que es la fila que guardarBranding escribe y la que lee
                 // el pase. `comercios` ni siquiera tiene esta columna: acá no hay a qué caer.
                 nombre_pase: principal?.nombrePase ?? '',

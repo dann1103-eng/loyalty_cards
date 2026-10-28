@@ -28,6 +28,14 @@ import { frentePase, PIE_CODIGO, type Franja } from '@/lib/tarjetas/frentePase';
 import { tipoOPuntos } from '@/lib/tarjetas/tipos';
 import { llevaSegundoIcono, type PatronSellos } from '@/lib/tarjetas/patronSellos';
 import { LARGO_MAXIMO_NOMBRE_PASE } from '@/lib/comercio/nombrePase';
+// Los textos y la regla de los sellos de regalo salen del módulo puro (probado en sellosRegalo.test.ts):
+// este componente no arma frases propias, así el aviso en vivo dice exactamente lo que dirá la regla
+// del servidor al guardar.
+import {
+  describirArranque,
+  sellosRegaloDesdeFormulario,
+  validarSellosRegalo,
+} from '@/lib/tarjetas/sellosRegalo';
 import type { SeccionBranding } from './page';
 import {
   ENCUADRE_POR_DEFECTO,
@@ -85,7 +93,7 @@ type Props = {
   programaId: string | null;
   /* Cómo se llama lo que se está diseñando, para los textos: el comercio o el programa. */
   nombreTarjeta: string;
-  inicial: Colores & { sello_meta: string; nombre_pase: string };
+  inicial: Colores & { sello_meta: string; sellos_regalo: string; nombre_pase: string };
   /* Lo que esta tarjeta toma del negocio en cada campo que quede vacío. null en modo negocio, donde
      no hay de quién heredar. Se muestra como placeholder gris: el dueño VE qué está usando hoy en
      vez de una caja vacía que no le dice si hereda o si no hay nada configurado. */
@@ -172,12 +180,15 @@ export default function FormularioBranding({
     color_texto: inicial.color_texto,
     color_label: inicial.color_label,
     sello_meta: inicial.sello_meta,
+    sellos_regalo: inicial.sellos_regalo,
     nombre_pase: inicial.nombre_pase,
     difuminado_franja: inicial.difuminado_franja,
   });
 
   const cambiarTexto =
-    (campo: 'color_fondo' | 'color_texto' | 'color_label' | 'sello_meta' | 'nombre_pase') =>
+    (
+      campo: 'color_fondo' | 'color_texto' | 'color_label' | 'sello_meta' | 'sellos_regalo' | 'nombre_pase',
+    ) =>
     (e: ChangeEvent<HTMLInputElement>) =>
       setValores((v) => ({ ...v, [campo]: e.target.value }));
 
@@ -262,6 +273,22 @@ export default function FormularioBranding({
   const metaConfigurada = Number(valores.sello_meta) > 0 ? Math.min(20, Number(valores.sello_meta)) : null;
   const meta = metaConfigurada ?? 0;
   const llenos = Math.min(7, meta);
+
+  // ---- sellos de regalo (migración 0043) ----------------------------------------------------------
+  // La meta TAL COMO la leería el servidor al guardar: entera y positiva, o ninguna (guardarBranding
+  // rechaza el resto antes de mirar el regalo). A diferencia de `metaConfigurada`, no se recorta a 20:
+  // eso es el límite de la grilla dibujada, no una regla de la mecánica, y el aviso de abajo tiene
+  // que hablar de la meta que de verdad se va a guardar. `Number('')` da 0, que tampoco pasa.
+  const metaEscrita = Number(valores.sello_meta);
+  const metaParaRegalo = Number.isInteger(metaEscrita) && metaEscrita > 0 ? metaEscrita : null;
+  const regaloEscrito = sellosRegaloDesdeFormulario(valores.sellos_regalo);
+  // El efecto en vivo SOLO con un regalo que el servidor aceptaría. Con uno inválido (igual o mayor
+  // que la meta, decimal, sin meta) no se muestra nada: el mensaje del error lo da el servidor al
+  // guardar, con la misma regla, y una frase de "arranca con 12 de 10" sería absurda.
+  const textoArranque =
+    regaloEscrito > 0 && metaParaRegalo !== null && validarSellosRegalo(metaParaRegalo, regaloEscrito) === null
+      ? describirArranque(metaParaRegalo, regaloEscrito)
+      : null;
   // Misma función que usa el pass real (lib/apple/stripPass.tsx): el preview y el pass NUNCA
   // pueden mostrar un difuminado distinto para el mismo nivel elegido.
   const stops = stopsDifuminado(valores.difuminado_franja || respaldo.difuminado_franja);
@@ -769,6 +796,43 @@ export default function FormularioBranding({
               {programaId && (
                 <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>
                   Cuántos sellos necesita el cliente para el premio de esta tarjeta.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Los sellos de regalo (0043). Van DEBAJO de la meta y con su misma condición, en los dos
+              modos: viven en la misma fila del programa y se validan contra la meta, así que viajan en
+              el mismo envío. Solo se dibuja en sellos (un programa de otro tipo no la lleva, y su
+              ausencia en el formulario es 0 por diseño, ver sellosRegaloDesdeFormulario).
+              A diferencia del aviso de la meta, la ayuda es PERMANENTE (también diseñando el negocio):
+              un campo que dice "sellos de regalo" sin más no explica que es solo para tarjetas nuevas. */}
+          {esSellos && (
+            <div className="field">
+              <label htmlFor="sellos_regalo">Sellos de regalo al registrarse</label>
+              <input
+                id="sellos_regalo"
+                name="sellos_regalo"
+                type="number"
+                min="0"
+                // Menos que la meta: con una meta válida, el tope es meta - 1. Sin ella no se pone tope
+                // (el servidor pide la meta primero). Con `noValidate` en el form esto solo guía las
+                // flechitas del campo, no impide enviar: la regla de verdad vive en el servidor.
+                max={metaParaRegalo !== null ? metaParaRegalo - 1 : undefined}
+                step="1"
+                value={valores.sellos_regalo}
+                onChange={cambiarTexto('sellos_regalo')}
+                placeholder="0"
+                className="dato-mono"
+                aria-describedby="ayuda-sellos-regalo"
+              />
+              <p id="ayuda-sellos-regalo" className="field-aviso" style={{ color: 'var(--texto-2)' }}>
+                Cuántos sellos trae ya puestos la tarjeta de un cliente nuevo. Dejalo en 0 si no querés
+                regalar ninguno.
+              </p>
+              {textoArranque !== null && (
+                <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>
+                  {textoArranque}
                 </p>
               )}
             </div>
