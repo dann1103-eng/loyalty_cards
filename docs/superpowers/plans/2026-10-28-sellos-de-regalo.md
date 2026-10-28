@@ -120,8 +120,10 @@ claro en la pantalla, sin sugerir subir la meta.**
 **D3. ¿Se lo contamos al cliente en la página de registro?** Recomendado: **sí, antes y después.**
 - El efecto depende de que el cliente lo NOTE. El pase ya lo muestra, pero la página de registro es
   el primer contacto.
-- Antes de registrarse: la tarjeta de muestra dibuja los sellos de regalo y una línea dice "Arrancás
-  con 2 sellos de regalo".
+- Antes de registrarse: una línea dice "Arrancás con 2 sellos de regalo". **Corrección hecha en la
+  Tarea 6:** este plan suponía una tarjeta de muestra también antes de registrarse, y no la hay (la
+  muestra solo se dibuja en "Tu tarjeta está lista"). Se resolvió con la línea sola, bajo la frase de
+  promesa; dibujar la tarjeta antes también queda como cambio posible.
 - Después: la tarjeta de muestra dibuja los sellos que REALMENTE recibió (0 si ya tenía tarjeta) y la
   frase de "Tu tarjeta está lista" lo menciona solo si los recibió.
 - Además, sin tocar la tarjeta de muestra, la página diría "0 de 10" mientras el pase dice "2 de 10".
@@ -235,8 +237,8 @@ muestra con la misma etiqueta.
   ver el comentario de `page.tsx` sobre por qué la meta sale del principal).
 - **Registro** (`app/registro/[comercioSlug]/…`): la página de servidor pasa `sellosRegalo` del
   programa (solo si es sellos); `VistaTarjeta` recibe `puntos` en vez del `0` fijo. Antes de
-  registrarse: `puntos = sellosRegalo` del programa y la línea `textoRegaloRegistro`. Después:
-  `puntos = sellosRegalo` que devolvió la API, y la línea solo si es mayor que 0.
+  registrarse: solo la línea `textoRegaloRegistro` bajo la promesa (no hay tarjeta de muestra en esa
+  pantalla). Después: `puntos = sellosRegalo` que devolvió la API, y la línea solo si es mayor que 0.
 
 ## 4. Antes de empezar (todas las tareas)
 
@@ -289,7 +291,9 @@ código de alrededor: se explica el POR QUÉ, con el caso real que lo motivó.
       `transacciones_puntos.tipo` con `'regalo'`.
 - [ ] `verificar-0043.ts` según 3.1 (solo lectura, `npx tsx --conditions=react-server`).
 - [ ] El controlador revisa el SQL, se lo pega a Daniel en el chat, Daniel lo corre en Studio y avisa.
-- [ ] Correr `verificar-0043.ts` y anotar acá la fecha en que quedó aplicada.
+- [x] Correr `verificar-0043.ts` y anotar acá la fecha en que quedó aplicada. **0043 aplicada por
+      Daniel el 2026-10-28 y verificada ese mismo día** (columna presente, 21 programas con regalo 0,
+      `emitir_tarjeta` existe y la clave foránea frenó el insert de prueba sin escribir nada).
 
 ## Tarea 2: La regla, pura
 

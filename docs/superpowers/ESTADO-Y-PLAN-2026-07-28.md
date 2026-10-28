@@ -1545,3 +1545,83 @@ primer commit. Afectaba a todos los comercios, no solo a Gama Gourmet.
   corre acá. Se verificó con certificados de prueba desechables y una config de vitest sin el setup,
   las dos en el scratchpad de la sesión. `lib/comercio/cartel/export.test.ts` ("el aislamiento aísla")
   falla en esta Mac también en `master`: es del entorno (fuentes), no de este cambio.
+
+## 2026-10-28 (tarde) — Sellos de regalo al registrarse (rama `claude/sellos-de-regalo`, SIN publicar)
+
+Pedido de Daniel desde el reel "Te falta poco" (Ronda 5): el dueño elige con cuántos sellos ya puestos
+arranca la tarjeta de un cliente nuevo, para el efecto de progreso empezado (Nunes y Drèze, "The
+Endowed Progress Effect", Journal of Consumer Research 32(4), 2006). Plan:
+`plans/2026-10-28-sellos-de-regalo.md`. El reel solo anuncia la feature cuando esté PUBLICADA y
+probada en producción con un registro real.
+
+**Migración 0043 — APLICADA por Daniel y verificada el 2026-10-28** (`scripts/verificar-0043.ts`).
+`programas_tarjeta.sellos_regalo` (entero, NOT NULL, default 0), un CHECK que la cruza con `sello_meta`,
+el tipo `'regalo'` en `transacciones_puntos_tipo_check` y la función `emitir_tarjeta`. Es aditiva: el
+código que hoy corre en producción no la nombra, así que aplicarla antes del deploy no rompió nada.
+
+### Cómo funciona
+- Campo "Sellos de regalo al registrarse" en **Marca**, debajo de la meta, solo en programas de sellos y
+  en los dos modos (negocio y tarjeta). Valida `lib/tarjetas/sellosRegalo.ts`: entero, 0 o más, menor
+  que la meta, y con meta definida si es mayor que 0.
+- **Toda tarjeta nueva nace en `emitir_tarjeta`** (la llama `registrarCliente`, así que cubre el
+  registro por QR, "Agregar cliente" y el seed): crea la tarjeta con el regalo como saldo inicial Y la
+  fila del libro `tipo 'regalo'` en la misma transacción. La ficha del dueño y el portal la muestran
+  como "Regalo de bienvenida".
+- Las tarjetas que ya existen no cambian, y quien vuelve a registrarse no recibe nada: el regalo se da
+  una vez, al nacer la tarjeta. Los dos pases leen el contador de la tarjeta, así que dicen "2 de 10"
+  desde el primer momento (medido en el `pass.json` firmado y en el objeto de Google).
+- Registro del cliente: una línea "Arrancás con N sellos de regalo." bajo la promesa y, después de
+  registrarse, la tarjeta de muestra con los sellos que la API devolvió de verdad. "Agregar cliente"
+  nombra el regalo en su mensaje.
+
+### Lo que NO es obvio y hay que recordar
+1. **El regalo es un descuento real y subir la meta NO lo compensa.** La meta es del PROGRAMA: subirla de
+   10 a 12 le pone 12 a todos los clientes que ya tienen tarjeta. Y el premio se cobra con el
+   `costo_puntos` de la recompensa, no con la meta. Por eso la pantalla lo dice sin rodeos ("Es un
+   regalo de verdad") en vez de sugerir subir la meta. Replicar el estudio exacto (meta congelada en
+   cada tarjeta) sería otro proyecto: el pase, el escáner, el portal y los reportes leen la del programa.
+2. **El regalo tiene que ser un movimiento del libro**: `historial_tarjeta` calcula el saldo como suma
+   corrida, y sin la fila cada línea del historial de esa tarjeta quedaría corrida en 2 para siempre.
+3. **Reportes y antifraude no cuentan el regalo, y es lo correcto**: los reportes filtran
+   `tipo in ('acreditacion', 'uso', 'renovacion')` y los topes cuentan solo `'acreditacion'`. El
+   movimiento no lleva cajero ni sucursal.
+4. **Campo ausente = 0** en las dos acciones de Marca (`sellosRegaloDesdeFormulario`): el campo solo se
+   dibuja en sellos. Si ausente significara "no tocar", un programa al que FM le cambió el tipo quedaría
+   con meta null y regalo 2, y el CHECK cruzado tumbaría TODO el guardado de Marca de ese dueño.
+5. **Meta y regalo viajan en el MISMO `update`** (`guardarBranding`, `guardarBrandingPrograma`): el CHECK
+   compara los dos valores nuevos juntos. Dos updates harían que subir o bajar ambos a la vez falle.
+6. **`emitir_tarjeta` lee el regalo ADENTRO** y solo de programas `tipo_tarjeta = 'sellos'`: ningún
+   llamador puede regalar de más, y un programa al que FM le cambió el tipo no regala. Su guard
+   `p.comercio_id = p_comercio_id` NO es una frontera de tenancy (la función es solo `service_role`, los
+   dos llamadores resuelven el programa por comercio y no hay FK compuesta): solo evita leer el regalo
+   de un programa ajeno.
+7. **`registrarCliente` devuelve `sellosRegalo: 0` en las DOS rutas de tarjeta ya existente** (la
+   encontrada y la ganadora de la carrera). Un `23505` aborta la función entera, así que no queda ningún
+   regalo suelto.
+8. **La pantalla de registro no tenía tarjeta de muestra antes de registrarse** (el plan lo supuso mal,
+   lo encontró la Tarea 6): "antes" es solo la línea de texto. Dibujar la tarjeta antes también es un
+   cambio chico si Daniel lo quiere.
+9. **Las pruebas cargan la configuración por el camino de producción** (`guardarBranding` /
+   `guardarBrandingPrograma`), nunca sembrando `sellos_regalo`; la única excepción es el cambio de tipo de
+   FM (un `update` directo de `tipo_tarjeta`, que es justo lo que `propagarTipoAlProgramaPrincipal` hace).
+
+### Pruebas y mutaciones
+- Integración contra la base real: todas verdes por tarea (Marca 158, emisión 52, alta por teléfono 18,
+  Marca desde el HTML real y ficha 13 + 19). Mutaciones de TypeScript confirmadas: regla pura 16, Marca
+  34 (19 con cliente falso + 15 de integración), emisión 14, alta por teléfono 5, ficha 8, formulario 9.
+  Una sobrevive a propósito: quitar `alta.esNuevaTarjeta &&` en `altaPorTelefono.ts` es equivalente (la
+  función ya devuelve 0 en tarjeta existente) y está documentada en el encabezado de la prueba.
+- **Mutantes de SQL de `emitir_tarjeta`**: se prueban con copias (`emitir_tarjeta_mut_a/b/c/d`, sin
+  la condición de tipo, saldo 0, sin fila de libro, sin la condición de comercio) para no romper la
+  función real en la base compartida. `lib/tarjetas/emitirTarjeta.sql.test.ts` toma el nombre de
+  `EMITIR_TARJETA_FUNCION`. Los SQL viven en el workspace de la sesión, fuera del repo.
+
+### Pendientes
+- Correr los 4 mutantes de SQL (Daniel pega `mutantes-0043.sql` en Studio; después el SQL que los borra).
+- QA manual en el panel real: guardar el regalo en Marca y verlo al recargar, y la ficha de un cliente
+  nuevo con "Regalo de bienvenida" (verificado en el navegador: registro, tarjeta lista, base, y el
+  formulario de Marca montado con props fijas; falta lo que necesita sesión de dueño).
+- Publicar: merge de la rama a `master` y push (la migración ya está aplicada).
+- Deuda previa que apareció de paso (no es de esta feature): el insert que repone el programa principal
+  en `eliminarComercio` tras un borrado fallido es parcial (pierde `nombre_pase`, marca, aviso,
+  `google_class_id`...).
