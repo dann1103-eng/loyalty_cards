@@ -1675,3 +1675,5 @@ la QA manual de lo que necesita sesión de dueño (guardar el regalo en Marca y 
 ficha de un cliente nuevo con "Regalo de bienvenida"), y el merge de la rama `claude/sellos-de-regalo` a
 `master` con push (la migración ya está aplicada). El reel "Te falta poco" anuncia la feature recién
 cuando esté publicada y probada en producción con un registro real.
+
+**Confirmado por Daniel el 2026-10-28:** el aviso del regalo que alcanza un premio queda como aviso, sin bloquear el guardado.
