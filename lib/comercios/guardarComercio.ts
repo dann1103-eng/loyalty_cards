@@ -369,7 +369,7 @@ export async function eliminarComercio(
     // si el borrado no procede — incluida su configuración, que el dueño puede haber cargado.
     supabase
       .from('programas_tarjeta')
-      .select('id, nombre, slug, tipo_tarjeta, activo, sello_meta, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias, created_at')
+      .select('id, nombre, slug, tipo_tarjeta, activo, sello_meta, sellos_regalo, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias, created_at')
       .eq('comercio_id', id)
       .eq('es_principal', true)
       .maybeSingle(),
@@ -460,6 +460,10 @@ export async function eliminarComercio(
         es_principal: true,
         activo: programaPrincipal.activo,
         sello_meta: programaPrincipal.sello_meta,
+        // Los sellos de regalo (0043) se reponen junto a la meta: sin esta línea la fila volvería con
+        // el default 0 y un borrado fallido le quitaría el regalo al programa en silencio. El CHECK
+        // cruzado acepta la reposición porque la meta que vuelve es la misma que lo sostenía.
+        sellos_regalo: programaPrincipal.sellos_regalo,
         cashback_porcentaje: programaPrincipal.cashback_porcentaje,
         multipass_visitas: programaPrincipal.multipass_visitas,
         membresia_dias: programaPrincipal.membresia_dias,

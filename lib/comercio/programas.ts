@@ -33,6 +33,11 @@ export interface Programa {
   // Marca) la necesitan junto al tipo, y leerla de `comercios.sello_meta` mientras `guardarBranding`
   // la escribe en el programa es exactamente cómo se le borraba la meta al principal.
   selloMeta: number | null;
+  // Cuántos sellos trae ya puestos la tarjeta de un cliente nuevo (0043); 0 = sin regalo. Viaja acá
+  // por el MISMO motivo que selloMeta: es mecánica del programa, la escribe el editor de Marca y la
+  // leen la página de registro y las pantallas del dueño. Solo significa algo si el programa es de
+  // sellos (lo decide emitir_tarjeta): en cualquier otro tipo la columna es inofensiva.
+  sellosRegalo: number;
   // El nombre que el cliente ve arriba en su pase (0033), o null si el dueño no le puso ninguno.
   // Viaja acá por el MISMO motivo que selloMeta: es identidad del programa, la escribe el editor de
   // Marca y la leen las pantallas del dueño. Leerla por otro camino es cómo se le borró la meta al
@@ -76,7 +81,7 @@ export type ResultadoPrograma = { ok: true; id: string } | { ok: false; error: s
 export type ResultadoAccion = { ok: true } | { ok: false; error: string };
 
 const CAMPOS_PROGRAMA =
-  'id, nombre, slug, tipo_tarjeta, es_principal, activo, sello_meta, nombre_pase, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias, aviso_vencimiento_activo, aviso_vencimiento_dias, aviso_vencimiento_mensaje';
+  'id, nombre, slug, tipo_tarjeta, es_principal, activo, sello_meta, sellos_regalo, nombre_pase, cashback_porcentaje, multipass_visitas, membresia_dias, cupon_vigencia_dias, aviso_vencimiento_activo, aviso_vencimiento_dias, aviso_vencimiento_mensaje';
 
 type FilaPrograma = {
   id: string;
@@ -86,6 +91,7 @@ type FilaPrograma = {
   es_principal: boolean;
   activo: boolean;
   sello_meta: number | null;
+  sellos_regalo: number;
   nombre_pase: string | null;
   cashback_porcentaje: number | string | null;
   multipass_visitas: number | null;
@@ -105,6 +111,7 @@ function filaAPrograma(fila: FilaPrograma): Programa {
     esPrincipal: fila.es_principal,
     activo: fila.activo,
     selloMeta: fila.sello_meta,
+    sellosRegalo: fila.sellos_regalo,
     nombrePase: fila.nombre_pase,
     // numeric de Postgres puede llegar como string según el driver: se normaliza acá para que nadie
     // más tenga que acordarse.

@@ -6,6 +6,8 @@ import {
   eliminarComercio,
   type DatosComercio,
 } from './guardarComercio';
+import { guardarBranding } from '../comercio/guardarBranding';
+import { obtenerPrograma } from '../comercio/programas';
 
 const supabase = createServiceClient();
 const slugsDePrueba: string[] = [];
@@ -521,6 +523,66 @@ describe('eliminarComercio', () => {
       .from('sucursales').select('id, nombre, activa, created_at')
       .eq('comercio_id', creado.id).eq('es_principal', true).single();
     expect(despues).toEqual(antes);
+  });
+
+  // Los SELLOS DE REGALO (migración 0043) sobreviven a un borrado rechazado. eliminarComercio retira el
+  // programa principal ANTES de intentar borrar el comercio y, si el borrado no procede, lo vuelve a
+  // insertar columna por columna: una columna que esa lista no nombra vuelve al default. Con el regalo
+  // afuera, un botón "Eliminar" que ni siquiera borró nada le quitaba el regalo al programa en silencio
+  // (sin error: el default es 0 y el CHECK cruzado lo acepta).
+  //
+  // La meta y el regalo entran por guardarBranding, la función que llama Marca, y se releen con
+  // obtenerPrograma: nada de un update directo que fabrique el estado. Necesita la 0043 aplicada.
+  //
+  // MUTACIONES PENDIENTES DE CORRER (con la 0043 aplicada; ninguna se corrió todavía; las dos ya están
+  // confirmadas sin base en sellosRegaloEnMarca.test.ts):
+  //   - sacar `sellos_regalo` del insert que repone la principal: esta prueba falla con
+  //     `expected 0 to be 2` (vuelve el default).
+  //   - sacar `sellos_regalo` del select de la principal: falla igual, porque el insert recibe undefined.
+  it('un borrado rechazado repone la principal con su meta y sus sellos de regalo', async () => {
+    const slug = `test-eliminar-regalo-${Date.now()}`;
+    const creado = await crearComercio(supabase, { ...(await datosValidos(slug)), tipo_tarjeta: 'sellos' });
+    if (!creado.ok) throw new Error('el setup falló');
+
+    const guardado = await guardarBranding(supabase, creado.id, {
+      color_fondo: 'rgb(35, 24, 18)',
+      color_texto: 'rgb(255, 255, 255)',
+      color_label: 'rgb(255, 255, 255)',
+      sello_meta: 10,
+      sellos_regalo: 2,
+      difuminado_franja: 'medio',
+      nombre_pase: null,
+      encuadre_franja: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
+      oscurecer_franja: true,
+    });
+    expect(guardado.ok, guardado.ok ? '' : guardado.error).toBe(true);
+
+    const { data: fila, error: ePrograma } = await supabase
+      .from('programas_tarjeta').select('id').eq('comercio_id', creado.id).eq('es_principal', true).single();
+    if (ePrograma) throw ePrograma;
+    // La precondición, para que la prueba no pase en vacío: el regalo estaba puesto ANTES del borrado.
+    const antes = await obtenerPrograma(supabase, creado.id, fila.id);
+    expect(antes?.sellosRegalo).toBe(2);
+
+    // Lo que hace fallar el borrado SIN impedir que se retire la principal: la membresía owner del
+    // dueño (sin sucursal), igual que el caso self-serve de arriba. Así el programa sí se retira y
+    // sí hay que reponerlo.
+    const { error: eOwner } = await supabase.from('usuarios_comercio').insert({
+      comercio_id: creado.id,
+      email: `owner-regalo-${Date.now()}-${Math.random().toString(36).slice(2)}@test.fm`,
+      rol: 'owner',
+    });
+    if (eOwner) throw eOwner;
+
+    const res = await eliminarComercio(supabase, creado.id);
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/accesos de dueño\/cajero/i);
+
+    const despues = await obtenerPrograma(supabase, creado.id, fila.id);
+    expect(despues, 'la principal se repuso con el mismo id').not.toBeNull();
+    expect(despues?.selloMeta).toBe(10);
+    expect(despues?.sellosRegalo, 'el borrado rechazado no le quita el regalo al programa').toBe(2);
   });
 
   it('rechaza eliminar si la principal tiene un cajero asignado, nombrando la causa real', async () => {

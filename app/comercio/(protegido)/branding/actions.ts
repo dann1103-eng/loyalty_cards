@@ -7,6 +7,7 @@ import { guardarBranding } from '@/lib/comercio/guardarBranding';
 import { guardarReverso } from '@/lib/comercio/guardarReverso';
 import { guardarPatronSellos, patronSellosDesdeFormulario } from '@/lib/comercio/guardarPatronSellos';
 import { encuadreDesdeFormulario } from '@/lib/comercio/encuadreFranja';
+import { sellosRegaloDesdeFormulario } from '@/lib/tarjetas/sellosRegalo';
 import {
   guardarBrandingPrograma,
   brandingProgramaDesdeFormulario,
@@ -37,7 +38,7 @@ const BUCKET = 'comercio-imagenes';
 
 export type EstadoBranding = { error: string } | { ok: true } | undefined;
 
-// Guarda colores + sello_meta. comercio_id SIEMPRE del gate, nunca del formulario.
+// Guarda colores + sello_meta + sellos de regalo. comercio_id SIEMPRE del gate, nunca del formulario.
 export async function accionGuardarBranding(
   _estadoPrevio: EstadoBranding,
   formData: FormData,
@@ -54,6 +55,10 @@ export async function accionGuardarBranding(
     color_label: String(formData.get('color_label') ?? ''),
     // '' → null; "12" → 12; "12a" → NaN, que guardarBranding rechaza con mensaje claro.
     sello_meta: montoMeta === '' ? null : Number(montoMeta),
+    // Ausente ⇒ 0, a propósito (ver sellosRegaloDesdeFormulario): el campo solo se dibuja en sellos,
+    // igual que la meta. Si ausente fuera "no tocar", un programa al que el FM le cambió el tipo
+    // quedaría con meta null y regalo > 0, y el CHECK de la base tumbaría TODO el guardado de Marca.
+    sellos_regalo: sellosRegaloDesdeFormulario(formData.get('sellos_regalo')),
     nombre_pase: nombrePase === '' ? null : nombrePase,
     difuminado_franja: String(formData.get('difuminado_franja') ?? 'medio'),
     // Los cuatro campos van SIEMPRE en el formulario del negocio (haya foto o no): sus columnas son
@@ -288,6 +293,8 @@ export async function accionGuardarBrandingDePrograma(
     // Vacío cuando la tarjeta no tiene foto propia: ⇒ null ⇒ se usa la decisión del negocio.
     oscurecerFranja: String(formData.get('oscurecer_franja') ?? ''),
     selloMeta: String(formData.get('sello_meta') ?? ''),
+    // Misma regla que en el modo negocio: ausente ⇒ 0.
+    sellosRegalo: sellosRegaloDesdeFormulario(formData.get('sellos_regalo')),
     // El nombre del pase NO es marca (no entra en hayMarcaPropia, más abajo): es identidad del
     // programa, como la meta. Vacío ⇒ null ⇒ el pase de esta tarjeta vuelve a salir sin nombre.
     nombrePase: String(formData.get('nombre_pase') ?? ''),

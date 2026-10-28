@@ -6,6 +6,7 @@ import { necesitaClasePropia } from './brandingEfectivo';
 import { encuadreDelPrograma, encuadreDesdeFormulario, validarEncuadre, type Encuadre } from './encuadreFranja';
 import { validarNombrePase } from './nombrePase';
 import { patronDeFila, type PatronSellos } from '../tarjetas/patronSellos';
+import { validarSellosRegalo } from '../tarjetas/sellosRegalo';
 
 // Escritura del branding de UN programa de tarjeta (migración 0027). El espejo de
 // guardarBranding.ts, con dos diferencias que importan:
@@ -45,6 +46,12 @@ export interface DatosBrandingPrograma {
   // interruptor. Y su `null` es un VALOR legítimo (un cupón no tiene meta), no una ausencia: nunca
   // se resuelve con `??` contra el comercio. Ese `??` fue un bug real el 2026-07-30.
   selloMeta: number | null;
+  // Cuántos sellos trae ya puestos la tarjeta de un cliente nuevo (0043). 0 = sin regalo. MISMO
+  // estatuto que selloMeta: no es branding sino la mecánica del programa, y por eso NO se rige por
+  // `brandingPropio` ni entra en hayMarcaPropia. OBLIGATORIO y no opcional a propósito: se escribe
+  // SIEMPRE junto a la meta, así que un llamador que no lo mande tiene que no compilar en vez de
+  // borrarle el regalo al dueño.
+  sellosRegalo: number;
   // El nombre que el cliente ve sobre la franja de su tarjeta (0033). MISMO estatuto que selloMeta: no es
   // branding, es identidad del programa, y por eso NO se rige por `brandingPropio` ni entra en
   // hayMarcaPropia — ponerle nombre a una tarjeta no puede sacarla del diseño del negocio. Acá
@@ -79,6 +86,9 @@ export interface BrandingProgramaFila {
   encuadreFranja: Encuadre | null;
   oscurecerFranja: boolean | null;
   selloMeta: number | null;
+  // Los sellos de regalo del programa (0043). De acá precarga el modo tarjeta de Marca, igual que la
+  // meta, que es contra la que se mide.
+  sellosRegalo: number;
   nombrePase: string | null;
 }
 
@@ -111,6 +121,13 @@ export async function guardarBrandingPrograma(
     return { ok: false, error: 'La meta de sellos debe ser un número entero mayor que cero.' };
   }
 
+  // DESPUÉS de la meta a propósito: con una meta inválida el dueño tiene que leer ESE error, no uno
+  // del regalo, que se mide contra ella. Se cruza contra la meta de ESTE MISMO envío (el par nuevo es
+  // lo que el CHECK de la 0043 evalúa), y la base solo devolvería un 23514 mudo, que acá se
+  // traduciría a "No se pudo guardar la marca del programa".
+  const errorRegalo = validarSellosRegalo(datos.selloMeta, datos.sellosRegalo);
+  if (errorRegalo) return { ok: false, error: errorRegalo };
+
   // La 0033 tiene un CHECK, pero devuelve un 23514 mudo que acá se traduciría a "No se pudo guardar
   // la marca del programa": el dueño no sabría qué campo corregir.
   const errorNombre = validarNombrePase(datos.nombrePase);
@@ -136,6 +153,9 @@ export async function guardarBrandingPrograma(
       zoom_franja: datos.encuadreFranja?.zoom ?? null,
       oscurecer_franja: datos.oscurecerFranja,
       sello_meta: datos.selloMeta,
+      // En el MISMO update que la meta: el CHECK cruzado de la 0043 compara las dos columnas NUEVAS
+      // juntas, y en dos sentencias el orden decidiría si un cambio de meta y regalo pasa o no.
+      sellos_regalo: datos.sellosRegalo,
       // Recortado: es el texto que va al primaryField de Apple y al textModulesData de Google.
       nombre_pase: datos.nombrePase?.trim() ?? null,
     })
@@ -242,7 +262,7 @@ export async function brandingDeProgramas(
   const { data, error } = await supabase
     .from('programas_tarjeta')
     .select(
-      'id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja, sello_meta, nombre_pase',
+      'id, branding_propio, color_fondo, color_texto, color_label, logo_url, hero_url, strip_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja, sello_meta, sellos_regalo, nombre_pase',
     )
     .eq('comercio_id', comercioId);
 
@@ -267,6 +287,7 @@ export async function brandingDeProgramas(
     encuadreFranja: encuadreDelPrograma(f),
     oscurecerFranja: f.oscurecer_franja,
     selloMeta: f.sello_meta,
+    sellosRegalo: f.sellos_regalo,
     nombrePase: f.nombre_pase,
   }));
 }
@@ -292,6 +313,9 @@ export function brandingProgramaDesdeFormulario(campos: {
   encuadre: { modo: string; focoX: string; focoY: string; zoom: string };
   oscurecerFranja: string;
   selloMeta: string;
+  // Ya convertido por quien conoce el FormData (sellosRegaloDesdeFormulario): a diferencia de los
+  // demás, no llega como texto. Obligatorio por lo mismo que DatosBrandingPrograma.sellosRegalo.
+  sellosRegalo: number;
   nombrePase: string;
 }): DatosBrandingPrograma {
   const aTexto = (valor: string): string | null => valor.trim() || null;
@@ -310,6 +334,7 @@ export function brandingProgramaDesdeFormulario(campos: {
     // Number() y no parseInt: parseInt('12a') devuelve 12 y se tragaría el typo del dueño en
     // silencio. NaN llega hasta la validación de arriba, que lo rechaza con un mensaje claro.
     selloMeta: metaLimpia === '' ? null : Number(metaLimpia),
+    sellosRegalo: campos.sellosRegalo,
     // Vacío ⇒ null, que acá significa "esta tarjeta no tiene nombre propio en el pase" (y no
     // "heredá": el nombre no se hereda de nadie). El CHECK de la base rechaza la cadena vacía.
     nombrePase: aTexto(campos.nombrePase),

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createServiceClient } from '@/lib/supabase/server';
 import { crearEntorno } from '@/test/fixtures/entornoComercio';
+import { obtenerPrograma } from '@/lib/comercio/programas';
 
 // El gate del dueño se mockea porque necesita cookies de una request real; se prueba aparte en
 // verifyComercioOwner. Mismo criterio que las pruebas de sucursales y del cartel.
@@ -41,7 +42,7 @@ vi.mock('@/lib/google/syncClasePrograma', () => ({
   syncClasePrograma: (...a: unknown[]) => claseDePrograma(...a),
 }));
 
-const { accionGuardarBranding } = await import('./actions');
+const { accionGuardarBranding, accionGuardarBrandingDePrograma } = await import('./actions');
 
 const supabase = createServiceClient();
 const entorno = crearEntorno(supabase);
@@ -102,5 +103,144 @@ describe('accionGuardarBranding', () => {
     expect(res).toEqual({ error: 'El zoom debe ser un entero de 100 a 300.' });
     expect(barrido).not.toHaveBeenCalled();
     expect(claseGoogle).not.toHaveBeenCalled();
+  }, 40_000);
+});
+
+// Los SELLOS DE REGALO (migración 0043) por las dos Server Actions de Marca. Plan:
+// docs/superpowers/plans/2026-10-28-sellos-de-regalo.md, sección 3.3.
+//
+// El envío se arma a mano, como el resto de este archivo, y NO desde el HTML del formulario: el campo
+// `sellos_regalo` todavía no se dibuja (lo agrega la Tarea 6 del plan), así que no hay HTML del que
+// armarlo. La Tarea 6 suma la prueba que lo arma desde el formulario renderizado, que es la que
+// atrapa un `name` mal escrito del lado de la pantalla. Lo que se prueba acá es el lado de la acción:
+// que lee el campo `sellos_regalo`, que AUSENTE es 0 (no "no tocar") y que un valor ilegible se
+// rechaza en vez de leerse a medias.
+//
+// Estas pruebas NECESITAN la 0043 aplicada (sin ella fallan con "column ... does not exist").
+//
+// MUTACIONES PENDIENTES DE CORRER (con la 0043 aplicada; ninguna se corrió todavía):
+//   - en accionGuardarBranding, `sellos_regalo: 0` fijo en vez de leer el formulario: "guarda el
+//     regalo que llega" falla con `expected 0 to be 3`.
+//   - leer otro nombre de campo (`formData.get('sellos_regalos')`), en cualquiera de las dos
+//     acciones: la prueba de guardar el regalo falla con `expected 0 to be 3`. Es la deriva de nombre
+//     que la Tarea 6 tiene que cerrar del lado de la pantalla.
+//   - ausente = "no escribir" (en guardarBranding.ts, `sellos_regalo: datos.sellos_regalo ||
+//     undefined`; en la acción de tarjeta, lo mismo en guardarBrandingPrograma.ts): "sin el campo
+//     escribe 0" falla con `expected 3 to be 0`, porque el regalo anterior se queda.
+//   - parseInt en vez de Number en la lectura ('2a' leído como 2): "un regalo ilegible se rechaza" falla
+//     con `{ ok: true }` en vez del mensaje del entero.
+//   - sacar `sellosRegalo` del objeto que arma accionGuardarBrandingDePrograma (queda undefined): sus
+//     tres pruebas fallan, porque validarSellosRegalo rechaza el undefined como "no es un entero".
+describe('accionGuardarBranding: sellos de regalo', () => {
+  const LEIDO = 'Los sellos de regalo tienen que ser un número entero, 0 o más.';
+
+  const principalDe = async (comercioId: string) =>
+    (await obtenerPrograma(supabase, comercioId, entorno.obtenerProgramaPrincipal(comercioId)))!;
+
+  it('guarda el regalo que llega en el campo sellos_regalo, junto a la meta', async () => {
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    sesion.comercioId = comercioId;
+
+    const res = await accionGuardarBranding(undefined, formulario({ ...VALIDO, sello_meta: '10', sellos_regalo: '3' }));
+
+    expect(res).toEqual({ ok: true });
+    const principal = await principalDe(comercioId);
+    expect(principal.selloMeta).toBe(10);
+    expect(principal.sellosRegalo).toBe(3);
+  }, 40_000);
+
+  it('sin el campo escribe 0: no deja el regalo anterior, porque ausente no es "no tocar"', async () => {
+    // El campo solo se dibuja cuando el programa es de sellos. Si el FM le cambia el tipo y el campo
+    // desaparece del formulario, "ausente = no tocar" dejaría meta null con regalo 3 y el CHECK de la
+    // base tumbaría el guardado de Marca ENTERO. Por eso ausente es 0.
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    sesion.comercioId = comercioId;
+    expect(await accionGuardarBranding(undefined, formulario({ ...VALIDO, sello_meta: '10', sellos_regalo: '3' }))).toEqual({ ok: true });
+
+    const res = await accionGuardarBranding(undefined, formulario({ ...VALIDO, sello_meta: '10' }));
+
+    expect(res).toEqual({ ok: true });
+    expect((await principalDe(comercioId)).sellosRegalo).toBe(0);
+  }, 40_000);
+
+  it('un regalo igual a la meta devuelve el mensaje exacto y no propaga nada', async () => {
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    sesion.comercioId = comercioId;
+
+    const res = await accionGuardarBranding(undefined, formulario({ ...VALIDO, sello_meta: '8', sellos_regalo: '8' }));
+
+    expect(res).toEqual({
+      error: 'Los sellos de regalo tienen que ser menos que la meta (8): si no, la tarjeta nacería completa.',
+    });
+    expect(apple).not.toHaveBeenCalled();
+    expect(claseGoogle).not.toHaveBeenCalled();
+    expect(objetosGoogle).not.toHaveBeenCalled();
+  }, 40_000);
+
+  it('un regalo ilegible ("2a") se rechaza, no se lee como 2', async () => {
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    sesion.comercioId = comercioId;
+
+    const res = await accionGuardarBranding(undefined, formulario({ ...VALIDO, sello_meta: '8', sellos_regalo: '2a' }));
+
+    expect(res).toEqual({ error: LEIDO });
+    expect((await principalDe(comercioId)).sellosRegalo).toBe(0);
+  }, 40_000);
+});
+
+describe('accionGuardarBrandingDePrograma: sellos de regalo', () => {
+  const programaDe = async (comercioId: string, programaId: string) =>
+    (await obtenerPrograma(supabase, comercioId, programaId))!;
+
+  it('guarda el regalo que llega en el campo sellos_regalo, junto a la meta', async () => {
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    const programaId = entorno.obtenerProgramaPrincipal(comercioId);
+    sesion.comercioId = comercioId;
+
+    const res = await accionGuardarBrandingDePrograma(
+      programaId,
+      undefined,
+      formulario({ sello_meta: '10', sellos_regalo: '2' }),
+    );
+
+    expect(res).toEqual({ ok: true });
+    const programa = await programaDe(comercioId, programaId);
+    expect(programa.selloMeta).toBe(10);
+    expect(programa.sellosRegalo).toBe(2);
+    // Y avisa a los pases: la acción de tarjeta propaga siempre, y el regalo no la hace distinta.
+    expect(appleprograma).toHaveBeenCalledOnce();
+  }, 40_000);
+
+  it('sin el campo escribe 0: no deja el regalo anterior, porque ausente no es "no tocar"', async () => {
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    const programaId = entorno.obtenerProgramaPrincipal(comercioId);
+    sesion.comercioId = comercioId;
+    expect(
+      await accionGuardarBrandingDePrograma(programaId, undefined, formulario({ sello_meta: '10', sellos_regalo: '3' })),
+    ).toEqual({ ok: true });
+
+    const res = await accionGuardarBrandingDePrograma(programaId, undefined, formulario({ sello_meta: '10' }));
+
+    expect(res).toEqual({ ok: true });
+    expect((await programaDe(comercioId, programaId)).sellosRegalo).toBe(0);
+  }, 40_000);
+
+  it('un regalo igual a la meta devuelve el mensaje exacto y no propaga nada', async () => {
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    const programaId = entorno.obtenerProgramaPrincipal(comercioId);
+    sesion.comercioId = comercioId;
+
+    const res = await accionGuardarBrandingDePrograma(
+      programaId,
+      undefined,
+      formulario({ sello_meta: '8', sellos_regalo: '8' }),
+    );
+
+    expect(res).toEqual({
+      error: 'Los sellos de regalo tienen que ser menos que la meta (8): si no, la tarjeta nacería completa.',
+    });
+    expect(appleprograma).not.toHaveBeenCalled();
+    expect(claseDePrograma).not.toHaveBeenCalled();
+    expect(objetosPrograma).not.toHaveBeenCalled();
   }, 40_000);
 });

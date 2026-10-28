@@ -4,6 +4,7 @@ import { validarColorRgb } from '../comercios/validarColorRgb';
 import { NIVELES_DIFUMINADO } from '../apple/difuminadoFranja';
 import { validarEncuadre } from './encuadreFranja';
 import { validarNombrePase } from './nombrePase';
+import { validarSellosRegalo } from '../tarjetas/sellosRegalo';
 
 export interface DatosBranding {
   color_fondo: string;
@@ -11,6 +12,11 @@ export interface DatosBranding {
   color_label: string;
   // null = el comercio no usa sellos, o el dueño aún no configuró la meta. La BD exige > 0 o null.
   sello_meta: number | null;
+  // Cuántos sellos trae ya puestos la tarjeta de un cliente nuevo (0043). 0 = sin regalo. OBLIGATORIO
+  // y no opcional a propósito: guardarBranding lo escribe SIEMPRE, junto a sello_meta, así que un
+  // llamador que no lo mande tiene que no compilar en vez de borrarle el regalo al dueño. Igual que
+  // la meta, vive en el PROGRAMA y no en comercios (que ni siquiera tiene la columna).
+  sellos_regalo: number;
   // Cuánto se funde la foto de fondo de la franja hacia el color de la tarjeta. Uno de
   // NIVELES_DIFUMINADO (migración 0007) — misma constante que valida el pass real, así el
   // <select> del formulario y este check nunca pueden divergir.
@@ -54,6 +60,14 @@ export async function guardarBranding(
   if (datos.sello_meta !== null && (!Number.isInteger(datos.sello_meta) || datos.sello_meta <= 0)) {
     return { ok: false, error: 'La meta de sellos debe ser un número entero mayor que cero.' };
   }
+
+  // DESPUÉS de la meta a propósito: si la meta es inválida, el dueño tiene que leer ESE error y no uno
+  // del regalo, que se mide contra ella. Y se cruza contra la meta que llega en ESTE MISMO envío, no
+  // contra la guardada: lo que va a quedar escrito es el par nuevo, y es el par lo que el CHECK de la
+  // 0043 evalúa. La base solo devolvería un 23514 mudo, que acá se traduciría a "No se pudo guardar el
+  // branding": el dueño no sabría que el problema es el regalo.
+  const errorRegalo = validarSellosRegalo(datos.sello_meta, datos.sellos_regalo);
+  if (errorRegalo) return { ok: false, error: errorRegalo };
 
   // La base tiene un CHECK, pero devuelve un 23514 mudo que acá se traduciría a "No se pudo
   // guardar el branding": el dueño no sabría qué campo corregir. Mismo criterio que el difuminado.
@@ -117,9 +131,20 @@ export async function guardarBranding(
   // lo hace todavía más claro: `comercios` no tiene columna equivalente, así que este UPDATE es el
   // ÚNICO lugar donde el nombre se escribe desde el modo negocio. Se guarda RECORTADO — es el texto
   // que va al primaryField de Apple y al textModulesData de Google (ver frentePase).
+  //
+  // `sellos_regalo` (0043) viaja en el MISMO update que la meta, y no es un detalle de estilo: el CHECK
+  // cruzado de la base (`sellos_regalo = 0 or (sello_meta is not null and sellos_regalo < sello_meta)`)
+  // compara las dos columnas NUEVAS juntas. En dos sentencias el ORDEN decidiría si el guardado pasa:
+  // para subir de 2/5 a 6/10 habría que tocar la meta primero, y para bajar de 6/10 a 2/5, el regalo
+  // primero. Tampoco toca ninguna tarjeta ya emitida: el regalo se da UNA vez, al nacer la tarjeta
+  // (emitir_tarjeta).
   const { error: errorPrograma } = await supabase
     .from('programas_tarjeta')
-    .update({ sello_meta: datos.sello_meta, nombre_pase: datos.nombre_pase?.trim() ?? null })
+    .update({
+      sello_meta: datos.sello_meta,
+      sellos_regalo: datos.sellos_regalo,
+      nombre_pase: datos.nombre_pase?.trim() ?? null,
+    })
     .eq('comercio_id', comercioId)
     .eq('es_principal', true);
   if (errorPrograma) {

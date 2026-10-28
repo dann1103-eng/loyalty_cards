@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createServiceClient } from '../supabase/server';
 import { crearEntorno } from '../../test/fixtures/entornoComercio';
-import { crearPrograma } from './programas';
+import { crearPrograma, obtenerPrograma } from './programas';
 import {
   guardarBrandingPrograma,
   brandingDeProgramas,
@@ -49,6 +49,7 @@ const BRANDING_VACIO = {
   encuadreFranja: null,
   oscurecerFranja: null,
   selloMeta: null,
+  sellosRegalo: 0,
   nombrePase: null,
 };
 
@@ -432,6 +433,7 @@ describe('brandingProgramaDesdeFormulario', () => {
       encuadre: { modo: '', focoX: '', focoY: '', zoom: '' },
       oscurecerFranja: '',
       selloMeta: '',
+      sellosRegalo: 0,
       nombrePase: '  Socio Oro  ',
     });
 
@@ -452,6 +454,7 @@ describe('brandingProgramaDesdeFormulario', () => {
       encuadre: { modo: '', focoX: '', focoY: '', zoom: '' },
       oscurecerFranja: '',
       selloMeta: '',
+      sellosRegalo: 0,
       nombrePase: '   ',
     });
     expect(datos.nombrePase).toBeNull();
@@ -468,6 +471,7 @@ describe('brandingProgramaDesdeFormulario', () => {
       encuadre: { modo: '', focoX: '', focoY: '', zoom: '' },
       oscurecerFranja: '',
       selloMeta: '12a',
+      sellosRegalo: 0,
       nombrePase: '',
     });
 
@@ -475,7 +479,7 @@ describe('brandingProgramaDesdeFormulario', () => {
   });
 
   describe('encuadre', () => {
-    const base = { brandingPropio: false, colorFondo: '', colorTexto: '', colorLabel: '', difuminadoFranja: '', oscurecerFranja: '', selloMeta: '', nombrePase: '' };
+    const base = { brandingPropio: false, colorFondo: '', colorTexto: '', colorLabel: '', difuminadoFranja: '', oscurecerFranja: '', selloMeta: '', sellosRegalo: 0, nombrePase: '' };
     it('cuatro vacíos → null', () => {
       expect(brandingProgramaDesdeFormulario({ ...base, encuadre: { modo: '', focoX: '', focoY: '', zoom: '' } }).encuadreFranja).toBeNull();
     });
@@ -511,5 +515,155 @@ describe('oscurecer la foto detrás de los sellos, por tarjeta', () => {
 
     const fila = (await brandingDeProgramas(supabase, comercioId)).find((f) => f.programaId === principalId)!;
     expect(fila.oscurecerFranja).toBeNull();
+  });
+});
+
+// Los SELLOS DE REGALO (migración 0043) por TARJETA: cuántos sellos trae ya puestos la tarjeta de un
+// cliente nuevo. Plan: docs/superpowers/plans/2026-10-28-sellos-de-regalo.md, sección 3.3.
+//
+// Como la meta, el regalo es la mecánica del programa y no marca: se guarda con el interruptor de
+// marca propia apagado (BRANDING_VACIO lo manda en false). La configuración entra SIEMPRE por
+// guardarBrandingPrograma (la función que llama Marca) y se relee por los dos lectores que usa la
+// app, brandingDeProgramas (precarga de Marca) y obtenerPrograma (registro y escáner). Ningún `update`
+// directo sobre programas_tarjeta para fabricar el estado.
+//
+// Estas pruebas NECESITAN la 0043 aplicada (sin ella fallan con "column ... does not exist"). Lo que no
+// necesita base (validar antes de escribir, el orden de los errores, el mismo update, que un 0 se
+// escribe) está en sellosRegaloEnMarca.test.ts, con sus mutaciones ya confirmadas.
+//
+// MUTACIONES PENDIENTES DE CORRER (con la 0043 aplicada; ninguna se corrió todavía):
+//   - sacar `sellos_regalo` del update en guardarBrandingPrograma.ts: "guarda la meta 10 con el regalo
+//     2" falla con `expected 0 to be 2` en los dos lectores.
+//   - `sellos_regalo: datos.sellosRegalo || undefined`: "un regalo 0 BORRA el anterior" falla con
+//     `expected 2 to be 0`.
+//   - escribirlo en un SEGUNDO update posterior al de la meta: "bajar la meta y el regalo juntos"
+//     falla con "No se pudo guardar la marca del programa." en vez de ok:true.
+//   - sacar la llamada a validarSellosRegalo: "un regalo igual a la meta se rechaza" falla porque el
+//     error es "No se pudo guardar la marca del programa." (el 23514 mudo) en vez del mensaje exacto.
+//   - mover validarSellosRegalo DESPUÉS del update: la misma prueba falla igual que sin la llamada
+//     (el CHECK frena el update con "No se pudo guardar la marca del programa."); lo que distingue
+//     esta mutación de la anterior es sellosRegaloEnMarca.test.ts ("no toca la base"), que ya la
+//     tiene confirmada.
+//   - validarlo ANTES de la meta: "con la meta inválida lee primero el error de la meta" falla con el
+//     mensaje del regalo.
+//   - sacar `sellos_regalo` del select de brandingDeProgramas, o `sellosRegalo` de su mapeo: la
+//     primera prueba falla con `expected undefined to be 2` en el lector de Marca.
+//   - gobernar el regalo con el interruptor (escribirlo solo si brandingPropio): la primera prueba
+//     falla con `expected 0 to be 2`, porque BRANDING_VACIO manda brandingPropio en false.
+describe('guardarBrandingPrograma: sellos de regalo', () => {
+  // Un comercio de sellos con su programa principal (el del fixture, sin meta ni regalo).
+  async function comercioDeSellos(): Promise<{ comercioId: string; programaId: string }> {
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    return { comercioId, programaId: entorno.obtenerProgramaPrincipal(comercioId) };
+  }
+
+  const leerEnMarca = async (comercioId: string, programaId: string) =>
+    (await brandingDeProgramas(supabase, comercioId)).find((f) => f.programaId === programaId)!;
+
+  it('guarda la meta 10 con el regalo 2 y se relee como sellosRegalo por los dos lectores', async () => {
+    const { comercioId, programaId } = await comercioDeSellos();
+
+    const res = await guardarBrandingPrograma(supabase, comercioId, programaId, {
+      ...BRANDING_VACIO,
+      selloMeta: 10,
+      sellosRegalo: 2,
+    });
+
+    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    const programa = await obtenerPrograma(supabase, comercioId, programaId);
+    expect(programa?.selloMeta).toBe(10);
+    expect(programa?.sellosRegalo, 'lo que leen el registro y el escáner').toBe(2);
+    const enMarca = await leerEnMarca(comercioId, programaId);
+    expect(enMarca.sellosRegalo, 'lo que precarga la pantalla de Marca').toBe(2);
+    expect(enMarca.brandingPropio, 'el regalo se guarda con el interruptor de marca apagado').toBe(false);
+  });
+
+  it('un regalo 0 BORRA el anterior: el dueño puede volver a "sin regalo"', async () => {
+    const { comercioId, programaId } = await comercioDeSellos();
+    await guardarBrandingPrograma(supabase, comercioId, programaId, { ...BRANDING_VACIO, selloMeta: 10, sellosRegalo: 2 });
+
+    const res = await guardarBrandingPrograma(supabase, comercioId, programaId, {
+      ...BRANDING_VACIO,
+      selloMeta: 10,
+      sellosRegalo: 0,
+    });
+
+    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    expect((await leerEnMarca(comercioId, programaId)).sellosRegalo).toBe(0);
+  });
+
+  it('bajar la meta y el regalo juntos (de 10 con 6 a 5 con 2) pasa el CHECK cruzado', async () => {
+    // El CHECK de la 0043 compara meta y regalo NUEVOS. En dos sentencias, bajar la meta primero
+    // dejaría 5 con regalo 6 un instante, y la base lo rechaza.
+    const { comercioId, programaId } = await comercioDeSellos();
+    const subida = await guardarBrandingPrograma(supabase, comercioId, programaId, {
+      ...BRANDING_VACIO,
+      selloMeta: 10,
+      sellosRegalo: 6,
+    });
+    expect(subida.ok, subida.ok ? '' : subida.error).toBe(true);
+
+    const res = await guardarBrandingPrograma(supabase, comercioId, programaId, {
+      ...BRANDING_VACIO,
+      selloMeta: 5,
+      sellosRegalo: 2,
+    });
+
+    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    const programa = await obtenerPrograma(supabase, comercioId, programaId);
+    expect(programa?.selloMeta).toBe(5);
+    expect(programa?.sellosRegalo).toBe(2);
+  });
+
+  it('un regalo igual a la meta se rechaza con el mensaje exacto y la fila queda SIN tocar', async () => {
+    const { comercioId, programaId } = await comercioDeSellos();
+    await guardarBrandingPrograma(supabase, comercioId, programaId, { ...BRANDING_VACIO, selloMeta: 10, sellosRegalo: 2 });
+
+    // Además del regalo cambia el color y se enciende el interruptor: si algo se escribiera antes de
+    // rechazar, se vería.
+    const res = await guardarBrandingPrograma(supabase, comercioId, programaId, {
+      ...BRANDING_VACIO,
+      brandingPropio: true,
+      colorFondo: 'rgb(9, 9, 9)',
+      selloMeta: 10,
+      sellosRegalo: 10,
+    });
+
+    expect(res).toEqual({
+      ok: false,
+      error: 'Los sellos de regalo tienen que ser menos que la meta (10): si no, la tarjeta nacería completa.',
+    });
+    const enMarca = await leerEnMarca(comercioId, programaId);
+    expect(enMarca.selloMeta).toBe(10);
+    expect(enMarca.sellosRegalo, 'el regalo anterior sigue ahí').toBe(2);
+    expect(enMarca.brandingPropio, 'el interruptor no se encendió').toBe(false);
+    expect(enMarca.colorFondo, 'el color nuevo no se escribió').toBeNull();
+  });
+
+  it('un regalo 2 con la meta vacía se rechaza con el mensaje exacto y la fila queda SIN tocar', async () => {
+    const { comercioId, programaId } = await comercioDeSellos();
+
+    const res = await guardarBrandingPrograma(supabase, comercioId, programaId, {
+      ...BRANDING_VACIO,
+      selloMeta: null,
+      sellosRegalo: 2,
+    });
+
+    expect(res).toEqual({ ok: false, error: 'Poné la meta de sellos antes de regalar sellos.' });
+    const enMarca = await leerEnMarca(comercioId, programaId);
+    expect(enMarca.selloMeta).toBeNull();
+    expect(enMarca.sellosRegalo).toBe(0);
+  });
+
+  it('con la meta inválida lee primero el error de la meta, no el del regalo', async () => {
+    const { comercioId, programaId } = await comercioDeSellos();
+
+    const res = await guardarBrandingPrograma(supabase, comercioId, programaId, {
+      ...BRANDING_VACIO,
+      selloMeta: 0,
+      sellosRegalo: 2,
+    });
+
+    expect(res).toEqual({ ok: false, error: 'La meta de sellos debe ser un número entero mayor que cero.' });
   });
 });
