@@ -14,6 +14,13 @@ export interface RegistrarClienteResult {
   // el regalo se da UNA vez, cuando nace la tarjeta, y quien vuelve a registrarse no recibe nada.
   // Lo lee la pantalla de "Tu tarjeta está lista", que solo menciona el regalo si de verdad llegó.
   sellosRegalo: number;
+  // El saldo REAL de la tarjeta (`tarjetas.puntos_actuales`) en este momento: en una tarjeta nueva es
+  // con lo que nació (el regalo que devolvió emitir_tarjeta, o 0), y en las DOS rutas de tarjeta que ya
+  // existía es lo que esa tarjeta tiene hoy. Es DISTINTO de `sellosRegalo`: quien vuelve a registrarse
+  // con 7 sellos recibe `sellosRegalo: 0` (no ganó nada ahora) pero su tarjeta vale 7, y la tarjeta de
+  // muestra de "Tu tarjeta está lista" tiene que decir lo mismo que el pase que se va a instalar. Lo
+  // mismo para quien pierde una carrera entre dos pestañas: la tarjeta que ganó ya tiene su regalo.
+  puntosActuales: number;
 }
 
 // Qué fecha de vencimiento le toca a la tarjeta que se está por emitir. Solo el tipo `cupon` tiene
@@ -152,7 +159,7 @@ export async function registrarCliente(
   // comercio, siempre que sean programas distintos.
   const { data: tarjetaExistente, error: buscarTarjetaError } = await supabase
     .from('tarjetas')
-    .select('id, qr_token')
+    .select('id, qr_token, puntos_actuales')
     .eq('cliente_id', clienteId)
     .eq('programa_id', programaId)
     .maybeSingle();
@@ -167,6 +174,7 @@ export async function registrarCliente(
       esNuevoCliente,
       esNuevaTarjeta: false,
       sellosRegalo: 0,
+      puntosActuales: tarjetaExistente.puntos_actuales,
     };
   }
 
@@ -202,7 +210,7 @@ export async function registrarCliente(
     if (crearTarjetaError.code !== '23505') throw crearTarjetaError;
     const { data: tarjetaGanadora, error: relecturaTarjetaError } = await supabase
       .from('tarjetas')
-      .select('id, qr_token')
+      .select('id, qr_token, puntos_actuales')
       .eq('cliente_id', clienteId)
       .eq('programa_id', programaId)
       .maybeSingle();
@@ -216,6 +224,7 @@ export async function registrarCliente(
       esNuevoCliente,
       esNuevaTarjeta: false,
       sellosRegalo: 0,
+      puntosActuales: tarjetaGanadora.puntos_actuales,
     };
   }
 
@@ -233,5 +242,7 @@ export async function registrarCliente(
     esNuevoCliente,
     esNuevaTarjeta: true,
     sellosRegalo: nuevaTarjeta.sellos_regalados,
+    // La tarjeta recién nació: su saldo ES el regalo con el que la creó la función (0 si no regala).
+    puntosActuales: nuevaTarjeta.sellos_regalados,
   };
 }

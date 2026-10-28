@@ -58,6 +58,13 @@ vi.mock('../google/walletClient', () => ({
 //   - registrarCliente.ts: `p_vigencia_hasta: null` en la llamada a la función deja al cupón sin
 //     vencimiento; lo atrapa tiposFuncionales.test.ts ("cupón: la tarjeta nace con la vigencia…",
 //     con `expected null not to be null`), no este archivo.
+//   - registrarCliente.ts, `puntosActuales` (el saldo real que dibuja la tarjeta de muestra; confirmadas
+//     2026-10-28, cada una restaurada): devolver 0 en la tarjeta NUEVA hace fallar SOLO el 1 ("el saldo
+//     con el que nació, para la tarjeta de muestra: expected +0 to be 2"). Devolver 0 (el valor de
+//     `sellosRegalo`) en la ruta de tarjeta ENCONTRADA hace fallar el 3 ("expected +0 to be 2") y el 10
+//     ("pero su tarjeta vale 3: expected +0 to be 3"); en la ganadora de la CARRERA, el 9 ("expected +0
+//     to be 2") y el 11 ("expected +0 to be 3"). No agregar `puntos_actuales` al select de cada una de
+//     esas dos rutas falla los mismos casos con `expected undefined to be 2` / `to be 3`.
 //   - historial.ts: sacar 'regalo' de CLASES hace fallar el 2 ("expected 'acreditacion' to be
 //     'regalo'") y la prueba equivalente de historial.test.ts.
 //   - contadorPase.ts: `0 de ${selloMeta}` fijo en vez de los puntos hace fallar el 6 en el lado de
@@ -168,6 +175,7 @@ describe('toda tarjeta nueva nace con su regalo', () => {
 
     expect(alta.esNuevaTarjeta).toBe(true);
     expect(alta.sellosRegalo, 'lo que devolvió emitir_tarjeta').toBe(2);
+    expect(alta.puntosActuales, 'el saldo con el que nació, para la tarjeta de muestra').toBe(2);
     expect(await saldoDe(alta.tarjetaId), 'el saldo con el que nació la tarjeta').toBe(2);
     // El movimiento es del PROGRAMA, no de quien atendió: sin cajero ni sucursal (si llevara cajero
     // inflaría su reporte), sin motivo, y no forzado ni con monto.
@@ -223,6 +231,8 @@ describe('toda tarjeta nueva nace con su regalo', () => {
     // 0 y no 2: el regalo se da UNA vez, cuando nace la tarjeta. Lo que ve el cliente en la pantalla
     // de "Tu tarjeta está lista" depende de este número.
     expect(segundo.sellosRegalo).toBe(0);
+    // Y su saldo SIGUE siendo 2: la muestra dibuja el saldo de la tarjeta, no lo que ganó ahora.
+    expect(segundo.puntosActuales).toBe(2);
     expect(await saldoDe(primero.tarjetaId)).toBe(2);
     expect(await libroDe(primero.tarjetaId)).toHaveLength(1);
   });
@@ -374,7 +384,50 @@ describe('toda tarjeta nueva nace con su regalo', () => {
     // 0 y no 2: quien pierde la carrera no recibió nada. Y como la función abortó entera, no quedó
     // un segundo regalo suelto en el libro ni sellos de más en la tarjeta.
     expect(perdedora.sellosRegalo).toBe(0);
+    // Pero la tarjeta que ve la perdedora YA vale 2 (el regalo de la ganadora): su muestra no puede
+    // decir "0 de 10" mientras el pase dice "2 de 10".
+    expect(perdedora.puntosActuales).toBe(2);
     expect(await saldoDe(ganadora.tarjetaId)).toBe(2);
     expect(await libroDe(ganadora.tarjetaId)).toHaveLength(1);
+  });
+
+  it('10. quien vuelve a registrarse con la tarjeta ya movida: sellosRegalo 0 y puntosActuales es el saldo real', async () => {
+    // El caso que la tarjeta de muestra dibujaba mal: un cliente con 2 de regalo + 1 sello comprado
+    // escanea el QR otra vez. No recibe regalo (0), pero su tarjeta vale 3 y el pase dice "3 de 10".
+    const { comercioId, programaId } = await comercioConRegalo(10, 2);
+    const telefono = telefonoUnico();
+    const primero = await registrarCliente(supabase, comercioId, programaId, 'Ana', null, telefono);
+    const acreditacion = await acreditarPuntos(supabase, comercioId, primero.tarjetaId, 1);
+    expect(acreditacion.ok, acreditacion.ok ? '' : acreditacion.error).toBe(true);
+
+    const otraVez = await registrarCliente(supabase, comercioId, programaId, 'Ana', null, telefono);
+
+    expect(otraVez.tarjetaId).toBe(primero.tarjetaId);
+    expect(otraVez.esNuevaTarjeta).toBe(false);
+    expect(otraVez.sellosRegalo, 'no ganó nada ahora').toBe(0);
+    expect(otraVez.puntosActuales, 'pero su tarjeta vale 3').toBe(3);
+    expect(await saldoDe(primero.tarjetaId)).toBe(3);
+  });
+
+  it('11. la carrera con la ganadora ya movida: la perdedora ve el saldo real (3), no el del regalo (2) ni 0', async () => {
+    const { comercioId, programaId } = await comercioConRegalo(10, 2);
+    const telefono = telefonoUnico();
+    const ganadora = await registrarCliente(supabase, comercioId, programaId, 'Ana', null, telefono);
+    const acreditacion = await acreditarPuntos(supabase, comercioId, ganadora.tarjetaId, 1);
+    expect(acreditacion.ok, acreditacion.ok ? '' : acreditacion.error).toBe(true);
+
+    const perdedora = await registrarCliente(
+      clienteConLecturaCiega(supabase),
+      comercioId,
+      programaId,
+      'Ana',
+      null,
+      telefono,
+    );
+
+    expect(perdedora.tarjetaId).toBe(ganadora.tarjetaId);
+    expect(perdedora.esNuevaTarjeta).toBe(false);
+    expect(perdedora.sellosRegalo).toBe(0);
+    expect(perdedora.puntosActuales).toBe(3);
   });
 });

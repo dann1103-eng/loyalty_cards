@@ -91,12 +91,15 @@ export async function POST(request: NextRequest) {
     console.error('[google] error inesperado sincronizando el registro:', err);
   }
 
-  // `sellosRegalo` es lo que la tarjeta trajo al NACER (0 si el cliente ya la tenía): la pantalla de
-  // registro dibuja los sellos que de verdad recibió y solo menciona el regalo si llegó, así que no
-  // puede deducirlo de lo que dice el programa (un cliente que vuelve a registrarse no recibe nada).
+  // `sellosRegalo` es lo que la tarjeta trajo al NACER (0 si el cliente ya la tenía): la pantalla solo
+  // menciona el regalo si llegó, así que no puede deducirlo de lo que dice el programa (un cliente que
+  // vuelve a registrarse no recibe nada). `puntosActuales` es el saldo REAL de la tarjeta: la tarjeta
+  // de muestra dibuja ESE número, para decir lo mismo que el pase aunque el cliente ya tuviera
+  // sellos o haya perdido una carrera entre dos pestañas (ahí sellosRegalo es 0 y el saldo no).
   return NextResponse.json({
     tarjetaId: resultado.tarjetaId,
     googleWalletDisponible,
     sellosRegalo: resultado.sellosRegalo,
+    puntosActuales: resultado.puntosActuales,
   });
 }

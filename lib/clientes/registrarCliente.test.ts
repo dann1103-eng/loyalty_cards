@@ -63,6 +63,10 @@ describe('registrarCliente', () => {
     expect(resultado.esNuevoCliente).toBe(true);
     expect(resultado.esNuevaTarjeta).toBe(true);
     expect(resultado.qrToken).toHaveLength(32);
+    // Sin regalo (el caso de todos los comercios de hoy) la tarjeta nace en 0. Los casos con regalo y
+    // con saldo ya movido, por el camino de producción, viven en sellosRegalo.integracion.test.ts.
+    expect(resultado.sellosRegalo).toBe(0);
+    expect(resultado.puntosActuales).toBe(0);
   });
 
   it('reutiliza el cliente si el teléfono ya existe en OTRO comercio', async () => {

@@ -4,6 +4,7 @@ import { POST } from './route';
 import { createServiceClient } from '@/lib/supabase/server';
 import { crearEntorno } from '../../../test/fixtures/entornoComercio';
 import { guardarBranding } from '@/lib/comercio/guardarBranding';
+import { acreditarPuntos } from '@/lib/comercio/acreditar';
 
 // Las dos billeteras de Google se reemplazan: la ruta las llama best-effort después de registrar, y
 // esta prueba mide lo que le responde al navegador, no lo que le manda a Google. Con el mock no hay
@@ -15,15 +16,21 @@ vi.mock('@/lib/google/syncObjeto', () => ({
   syncObjetoTarjeta: async () => ({ ok: false, error: 'Google deshabilitado en la prueba.' }),
 }));
 
-// POST /api/registro: el JSON que recibe la página de registro. `sellosRegalo` es lo que dibuja
-// "Tu tarjeta está lista" (los sellos con los que NACIÓ, y la frase del regalo solo si llegó), así
-// que tiene que viajar en la respuesta y valer 0 para quien ya tenía la tarjeta.
+// POST /api/registro: el JSON que recibe la página de registro. `sellosRegalo` es lo que decide la
+// frase del regalo de "Tu tarjeta está lista" (solo si llegó), así que tiene que viajar en la respuesta
+// y valer 0 para quien ya tenía la tarjeta. `puntosActuales` es el saldo REAL de la tarjeta, lo que
+// dibuja la muestra: tiene que ser el regalo en una tarjeta nueva y lo que la tarjeta tiene hoy en una
+// que ya existía (donde `sellosRegalo` es 0 y el saldo no).
 //
 // MUTACIONES CONFIRMADAS (2026-10-28), cada una corrida y restaurada con `git checkout -- <archivo>`:
 //   - route.ts: sacar `sellosRegalo` del JSON hace fallar la prueba con "cliente nuevo: llega con el
 //     regalo puesto: expected undefined to be 2".
 //   - route.ts: `sellosRegalo: 2` fijo hace fallar la misma prueba en la segunda llamada, con
 //     "cliente que vuelve: no recibe nada: expected 2 to be +0".
+//   - route.ts, `puntosActuales` (confirmadas 2026-10-28, cada una restaurada): sacarlo del JSON falla con
+//     "cliente nuevo: su saldo es el regalo: expected undefined to be 2"; `puntosActuales: 0` fijo, con
+//     "cliente nuevo: su saldo es el regalo: expected +0 to be 2"; y devolver `resultado.sellosRegalo`
+//     en su lugar, con "cliente que vuelve: el saldo real de su tarjeta: expected +0 to be 3".
 const supabase = createServiceClient();
 const entorno = crearEntorno(supabase);
 
@@ -66,6 +73,11 @@ describe('POST /api/registro: sellosRegalo', () => {
     expect(primera.status).toBe(200);
     const jsonPrimera = await primera.json();
     expect(jsonPrimera.sellosRegalo, 'cliente nuevo: llega con el regalo puesto').toBe(2);
+    expect(jsonPrimera.puntosActuales, 'cliente nuevo: su saldo es el regalo').toBe(2);
+
+    // Le acreditan 1 sello: su tarjeta ahora vale 3, y el cliente vuelve a escanear el QR.
+    const acreditacion = await acreditarPuntos(supabase, comercioId, jsonPrimera.tarjetaId, 1);
+    expect(acreditacion.ok, acreditacion.ok ? '' : acreditacion.error).toBe(true);
 
     const segunda = await POST(pedir(cuerpo));
     expect(segunda.status).toBe(200);
@@ -73,5 +85,7 @@ describe('POST /api/registro: sellosRegalo', () => {
     expect(jsonSegunda.tarjetaId).toBe(jsonPrimera.tarjetaId);
     // 0 y no 2: ya tenía la tarjeta, la pantalla no puede decirle que acaba de recibir sellos.
     expect(jsonSegunda.sellosRegalo, 'cliente que vuelve: no recibe nada').toBe(0);
+    // Pero su tarjeta vale 3: la muestra de "Tu tarjeta está lista" dibuja ESTE número, no el regalo.
+    expect(jsonSegunda.puntosActuales, 'cliente que vuelve: el saldo real de su tarjeta').toBe(3);
   });
 });

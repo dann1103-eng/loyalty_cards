@@ -117,3 +117,12 @@ export function avisoRegaloAlcanzaPremio(
 
   return `Con ${sellosRegalo} de regalo, un cliente nuevo ya puede canjear «${recompensaMasBarata.nombre}» sin haber comprado nada.`;
 }
+
+// Lee de la respuesta JSON de /api/registro un número de la tarjeta (`sellosRegalo`, `puntosActuales`)
+// para dibujar la tarjeta de muestra de "Tu tarjeta está lista". Solo un ENTERO de 0 en adelante
+// cuenta; todo lo demás (el campo ausente de una versión vieja de la API, null, un texto, un decimal,
+// un negativo, NaN, Infinity) es 0, que es lo que la muestra dibujaba antes de que existieran. Un
+// contador de sellos que no es entero nunca es un saldo real, y dibujarlo sería inventar un número.
+export function contadorDeRespuesta(valor: unknown): number {
+  return typeof valor === 'number' && Number.isInteger(valor) && valor >= 0 ? valor : 0;
+}

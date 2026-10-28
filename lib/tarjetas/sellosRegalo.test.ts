@@ -5,6 +5,7 @@ import {
   describirArranque,
   textoRegaloRegistro,
   avisoRegaloAlcanzaPremio,
+  contadorDeRespuesta,
 } from './sellosRegalo';
 
 // Pruebas de la regla pura de los sellos de regalo (lib/tarjetas/sellosRegalo.ts). Corren sin
@@ -328,5 +329,45 @@ describe('avisoRegaloAlcanzaPremio', () => {
     expect(avisoRegaloAlcanzaPremio(NaN, BARATA)).toBeNull();
     expect(avisoRegaloAlcanzaPremio(1.5, BARATA)).toBeNull();
     expect(avisoRegaloAlcanzaPremio(Infinity, BARATA)).toBeNull();
+  });
+});
+
+// Lo que la tarjeta de muestra de "Tu tarjeta está lista" acepta de la respuesta JSON de /api/registro
+// (`sellosRegalo` y `puntosActuales`). El componente es de cliente y el repo no tiene pruebas de
+// componentes: el guard vive acá, puro, para poder romperlo.
+//
+// MUTACIONES CONFIRMADAS (2026-10-28), cada una restaurada: sacar `Number.isInteger` falla "un decimal"
+// (`expected 1.5 to be +0`) y "NaN e Infinity" (`expected Infinity to be +0`); sacar `>= 0` falla "un
+// negativo" (`expected -1 to be +0`); el respaldo en 1 en vez de 0 falla 4 pruebas (`expected 1 to be
+// +0`); y aceptar textos numéricos con `Number(valor)` falla "lo que no es un número" (`expected 2 to
+// be +0`). Lo que NO cubre ninguna prueba: que RegistroCliente.tsx le pase `puntosActuales` (y no
+// `sellosRegaloRecibidos`) a la muestra; es el pegamento de un componente de cliente, se mira en el
+// navegador.
+describe('contadorDeRespuesta', () => {
+  it('un entero de 0 en adelante pasa tal cual', () => {
+    expect(contadorDeRespuesta(0)).toBe(0);
+    expect(contadorDeRespuesta(2)).toBe(2);
+    expect(contadorDeRespuesta(7)).toBe(7);
+  });
+
+  it('un negativo es 0: una muestra con "-1 de 10" sería inventar un saldo', () => {
+    expect(contadorDeRespuesta(-1)).toBe(0);
+  });
+
+  it('un decimal es 0: un contador de sellos no es 1.5', () => {
+    expect(contadorDeRespuesta(1.5)).toBe(0);
+  });
+
+  it('NaN e Infinity son 0', () => {
+    expect(contadorDeRespuesta(NaN)).toBe(0);
+    expect(contadorDeRespuesta(Infinity)).toBe(0);
+  });
+
+  it('lo que no es un número (campo ausente, null, texto) es 0', () => {
+    // El ausente es el de una versión vieja de la API que todavía no devolvía el campo.
+    expect(contadorDeRespuesta(undefined)).toBe(0);
+    expect(contadorDeRespuesta(null)).toBe(0);
+    expect(contadorDeRespuesta('2')).toBe(0);
+    expect(contadorDeRespuesta({})).toBe(0);
   });
 });
