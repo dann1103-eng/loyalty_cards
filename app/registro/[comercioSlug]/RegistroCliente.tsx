@@ -4,6 +4,7 @@ import { useState, useSyncExternalStore, type FormEvent } from 'react';
 import { PAISES, PAIS_DEFAULT, buscarPaisPorClave } from '@/lib/clientes/paises';
 import { billeteraDeEntrada, fraseWalletDelFormulario, type Plataforma } from '@/lib/clientes/plataforma';
 import { frentePase } from '@/lib/tarjetas/frentePase';
+import { textoRegaloRegistro } from '@/lib/tarjetas/sellosRegalo';
 import { promesaRegistro, promesaTarjetaLista, rotuloTarjeta } from '@/lib/tarjetas/textosPorTipo';
 import BotonesWallet from '@/app/_ui/BotonesWallet';
 import type { MarcaRegistro } from './marcaDelRegistro';
@@ -19,12 +20,17 @@ import type { MarcaRegistro } from './marcaDelRegistro';
 function VistaTarjeta({
   nombreComercio,
   tipoTarjeta,
+  puntos,
   selloMeta,
   marca,
   hoyIso,
 }: {
   nombreComercio: string;
   tipoTarjeta: string;
+  // Lo que la tarjeta trae al nacer: los sellos de regalo que la API devolvió (0 sin regalo, o si el
+  // cliente ya tenía tarjeta). Nunca un número propio de esta pantalla: la muestra tiene que decir
+  // lo mismo que el pase que se va a instalar.
+  puntos: number;
   selloMeta: number | null;
   marca: MarcaRegistro;
   hoyIso: string;
@@ -34,7 +40,9 @@ function VistaTarjeta({
   //
   // - `franja: 'banda'` es literal, no una simplificación: esta tarjeta de muestra no dibuja franja
   //   ni grilla. Solo decide `sobreFranja`, que acá no se muestra — y el estado no depende de ella.
-  // - `puntos: 0` porque la tarjeta acaba de nacer.
+  // - `puntos` es lo que la tarjeta acaba de nacer con: 0, o los sellos de regalo del programa
+  //   (migración 0043). Antes era un `0` fijo "porque la tarjeta acaba de nacer", y con regalo la
+  //   muestra habría dicho "0 de 10" mientras el pase decía "2 de 10".
   // - `vigenciaHasta`/`usadoEn` en null: acá NO hay ninguna tarjeta emitida todavía, y ahí el estado
   //   dice "MEMBRESÍA · Sin activar" o "CUPÓN · Disponible" sin mirar el reloj — que es exactamente
   //   el estado que va a tener la tarjeta el primer día.
@@ -46,7 +54,7 @@ function VistaTarjeta({
   // 'use client' montado desde una página de servidor, y un reloj propio daría mismatch de
   // hidratación. La regla vale aunque hoy el valor no se llegue a leer.
   const frente = frentePase({
-    tipoTarjeta, puntos: 0, selloMeta, franja: 'banda',
+    tipoTarjeta, puntos, selloMeta, franja: 'banda',
     vigenciaHasta: null, usadoEn: null, nombrePase: null,
     nombreCliente: null, apellidoCliente: null, hoyIso,
   });
@@ -170,6 +178,10 @@ export default function RegistroCliente({
   const [clavePais, setClavePais] = useState(PAIS_DEFAULT);
   const [tarjetaId, setTarjetaId] = useState<string | null>(null);
   const [googleWalletDisponible, setGoogleWalletDisponible] = useState(false);
+  // Los sellos de regalo que la tarjeta recién creada REALMENTE trae, tal como los devolvió la API.
+  // No se calculan acá desde el programa: un cliente que ya tenía tarjeta vuelve a registrarse y la
+  // API le devuelve 0, y la muestra no puede prometerle un regalo que no recibió.
+  const [sellosRegaloRecibidos, setSellosRegaloRecibidos] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
 
@@ -211,6 +223,14 @@ export default function RegistroCliente({
       if (!res.ok) throw new Error(data.error ?? 'Error al registrar');
       setTarjetaId(data.tarjetaId);
       setGoogleWalletDisponible(Boolean(data.googleWalletDisponible));
+      // Solo un número finito de 0 en adelante cuenta; cualquier otra cosa (campo ausente de una
+      // versión vieja de la API, null, texto) es "sin regalo": la muestra queda en 0, que es lo que
+      // dibujaba antes de esta función.
+      setSellosRegaloRecibidos(
+        typeof data.sellosRegalo === 'number' && Number.isFinite(data.sellosRegalo) && data.sellosRegalo >= 0
+          ? data.sellosRegalo
+          : 0,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
@@ -243,10 +263,17 @@ export default function RegistroCliente({
             <VistaTarjeta
               nombreComercio={nombreComercio}
               tipoTarjeta={tipoTarjeta}
+              puntos={sellosRegaloRecibidos}
               selloMeta={selloMeta}
               marca={marca}
               hoyIso={hoyIso}
             />
+            {/* Solo si el regalo llegó de verdad (> 0): quien ya tenía tarjeta recibe 0 y no ve nada. */}
+            {sellosRegaloRecibidos > 0 && (
+              <p className="nota" style={{ marginTop: 14, marginBottom: 6, color: 'var(--texto-2)' }}>
+                {textoRegaloRegistro(sellosRegaloRecibidos)}
+              </p>
+            )}
             <BotonesWallet
               plataforma={plataforma}
               urlApple={`/api/tarjetas/${tarjetaId}/pass.pkpass`}
