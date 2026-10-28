@@ -4,13 +4,14 @@ import { crearEntorno } from '../../test/fixtures/entornoComercio';
 import { guardarBranding } from '../comercio/guardarBranding';
 
 // La función de la base `emitir_tarjeta` (migración 0043), llamada DIRECTAMENTE, sin pasar por
-// registrarCliente: sus tres ramas SQL, una por caso.
+// registrarCliente: sus ramas SQL, una por caso.
 //
 //   A. el programa es de sellos y regala 2   → la tarjeta nace en 2 y el libro tiene UNA fila 'regalo'.
 //   B. el programa FUE de sellos con regalo 2 y ya es de otro tipo (el FM le cambió el tipo)
 //                                            → la tarjeta nace en 0, sin fila.
 //   C. el programa regala 0                  → la tarjeta nace en 0, sin fila.
 //   D. la tarjeta ya existía                 → lanza 23505 y no deja NADA suelto.
+//   E. el programa es de OTRO comercio       → no se lee su regalo: la tarjeta nace en 0, sin fila.
 //
 // Por qué un archivo aparte de sellosRegalo.integracion.test.ts: aquello prueba el recorrido del
 // dueño (registrarCliente, historial, pase). Esto prueba la función, y existe para poder MUTARLA: el
@@ -24,7 +25,7 @@ import { guardarBranding } from '../comercio/guardarBranding';
 // Cada mutante es una copia EXACTA de emitir_tarjeta con UNA línea rota, creada con otro nombre. El
 // SQL lo corre el dueño en Studio (el asistente no puede correr DDL):
 //
-//   - .superpowers/sdd/2026-10-28-sellos-de-regalo/mutantes-0043.sql        crea los tres
+//   - .superpowers/sdd/2026-10-28-sellos-de-regalo/mutantes-0043.sql        crea los cuatro
 //   - .superpowers/sdd/2026-10-28-sellos-de-regalo/mutantes-0043-borrar.sql  los borra
 //
 // Después, uno por uno (con el mutante creado, y antes de borrarlos):
@@ -32,6 +33,7 @@ import { guardarBranding } from '../comercio/guardarBranding';
 //   EMITIR_TARJETA_FUNCION=emitir_tarjeta_mut_a npx vitest run lib/tarjetas/emitirTarjeta.sql.test.ts
 //   EMITIR_TARJETA_FUNCION=emitir_tarjeta_mut_b npx vitest run lib/tarjetas/emitirTarjeta.sql.test.ts
 //   EMITIR_TARJETA_FUNCION=emitir_tarjeta_mut_c npx vitest run lib/tarjetas/emitirTarjeta.sql.test.ts
+//   EMITIR_TARJETA_FUNCION=emitir_tarjeta_mut_d npx vitest run lib/tarjetas/emitirTarjeta.sql.test.ts
 //
 //   mut_a  quita la condición `p.tipo_tarjeta = 'sellos'` (lee siempre p.sellos_regalo).
 //          Tiene que fallar el caso B, en "sellos_regalados que devuelve la función", con
@@ -41,9 +43,14 @@ import { guardarBranding } from '../comercio/guardarBranding';
 //   mut_c  se salta el insert del movimiento en el ledger.
 //          Tiene que fallar el caso A: "el libro tiene UNA fila" (`expected [] to deeply equal
 //          [ { tipo: 'regalo', … } ]`).
+//   mut_d  quita `and p.comercio_id = p_comercio_id` de la lectura del regalo (lee el programa sea de
+//          quien sea).
+//          Tiene que fallar el caso E: "sellos_regalados: el regalo de un programa ajeno no se lee"
+//          con `expected 2 to be +0` (y detrás, la tarjeta en 2 y una fila de regalo). A, B, C y D pasan.
 //
-// Hasta que el dueño las corra, estas tres NO están confirmadas: la defensa de la función son los
-// casos 1, 2 y 5 de sellosRegalo.integracion.test.ts, que fallaban antes de que la función existiera.
+// Hasta que el dueño las corra, estas cuatro NO están confirmadas: la defensa de la función son los
+// casos 1, 2 y 5 de sellosRegalo.integracion.test.ts, que fallaban antes de que la función existiera
+// (el guard de comercio de mut_d no lo ejerce ninguno de ellos: solo el caso E).
 const supabase = createServiceClient();
 const entorno = crearEntorno(supabase);
 
@@ -133,6 +140,18 @@ async function libroDe(tarjetaId: string) {
   return data;
 }
 
+// Borra una tarjeta que la función creó con un par comercio/programa que NO es el del fixture (caso
+// E): lleva el comercio A pero cuelga del programa de B. El fixture la encuentra por comercio_id, pero
+// si el orden de su limpieza cambiara, borrar el programa de B antes que esta tarjeta fallaría con
+// 23503 en SILENCIO y dejaría basura en la base real. Por eso se borra acá, explícita y primero: el
+// ledger antes que la tarjeta (transacciones_puntos.tarjeta_id la referencia).
+async function borrarTarjeta(tarjetaId: string) {
+  const { error: errorLibro } = await supabase.from('transacciones_puntos').delete().eq('tarjeta_id', tarjetaId);
+  if (errorLibro) console.error('[test] no se pudo borrar el libro de la tarjeta suelta:', errorLibro);
+  const { error: errorTarjeta } = await supabase.from('tarjetas').delete().eq('id', tarjetaId);
+  if (errorTarjeta) console.error('[test] no se pudo borrar la tarjeta suelta:', errorTarjeta);
+}
+
 describe(`emitir_tarjeta (función: ${FUNCION})`, () => {
   it('A. programa de sellos con regalo 2: la tarjeta nace con 2 y el libro tiene UNA fila de regalo', async () => {
     const { comercioId, programaId } = await programaConRegalo(10, 2);
@@ -212,5 +231,44 @@ describe(`emitir_tarjeta (función: ${FUNCION})`, () => {
     expect(segunda.data).toBeNull();
     expect((await leerTarjeta(tarjetaId)).puntos_actuales).toBe(2);
     expect(await libroDe(tarjetaId)).toHaveLength(1);
+  });
+
+  it('E. un programa de OTRO comercio: la función no lee su regalo y la tarjeta nace en 0 y sin fila', async () => {
+    // El comercio A es el que llama y no regala nada, para que ningún 2 pueda venir de él.
+    const { comercioId: comercioA } = await programaConRegalo(10, 0);
+    // El comercio B es el dueño del programa: meta 10 y regalo 2, cargados por el camino de producción.
+    const { comercioId: comercioB, programaId: programaB } = await programaConRegalo(10, 2);
+    const { data: programa } = await supabase
+      .from('programas_tarjeta')
+      .select('comercio_id, tipo_tarjeta, sellos_regalo')
+      .eq('id', programaB)
+      .single();
+    expect(programa, 'el estado de partida: un programa de sellos con regalo 2, de OTRO comercio que el que llama').toEqual({
+      comercio_id: comercioB,
+      tipo_tarjeta: 'sellos',
+      sellos_regalo: 2,
+    });
+    expect(comercioB).not.toBe(comercioA);
+    const clienteId = await crearClienteSinTarjeta();
+
+    // El par desparejado: ninguna FK ata tarjetas.comercio_id a programas_tarjeta.comercio_id, así que
+    // la tarjeta SÍ se crea (comercio A, programa de B). Lo que no puede pasar es que regale el 2 de B.
+    let tarjetaId: string | undefined;
+    try {
+      const { data, error } = await emitir(comercioA, programaB, clienteId);
+      tarjetaId = data?.[0]?.id_tarjeta; // antes de cualquier expect: el finally la borra aunque algo falle
+
+      expect(error, error?.message).toBeNull();
+      expect(data).toHaveLength(1);
+      const fila = data![0];
+      expect(fila.sellos_regalados, 'sellos_regalados: el regalo de un programa ajeno no se lee').toBe(0);
+      expect(
+        (await leerTarjeta(fila.id_tarjeta)).puntos_actuales,
+        'la tarjeta nace en 0, sin el regalo del otro comercio',
+      ).toBe(0);
+      expect(await libroDe(fila.id_tarjeta), 'ni una fila de regalo en el libro').toEqual([]);
+    } finally {
+      if (tarjetaId) await borrarTarjeta(tarjetaId);
+    }
   });
 });
