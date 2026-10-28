@@ -33,6 +33,7 @@ import { LARGO_MAXIMO_NOMBRE_PASE } from '@/lib/comercio/nombrePase';
 // del servidor al guardar.
 import {
   describirArranque,
+  avisoRegaloAlcanzaPremio,
   sellosRegaloDesdeFormulario,
   validarSellosRegalo,
 } from '@/lib/tarjetas/sellosRegalo';
@@ -94,6 +95,11 @@ type Props = {
   /* Cómo se llama lo que se está diseñando, para los textos: el comercio o el programa. */
   nombreTarjeta: string;
   inicial: Colores & { sello_meta: string; sellos_regalo: string; nombre_pase: string };
+  /* La recompensa ACTIVA más barata del comercio, o null si no tiene ninguna. Solo alimenta el aviso
+     de debajo del campo de sellos de regalo (avisoRegaloAlcanzaPremio): el canje compara el saldo con
+     el costo de cualquier recompensa del COMERCIO, no del programa, así que es la misma en los dos
+     modos. Resuelta en el servidor (page.tsx) como el resto de lo que baja por props. */
+  recompensaMasBarata: { nombre: string; costoPuntos: number } | null;
   /* Lo que esta tarjeta toma del negocio en cada campo que quede vacío. null en modo negocio, donde
      no hay de quién heredar. Se muestra como placeholder gris: el dueño VE qué está usando hoy en
      vez de una caja vacía que no le dice si hereda o si no hay nada configurado. */
@@ -157,6 +163,7 @@ export default function FormularioBranding({
   nombreTarjeta,
   inicial,
   heredado,
+  recompensaMasBarata,
   encuadreInicial,
   oscurecerInicial,
   fotoPropia,
@@ -289,6 +296,12 @@ export default function FormularioBranding({
     regaloEscrito > 0 && metaParaRegalo !== null && validarSellosRegalo(metaParaRegalo, regaloEscrito) === null
       ? describirArranque(metaParaRegalo, regaloEscrito)
       : null;
+  // El aviso de que el regalo ya alcanza una recompensa. Solo con un regalo que el servidor aceptaría
+  // (el mismo criterio que el efecto en vivo: con uno inválido el guardado ni llega a eso, y el helper
+  // no tendría qué decir de un "12 de 10"). NO bloquea nada: es una línea más, el guardado y la
+  // validación del servidor no la miran.
+  const textoAvisoPremio =
+    textoArranque !== null ? avisoRegaloAlcanzaPremio(regaloEscrito, recompensaMasBarata) : null;
   // Misma función que usa el pass real (lib/apple/stripPass.tsx): el preview y el pass NUNCA
   // pueden mostrar un difuminado distinto para el mismo nivel elegido.
   const stops = stopsDifuminado(valores.difuminado_franja || respaldo.difuminado_franja);
@@ -833,6 +846,13 @@ export default function FormularioBranding({
               {textoArranque !== null && (
                 <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>
                   {textoArranque}
+                </p>
+              )}
+              {/* Misma clase y color que el resto de los avisos de esta pantalla (AVISO_GOOGLE incluido):
+                  no se inventa un estilo nuevo para este. */}
+              {textoAvisoPremio !== null && (
+                <p className="field-aviso" style={{ color: 'var(--texto-2)' }}>
+                  {textoAvisoPremio}
                 </p>
               )}
             </div>

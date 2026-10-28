@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createElement } from 'react';
+import { createElement, isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { crearEntorno } from '@/test/fixtures/entornoComercio';
@@ -47,6 +47,7 @@ vi.mock('@/lib/google/syncClasePrograma', () => ({
 
 const { accionGuardarBranding, accionGuardarBrandingDePrograma } = await import('./actions');
 const { default: FormularioBranding } = await import('./FormularioBranding');
+const { default: PaginaBranding } = await import('./page');
 
 const supabase = createServiceClient();
 const entorno = crearEntorno(supabase);
@@ -287,6 +288,16 @@ describe('accionGuardarBrandingDePrograma: sellos de regalo', () => {
 //   - el `value` del input fijo en "0" en vez de `valores.sellos_regalo`: `expected '0' to be '2'`.
 //   - `min="1"` en vez de `min="0"`: `expected '1' to be '0'`.
 //   - el estado inicial en '' en vez de `inicial.sellos_regalo`: `expected '' to be '2'`.
+//
+// El AVISO de que el regalo ya alcanza una recompensa (mutaciones confirmadas 2026-10-28, restauradas):
+//   - quitar la línea del aviso de FormularioBranding.tsx: `modo negocio, regalo = costo: expected false
+//     to be true`.
+//   - pasarle `null` fijo al helper en lugar de la recompensa del prop: el mismo mensaje.
+//   - sacar la compuerta de "regalo que el servidor aceptaría" (`textoArranque !== null ? … : null`):
+//     `regalo igual a la meta: expected true to be false`.
+//   - en page.tsx, `recompensaMasBarata={null}` en vez de lo que devolvió la consulta, y la consulta
+//     con un id de comercio que no es el del gate: en las dos, `modo negocio: expected null to deeply
+//     equal { nombre: 'Premio Prueba', … }` (último bloque del archivo).
 
 type PropsFormulario = Parameters<typeof FormularioBranding>[0];
 
@@ -308,6 +319,7 @@ function propsNegocio(selloMeta: string, sellosRegalo: string): PropsFormulario 
     programaId: null,
     nombreTarjeta: 'Café de prueba',
     inicial: { ...COLORES, sello_meta: selloMeta, sellos_regalo: sellosRegalo, nombre_pase: '' },
+    recompensaMasBarata: null,
     heredado: null,
     encuadreInicial: { modo: 'llenar', focoX: 50, focoY: 50, zoom: 100 },
     oscurecerInicial: true,
@@ -478,10 +490,104 @@ describe('FormularioBranding: el campo de sellos de regalo, desde el HTML real',
     expect(inputDeRegalo(dibujado('2.5', '1')).has('max'), 'meta decimal').toBe(false);
   });
 
+  it('el aviso de que el regalo ya alcanza una recompensa sale en los dos modos, sin bloquear, y solo si la alcanza', () => {
+    // Un booleano y no `not.toContain(html)`: si falla, el mensaje de vitest volcaría el HTML entero.
+    const hayAviso = (html: string) => html.includes('ya puede canjear');
+    const AVISO =
+      'Con 2 de regalo, un cliente nuevo ya puede canjear «Café gratis» sin haber comprado nada.';
+    const premio = (costoPuntos: number) => ({ nombre: 'Café gratis', costoPuntos });
+    const negocio = (meta: string, regalo: string, recompensaMasBarata: PropsFormulario['recompensaMasBarata']) =>
+      dibujar({ ...propsNegocio(meta, regalo), recompensaMasBarata });
+    const tarjeta = (meta: string, regalo: string, recompensaMasBarata: PropsFormulario['recompensaMasBarata']) =>
+      dibujar({ ...propsTarjeta('programa-de-prueba', meta, regalo), recompensaMasBarata });
+
+    // Regalo 2 con una recompensa que cuesta 2: justo la alcanza (el canje exige >=). Sale la frase
+    // entera, en el modo negocio Y en el de tarjeta.
+    expect(negocio('10', '2', premio(2)).includes(AVISO), 'modo negocio, regalo = costo').toBe(true);
+    expect(tarjeta('10', '2', premio(2)).includes(AVISO), 'modo tarjeta, regalo = costo').toBe(true);
+    // La frase se arma con el regalo y el nombre, no con el costo ni con un premio fijo.
+    expect(
+      negocio('10', '4', { nombre: 'Almuerzo', costoPuntos: 3 }).includes(
+        'Con 4 de regalo, un cliente nuevo ya puede canjear «Almuerzo» sin haber comprado nada.',
+      ),
+      'regalo mayor que el costo, otro premio',
+    ).toBe(true);
+
+    // Un sello por debajo del costo (2 de 3): todavía no alcanza, no hay aviso.
+    expect(hayAviso(negocio('10', '2', premio(3))), 'modo negocio, regalo = costo - 1').toBe(false);
+    expect(hayAviso(tarjeta('10', '2', premio(3))), 'modo tarjeta, regalo = costo - 1').toBe(false);
+    // El comercio sin recompensas activas: nada que alcanzar.
+    expect(hayAviso(negocio('10', '2', null)), 'sin recompensa').toBe(false);
+    // Sin regalo (0): no hay nada que avisar aunque la recompensa cueste 1.
+    expect(hayAviso(negocio('10', '0', premio(1))), 'regalo 0').toBe(false);
+    // Un regalo que el servidor rechazaría (igual a la meta): nada en vivo, tampoco este aviso.
+    expect(hayAviso(negocio('2', '2', premio(1))), 'regalo igual a la meta').toBe(false);
+    // Y NO bloquea: con el aviso a la vista el campo sigue ahí, con su valor y sin deshabilitar.
+    const conAviso = negocio('10', '2', premio(2));
+    expect(inputDeRegalo(conAviso).get('value')).toBe('2');
+    expect(inputDeRegalo(conAviso).has('disabled'), 'el campo sigue habilitado').toBe(false);
+  });
+
   it('un programa que no es de sellos no dibuja el campo (su ausencia en el envío es 0 a propósito)', () => {
     const html = dibujar({ ...propsNegocio('', '0'), tipoTarjeta: 'puntos' });
     // Booleanos y no `not.toContain(html)`: si falla, el mensaje volcaría el HTML entero.
     expect(html.includes('name="sellos_regalo"'), 'el input').toBe(false);
     expect(html.includes('Sellos de regalo al registrarse'), 'el rótulo').toBe(false);
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// page.tsx de Marca: la recompensa más barata baja al formulario
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// El aviso "el regalo ya alcanza una recompensa" se prueba dibujado arriba con props armadas a mano,
+// que pasarían igual si page.tsx nunca leyera la recompensa o se la pasara al formulario vacía. Acá se
+// llama a la PÁGINA de verdad (es un Server Component async: devuelve el árbol de elementos sin
+// dibujarlo) y se mira con qué props monta FormularioBranding. La consulta en sí (activa, más barata,
+// del comercio) la prueba lib/comercio/recompensas.test.ts; esto prueba el pegamento.
+function buscarElemento(nodo: ReactNode, tipo: unknown): { props: Record<string, unknown> } | null {
+  if (Array.isArray(nodo)) {
+    for (const hijo of nodo) {
+      const hallado = buscarElemento(hijo, tipo);
+      if (hallado) return hallado;
+    }
+    return null;
+  }
+  if (!isValidElement<Record<string, unknown>>(nodo)) return null;
+  if (nodo.type === tipo) return nodo;
+  return buscarElemento(nodo.props.children as ReactNode, tipo);
+}
+
+describe('PaginaBranding: la recompensa más barata que recibe FormularioBranding', () => {
+  const propsDelFormulario = async (searchParams: { programa?: string }) => {
+    const arbol = await PaginaBranding({ searchParams: Promise.resolve(searchParams) });
+    const formulario = buscarElemento(arbol, FormularioBranding);
+    if (!formulario) throw new Error('[test] la página no monta FormularioBranding');
+    return formulario.props;
+  };
+
+  it('en modo negocio y en modo tarjeta recibe la activa más barata de SU comercio, no la de otro', async () => {
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    const ajeno = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    const programaId = entorno.obtenerProgramaPrincipal(comercioId);
+    sesion.comercioId = comercioId;
+    await entorno.crearRecompensa(comercioId, 5);
+    await entorno.crearRecompensa(comercioId, 3);
+    await entorno.crearRecompensa(ajeno, 1);
+
+    expect((await propsDelFormulario({})).recompensaMasBarata, 'modo negocio').toEqual({
+      nombre: 'Premio Prueba',
+      costoPuntos: 3,
+    });
+    expect((await propsDelFormulario({ programa: programaId })).recompensaMasBarata, 'modo tarjeta').toEqual({
+      nombre: 'Premio Prueba',
+      costoPuntos: 3,
+    });
+  }, 60_000);
+
+  it('un comercio sin recompensas activas lo monta con null', async () => {
+    const comercioId = await entorno.crearComercio({ tipo_tarjeta: 'sellos' });
+    sesion.comercioId = comercioId;
+
+    expect((await propsDelFormulario({})).recompensaMasBarata).toBeNull();
+  }, 60_000);
 });

@@ -104,3 +104,35 @@ export async function guardarFotoRecompensa(
   }
   return { ok: true };
 }
+
+// La recompensa ACTIVA más barata del comercio, o null si no tiene ninguna. La lee Marca para avisarle
+// al dueño cuando el regalo de bienvenida ya alcanza un premio (avisoRegaloAlcanzaPremio): el canje
+// compara el saldo con el costo de CUALQUIER recompensa activa del comercio, así que la más barata es
+// la que se alcanza primero.
+//
+// Es del COMERCIO y no de un programa (el canje no distingue programa), y solo las activas: las
+// desactivadas siguen en la tabla (soft-delete) pero ya no se pueden canjear. El empate de costo se
+// desempata por nombre para que el aviso diga siempre el mismo premio.
+//
+// Un fallo de lectura devuelve null y se registra: el aviso es una ayuda, no puede tumbar la pantalla
+// de Marca.
+export async function recompensaActivaMasBarata(
+  supabase: SupabaseClient<Database>,
+  comercioId: string,
+): Promise<{ nombre: string; costoPuntos: number } | null> {
+  const { data, error } = await supabase
+    .from('recompensas')
+    .select('nombre, costo_puntos')
+    .eq('comercio_id', comercioId)
+    .eq('activa', true)
+    .order('costo_puntos', { ascending: true })
+    .order('nombre', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[comercio] falló la lectura de la recompensa más barata:', error);
+    return null;
+  }
+  return data ? { nombre: data.nombre, costoPuntos: data.costo_puntos } : null;
+}

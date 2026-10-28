@@ -4,6 +4,7 @@ import {
   sellosRegaloDesdeFormulario,
   describirArranque,
   textoRegaloRegistro,
+  avisoRegaloAlcanzaPremio,
 } from './sellosRegalo';
 
 // Pruebas de la regla pura de los sellos de regalo (lib/tarjetas/sellosRegalo.ts). Corren sin
@@ -45,6 +46,18 @@ import {
 //   "arranca con 10 de 2"). Por eso el caso 3 de 7 trae tres cifras distintas.
 // - `textoRegaloRegistro`: singular roto (`=== 1 ? 'sellos' : 'sellos'`) falla "1 → singular"
 //   ("1 sellos de regalo"); singular de más (`<= 2`) falla "2 → plural" ("2 sello de regalo").
+//
+// - `avisoRegaloAlcanzaPremio` (mutaciones confirmadas 2026-10-28, cada una restaurada después):
+//   `<` → `<=` en la comparación con el costo (regalo igual al costo ya no avisa): falla "regalo IGUAL
+//   al costo (5 de 5)" (`expected null to be 'Con 5 de regalo…'`); el tope un sello corto
+//   (`< costo - 1`): falla "regalo UN sello menos que el costo (4 de 5)" (`expected 'Con 4 de regalo…'
+//   to be null`); ignorar el null (sacar la guarda de la recompensa): falla "sin recompensa" con
+//   `TypeError: Cannot read properties of null (reading 'costoPuntos')`; nombre fijo («Premio») en
+//   vez del de la recompensa: fallan "5 de 5", "7 de 5" y "el nombre sale de la recompensa"; usar el
+//   costo en vez del regalo en el texto: fallan "7 de 5" (`Con 5` en vez de `Con 7`) y "el nombre
+//   sale de la recompensa"; sacar la guarda `<= 0`: falla "regalo 0 o negativo → null aun si el costo
+//   fuera 0" (`expected 'Con 0 de regalo…' to be null`); sacar la guarda de entero: falla "un regalo
+//   que no es entero" (`expected 'Con NaN de regalo…' to be null`).
 //
 // Dos cosas del código que NO tienen mutación posible, y no es un hueco: `.trim()` y un caso aparte
 // para el vacío no existen en `sellosRegaloDesdeFormulario` porque `Number('')`, `Number('  ')` y
@@ -250,5 +263,59 @@ describe('textoRegaloRegistro', () => {
 
   it('9 → plural: solo el 1 exacto es singular', () => {
     expect(textoRegaloRegistro(9)).toBe('Arrancás con 9 sellos de regalo.');
+  });
+});
+
+describe('avisoRegaloAlcanzaPremio', () => {
+  // La recompensa activa más barata del comercio: un café a 5 sellos.
+  const CAFE = { nombre: 'Café gratis', costoPuntos: 5 };
+
+  it('regalo IGUAL al costo (5 de 5) → avisa: el canje exige >=, así que ya puede canjear', () => {
+    expect(avisoRegaloAlcanzaPremio(5, CAFE)).toBe(
+      'Con 5 de regalo, un cliente nuevo ya puede canjear «Café gratis» sin haber comprado nada.',
+    );
+  });
+
+  it('regalo UN sello menos que el costo (4 de 5) → null: todavía no alcanza', () => {
+    expect(avisoRegaloAlcanzaPremio(4, CAFE)).toBeNull();
+  });
+
+  it('regalo mayor que el costo (7 de 5) → avisa con el regalo, no con el costo', () => {
+    // Regalo y costo son cifras distintas a propósito: si el texto usara el costo diría "Con 5".
+    expect(avisoRegaloAlcanzaPremio(7, CAFE)).toBe(
+      'Con 7 de regalo, un cliente nuevo ya puede canjear «Café gratis» sin haber comprado nada.',
+    );
+  });
+
+  it('el nombre sale de la recompensa que llega, no de un premio fijo', () => {
+    expect(avisoRegaloAlcanzaPremio(3, { nombre: 'Almuerzo completo', costoPuntos: 2 })).toBe(
+      'Con 3 de regalo, un cliente nuevo ya puede canjear «Almuerzo completo» sin haber comprado nada.',
+    );
+  });
+
+  it('sin recompensa (el comercio no tiene ninguna activa) → null, con cualquier regalo', () => {
+    expect(avisoRegaloAlcanzaPremio(5, null)).toBeNull();
+    expect(avisoRegaloAlcanzaPremio(1, null)).toBeNull();
+  });
+
+  it('regalo 0 → null: no hay regalo que avisar', () => {
+    expect(avisoRegaloAlcanzaPremio(0, CAFE)).toBeNull();
+  });
+
+  it('regalo 0 o negativo → null aun si el costo fuera 0 (una fila rara no inventa un aviso)', () => {
+    // Con un costo válido (1 o más) el regalo 0 ya queda por debajo del costo y esta guarda no se
+    // nota. Con costo 0 (que la app no crea, pero una fila cargada a mano podría traer) 0 >= 0 sería
+    // verdad: solo la guarda del regalo 0 lo evita.
+    const RARA = { nombre: 'Premio raro', costoPuntos: 0 };
+    expect(avisoRegaloAlcanzaPremio(0, RARA)).toBeNull();
+    expect(avisoRegaloAlcanzaPremio(-1, RARA)).toBeNull();
+  });
+
+  it('un regalo que no es entero (NaN, 1.5, Infinity) → null: no es uno que el servidor aceptaría', () => {
+    // Con costo 1, los tres pasarían la comparación `regalo >= costo` y el aviso diría "Con NaN...".
+    const BARATA = { nombre: 'Café gratis', costoPuntos: 1 };
+    expect(avisoRegaloAlcanzaPremio(NaN, BARATA)).toBeNull();
+    expect(avisoRegaloAlcanzaPremio(1.5, BARATA)).toBeNull();
+    expect(avisoRegaloAlcanzaPremio(Infinity, BARATA)).toBeNull();
   });
 });

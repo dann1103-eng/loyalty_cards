@@ -84,3 +84,31 @@ export function textoRegaloRegistro(sellosRegalo: number): string {
   const palabra = sellosRegalo === 1 ? 'sello' : 'sellos';
   return `Arrancás con ${sellosRegalo} ${palabra} de regalo.`;
 }
+
+// El aviso de Marca cuando el regalo, por sí solo, ya alcanza una recompensa. NO bloquea el guardado
+// (decisión del dueño del proyecto: es una advertencia, no una regla).
+//
+// POR QUÉ EXISTE: el canje (canjear_recompensa_atomico, migración 0009) solo exige
+// `puntos_actuales >= costo_puntos` de CUALQUIER recompensa activa del comercio. Con recompensas
+// escalonadas (un café a 5 sellos y un almuerzo a 10), un regalo de 5 con meta 10 pasa la regla de
+// arriba (5 < 10) pero iguala el costo del café: el cliente nuevo se registra y canjea ese mismo
+// día, sin comprar nada y sin pasar por el antifraude (el regalo no es una acreditación). La meta no
+// protege de esto porque el canje no mira la meta: mira el costo de la recompensa.
+//
+// Recibe la recompensa activa MÁS BARATA del comercio (no del programa: el canje no distingue
+// programa) porque si el regalo no alcanza a esa, no alcanza a ninguna.
+//
+// Devuelve null si no hay nada que avisar: regalo 0 o menos (no hay regalo), un regalo que no es un
+// entero (no es uno que el servidor aceptaría; evita escribir "Con NaN de regalo"), sin recompensa, o
+// un regalo MENOR que su costo. Con el regalo IGUAL al costo SÍ avisa: el canje exige `>=`, así que
+// un cliente nuevo con exactamente el costo ya puede canjear.
+export function avisoRegaloAlcanzaPremio(
+  sellosRegalo: number,
+  recompensaMasBarata: { nombre: string; costoPuntos: number } | null,
+): string | null {
+  if (!Number.isInteger(sellosRegalo) || sellosRegalo <= 0) return null;
+  if (recompensaMasBarata === null) return null;
+  if (sellosRegalo < recompensaMasBarata.costoPuntos) return null;
+
+  return `Con ${sellosRegalo} de regalo, un cliente nuevo ya puede canjear «${recompensaMasBarata.nombre}» sin haber comprado nada.`;
+}

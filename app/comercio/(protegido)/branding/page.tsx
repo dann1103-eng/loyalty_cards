@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { verifyComercioOwner } from '@/lib/comercio/verifyComercioOwner';
 import { createServiceClient } from '@/lib/supabase/server';
 import { listarProgramas } from '@/lib/comercio/programas';
+import { recompensaActivaMasBarata } from '@/lib/comercio/recompensas';
 import { brandingDeProgramas, hayMarcaPropia } from '@/lib/comercio/guardarBrandingPrograma';
 import { reversoDePrograma, hayReversoPropio } from '@/lib/comercio/guardarReversoPrograma';
 import { tipoOPuntos } from '@/lib/tarjetas/tipos';
@@ -57,7 +58,7 @@ export default async function PaginaBranding({
     : 'colores';
 
   const supabase = createServiceClient();
-  const [{ data: c }, programas] = await Promise.all([
+  const [{ data: c }, programas, recompensaMasBarata] = await Promise.all([
     supabase
       .from('comercios')
       .select('nombre, zona_horaria, tipo_tarjeta, color_fondo, color_texto, color_label, sello_meta, logo_url, strip_url, hero_url, sello_icono_url, sello_icono_2_url, sello_patron, sello_casillas, difuminado_franja, encuadre_franja, oscurecer_franja, foco_franja_x, foco_franja_y, zoom_franja, terminos_uso, red_instagram, red_facebook, red_tiktok, red_whatsapp, sitio_web, mostrar_como_funciona')
@@ -67,6 +68,9 @@ export default async function PaginaBranding({
     // color de fondo crearía una clase PERMANENTE en Google para un programa en el que ya nadie
     // puede registrarse.
     listarProgramas(supabase, comercioId),
+    // Para el aviso de que el regalo de bienvenida ya alcanza un premio (FormularioBranding). Es del
+    // COMERCIO y no del programa elegido: el canje compara con cualquier recompensa activa del comercio.
+    recompensaActivaMasBarata(supabase, comercioId),
   ]);
 
   if (!c) {
@@ -336,6 +340,7 @@ export default async function PaginaBranding({
               }
         }
         heredado={seleccionado ? marcaComercio : null}
+        recompensaMasBarata={recompensaMasBarata}
         // Una tarjeta que HEREDA la foto tiene que previsualizarse con el encuadre del NEGOCIO, que
         // es el que brandingEfectivo le da al pass. Mostrarle el encuadre propio que le quedó
         // guardado de una foto anterior sería una vista previa que miente: el dueño vería una cosa y
