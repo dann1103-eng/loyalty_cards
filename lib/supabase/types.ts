@@ -27,6 +27,7 @@
 //   - supabase/migrations/0038_cobranza.sql (cuentas_comercio.cobranza/cobranza_desde/cobranza_pospuesta_hasta; las cuentas existentes quedan 'exenta')
 //   - supabase/migrations/0039_monto_minimo_y_resena.sql (comercios.exigir_monto_compra/monto_minimo_compra_centavos/pedir_resena_google/resena_google_url)
 //   - supabase/migrations/0040_reportes_con_filtros.sql (funciones reporte_resumen/reporte_por_dia/reporte_clientes/reporte_cajeros_alcance en Functions; índices; no cambia columnas)
+//   - supabase/migrations/0043_sellos_de_regalo.sql (programas_tarjeta.sellos_regalo; tipo 'regalo' en el ledger; funcion emitir_tarjeta en Functions)
 //   - supabase/migrations/0027_branding_por_programa.sql (branding por programa en programas_tarjeta)
 //   - supabase/migrations/0026_notificaciones_push.sql (tablas difusiones y notificaciones_enviadas; tarjetas.aviso_texto/aviso_hasta/aviso_inactividad_enviado_en; comercios.aviso_inactividad_activo/dias/mensaje)
 //   - supabase/migrations/0025_backfill_programas_principales_faltantes.sql (solo datos, no cambia columnas: programa principal para comercios que la 0024 no alcanzó a cubrir)
@@ -499,9 +500,11 @@ export type Database = {
           monto_compra: number | null;
           sucursal_id: string | null;
           created_at: string;
-          // Clasificación del ledger (migración 0015). 'acreditacion' | 'ajuste'. Todo el histórico
-          // anterior queda en 'acreditacion' por el default, y las cuatro funciones de reporte
-          // filtran por ese valor para que una corrección no cuente como visita.
+          // Clasificación del ledger (migración 0015). 'acreditacion' | 'ajuste', y después 'uso' |
+          // 'renovacion' (0019) y 'regalo' (0043). Todo el histórico anterior queda en 'acreditacion'
+          // por el default, y las funciones de reporte filtran por tipos concretos para que una
+          // corrección no cuente como visita. 'regalo' son los sellos con que nace una tarjeta: sin
+          // cajero ni sucursal, y ningún reporte ni tope de antifraude lo cuenta.
           tipo: string;
           // Obligatorio cuando tipo='ajuste' o forzado=true (CHECK en la BD + validación en TS).
           motivo: string | null;
@@ -1077,6 +1080,10 @@ export type Database = {
           // Configuración por tipo, mudada desde comercios (migración 0018 → 0024). Cada campo solo
           // aplica a un tipo — ver lib/comercio/programas.ts.
           sello_meta: number | null;
+          // Sellos con que NACE una tarjeta nueva de este programa (migración 0043). 0 = sin regalo.
+          // Solo se aplica si el programa es de sellos (lo decide la función emitir_tarjeta) y la
+          // base garantiza que, si es mayor que 0, hay meta y el regalo es menor que ella.
+          sellos_regalo: number;
           cashback_porcentaje: number | null;
           multipass_visitas: number | null;
           membresia_dias: number | null;
@@ -1134,6 +1141,7 @@ export type Database = {
           es_principal?: boolean;
           activo?: boolean;
           sello_meta?: number | null;
+          sellos_regalo?: number;
           cashback_porcentaje?: number | null;
           multipass_visitas?: number | null;
           membresia_dias?: number | null;
@@ -1179,6 +1187,7 @@ export type Database = {
           es_principal?: boolean;
           activo?: boolean;
           sello_meta?: number | null;
+          sellos_regalo?: number;
           cashback_porcentaje?: number | null;
           multipass_visitas?: number | null;
           membresia_dias?: number | null;
@@ -1603,6 +1612,19 @@ export type Database = {
           p_cajero_usuario_id: string | null;
         };
         Returns: { estado: string; saldo: number }[];
+      };
+      // Crea la tarjeta de un cliente en un programa y, si el programa de sellos tiene regalo, la
+      // deja nacer con esos sellos y su movimiento 'regalo' en el ledger (todo en una transacción).
+      // Si la tarjeta ya existe lanza 23505 (en `error.code`), igual que el insert directo.
+      emitir_tarjeta: {
+        Args: {
+          p_comercio_id: string;
+          p_programa_id: string;
+          p_cliente_id: string;
+          // Solo los cupones llevan fecha; el resto va null. La calcula TypeScript.
+          p_vigencia_hasta: string | null;
+        };
+        Returns: { id_tarjeta: string; token_qr: string; sellos_regalados: number }[];
       };
       usar_cupon_atomico: {
         Args: {
