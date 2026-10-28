@@ -42,12 +42,33 @@ vi.mock('../google/walletClient', () => ({
 //
 // MUTACIONES de TypeScript, CONFIRMADAS el 2026-10-28 (cada una corrida y restaurada con
 // `git checkout -- <archivo>`; el mensaje es el que imprimió vitest):
-//   (se completan al correrlas)
+//   - registrarCliente.ts: volver al insert directo de la tarjeta (sin función, sellos_regalados en 0)
+//     hace fallar 7 de 9. El 1, con "lo que devolvió emitir_tarjeta: expected +0 to be 2"; el 2, con
+//     "expected [] to have a length of 1 but got +0" (sin fila de regalo no hay historial); el 3, 4, 6,
+//     8 y 9, con "expected +0 to be 2". Pasan el 5 y el 7, que afirman 0.
+//   - registrarCliente.ts: `sellosRegalo: 0` en la tarjeta NUEVA (en vez de lo que devolvió la
+//     función) hace fallar 1, 4, 6, 8 y 9, todos con "expected +0 to be 2".
+//   - registrarCliente.ts: devolver `sellosRegalo: 2` en la tarjeta ya existente hace fallar SOLO el 3
+//     ("expected 2 to be +0"). Devolverlo en la ganadora de la carrera, SOLO el 9 (mismo mensaje):
+//     son dos caminos distintos y cada uno tiene su prueba.
+//   - registrarCliente.ts: no recuperar la ganadora ante el 23505 (lanzar siempre) hace fallar SOLO el
+//     9, con `Unknown Error: duplicate key value violates unique constraint
+//     "tarjetas_cliente_programa_key"`. El caso 9 existe porque la carrera de registrarCliente.test.ts
+//     (dos registros en paralelo) depende del reloj; esa prueba también cayó en las dos corridas.
+//   - registrarCliente.ts: `p_vigencia_hasta: null` en la llamada a la función deja al cupón sin
+//     vencimiento; lo atrapa tiposFuncionales.test.ts ("cupón: la tarjeta nace con la vigencia…",
+//     con `expected null not to be null`), no este archivo.
+//   - historial.ts: sacar 'regalo' de CLASES hace fallar el 2 ("expected 'acreditacion' to be
+//     'regalo'") y la prueba equivalente de historial.test.ts.
+//   - contadorPase.ts: `0 de ${selloMeta}` fijo en vez de los puntos hace fallar el 6 en el lado de
+//     Apple (`"value": "2 de 10"` contra `"0 de 10"`). frentePase.ts: `0 de … sellos` fijo en el
+//     listado, el 6 en el de Google (`"string": "2 de 10 sellos"` contra `"0 de 10 sellos"`). Así el
+//     6 mide el texto que se dibuja y no la columna.
 //
 // MUTACIONES PENDIENTES de SQL: ver el encabezado de emitirTarjeta.sql.test.ts, que las lleva
-// contra mutantes de la función (emitir_tarjeta_mut_a/b/c) sin tocar la real. Mientras no se corran,
-// la defensa de la función son los casos 1, 2 y 5 de este archivo, que fallaban antes de que
-// existiera.
+// contra mutantes de la función (emitir_tarjeta_mut_a/b/c) sin tocar la real. NO están corridas ni
+// confirmadas: mientras tanto, la defensa de la función son los casos 1, 2 y 5 de este archivo, que
+// fallaban antes de que existiera.
 const supabase = createServiceClient();
 const entorno = crearEntorno(supabase);
 

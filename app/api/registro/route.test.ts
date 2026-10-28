@@ -20,7 +20,10 @@ vi.mock('@/lib/google/syncObjeto', () => ({
 // que tiene que viajar en la respuesta y valer 0 para quien ya tenía la tarjeta.
 //
 // MUTACIONES CONFIRMADAS (2026-10-28), cada una corrida y restaurada con `git checkout -- <archivo>`:
-//   (se completan al correrlas)
+//   - route.ts: sacar `sellosRegalo` del JSON hace fallar la prueba con "cliente nuevo: llega con el
+//     regalo puesto: expected undefined to be 2".
+//   - route.ts: `sellosRegalo: 2` fijo hace fallar la misma prueba en la segunda llamada, con
+//     "cliente que vuelve: no recibe nada: expected 2 to be +0".
 const supabase = createServiceClient();
 const entorno = crearEntorno(supabase);
 

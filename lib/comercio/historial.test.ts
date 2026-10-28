@@ -273,8 +273,9 @@ describe('etiquetaClase', () => {
     expect(etiquetaClase('canje')).toBe('Canje');
     expect(etiquetaClase('uso')).toBe('Uso');
     expect(etiquetaClase('renovacion')).toBe('Renovación');
-    // El texto que ven el dueño y el cliente en la fila del regalo (0043). MUTACIÓN: devolver
-    // 'Acreditación' para 'regalo' rompe esta línea.
+    // El texto que ven el dueño y el cliente en la fila del regalo (0043). MUTACIÓN (verificada el
+    // 2026-10-28): devolver 'Acreditación' para 'regalo' rompe esta línea con
+    // `expected 'Acreditación' to be 'Regalo de bienvenida'`.
     expect(etiquetaClase('regalo')).toBe('Regalo de bienvenida');
   });
 });
