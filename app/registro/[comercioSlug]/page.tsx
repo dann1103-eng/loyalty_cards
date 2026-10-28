@@ -4,6 +4,7 @@ import { hoyEnZona } from '@/lib/tarjetas/vigencia';
 import { resolverProgramaPorSlug } from '@/lib/comercio/programas';
 import { leerResenaGoogle } from '@/lib/comercio/resenaGoogle';
 import { detectarPlataforma } from '@/lib/clientes/plataforma';
+import { sellosRegaloDelPrograma } from '@/lib/tarjetas/sellosRegalo';
 import { marcaDelRegistro } from './marcaDelRegistro';
 import RegistroCliente from './RegistroCliente';
 
@@ -67,10 +68,9 @@ export default async function PaginaRegistro({
       nombreComercio={comercio.nombre}
       tipoTarjeta={programa.tipoTarjeta}
       selloMeta={programa.selloMeta}
-      // Solo un programa de tipo EXACTAMENTE 'sellos' regala (la misma regla que emitir_tarjeta en la
-      // base): en cualquier otro tipo la columna puede traer un número viejo (el FM le cambió el tipo)
-      // y la pantalla no puede prometer un regalo que la tarjeta nueva no va a traer.
-      sellosRegalo={programa.tipoTarjeta === 'sellos' ? programa.sellosRegalo : 0}
+      // Solo un programa de sellos regala (la regla vive en sellosRegaloDelPrograma, con su prueba, y
+      // la comparten las dos páginas de registro).
+      sellosRegalo={sellosRegaloDelPrograma(programa.tipoTarjeta, programa.sellosRegalo)}
       marca={marca}
       resenaGoogleUrl={resena?.pedir ? resena.url : null}
       // El "hoy" del COMERCIO, resuelto acá: la tarjeta de muestra es 'use client' y un new Date()

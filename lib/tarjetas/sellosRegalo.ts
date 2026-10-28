@@ -118,6 +118,17 @@ export function avisoRegaloAlcanzaPremio(
   return `Con ${sellosRegalo} de regalo, un cliente nuevo ya puede canjear «${recompensaMasBarata.nombre}» sin haber comprado nada.`;
 }
 
+// Cuántos sellos de regalo PROMETE la página de registro de un programa. Solo un programa de tipo
+// EXACTAMENTE 'sellos' regala (la misma regla que emitir_tarjeta en la base, que lee el regalo solo si
+// `tipo_tarjeta = 'sellos'`): en cualquier otro tipo la columna puede traer un número viejo (el FM le
+// cambió el tipo a un programa que regalaba 2) y la pantalla no puede prometer un regalo que la tarjeta
+// nueva no va a traer. Vivía como un ternario copiado en las dos páginas de registro (la del QR sin
+// programa y la del QR de un programa) sin ninguna prueba; si una se corregía y la otra no, un QR
+// prometía lo que el otro no.
+export function sellosRegaloDelPrograma(tipoTarjeta: string, sellosRegalo: number): number {
+  return tipoTarjeta === 'sellos' ? sellosRegalo : 0;
+}
+
 // Lee de la respuesta JSON de /api/registro un número de la tarjeta (`sellosRegalo`, `puntosActuales`)
 // para dibujar la tarjeta de muestra de "Tu tarjeta está lista". Solo un ENTERO de 0 en adelante
 // cuenta; todo lo demás (el campo ausente de una versión vieja de la API, null, un texto, un decimal,

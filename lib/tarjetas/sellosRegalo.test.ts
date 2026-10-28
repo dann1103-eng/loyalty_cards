@@ -6,6 +6,7 @@ import {
   textoRegaloRegistro,
   avisoRegaloAlcanzaPremio,
   contadorDeRespuesta,
+  sellosRegaloDelPrograma,
 } from './sellosRegalo';
 
 // Pruebas de la regla pura de los sellos de regalo (lib/tarjetas/sellosRegalo.ts). Corren sin
@@ -369,5 +370,40 @@ describe('contadorDeRespuesta', () => {
     expect(contadorDeRespuesta(null)).toBe(0);
     expect(contadorDeRespuesta('2')).toBe(0);
     expect(contadorDeRespuesta({})).toBe(0);
+  });
+});
+
+// Lo que la página de registro le promete al cliente antes de que se registre: solo los programas de
+// tipo exactamente 'sellos' regalan. Las dos páginas de registro llaman a esta función (y que de verdad
+// la llamen lo prueba app/registro/[comercioSlug]/paginasRegistro.test.ts).
+//
+// MUTACIONES CONFIRMADAS (2026-10-28), cada una restaurada: quitar la condición del tipo (devolver
+// siempre el regalo) falla "puntos", "cupón" y "un tipo desconocido" con `expected 2 to be +0`; la
+// condición invertida (`!==`) falla 4 pruebas (`expected +0 to be 2` en "sellos con regalo 2"); comparar
+// con `tipoTarjeta.toLowerCase().trim()` falla SOLO "un tipo desconocido, y también lo que casi es
+// sellos" (`expected 2 to be +0`); y devolver siempre 0 falla "sellos con regalo 2" (`expected +0 to
+// be 2`).
+describe('sellosRegaloDelPrograma', () => {
+  it("sellos con regalo 2 → 2: el único tipo que regala", () => {
+    expect(sellosRegaloDelPrograma('sellos', 2)).toBe(2);
+  });
+
+  it('puntos con un regalo viejo de 2 → 0: el FM le cambió el tipo y la columna quedó guardada', () => {
+    expect(sellosRegaloDelPrograma('puntos', 2)).toBe(0);
+  });
+
+  it('cupón con un regalo viejo de 2 → 0', () => {
+    expect(sellosRegaloDelPrograma('cupon', 2)).toBe(0);
+  });
+
+  it('un tipo desconocido → 0, y también lo que casi es "sellos" (mayúscula, espacio, plural)', () => {
+    expect(sellosRegaloDelPrograma('inventado', 2)).toBe(0);
+    expect(sellosRegaloDelPrograma('Sellos', 2)).toBe(0);
+    expect(sellosRegaloDelPrograma('sellos ', 2)).toBe(0);
+    expect(sellosRegaloDelPrograma('', 2)).toBe(0);
+  });
+
+  it('sellos con regalo 0 → 0: el caso de todos los comercios de hoy', () => {
+    expect(sellosRegaloDelPrograma('sellos', 0)).toBe(0);
   });
 });
