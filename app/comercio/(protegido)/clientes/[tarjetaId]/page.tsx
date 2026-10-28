@@ -6,6 +6,7 @@ import {
   etiquetaClase,
   describirDeltaMovimiento,
   describirSaldoMovimiento,
+  origenMovimiento,
   type ClaseMovimiento,
 } from '@/lib/comercio/historial';
 import { resolverProgramaDeTarjeta } from '@/lib/comercio/programas';
@@ -189,8 +190,7 @@ export default async function PaginaFichaCliente({
                       </div>
                       <div className="admin-fila-slug dato-mono">{formatoFecha.format(new Date(m.ocurrioEn))}</div>
                       <div className="admin-fila-slug">
-                        {m.sucursalNombre ?? 'Sin sucursal'}
-                        {m.cajeroEmail ? ` · ${m.cajeroEmail}` : ' · sin cajero registrado'}
+                        {origenMovimiento(m)}
                         {m.monto !== null && ` · compra $${m.monto.toFixed(2)}`}
                       </div>
                       {m.motivo && (

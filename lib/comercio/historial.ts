@@ -143,3 +143,23 @@ export function describirSaldoMovimiento(
   }
   return describirCosto(tipoTarjeta, saldo);
 }
+
+// La línea de ORIGEN de un movimiento en la ficha del dueño: dónde y quién lo hizo. Solo la usa la
+// ficha (el portal del cliente no muestra cajero, y de la sucursal solo la nombra si existe).
+//
+// El regalo de bienvenida (0043) no lleva sucursal ni cajero A PROPÓSITO: es del programa, no de
+// quien atendió, y si llevara cajero inflaría su reporte. Pero la ficha imprimía igual el respaldo
+// "Sin sucursal · sin cajero registrado", que en un movimiento normal es una ALERTA forense (a esa
+// acreditación le falta el dato) y en el regalo se leía como datos perdidos. Por eso el regalo dice
+// de dónde viene de verdad.
+//
+// Para todo lo demás el texto es EXACTAMENTE el que la ficha imprimía antes de existir esta función,
+// incluida su asimetría: la sucursal cae al respaldo solo con null (`??`), el cajero con cualquier
+// valor falso (`?`), así que un correo vacío cuenta como "sin cajero registrado". El `Pick` pide
+// solo lo que lee: la prueba no necesita armar un MovimientoHistorial entero.
+export function origenMovimiento(
+  m: Pick<MovimientoHistorial, 'clase' | 'sucursalNombre' | 'cajeroEmail'>,
+): string {
+  if (m.clase === 'regalo') return 'Al registrarse · regalo del programa';
+  return `${m.sucursalNombre ?? 'Sin sucursal'}${m.cajeroEmail ? ` · ${m.cajeroEmail}` : ' · sin cajero registrado'}`;
+}

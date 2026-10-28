@@ -9,6 +9,7 @@ import {
   etiquetaClase,
   describirDeltaMovimiento,
   describirSaldoMovimiento,
+  origenMovimiento,
 } from './historial';
 
 const supabase = createServiceClient();
@@ -311,5 +312,83 @@ describe('describirSaldoMovimiento', () => {
     // MUTACIÓN: devolver el contador crudo acá le muestra "1250" a quien tiene $12.50.
     expect(describirSaldoMovimiento('gift_card', 1250)).toBe('$12.50');
     expect(describirSaldoMovimiento('prepago', 1)).toBe('1 visita');
+  });
+});
+
+describe('origenMovimiento', () => {
+  // PURA (no toca la BD), como las tres de arriba. Es la línea "dónde y quién" de la ficha del dueño.
+  //
+  // MUTACIONES CONFIRMADAS (corridas el 2026-10-28, cada una rompe la prueba por su razón y se
+  // restauró la fuente):
+  // - quitar la rama de 'regalo' (`if (false)`): `expected 'Sin sucursal · sin cajero registrado' to be
+  //   'Al registrarse · regalo del programa'`.
+  // - invertirla (`clase !== 'regalo'`): las cuatro pruebas de arriba fallan, p. ej. `expected 'Al
+  //   registrarse · regalo del programa' to be 'Centro · ana@cafe.sv'`.
+  // - acortar el texto del regalo a 'Al registrarse': `expected 'Al registrarse' to be 'Al registrarse ·
+  //   regalo del programa'`.
+  // - cambiar el respaldo 'Sin sucursal' por 'Sin sede': `expected 'Sin sede · ana@cafe.sv' to be 'Sin
+  //   sucursal · ana@cafe.sv'`.
+  // - cambiar 'sin cajero registrado' por 'sin cajero': `expected 'Centro · sin cajero' to be 'Centro ·
+  //   sin cajero registrado'`.
+  // - intercambiar los dos respaldos: `expected 'sin cajero registrado · ana@cafe.sv' to be 'Sin
+  //   sucursal · ana@cafe.sv'`.
+  // - decidir el cajero con `!== null` en vez de verdad: `expected 'Centro · ' to be 'Centro · sin cajero
+  //   registrado'`.
+  // - la sucursal con `||` en vez de `??`: `expected 'Sin sucursal · ana@cafe.sv' to be ' ·
+  //   ana@cafe.sv'`.
+
+  it('el regalo de bienvenida dice de dónde viene, con o sin sucursal y cajero', () => {
+    // La fila de regalo nace sin sucursal ni cajero (es del programa). Antes la ficha imprimía el
+    // respaldo "Sin sucursal · sin cajero registrado", que se leía como datos perdidos.
+    const texto = 'Al registrarse · regalo del programa';
+    expect(origenMovimiento({ clase: 'regalo', sucursalNombre: null, cajeroEmail: null })).toBe(texto);
+    // Aunque algún día llegara con sucursal o cajero, el regalo sigue siendo del programa: la
+    // línea no los nombra.
+    expect(origenMovimiento({ clase: 'regalo', sucursalNombre: 'Centro', cajeroEmail: null })).toBe(texto);
+    expect(origenMovimiento({ clase: 'regalo', sucursalNombre: null, cajeroEmail: 'ana@cafe.sv' })).toBe(texto);
+    expect(origenMovimiento({ clase: 'regalo', sucursalNombre: 'Centro', cajeroEmail: 'ana@cafe.sv' })).toBe(
+      texto,
+    );
+  });
+
+  it('el resto de las clases imprime EXACTAMENTE lo que la ficha imprimía antes, en las cuatro combinaciones', () => {
+    // Con sucursal y cajero faltantes, el respaldo ES la alerta forense ("a esta acreditación le
+    // falta el dato"): tiene que seguir saliendo igual, palabra por palabra.
+    expect(origenMovimiento({ clase: 'acreditacion', sucursalNombre: 'Centro', cajeroEmail: 'ana@cafe.sv' })).toBe(
+      'Centro · ana@cafe.sv',
+    );
+    expect(origenMovimiento({ clase: 'acreditacion', sucursalNombre: 'Centro', cajeroEmail: null })).toBe(
+      'Centro · sin cajero registrado',
+    );
+    expect(origenMovimiento({ clase: 'acreditacion', sucursalNombre: null, cajeroEmail: 'ana@cafe.sv' })).toBe(
+      'Sin sucursal · ana@cafe.sv',
+    );
+    expect(origenMovimiento({ clase: 'acreditacion', sucursalNombre: null, cajeroEmail: null })).toBe(
+      'Sin sucursal · sin cajero registrado',
+    );
+  });
+
+  it('las demás clases no heredan el texto del regalo', () => {
+    // Solo 'regalo' tiene origen propio: un canje, un ajuste, un uso o una renovación sin cajero
+    // siguen mostrando el respaldo, que es el dato que el dueño tiene que poder notar que falta.
+    for (const clase of ['acreditacion', 'ajuste', 'canje', 'uso', 'renovacion'] as const) {
+      expect(origenMovimiento({ clase, sucursalNombre: null, cajeroEmail: null }), clase).toBe(
+        'Sin sucursal · sin cajero registrado',
+      );
+    }
+  });
+
+  it('los valores vacíos se tratan como antes: un correo vacío es "sin cajero", una sucursal vacía NO cae al respaldo', () => {
+    // CARACTERIZA el comportamiento que la ficha ya tenía y que esta función conserva byte por byte,
+    // no lo recomienda. El cajero se decidía con `m.cajeroEmail ? … : …` (cualquier valor falso):
+    // un '' no debe imprimir "Centro · " con el punto colgado. La sucursal, en cambio, caía al
+    // respaldo solo con null (`??`). Hoy ninguno de los dos llega vacío de la base, pero si la ficha
+    // cambiara de regla sin querer, esta prueba lo dice.
+    expect(origenMovimiento({ clase: 'acreditacion', sucursalNombre: 'Centro', cajeroEmail: '' })).toBe(
+      'Centro · sin cajero registrado',
+    );
+    expect(origenMovimiento({ clase: 'acreditacion', sucursalNombre: '', cajeroEmail: 'ana@cafe.sv' })).toBe(
+      ' · ana@cafe.sv',
+    );
   });
 });
