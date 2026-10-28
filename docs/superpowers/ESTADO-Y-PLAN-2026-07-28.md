@@ -1677,3 +1677,11 @@ ficha de un cliente nuevo con "Regalo de bienvenida"), y el merge de la rama `cl
 cuando esté publicada y probada en producción con un registro real.
 
 **Confirmado por Daniel el 2026-10-28:** el aviso del regalo que alcanza un premio queda como aviso, sin bloquear el guardado.
+
+**Mutantes de SQL de `emitir_tarjeta`: CORRIDOS y CONFIRMADOS el 2026-10-28** (en el proyecto `loyalty_cards`, y las cuatro copias ya fueron borradas). Todos mueren por el motivo correcto:
+`mut_a` (sin la condición del tipo) cae el caso B, "expected 2 to be +0"; `mut_b` (saldo 0) cae el A,
+"la tarjeta nace con el saldo del regalo: expected +0 to be 2" (y el D); `mut_c` (sin fila de libro) cae el
+A, "el libro tiene UNA fila de regalo: expected [] to deeply equal…" (y el D); `mut_d` (sin la condición del
+comercio) cae el E, "el regalo de un programa ajeno no se lee: expected 2 to be +0". Los SQL siguen en
+`supabase/pruebas/` por si algún día hace falta repetirlo. Con eso ya no queda ninguna mutación de esta
+feature sin correr; lo único que falta para publicar es la QA con sesión de dueño y el merge.
