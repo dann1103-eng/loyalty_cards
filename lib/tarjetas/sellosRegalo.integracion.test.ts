@@ -73,9 +73,10 @@ vi.mock('../google/walletClient', () => ({
 //     6 mide el texto que se dibuja y no la columna.
 //
 // MUTACIONES PENDIENTES de SQL: ver el encabezado de emitirTarjeta.sql.test.ts, que las lleva
-// contra mutantes de la función (emitir_tarjeta_mut_a/b/c) sin tocar la real. NO están corridas ni
-// confirmadas: mientras tanto, la defensa de la función son los casos 1, 2 y 5 de este archivo, que
-// fallaban antes de que existiera.
+// contra los CUATRO mutantes de la función (emitir_tarjeta_mut_a, _b, _c y _d; sus SQL están en
+// supabase/pruebas/) sin tocar la real. NO están corridas ni confirmadas: mientras tanto, la defensa
+// de la función son los casos 1, 2 y 5 de este archivo, que fallaban antes de que existiera (el guard
+// de comercio de mut_d no lo ejerce ninguno de ellos: solo el caso E de emitirTarjeta.sql.test.ts).
 const supabase = createServiceClient();
 const entorno = crearEntorno(supabase);
 
