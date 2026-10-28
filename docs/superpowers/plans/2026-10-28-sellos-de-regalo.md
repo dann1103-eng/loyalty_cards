@@ -237,7 +237,7 @@ muestra con la misma etiqueta.
   ver el comentario de `page.tsx` sobre por qué la meta sale del principal).
 - **Registro** (`app/registro/[comercioSlug]/…`): la página de servidor pasa `sellosRegalo` del
   programa (solo si es sellos); `VistaTarjeta` recibe `puntos` en vez del `0` fijo. Antes de
-  registrarse: solo la línea `textoRegaloRegistro` bajo la promesa (no hay tarjeta de muestra en esa
+  registrarse: solo la línea `textoRegaloAntesDeRegistrar` ("Si es tu primera tarjeta, arrancás con N sellos de regalo.", corregida tras la QA) bajo la promesa (no hay tarjeta de muestra en esa
   pantalla). Después: `puntos = sellosRegalo` que devolvió la API, y la línea solo si es mayor que 0.
 
 ## 4. Antes de empezar (todas las tareas)

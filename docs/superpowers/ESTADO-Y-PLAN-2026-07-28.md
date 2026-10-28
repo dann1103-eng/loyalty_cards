@@ -1618,8 +1618,8 @@ código que hoy corre en producción no la nombra, así que aplicarla antes del 
   `mutantes-0043-borrar.sql`; NO en `supabase/migrations/`, no son migraciones).
 
 ### Pendientes (estado al publicar)
-- Mutantes de SQL: HECHO (ver más abajo). QA manual con sesión de dueño en producción: guardar el regalo en Marca
-  y verlo al recargar, y la ficha de un cliente nuevo con "Regalo de bienvenida" (no hecha todavía).
+- Mutantes de SQL: HECHO (ver más abajo). QA con sesión de dueño en producción: HECHA
+  (ver "QA en producción" al final de esta sección).
 - Deuda previa que apareció de paso (no es de esta feature): el insert que repone el programa principal
   en `eliminarComercio` tras un borrado fallido es parcial (pierde `nombre_pase`, marca, aviso,
   `google_class_id`...).
@@ -1669,9 +1669,8 @@ existente cuando se baja la meta). Si algún día importa: `for share` en ese `s
 **Publicado el 2026-10-28** (a pedido de Daniel): fast-forward de `claude/sellos-de-regalo` a `master`
 (25 commits) y push; deploy de Vercel en success. Humo en producción: `www.cardly-sv.site/` y
 `/registro/cafeteria-piloto` responden 200 y esa pantalla no muestra línea de regalo (todos los
-comercios están en regalo 0 hasta que un dueño lo configure). **Falta:** la QA manual de arriba y una
-prueba con un registro real de un comercio que tenga regalo; el reel "Te falta poco" anuncia la
-feature recién después de eso.
+comercios están en regalo 0 hasta que un dueño lo configure). **Falta:** ver el "2 de N" en un iPhone con un registro de
+teléfono nuevo en un comercio con regalo; el reel "Te falta poco" anuncia la feature recién después de eso.
 
 **Confirmado por Daniel el 2026-10-28:** el aviso del regalo que alcanza un premio queda como aviso, sin bloquear el guardado.
 
@@ -1682,3 +1681,28 @@ A, "el libro tiene UNA fila de regalo: expected [] to deeply equal…" (y el D);
 comercio) cae el E, "el regalo de un programa ajeno no se lee: expected 2 to be +0". Los SQL siguen en
 `supabase/pruebas/` por si algún día hace falta repetirlo. Con eso ya no queda ninguna mutación de esta
 feature sin correr; lo único que falta para publicar es la QA con sesión de dueño y el merge.
+
+### QA en producción y la frase del formulario (2026-10-28, noche)
+
+Hecha por Claude en el Chrome de Daniel, con su sesión de dueño de **Farmacias ABC** (comercio de pruebas
+de sellos, meta 8). Todo salió como se diseñó:
+- **Marca:** el campo aparece debajo de la meta, con tope en meta - 1 y el texto en vivo. Regalo 2,
+  publicado, se guardó y sobrevivió a la recarga.
+- **Registro público:** `/registro/farmacia-abc` mostró la línea del regalo. Daniel se registró con un
+  teléfono que YA tenía tarjeta (5 de 8): la app devolvió su tarjeta existente, sin regalo, y la pantalla de
+  "Tu tarjeta está lista" dijo su saldo real. Eso destapó que la línea del formulario le prometía 2 sellos
+  a quien ya tenía tarjeta (ver abajo).
+- **"Agregar cliente"** (teléfono inventado 7000-0000, 1 sello): "Listo: Prueba Regalo ya tiene su tarjeta
+  con 2 sellos de regalo y 1 sello. Ahora tiene 3 de 8 sellos." La ficha muestra "Regalo de bienvenida ·
+  Al registrarse · regalo del programa · +2 sellos · quedan 2 de 8", y después la acreditación.
+- **Quedó como estaba**: el regalo de Farmacias ABC volvió a 0 (verificado en la base). Queda UN cliente de
+  prueba, "Prueba Regalo QA" (+503 7000-0000, 3 de 8 sellos), porque la app no borra tarjetas.
+
+**La frase del formulario.** Antes de enviar, el formulario no puede saber si ese teléfono ya tiene tarjeta
+y el regalo es solo para las tarjetas NUEVAS, así que "Arrancás con 2 sellos de regalo." le prometía algo
+falso a quien volvía. Ahora el formulario dice **"Si es tu primera tarjeta, arrancás con N sellos de
+regalo."** (`textoRegaloAntesDeRegistrar`, con "1 sello" en singular) y la pantalla de "Tu tarjeta está
+lista" conserva la frase sin condición (`textoRegaloRegistro`), que ahí solo sale si la API confirma que la
+tarjeta recibió el regalo. Verificado leyendo el HTML que sirve el servidor con un comercio temporal. La
+llamada del componente no tiene prueba automática (no hay pruebas de componentes): si alguien intercambia
+las dos funciones, nada falla.
