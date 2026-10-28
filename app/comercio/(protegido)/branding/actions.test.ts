@@ -118,19 +118,28 @@ describe('accionGuardarBranding', () => {
 //
 // Estas pruebas NECESITAN la 0043 aplicada (sin ella fallan con "column ... does not exist").
 //
-// MUTACIONES PENDIENTES DE CORRER (con la 0043 aplicada; ninguna se corrió todavía):
-//   - en accionGuardarBranding, `sellos_regalo: 0` fijo en vez de leer el formulario: "guarda el
-//     regalo que llega" falla con `expected 0 to be 3`.
-//   - leer otro nombre de campo (`formData.get('sellos_regalos')`), en cualquiera de las dos
-//     acciones: la prueba de guardar el regalo falla con `expected 0 to be 3`. Es la deriva de nombre
+// MUTACIONES CONFIRMADAS (2026-10-28), cada una corrida contra la base real (con la 0043 aplicada) y
+// restaurada después. Lo que la prueba recibió al fallar va entre acentos graves:
+//   - en accionGuardarBranding, `sellos_regalo: 0` fijo en vez de leer el formulario: fallan 3 pruebas.
+//     "guarda el regalo que llega" con `expected +0 to be 3`; "un regalo igual a la meta" y "un regalo
+//     ilegible ('2a')" con `{ ok: true }` en vez del mensaje de error esperado.
+//   - leer otro nombre de campo (`formData.get('sellos_regalos')`) en accionGuardarBranding: las mismas
+//     tres pruebas, con los mismos valores (`expected +0 to be 3`, y `{ ok: true }` en las otras dos).
+//     En accionGuardarBrandingDePrograma: fallan "guarda el regalo que llega" (`expected +0 to be 2`)
+//     y "un regalo igual a la meta" (`{ ok: true }` en vez del mensaje exacto). Es la deriva de nombre
 //     que la Tarea 6 tiene que cerrar del lado de la pantalla.
-//   - ausente = "no escribir" (en guardarBranding.ts, `sellos_regalo: datos.sellos_regalo ||
-//     undefined`; en la acción de tarjeta, lo mismo en guardarBrandingPrograma.ts): "sin el campo
-//     escribe 0" falla con `expected 3 to be 0`, porque el regalo anterior se queda.
-//   - parseInt en vez de Number en la lectura ('2a' leído como 2): "un regalo ilegible se rechaza" falla
-//     con `{ ok: true }` en vez del mensaje del entero.
-//   - sacar `sellosRegalo` del objeto que arma accionGuardarBrandingDePrograma (queda undefined): sus
-//     tres pruebas fallan, porque validarSellosRegalo rechaza el undefined como "no es un entero".
+//   - ausente = "no escribir", en guardarBranding.ts (`sellos_regalo: datos.sellos_regalo ||
+//     undefined`) y, por separado, en guardarBrandingPrograma.ts (`sellos_regalo: datos.sellosRegalo ||
+//     undefined`): en cada caso falla SOLO "sin el campo escribe 0" de la acción que corresponde, con
+//     `expected 3 to be +0` (el regalo anterior se queda). Cada mutación la atrapa una sola acción.
+//   - `parseInt(String(valor), 10)` en vez de `Number(valor)` en sellosRegaloDesdeFormulario
+//     (lib/tarjetas/sellosRegalo.ts; '2a' se leería como 2): falla SOLO "un regalo ilegible ('2a') se
+//     rechaza", con `{ ok: true }` en vez de `{ error: 'Los sellos de regalo tienen que ser un número
+//     entero, 0 o más.' }`.
+//   - sacar `sellosRegalo` del objeto que arma accionGuardarBrandingDePrograma (queda undefined):
+//     fallan sus tres pruebas. Las dos que esperan `{ ok: true }` reciben `{ error: 'Los sellos de
+//     regalo tienen que ser un número entero, 0 o más.' }` (validarSellosRegalo rechaza el undefined),
+//     y la del regalo igual a la meta recibe ese mismo mensaje en vez del de "menos que la meta (8)".
 describe('accionGuardarBranding: sellos de regalo', () => {
   const LEIDO = 'Los sellos de regalo tienen que ser un número entero, 0 o más.';
 

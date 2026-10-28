@@ -332,22 +332,40 @@ describe('guardarBranding — oscurecer la foto detrás de los sellos', () => {
 // valida antes de escribir, el orden de los errores, que viaja en el mismo update) están en
 // sellosRegaloEnMarca.test.ts, con sus mutaciones ya confirmadas.
 //
-// MUTACIONES PENDIENTES DE CORRER (con la 0043 aplicada; ninguna se corrió todavía):
-//   - sacar `sellos_regalo` del update del programa en guardarBranding.ts: "guarda la meta 10 con el
-//     regalo 2" falla con `expected 0 to be 2` (la relectura da el default).
-//   - `sellos_regalo: datos.sellos_regalo || undefined` (el 0 no se escribe): "un regalo 0 BORRA el
-//     anterior" falla con `expected 2 to be 0`.
-//   - escribirlo en un SEGUNDO update, después del de la meta: "bajar la meta y el regalo juntos"
-//     falla con "No se pudo guardar el branding." en vez de ok:true (el CHECK cruzado ve meta 5 con
-//     regalo 6).
-//   - sacar la llamada a validarSellosRegalo: "un regalo igual a la meta se rechaza" falla porque el
-//     error es "No se pudo guardar el branding." (el 23514 mudo del CHECK) en vez del mensaje exacto.
-//   - mover validarSellosRegalo DESPUÉS del update de comercios: la misma prueba falla igual que sin la
-//     llamada (el CHECK frena el update del programa con "No se pudo guardar el branding."), y encima
-//     el color nuevo ya quedó escrito en comercios; lo que distingue esta mutación de la anterior es
-//     sellosRegaloEnMarca.test.ts ("no toca la base"), que ya la tiene confirmada.
-//   - validarlo ANTES de la meta: "con la meta inválida lee primero el error de la meta" falla con el
-//     mensaje del regalo en vez del de la meta.
+// MUTACIONES CONFIRMADAS (2026-10-28), cada una corrida contra la base real (con la 0043 aplicada) y
+// restaurada después. Lo que la prueba recibió al fallar va entre acentos graves:
+//   - sacar `sellos_regalo` del update del programa en guardarBranding.ts: fallan 4 pruebas. "guarda la
+//     meta 10 con el regalo 2" con `el programa principal tiene que quedar con el regalo nuevo:
+//     expected +0 to be 2` (la relectura da el default); "bajar" con `expected +0 to be 2`; "subir"
+//     con `expected +0 to be 6`; "un regalo igual a la meta" con `el regalo anterior sigue ahí:
+//     expected +0 to be 2`.
+//   - `sellos_regalo: datos.sellos_regalo || undefined` (el 0 no se escribe): falla SOLO "un regalo 0
+//     BORRA el anterior", con `expected 2 to be +0`.
+//   - escribirlo en un SEGUNDO update, después del de la meta: falla SOLO "bajar la meta y el regalo
+//     juntos", con `No se pudo guardar el branding.: expected false to be true` (el CHECK cruzado ve
+//     meta 5 con regalo 6). "subir" PASA con esta mutación, y es lo esperado: con la meta primero,
+//     subir es válido.
+//   - la inversa, escribirlo en un update APARTE y ANTES del de la meta: fallan 5 pruebas. "subir la
+//     meta y el regalo juntos" falla EN EL PASO DE SUBIR (`res.ok`), con `No se pudo guardar el
+//     branding.: expected false to be true`, porque su partida se arma en dos guardados (meta sola, y
+//     después el regalo) justamente para que la mutación no la tumbe antes. Las otras cuatro (guarda
+//     la meta 10 con el regalo 2, un regalo 0, bajar, un regalo igual a la meta) ya fallan en su
+//     primer guardado desde cero (meta vacía con regalo mayor que cero), sin llegar a lo que miden.
+//     Entre las dos mutaciones de orden, ningún orden fijo de dos updates pasa "bajar" y "subir" a la
+//     vez: ese es el hueco que cierran las dos juntas.
+//   - sacar la llamada a validarSellosRegalo: fallan "un regalo igual a la meta" y "un regalo 2 con la
+//     meta vacía", ambas con `error: 'No se pudo guardar el branding.'` en vez del mensaje exacto
+//     (el 23514 mudo del CHECK).
+//   - mover validarSellosRegalo DESPUÉS del update de comercios (entre los dos updates): falla SOLO
+//     "un regalo igual a la meta", y NO por el mensaje exacto sino por la aserción de que el color
+//     nuevo no se escribió: `el color nuevo no se escribió: expected 'rgb(99, 98, 97)' to be 'rgb(10,
+//     20, 30)'`. La validación en TS sigue devolviendo el mensaje correcto desde esa posición, porque
+//     el update de comercios acepta el color y el CHECK recién salta en el del programa, que ya no se
+//     alcanza. Por eso esa aserción NO es decorativa: es la que ancla que el rechazo ocurre ANTES del
+//     primer write. (sellosRegaloEnMarca.test.ts lo cubre también sin base: "no toca la base").
+//   - validarlo ANTES de la meta: falla SOLO "con la meta inválida lee primero el error de la meta",
+//     recibiendo `Los sellos de regalo tienen que ser menos que la meta (0): si no, la tarjeta
+//     nacería completa.` en vez de `La meta de sellos debe ser un número entero mayor que cero.`
 describe('guardarBranding: sellos de regalo', () => {
   // Un comercio de sellos con su programa principal recién nacido: sin meta y sin regalo (los
   // defaults de la 0043), que es como llega un comercio nuevo a la pantalla de Marca.
@@ -410,6 +428,24 @@ describe('guardarBranding: sellos de regalo', () => {
     const programa = await obtenerPrograma(supabase, comercioId, programaId);
     expect(programa?.selloMeta).toBe(5);
     expect(programa?.sellosRegalo).toBe(2);
+  });
+
+  it('subir la meta y el regalo juntos (de 5 con 2 a 10 con 6) pasa el CHECK cruzado', async () => {
+    // La inversa de la anterior. En dos sentencias, subir el regalo primero dejaría 5 con regalo 6 un
+    // instante y la base lo rechaza: el orden que arregla un caso rompe el otro, y solo un MISMO update
+    // pasa los dos. La partida (meta 5 con regalo 2) se arma en dos guardados, la meta sola primero:
+    // un guardado que escribiera el regalo antes que la meta ya tropezaría armando la partida desde
+    // cero (meta vacía con regalo 2), y la prueba dejaría de medir el paso de SUBIR.
+    const { comercioId, programaId } = await comercioDeSellos();
+    expect((await guardarBranding(supabase, comercioId, { ...BASE, sello_meta: 5, sellos_regalo: 0 })).ok).toBe(true);
+    expect((await guardarBranding(supabase, comercioId, { ...BASE, sello_meta: 5, sellos_regalo: 2 })).ok).toBe(true);
+
+    const res = await guardarBranding(supabase, comercioId, { ...BASE, sello_meta: 10, sellos_regalo: 6 });
+
+    expect(res.ok, res.ok ? '' : res.error).toBe(true);
+    const programa = await obtenerPrograma(supabase, comercioId, programaId);
+    expect(programa?.selloMeta).toBe(10);
+    expect(programa?.sellosRegalo).toBe(6);
   });
 
   it('un regalo igual a la meta se rechaza con el mensaje exacto y la fila queda SIN tocar', async () => {

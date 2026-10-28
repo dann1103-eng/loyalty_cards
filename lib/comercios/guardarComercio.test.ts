@@ -534,11 +534,12 @@ describe('eliminarComercio', () => {
   // La meta y el regalo entran por guardarBranding, la función que llama Marca, y se releen con
   // obtenerPrograma: nada de un update directo que fabrique el estado. Necesita la 0043 aplicada.
   //
-  // MUTACIONES PENDIENTES DE CORRER (con la 0043 aplicada; ninguna se corrió todavía; las dos ya están
-  // confirmadas sin base en sellosRegaloEnMarca.test.ts):
-  //   - sacar `sellos_regalo` del insert que repone la principal: esta prueba falla con
-  //     `expected 0 to be 2` (vuelve el default).
-  //   - sacar `sellos_regalo` del select de la principal: falla igual, porque el insert recibe undefined.
+  // MUTACIONES CONFIRMADAS (2026-10-28), cada una corrida contra la base real (con la 0043 aplicada) y
+  // restaurada después (las dos también están confirmadas sin base en sellosRegaloEnMarca.test.ts).
+  // Ambas hacen fallar SOLO esta prueba, con el mismo texto: `el borrado rechazado no le quita el
+  // regalo al programa: expected +0 to be 2` (vuelve el default de la 0043):
+  //   - sacar `sellos_regalo` del insert que repone la principal.
+  //   - sacar `sellos_regalo` del select de la principal: el insert recibe undefined y pasa lo mismo.
   it('un borrado rechazado repone la principal con su meta y sus sellos de regalo', async () => {
     const slug = `test-eliminar-regalo-${Date.now()}`;
     const creado = await crearComercio(supabase, { ...(await datosValidos(slug)), tipo_tarjeta: 'sellos' });
