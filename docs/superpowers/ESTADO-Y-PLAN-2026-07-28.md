@@ -1546,7 +1546,7 @@ primer commit. Afectaba a todos los comercios, no solo a Gama Gourmet.
   las dos en el scratchpad de la sesión. `lib/comercio/cartel/export.test.ts` ("el aislamiento aísla")
   falla en esta Mac también en `master`: es del entorno (fuentes), no de este cambio.
 
-## 2026-10-28 (tarde) — Sellos de regalo al registrarse (rama `claude/sellos-de-regalo`, SIN publicar)
+## 2026-10-28 (tarde) — Sellos de regalo al registrarse (PUBLICADO el 2026-10-28, `master` en `6208393`)
 
 Pedido de Daniel desde el reel "Te falta poco" (Ronda 5): el dueño elige con cuántos sellos ya puestos
 arranca la tarjeta de un cliente nuevo, para el efecto de progreso empezado (Nunes y Drèze, "The
@@ -1617,13 +1617,9 @@ código que hoy corre en producción no la nombra, así que aplicarla antes del 
   `EMITIR_TARJETA_FUNCION`. Los SQL viven en el repo, en `supabase/pruebas/` (`mutantes-0043.sql` y
   `mutantes-0043-borrar.sql`; NO en `supabase/migrations/`, no son migraciones).
 
-### Pendientes
-- Correr los 4 mutantes de SQL (Daniel pega `supabase/pruebas/mutantes-0043.sql` en Studio; después
-  `supabase/pruebas/mutantes-0043-borrar.sql`, que los borra).
-- QA manual en el panel real: guardar el regalo en Marca y verlo al recargar, y la ficha de un cliente
-  nuevo con "Regalo de bienvenida" (verificado en el navegador: registro, tarjeta lista, base, y el
-  formulario de Marca montado con props fijas; falta lo que necesita sesión de dueño).
-- Publicar: merge de la rama a `master` y push (la migración ya está aplicada).
+### Pendientes (estado al publicar)
+- Mutantes de SQL: HECHO (ver más abajo). QA manual con sesión de dueño en producción: guardar el regalo en Marca
+  y verlo al recargar, y la ficha de un cliente nuevo con "Regalo de bienvenida" (no hecha todavía).
 - Deuda previa que apareció de paso (no es de esta feature): el insert que repone el programa principal
   en `eliminarComercio` tras un borrado fallido es parcial (pierde `nombre_pase`, marca, aviso,
   `google_class_id`...).
@@ -1670,11 +1666,12 @@ mientras alguien se registra, una tarjeta puede nacer con un regalo igual o mayo
 (el CHECK protege la fila del programa, no las tarjetas; es el mismo efecto que sufre cualquier tarjeta
 existente cuando se baja la meta). Si algún día importa: `for share` en ese `select`, en otra migración.
 
-**Qué falta para publicar** (nada de esto se hizo sin que Daniel lo pida): correr los mutantes de SQL,
-la QA manual de lo que necesita sesión de dueño (guardar el regalo en Marca y verlo al recargar, y la
-ficha de un cliente nuevo con "Regalo de bienvenida"), y el merge de la rama `claude/sellos-de-regalo` a
-`master` con push (la migración ya está aplicada). El reel "Te falta poco" anuncia la feature recién
-cuando esté publicada y probada en producción con un registro real.
+**Publicado el 2026-10-28** (a pedido de Daniel): fast-forward de `claude/sellos-de-regalo` a `master`
+(25 commits) y push; deploy de Vercel en success. Humo en producción: `www.cardly-sv.site/` y
+`/registro/cafeteria-piloto` responden 200 y esa pantalla no muestra línea de regalo (todos los
+comercios están en regalo 0 hasta que un dueño lo configure). **Falta:** la QA manual de arriba y una
+prueba con un registro real de un comercio que tenga regalo; el reel "Te falta poco" anuncia la
+feature recién después de eso.
 
 **Confirmado por Daniel el 2026-10-28:** el aviso del regalo que alcanza un premio queda como aviso, sin bloquear el guardado.
 
