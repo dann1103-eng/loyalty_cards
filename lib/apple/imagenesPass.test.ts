@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import sharp from 'sharp';
 import { randomBytes } from 'node:crypto';
-import { ANCHOS_LOGO, ALTOS_LOGO, redimensionarLogo, comprimirPng } from './imagenesPass';
+import { ANCHOS_LOGO, ALTOS_LOGO, LADOS_ICONO, redimensionarLogo, comprimirPng, iconoDesdeLogo } from './imagenesPass';
 
 // Las imágenes de prueba se generan acá y no se guardan como fixtures: lo que hay que probar es
 // cómo reacciona sharp a píxeles REALES, y un PNG de 1×1 no ejercita ni el redimensionado ni la
@@ -168,5 +168,45 @@ describe('comprimirPng', () => {
     expect(meta.format).toBe('png');
     expect(meta.width).toBe(375);
     expect(meta.height).toBe(123);
+  });
+});
+
+// El ícono del pase: el que iOS pone en la notificación y en la pantalla de bloqueo. Lo que el dueño
+// tiene que ver ahí es SU logo ENTERO, no un pedazo; se mide sobre los píxeles del @3x.
+//
+// Un "logo" de prueba es un rectángulo rojo liso: todo píxel rojo del resultado es logo. Las
+// mutaciones corridas sobre el ícono están anotadas en generatePass.test.ts, junto a la prueba que
+// mide el ícono dentro del .pkpass.
+describe('iconoDesdeLogo', () => {
+  async function logoRojo(ancho: number, alto: number): Promise<Buffer> {
+    return sharp({ create: { width: ancho, height: alto, channels: 3, background: '#ff0000' } }).png().toBuffer();
+  }
+
+  it('las tres medidas son las de la plantilla del pase (29 pt en @1x, @2x y @3x)', () => {
+    expect(LADOS_ICONO).toEqual([29, 58, 87]);
+  });
+
+  it('un logo ancho (3:1) entra ENTERO y centrado, con margen del fondo a los dos lados', async () => {
+    const iconos = await iconoDesdeLogo(await logoRojo(300, 100), 'rgb(35, 24, 18)');
+    const { data, info } = await sharp(iconos![2]).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    let minX = Infinity, maxX = -1;
+    for (let y = 0; y < info.height; y++) {
+      for (let x = 0; x < info.width; x++) {
+        const i = (y * info.width + x) * 4;
+        if (data[i] > 200 && data[i + 1] < 60 && data[i + 2] < 60) {
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+        }
+      }
+    }
+    // Ni pegado ni cortado contra el borde (iOS redondea las esquinas del ícono), y centrado.
+    expect(minX).toBeGreaterThan(5);
+    expect(info.width - 1 - maxX).toBeGreaterThan(5);
+    expect(Math.abs(minX - (info.width - 1 - maxX))).toBeLessThanOrEqual(1);
+  });
+
+  it('ante un buffer que no es una imagen devuelve null, sin lanzar', async () => {
+    // BEST-EFFORT: null = el pase sale con el ícono de la plantilla. Nunca sin ícono.
+    expect(await iconoDesdeLogo(Buffer.from('esto no es una imagen'), 'rgb(35, 24, 18)')).toBeNull();
   });
 });

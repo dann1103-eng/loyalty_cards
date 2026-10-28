@@ -1,4 +1,5 @@
 import sharp from 'sharp';
+import { componerLogoCuadrado } from '@/lib/google/componerLogo';
 
 // Redimensionado y compresión de las imágenes que entran al .pkpass.
 //
@@ -77,6 +78,41 @@ export async function redimensionarLogo(buf: Buffer): Promise<[Buffer, Buffer, B
     redimensionarA(buf, ANCHOS_LOGO[1], ALTOS_LOGO[1]),
     redimensionarA(buf, ANCHOS_LOGO[2], ALTOS_LOGO[2]),
   ]);
+}
+
+// El ícono del pase: el que iOS pone en la NOTIFICACIÓN y en la pantalla de bloqueo, al lado del
+// nombre del comercio. Hasta el 2026-10-28 salía siempre el de passModels/loyalty.pass, un cuadrado
+// café liso que era relleno de la plantilla: el dueño de Gama Gourmet mandó una notificación y sus
+// clientes la recibieron sin su logo.
+//
+// 29 pt, las mismas medidas de la plantilla y las que confirmó Apple en sus foros de desarrolladores
+// (hilo 773456: 29×29, 58×58, 87×87; los 38 pt que figuraron en las guías de diseño no aplican).
+export const LADOS_ICONO = [29, 58, 87] as const;
+
+// El ícono sale del cuadrado que ya se compone para el `programLogo` de Google: el logo ENTERO sobre
+// el color de fondo de la tarjeta, a sangre. Así el comercio tiene la misma insignia en las dos
+// billeteras, y el fondo OPACO no es un detalle: Apple pinta de blanco lo transparente del ícono en
+// la notificación, y un logo blanco sin fondo quedaba blanco sobre blanco (respuesta de Apple en ese
+// mismo hilo). El área segura del 70 % que se pensó para el círculo de Google le deja de sobra
+// espacio a las esquinas redondeadas que le pone iOS.
+//
+// Best-effort como todo lo de este archivo, pero acá el respaldo no es "el original": es null, y con
+// null el pase sale con el ícono de la plantilla. Un logo crudo de 480 px en icon.png no le sirve a
+// nadie, y Apple rechaza el pase si falta el ícono.
+export async function iconoDesdeLogo(
+  logo: Buffer,
+  colorFondo: string,
+): Promise<[Buffer, Buffer, Buffer] | null> {
+  try {
+    const cuadrado = await componerLogoCuadrado(logo, colorFondo);
+    const [chico, mediano, grande] = await Promise.all(
+      LADOS_ICONO.map((lado) => sharp(cuadrado).resize(lado, lado).png({ compressionLevel: 9 }).toBuffer()),
+    );
+    return [chico, mediano, grande];
+  } catch (error) {
+    console.warn('[apple] no se pudo componer el ícono con el logo; va el de la plantilla:', error);
+    return null;
+  }
 }
 
 // Cuantización a paleta: lo único que corta el peso de un PNG con contenido fotográfico. Apple solo

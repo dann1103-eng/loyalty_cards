@@ -1515,3 +1515,33 @@ el campo TikTok en Reverso (el navegador frena lo que no es una URL; una válida
 de una tarjeta real como enlace). El comercio quedó como estaba. Mutaciones: 15 de 15 caen; la primera
 pasada dejó 5 vivas (el guardado y la herencia del TikTok, y que el velo no cambie el hash por defecto) y se
 escribieron las pruebas que faltaban — entre ellas el hash LITERAL de antes de la 0041 en `heroUrl.test.ts`.
+
+## 2026-10-28 — El ícono de las notificaciones de Apple es el logo del comercio (sin migración)
+
+Reportado por Daniel con una captura: Gama Gourmet mandó una notificación y en el iPhone salió con un
+cuadrado café en vez de su logo. **Causa:** iOS pone en la notificación (y en la pantalla de bloqueo)
+el `icon.png` del pase, no el `logo.png`, y el pase llevaba SIEMPRE el ícono de
+`passModels/loyalty.pass`: un cuadrado café liso de 112 bytes que era relleno de la plantilla desde el
+primer commit. Afectaba a todos los comercios, no solo a Gama Gourmet.
+
+- **Arreglo:** `iconoDesdeLogo` (`lib/apple/imagenesPass.ts`) compone el ícono a 29/58/87 px a partir
+  del mismo cuadrado que ya se arma para el `programLogo` de Google (`componerLogoCuadrado`): el logo
+  entero, centrado en el 70 %, sobre el color de fondo de la tarjeta. El fondo OPACO importa: Apple
+  pinta de blanco lo transparente del ícono en la notificación (respuesta de Apple en sus foros, hilo
+  773456), y un logo blanco quedaría blanco sobre blanco. `generarPassApple` reemplaza el ícono de la
+  plantilla solo si hay logo y se pudo componer; si no, queda el de la plantilla (Apple rechaza un pase
+  sin ícono).
+- **Peso:** el peor caso (logo de ruido de 480 px) suma 17 KB; el pase sigue bajo los 600 KB.
+- **Mutaciones:** 6 de 6 caen (anotadas en `generatePass.test.ts`). Las pruebas miden el PÍXEL del ícono
+  que viaja dentro del `.pkpass`. Ojo: el café de la plantilla es igual al `colorFondo` de `datosBase`,
+  así que lo que delata el bug es el centro del ícono, no la esquina.
+
+**Pendientes:**
+- **Sin probar en un iPhone.** Los pases ya instalados toman el ícono nuevo cuando se actualizan (el
+  próximo sello, punto o notificación), y Apple puede tardar un rato en dejar de mostrar el ícono que
+  tiene guardado.
+- Un comercio SIN logo sigue mostrando el cuadrado café de la plantilla.
+- **Mac nueva:** el checkout no tiene `.env.local`, así que la suite de integración (87 archivos) no
+  corre acá. Se verificó con certificados de prueba desechables y una config de vitest sin el setup,
+  las dos en el scratchpad de la sesión. `lib/comercio/cartel/export.test.ts` ("el aislamiento aísla")
+  falla en esta Mac también en `master`: es del entorno (fuentes), no de este cambio.

@@ -2,7 +2,7 @@ import { PKPass } from 'passkit-generator';
 import path from 'node:path';
 import { requireEnv } from '@/lib/env';
 import { componerStrips, descargarImagen } from './stripPass';
-import { redimensionarLogo } from './imagenesPass';
+import { iconoDesdeLogo, redimensionarLogo } from './imagenesPass';
 import type { CampoReverso } from './construirReverso';
 import type { PatronSellos } from '@/lib/tarjetas/patronSellos';
 import { frentePase, PIE_CODIGO } from '@/lib/tarjetas/frentePase';
@@ -194,6 +194,16 @@ export async function generarPassApple(datos: DatosPass): Promise<Buffer> {
     pass.addBuffer('logo.png', logo1x);
     pass.addBuffer('logo@2x.png', logo2x);
     pass.addBuffer('logo@3x.png', logo3x);
+
+    // El ícono es lo que iOS muestra en la NOTIFICACIÓN: sin esto iba el cuadrado café de la
+    // plantilla y el cliente recibía el aviso del comercio sin su logo (2026-10-28). addBuffer
+    // reemplaza el icon.png de passModels; si componerlo falla (null), queda ese.
+    const iconos = await iconoDesdeLogo(logo.buf, datos.colorFondo);
+    if (iconos) {
+      pass.addBuffer('icon.png', iconos[0]);
+      pass.addBuffer('icon@2x.png', iconos[1]);
+      pass.addBuffer('icon@3x.png', iconos[2]);
+    }
   }
 
   // Qué va en el frente del pass lo decide frentePase, compartido con Google y con la vista previa

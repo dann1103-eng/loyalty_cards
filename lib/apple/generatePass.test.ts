@@ -2,8 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import JSZip from 'jszip';
 import sharp from 'sharp';
 import { randomBytes } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { generarPassApple } from './generatePass';
-import { ALTOS_LOGO } from './imagenesPass';
+import { ALTOS_LOGO, LADOS_ICONO } from './imagenesPass';
 import type { UbicacionGeopush } from '@/lib/comercio/geopush';
 import { ENCUADRE_POR_DEFECTO } from '@/lib/comercio/encuadreFranja';
 import { PIE_CODIGO } from '@/lib/tarjetas/frentePase';
@@ -345,6 +347,76 @@ describe('generarPassApple', () => {
     // Y que sean tres imágenes DISTINTAS: con el bug las tres eran el mismo buffer, byte a byte.
     expect(densidades[0].equals(densidades[1])).toBe(false);
     expect(densidades[1].equals(densidades[2])).toBe(false);
+  });
+
+  // El ícono del pase es lo que iOS pone en la NOTIFICACIÓN (y en la pantalla de bloqueo). Hasta el
+  // 2026-10-28 salía siempre el de la plantilla, un cuadrado café liso: el dueño de Gama Gourmet
+  // mandó una notificación y sus clientes la recibieron sin su logo. Se mide el PÍXEL del ícono que
+  // viaja en el .pkpass, no que se haya llamado a una función: lo que le importa al dueño es que su
+  // logo se vea ahí.
+  //
+  // MUTACIONES corridas el 2026-10-28 (cada una restaurada y comparada con un respaldo):
+  //   (a) Sin los tres addBuffer del ícono (el bug original) → FALLA esta prueba con `icon.png: centro:
+  //       expected [ 35, 24, 18, 255 ] to deeply equal [ 255, +0, +0, 255 ]`. OJO: el café de la
+  //       plantilla es justo el colorFondo de datosBase, así que la ESQUINA pasa igual con el bug; lo
+  //       que lo delata es el centro.
+  //   (b) El @3x en las tres densidades → FALLA esta prueba con `icon.png: expected [ 87, 87 ]…`.
+  //   (c) componerLogoCuadrado con null en vez del color de la tarjeta → FALLA con `icon.png: esquina:
+  //       expected [ 255, 255, 255, 255 ]…` (fondo blanco).
+  //   (d) Sin el `if (iconos)` → FALLA "con un logo ilegible…" con `Cannot read properties of null`.
+  //   (e) Sin el try/catch de iconoDesdeLogo → FALLA "con un logo ilegible…" (lanza sharp) y la de
+  //       null de imagenesPass.test.ts.
+  //   (f) Achicar el logo crudo en vez del cuadrado compuesto → FALLA esta prueba en la esquina (el
+  //       logo estirado a sangre) y la de "entero y centrado" de imagenesPass.test.ts.
+  it('con logo, el ícono del pase (el de las notificaciones) es el logo sobre el color de la tarjeta', async () => {
+    const logoRojo = await sharp({ create: { width: 300, height: 100, channels: 3, background: '#ff0000' } })
+      .png()
+      .toBuffer();
+
+    const buffer = await generarPassApple({
+      ...datosBase(),
+      serialNumber: 'test-serial-icono-logo',
+      qrToken: 'ico001',
+      puntos: 1,
+      tipoTarjeta: 'puntos',
+      selloMeta: null,
+      stripUrl: null,
+      logoUrl: `data:image/png;base64,${logoRojo.toString('base64')}`,
+    });
+
+    const zip = await JSZip.loadAsync(buffer);
+    for (const [i, nombre] of ['icon.png', 'icon@2x.png', 'icon@3x.png'].entries()) {
+      const icono = Buffer.from(await zip.file(nombre)!.async('nodebuffer'));
+      const { data, info } = await sharp(icono).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      expect([info.width, info.height], nombre).toEqual([LADOS_ICONO[i], LADOS_ICONO[i]]);
+      const pixel = (x: number, y: number) => [...data.subarray((y * info.width + x) * 4, (y * info.width + x) * 4 + 4)];
+      // El centro es el logo (rojo) y la esquina el fondo de la tarjeta de datosBase, OPACO.
+      const centro = Math.floor(info.width / 2);
+      expect(pixel(centro, centro), `${nombre}: centro`).toEqual([255, 0, 0, 255]);
+      expect(pixel(0, 0), `${nombre}: esquina`).toEqual([35, 24, 18, 255]);
+    }
+  });
+
+  it('con un logo ilegible el pase sale igual, con el ícono de la plantilla (nunca sin ícono)', async () => {
+    // Apple rechaza un pase sin icon.png. Si el logo guardado está corrupto, componer el ícono falla
+    // y tiene que quedar el de la plantilla, no un hueco.
+    const buffer = await generarPassApple({
+      ...datosBase(),
+      serialNumber: 'test-serial-icono-roto',
+      qrToken: 'ico002',
+      puntos: 1,
+      tipoTarjeta: 'puntos',
+      selloMeta: null,
+      stripUrl: null,
+      logoUrl: `data:image/png;base64,${Buffer.from('esto no es una imagen').toString('base64')}`,
+    });
+
+    const zip = await JSZip.loadAsync(buffer);
+    for (const nombre of ['icon.png', 'icon@2x.png', 'icon@3x.png']) {
+      const plantilla = await readFile(path.join(process.cwd(), 'passModels', 'loyalty.pass', nombre));
+      const icono = Buffer.from(await zip.file(nombre)!.async('nodebuffer'));
+      expect(icono.equals(plantilla), nombre).toBe(true);
+    }
   });
 });
 
