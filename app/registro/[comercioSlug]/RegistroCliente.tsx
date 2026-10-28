@@ -143,6 +143,7 @@ export default function RegistroCliente({
   nombreComercio,
   tipoTarjeta,
   selloMeta,
+  sellosRegalo,
   marca,
   resenaGoogleUrl,
   hoyIso,
@@ -157,6 +158,11 @@ export default function RegistroCliente({
   // contador y la promesa equivocados.
   tipoTarjeta: string;
   selloMeta: number | null;
+  // Cuántos sellos trae ya puestos la tarjeta NUEVA de este programa (0043), ya resuelto en el
+  // servidor: 0 si el programa no es de sellos. Es lo que PROMETE el formulario; lo que la tarjeta
+  // trae de verdad lo dice la API al registrar (`sellosRegaloRecibidos`), que es 0 si el cliente ya
+  // tenía tarjeta.
+  sellosRegalo: number;
   marca: MarcaRegistro;
   // El link de reseña de Google, YA REVALIDADO por `leerResenaGoogle` — o `null` si el comercio no
   // pide reseña (`pedir_resena_google` apagado) o si la lectura falló (columna de la 0039 todavía
@@ -345,6 +351,16 @@ export default function RegistroCliente({
         <p className="lede reveal d2">
           {promesaRegistro(tipoTarjeta)} {fraseWalletDelFormulario(plataforma)}, sin apps y sin plásticos.
         </p>
+        {/* El regalo se dice ANTES de registrarse porque el efecto depende de que el cliente lo note,
+            y esta pantalla es su primer contacto con la tarjeta. Una línea y no una tarjeta de
+            muestra: este paso nunca la tuvo, y la muestra aparece recién en "Tu tarjeta está lista".
+            Mismo recuadro corto con filo de acento que ya usan los avisos de las pantallas del dueño
+            (.aviso-contexto, con el margen de FiltrosReportes). Solo con regalo > 0. */}
+        {sellosRegalo > 0 && (
+          <p className="aviso-contexto reveal d2" style={{ margin: '14px 0 0' }}>
+            {textoRegaloRegistro(sellosRegalo)}
+          </p>
+        )}
 
         <form className="panel reveal d3" onSubmit={handleSubmit}>
           {/* Nombre y apellido por separado (0036): el pase los muestra en dos campos, NOMBRE y

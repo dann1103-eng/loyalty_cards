@@ -67,6 +67,10 @@ export default async function PaginaRegistro({
       nombreComercio={comercio.nombre}
       tipoTarjeta={programa.tipoTarjeta}
       selloMeta={programa.selloMeta}
+      // Solo un programa de tipo EXACTAMENTE 'sellos' regala (la misma regla que emitir_tarjeta en la
+      // base): en cualquier otro tipo la columna puede traer un número viejo (el FM le cambió el tipo)
+      // y la pantalla no puede prometer un regalo que la tarjeta nueva no va a traer.
+      sellosRegalo={programa.tipoTarjeta === 'sellos' ? programa.sellosRegalo : 0}
       marca={marca}
       resenaGoogleUrl={resena?.pedir ? resena.url : null}
       // El "hoy" del COMERCIO, resuelto acá: la tarjeta de muestra es 'use client' y un new Date()
