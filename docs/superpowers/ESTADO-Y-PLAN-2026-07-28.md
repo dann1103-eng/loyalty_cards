@@ -1627,3 +1627,51 @@ código que hoy corre en producción no la nombra, así que aplicarla antes del 
 - Deuda previa que apareció de paso (no es de esta feature): el insert que repone el programa principal
   en `eliminarComercio` tras un borrado fallido es parcial (pierde `nombre_pase`, marca, aviso,
   `google_class_id`...).
+
+### Revisión final de la rama y tanda de arreglos (2026-10-28, misma sesión)
+
+La revisión de toda la rama (Opus) no encontró nada crítico y pidió dos cosas antes de publicar; ambas
+quedaron atendidas. Suite completa corrida antes de los arreglos: 195 de 196 archivos, 2763 de 2764
+pruebas; la única falla es `lib/comercio/cartel/export.test.ts` ("el aislamiento aísla", fuentes de esta
+Mac, ya documentada arriba y también falla en `master`).
+
+- **Un regalo puede alcanzar una recompensa barata y el cliente nuevo canjea al registrarse.**
+  `canjear_recompensa_atomico` (0009) solo exige `puntos_actuales >= costo_puntos` de CUALQUIER
+  recompensa activa del comercio, no la meta, así que la regla "menos que la meta" no lo cubre (ejemplo
+  de las demos: meta 5, "Arreglo de barba" a 3, regalo 3 o 4). **Decisión tomada: aviso NO bloqueante**
+  en Marca ("Con N de regalo, un cliente nuevo ya puede canjear «X» sin haber comprado nada"), con la
+  recompensa activa más barata del COMERCIO (`recompensaActivaMasBarata`, `lib/comercio/recompensas.ts`).
+  No bloquea porque el dueño puede agregar una recompensa más barata después. Si Daniel prefiere
+  bloquear el guardado (pasarle el costo mínimo a `validarSellosRegalo`) o aceptar el riesgo, es un
+  cambio chico. **Riesgo de producto a decirle al dueño:** el registro público no verifica el teléfono ni
+  tiene límite de intentos (ya era así), y cada número nuevo recibe su regalo sin cajero ni sucursal: solo
+  rinde si el regalo alcanza la recompensa más barata, y el aviso existe para eso.
+- **Los mutantes de SQL viven en el repo**: `supabase/pruebas/mutantes-0043.sql` y
+  `mutantes-0043-borrar.sql` (nunca bajo `migrations/`). Pasos: Daniel pega el primero en Studio; se
+  corre `EMITIR_TARJETA_FUNCION=emitir_tarjeta_mut_a npx vitest run lib/tarjetas/emitirTarjeta.sql.test.ts`
+  para a, b, c y d (cada una tiene que FALLAR por el motivo del encabezado de la prueba); después Daniel
+  pega el segundo. **Todavía no corridos.**
+- "Tu tarjeta está lista" ahora dice el saldo REAL: `registrarCliente` y `/api/registro` devuelven
+  `puntosActuales` (nueva = el regalo con el que nació; existente = su `puntos_actuales`). Antes, quien
+  volvía a registrarse veía "0 de 10" aunque su tarjeta tuviera sellos. Verificado en el navegador: la
+  primera inscripción dice "2 de 10" y la línea del regalo; tras acreditarle 1 sello, el mismo teléfono ve
+  "3 de 10" y sin la línea.
+- El texto en vivo dice "le falta 1" en singular. La regla "solo los programas de sellos regalan" en el
+  registro salió a un helper puro (`sellosRegaloDelPrograma`) con prueba.
+
+**Receta de rollback** (si se revierte el código después de que algún dueño configuró un regalo): antes
+de revertir, `update programas_tarjeta set sellos_regalo = 0;`. Si no, el `guardarBranding` viejo que
+baja la meta por debajo del regalo choca con el CHECK DESPUÉS de haber actualizado `comercios` (un
+guardado parcial con un error genérico), y la ficha vieja mostraría las filas de regalo como
+"Acreditación".
+
+**Carrera conocida y aceptada:** `emitir_tarjeta` lee el regalo sin lock. Si el dueño baja la meta justo
+mientras alguien se registra, una tarjeta puede nacer con un regalo igual o mayor que la meta nueva
+(el CHECK protege la fila del programa, no las tarjetas; es el mismo efecto que sufre cualquier tarjeta
+existente cuando se baja la meta). Si algún día importa: `for share` en ese `select`, en otra migración.
+
+**Qué falta para publicar** (nada de esto se hizo sin que Daniel lo pida): correr los mutantes de SQL,
+la QA manual de lo que necesita sesión de dueño (guardar el regalo en Marca y verlo al recargar, y la
+ficha de un cliente nuevo con "Regalo de bienvenida"), y el merge de la rama `claude/sellos-de-regalo` a
+`master` con push (la migración ya está aplicada). El reel "Te falta poco" anuncia la feature recién
+cuando esté publicada y probada en producción con un registro real.
